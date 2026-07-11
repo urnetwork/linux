@@ -1,0 +1,12 @@
+# meson / ninja build output
+/build/
+/builddir/
+
+# vendored SDK (fetched by scripts/fetch-deps.sh or the build container)
+/third_party/urnetwork-sdk/
+
+# snapcraft output
+*.snap
+parts/
+prime/
+stage/

@@ -1,0 +1,82 @@
+# URnetwork snap — strict confinement. The single-process C++/GTK4 app opens
+# /dev/net/tun and configures the tunnel itself using the CAP_NET_ADMIN the
+# `network-control` interface grants the confined process (plan §2, R4).
+#
+# core24 = the Ubuntu 24.04 runtime (GTK4 4.14 + libadwaita 1.5) regardless of
+# host, so this runs on Ubuntu 22.04+ without coding to 22.04's older libadwaita.
+#
+# Built by build/all/linux (Docker + `snapcraft --destructive-mode`), once per
+# arch. Before snapcraft runs, that container unzips the matching cgo SDK into
+# third_party/urnetwork-sdk/<arch>/ (libURnetworkSdk.so + urnetwork_sdk.hpp);
+# fetch-deps.sh does the same for local dev.
+#
+# SPDX-License-Identifier: MPL-2.0
+name: urnetwork
+base: core24
+version: "0.0.1"
+summary: URnetwork VPN
+description: |
+  URnetwork desktop client — a single-process VPN with a system-tray UX,
+  built on the URnetwork SDK.
+grade: stable
+confinement: strict
+
+platforms:
+  amd64:
+  arm64:
+
+apps:
+  urnetwork:
+    command: usr/bin/urnetwork
+    extensions: [gnome]     # GTK4/libadwaita runtime, themes, portals, wayland/x11
+    common-id: network.ur.urnetwork
+    desktop: usr/share/applications/urnetwork.desktop
+    plugs:
+      - network            # outbound sockets (SDK platform + provider traffic)
+      - network-bind
+      - network-control    # /dev/net/tun + CAP_NET_ADMIN + netns (the crux)
+      - network-observe
+      - desktop            # session bus for the SNI tray / StatusNotifierWatcher
+      - browser-support    # open Stripe/OAuth in the system browser
+
+parts:
+  urnetwork:
+    plugin: meson
+    source: .
+    meson-parameters:
+      - --prefix=/usr
+      - --buildtype=release
+    build-packages:
+      - g++
+      - meson
+      - ninja-build
+      - pkg-config
+      - libgtkmm-4.0-dev
+      - libadwaita-1-dev
+      - libglib2.0-dev
+      - nlohmann-json3-dev
+    stage-packages:
+      - libgtkmm-4.0-0
+      - libadwaita-1-0
+    build-attributes:
+      - enable-patchelf
+    override-build: |
+      arch="${CRAFT_ARCH_BUILD_FOR}"          # debian arch: amd64 | arm64
+      # Locate the vendored SDK for this arch (staged by build/all/linux or fetch-deps.sh).
+      sdk_so="$(find "${CRAFT_PART_SRC}" "${CRAFT_PART_BUILD}" -name libURnetworkSdk.so -path "*/${arch}/*" 2>/dev/null | head -1)"
+      if [ -z "${sdk_so}" ]; then
+        echo "ERROR: third_party/urnetwork-sdk/${arch}/libURnetworkSdk.so missing — run fetch-deps.sh or stage it in the build container" >&2
+        exit 1
+      fi
+      meson setup build --prefix=/usr --buildtype=release -Dsdk_arch="${arch}"
+      meson compile -C build
+      DESTDIR="${CRAFT_PART_INSTALL}" meson install -C build
+      # Ship the SDK next to the binary; the exe's rpath is $ORIGIN/../lib → /usr/lib.
+      install -Dm755 "${sdk_so}" "${CRAFT_PART_INSTALL}/usr/lib/libURnetworkSdk.so"
+
+  desktop-integration:
+    plugin: dump
+    source: packaging
+    organize:
+      urnetwork.desktop: usr/share/applications/urnetwork.desktop
+      urnetwork.png: usr/share/icons/hicolor/256x256/apps/urnetwork.png

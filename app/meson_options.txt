@@ -1,0 +1,4 @@
+# Which vendored SDK slice to link against: third_party/urnetwork-sdk/<sdk_arch>/.
+# Uses debian arch names to match snapcraft's CRAFT_ARCH_BUILD_FOR and the zip layout.
+option('sdk_arch', type : 'combo', choices : ['amd64', 'arm64'], value : 'amd64',
+       description : 'Target arch of the vendored cgo SDK to link (amd64|arm64)')
