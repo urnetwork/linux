@@ -1,0 +1,20 @@
+# Sources with translatable strings, relative to the project source root.
+# Every string in them is looked up with T_/TN_ (src/I18n.hpp) under its
+# localization-store key id. Keep this list in sync when a source starts (or
+# stops) carrying user-facing text.
+#
+# Not listed, deliberately:
+#   src/I18n.hpp        the T_/TN_ wrappers themselves — no strings of its own
+#   src/Ui.cpp          stylesheet + widget factories — no user-facing strings
+#   src/main.cpp        only the gettext bootstrap and stderr diagnostics
+#   src/Formatters.cpp  byte/rate/time formatting units
+src/AuthViews.cpp
+src/ConnectDrawer.cpp
+src/ContractsSheet.cpp
+src/DnsSheet.cpp
+src/MainWindow.cpp
+src/RedeemCodeSheet.cpp
+src/SplitRulesSheet.cpp
+src/Tray.cpp
+src/UpgradeSheet.cpp
+src/UsageBar.cpp

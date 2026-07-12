@@ -51,10 +51,19 @@ parts:
       - meson
       - ninja-build
       - pkg-config
+      - gettext            # msgfmt: compiles po/*.po into the installed catalogs
       - libgtkmm-4.0-dev
       - libadwaita-1-dev
       - libglib2.0-dev
       - nlohmann-json3-dev
+      # WebKitGTK (the GTK4 API): the upgrade sheet's embedded Stripe checkout
+      # webview. A soft dependency in meson (required: false) — if this package
+      # goes missing the build still succeeds, SILENTLY webview-less, and
+      # checkout falls back to the system browser. At runtime the gnome
+      # extension's platform snap is expected to provide libwebkitgtk-6.0.so.4;
+      # verify on the first build that the snap still launches (ldd the staged
+      # binary) and add libwebkitgtk-6.0-4 to stage-packages if it does not.
+      - libwebkitgtk-6.0-dev
     stage-packages:
       - libgtkmm-4.0-0
       - libadwaita-1-0

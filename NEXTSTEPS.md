@@ -110,6 +110,23 @@ Bring these to Linux (same cross-platform SDK the apple app uses):
   `HANDLES_OPEN` + `signal_open`. Needs the ur.io/wallet-connect page **deployed** +
   a real-wallet round-trip test (on-device, same as macOS). The connect-wallet-in-
   account path (`createAccountWallet`) awaits the account UI.
+- [x] **Sign in with Bittensor** (`apple/BITTENSOR.md`, `apple/NEXTSTEPS2.md`) —
+  **DONE**: the same bridge, but **one hop** (`provider=bittensor&method=signMessage`)
+  and a **plain-query return** (`?address=<ss58>&signature=<0xhex>`, no NaCl
+  envelope — sr25519 signatures are public). `WalletConnect::SignInWithBittensor` →
+  `SdkHost::SignInWithBittensor` → `authLogin{wallet_auth, blockchain: urnet::TAO}`;
+  the server verifies sr25519. "Sign in with Bittensor" sits **above** the
+  Phantom/Solflare buttons on the login view. The optional WalletConnect Cloud
+  project id lives in `src/Config.hpp` (`kWalletConnectProjectId`, or
+  `meson setup -Dwalletconnect_project_id=<id>`) — **empty is valid**: the bridge
+  then drives injected (extension) wallets only. Same deploy dependency as Solana
+  (the bridge page) + a real-wallet round trip.
+  **Bittensor's two account-surface pieces are still missing with the account UI**:
+  "Connect wallet" for Bittensor (paste an ss58 address →
+  `Api::createAccountWallet{blockchain: urnet::TAO}` / `addExternalWallet`, no
+  signature) and the rule that **TAO can never be the payout wallet** (hide "Make
+  default"; show "Bittensor wallets are stored for future use and can't receive
+  payouts yet."). Noted at the attach point in `MainWindow::BuildHome`.
 - [ ] **Country search** on the add-blocked-location surface (DESKTOP2 remaining).
 - n/a **In-app review prompt** — platform-specific; Snap Store has no in-app
   review API. Omit (like the macOS `requestReview` note).

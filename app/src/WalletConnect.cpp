@@ -9,6 +9,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "Config.hpp"
+
 namespace urnw {
 namespace {
 
@@ -58,12 +60,16 @@ std::map<std::string, std::string> ParseQuery(const std::string& query) {
 }  // namespace
 
 const char* WalletConnect::Host(Provider p) {
-  return p == Provider::Solflare ? "solflare" : "phantom";
+  if (p == Provider::Solflare) return "solflare";
+  if (p == Provider::Bittensor) return "bittensor";
+  return "phantom";
 }
 
 std::optional<WalletConnect::Provider> WalletConnect::ProviderForHost(const std::string& host) {
   if (host == "phantom-connect" || host == "phantom-sign-message") return Provider::Phantom;
   if (host == "solflare-connect" || host == "solflare-sign-message") return Provider::Solflare;
+  // bittensor has no connect hop: the sign-message return carries the address
+  if (host == "bittensor-sign-message") return Provider::Bittensor;
   return std::nullopt;
 }
 
@@ -144,12 +150,38 @@ void WalletConnect::SignMessage(const std::string& message) {
   OpenUrl(url);
 }
 
+void WalletConnect::SignInWithBittensor(const std::string& message) {
+  // One hop: the bridge connects the substrate wallet AND signs in the same page
+  // load, and sr25519 signatures are public — so there is no ephemeral keypair,
+  // no session, and no shared secret on this path.
+  connectedPublicKey_.reset();
+  walletEncryptionPublicKey_.reset();
+  session_.reset();
+  dappKeyPair_.reset();
+  currentProvider_ = Provider::Bittensor;
+  lastMessage_ = message;
+
+  const std::string redirect =
+      std::string("urnetwork://") + Host(Provider::Bittensor) + "-sign-message";
+  std::string url = std::string(kWebBridge) + "?provider=" + Host(Provider::Bittensor) +
+                    "&method=signMessage&message=" + Esc(message) +
+                    "&redirect_link=" + Esc(redirect);
+  // The WalletConnect Cloud project id (Config.hpp) lets the bridge pair with a
+  // wallet app over a QR code. Without one the bridge falls back to injected
+  // wallets only (browser extension) — so an empty id is sent as no param at all.
+  const std::string projectId = kWalletConnectProjectId;
+  if (!projectId.empty()) url += "&wc_project_id=" + Esc(projectId);
+  OpenUrl(url);
+}
+
 bool WalletConnect::HandleDeepLink(const std::string& url) {
   std::string host, query;
   SplitUrl(url, host, query);
   auto provider = ProviderForHost(host);
   if (!provider) return false;  // not a wallet callback
-  if (host.find("-connect") != std::string::npos) {
+  if (*provider == Provider::Bittensor) {
+    HandleBittensorSignMessage(query);
+  } else if (host.find("-connect") != std::string::npos) {
     HandleConnect(*provider, query);
   } else {
     HandleSignMessage(*provider, query);
@@ -227,6 +259,30 @@ void WalletConnect::HandleSignMessage(Provider p, const std::string& query) {
   } catch (const std::exception& e) {
     if (on_error) on_error(std::string("bad signature response: ") + e.what());
   }
+}
+
+// The bittensor bridge returns PLAIN query params — no NaCl envelope, nothing to
+// decrypt (mmm/ur.io react/src/components/WalletConnect.jsx):
+//   urnetwork://bittensor-sign-message?address=<ss58>&signature=<0xhex>
+//   urnetwork://bittensor-sign-message?errorCode=-1&errorMessage=<text>
+void WalletConnect::HandleBittensorSignMessage(const std::string& query) {
+  auto params = ParseQuery(query);
+  if (params.count("errorCode")) {
+    if (on_error)
+      on_error(params.count("errorMessage") ? params["errorMessage"] : "wallet signing error");
+    return;
+  }
+  const std::string address = params.count("address") ? params["address"] : std::string();
+  const std::string signature = params.count("signature") ? params["signature"] : std::string();
+  if (address.empty() || signature.empty()) {
+    if (on_error) on_error("missing wallet signature parameters");
+    return;
+  }
+  connectedPublicKey_ = address;  // ss58, the wallet_address for authLogin
+  currentProvider_ = Provider::Bittensor;
+  // the sr25519 signature passes through as the hex the wallet returned; the
+  // server accepts it with or without the 0x prefix
+  if (on_signature) on_signature(signature);
 }
 
 }  // namespace urnw

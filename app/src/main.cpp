@@ -12,12 +12,21 @@
 
 #include <vector>
 
+#include <clocale>
 #include <memory>
 #include <string>
 
+#include "I18n.hpp"
 #include "MainWindow.hpp"
 #include "SdkHost.hpp"
 #include "Tray.hpp"
+
+// Where the message catalogs are installed: meson passes the configured
+// localedir (see meson.build). The fallback is the FHS default, so the file
+// still builds standalone.
+#ifndef UR_LOCALEDIR
+#define UR_LOCALEDIR "/usr/share/locale"
+#endif
 
 namespace {
 
@@ -30,6 +39,16 @@ std::string EnsureDir(const std::string& base, const char* leaf) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  // gettext (GNOME convention): pick up the user's locale, then bind the
+  // "urnetwork" domain to the installed catalogs
+  // (<localedir>/<locale>/LC_MESSAGES/urnetwork.mo, built from po/*.po, which
+  // the localization store generates). GTK sets the locale too, but the SDK
+  // host below can already produce user-visible text, so do it first.
+  std::setlocale(LC_ALL, "");
+  bindtextdomain(GETTEXT_PACKAGE, UR_LOCALEDIR);
+  bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");  // the catalogs are UTF-8
+  textdomain(GETTEXT_PACKAGE);
+
   auto host = std::make_shared<urnw::SdkHost>();
   const std::string storageDir = EnsureDir(Glib::get_user_data_dir(), "urnetwork");
   const std::string logDir = EnsureDir(Glib::get_user_state_dir(), "urnetwork");
@@ -53,6 +72,10 @@ int main(int argc, char** argv) {
 
   app->signal_startup().connect([&] {
     adw_init();  // libadwaita stylesheet + platform integration
+    // the brand visual system is dark (mac app parity); the Ui.cpp stylesheet
+    // layers the exact palette on top
+    adw_style_manager_set_color_scheme(adw_style_manager_get_default(),
+                                       ADW_COLOR_SCHEME_FORCE_DARK);
 
     window = std::make_shared<urnw::MainWindow>(*host);
     app->add_window(*window);

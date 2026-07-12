@@ -2,3 +2,11 @@
 # Uses debian arch names to match snapcraft's CRAFT_ARCH_BUILD_FOR and the zip layout.
 option('sdk_arch', type : 'combo', choices : ['amd64', 'arm64'], value : 'amd64',
        description : 'Target arch of the vendored cgo SDK to link (amd64|arm64)')
+
+# WalletConnect Cloud project id, passed to the ur.io/wallet-connect bridge as
+# `wc_project_id` for the Bittensor sign-in (src/Config.hpp; the same id lives in
+# android/app/local.properties and apple/app/URnetwork-Info.plist). Optional: with
+# no id the bridge uses injected wallets (browser extensions) only. Setting it here
+# keeps it out of the source tree, the way the other platforms do it.
+option('walletconnect_project_id', type : 'string', value : '',
+       description : 'WalletConnect Cloud project id for the wallet-connect bridge (optional)')

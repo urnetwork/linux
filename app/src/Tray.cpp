@@ -5,6 +5,8 @@
 
 #include <string>
 
+#include "I18n.hpp"
+
 namespace urnw {
 namespace {
 
@@ -63,7 +65,9 @@ constexpr const char* kMenuXml = R"XML(
 // Menu item ids (0 is the root).
 enum : int { kIdConnect = 1, kIdSep = 2, kIdShow = 3, kIdQuit = 4 };
 
-std::string ConnectLabel(bool connected) { return connected ? "Disconnect" : "Connect"; }
+std::string ConnectLabel(bool connected) {
+  return connected ? T_("disconnect", "Disconnect") : T_("connect", "Connect");
+}
 
 GVariant* BuildItem(int id, const std::string& label, bool separator) {
   GVariantBuilder props;
@@ -99,6 +103,7 @@ static GVariant* SniGetProp(GDBusConnection*, const gchar*, const gchar*, const 
   auto* self = static_cast<Tray*>(user);
   if (g_strcmp0(prop, "Category") == 0) return g_variant_new_string("ApplicationStatus");
   if (g_strcmp0(prop, "Id") == 0) return g_variant_new_string("urnetwork");
+  // Title is the product name (the store never translates it), not UI copy.
   if (g_strcmp0(prop, "Title") == 0) return g_variant_new_string("URnetwork");
   if (g_strcmp0(prop, "Status") == 0) return g_variant_new_string("Active");
   if (g_strcmp0(prop, "IconName") == 0)
@@ -121,8 +126,9 @@ static void MenuMethod(GDBusConnection*, const gchar*, const gchar*, const gchar
     g_variant_builder_init(&kids, G_VARIANT_TYPE("av"));
     g_variant_builder_add(&kids, "v", BuildItem(kIdConnect, ConnectLabel(self->connectedForIcon()), false));
     g_variant_builder_add(&kids, "v", BuildItem(kIdSep, "", true));
-    g_variant_builder_add(&kids, "v", BuildItem(kIdShow, "Show URnetwork", false));
-    g_variant_builder_add(&kids, "v", BuildItem(kIdQuit, "Quit", false));
+    g_variant_builder_add(&kids, "v",
+                          BuildItem(kIdShow, T_("show_urnetwork", "Show URnetwork"), false));
+    g_variant_builder_add(&kids, "v", BuildItem(kIdQuit, T_("quit", "Quit"), false));
 
     GVariantBuilder rootProps;
     g_variant_builder_init(&rootProps, G_VARIANT_TYPE("a{sv}"));

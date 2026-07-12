@@ -53,8 +53,13 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg) {
   if (!t->Configure(cfg)) {
     return nullptr;  // dtor closes the fd + tears down
   }
+  std::string dnsList;
+  for (const auto& dns : cfg.dns_servers) {
+    if (!dnsList.empty()) dnsList += ',';
+    dnsList += dns;
+  }
   std::fprintf(stderr, "[tun] up %s addr=%s/%d mtu=%d dns=%s\n", t->name_.c_str(),
-               cfg.local_addr.c_str(), cfg.prefix, cfg.mtu, cfg.dns_server.c_str());
+               cfg.local_addr.c_str(), cfg.prefix, cfg.mtu, dnsList.c_str());
   return t;
 }
 
@@ -72,10 +77,14 @@ bool Tunnel::Configure(const TunnelConfig& cfg) {
   for (const auto& s : steps) {
     if (!Run(s)) return false;
   }
-  // DNS via systemd-resolved: this link's resolver + route all queries through
+  // DNS via systemd-resolved: this link's resolvers + route all queries through
   // it (~. is resolved's "default route" domain). Best-effort (no resolved -> skip).
-  Run({"resolvectl", "dns", name_, cfg.dns_server});
-  Run({"resolvectl", "domain", name_, "~."});
+  if (!cfg.dns_servers.empty()) {
+    std::vector<std::string> dnsCmd = {"resolvectl", "dns", name_};
+    dnsCmd.insert(dnsCmd.end(), cfg.dns_servers.begin(), cfg.dns_servers.end());
+    Run(dnsCmd);
+    Run({"resolvectl", "domain", name_, "~."});
+  }
   return true;
 }
 

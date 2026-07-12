@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace urnw {
 
@@ -17,7 +18,7 @@ struct TunnelConfig {
   std::string local_addr = "169.254.2.1";
   int prefix = 24;
   int mtu = 1440;
-  std::string dns_server = "1.1.1.1";
+  std::vector<std::string> dns_servers = {"1.1.1.1"};
 };
 
 // RAII tun device. Closing removes the (non-persistent) interface + its routes.
