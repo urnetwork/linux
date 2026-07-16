@@ -2605,6 +2605,641 @@ msgctxt "site_account_tools"
 msgid "Account tools"
 msgstr "Account tools"
 
+#. App wallets/blocked: add button
+msgctxt "site_app_add"
+msgid "Add"
+msgstr "Add"
+
+#. App wallets: add wallet heading
+msgctxt "site_app_add_wallet"
+msgid "Add wallet"
+msgstr "Add wallet"
+
+#. App connect: allowed count label
+msgctxt "site_app_allowed"
+msgid "allowed"
+msgstr "allowed"
+
+#. App settings: auth code limit error
+msgctxt "site_app_auth_code_limit"
+msgid "Auth code limit reached. Try again later."
+msgstr "Auth code limit reached. Try again later."
+
+#. App settings: auth code expiry note
+msgctxt "site_app_auth_code_note"
+msgid "Created auth codes expire after 5 minutes"
+msgstr "Created auth codes expire after 5 minutes"
+
+#. Reliability: average label
+msgctxt "site_app_average_reliability"
+msgid "Average reliability"
+msgstr "Average reliability"
+
+#. App connect: block ads and trackers toggle
+msgctxt "site_app_block_ads"
+msgid "Block ads and trackers"
+msgstr "Block ads and trackers"
+
+#. App blocked locations: search hint
+msgctxt "site_app_block_hint"
+msgid "Search for a location to block"
+msgstr "Search for a location to block"
+
+#. App payout detail: blockchain
+msgctxt "site_app_blockchain"
+msgid "Blockchain"
+msgstr "Blockchain"
+
+#. App connect: blocked count label
+msgctxt "site_app_blocked"
+msgid "blocked"
+msgstr "blocked"
+
+#. App account: blocked locations row/screen title
+msgctxt "site_app_blocked_locations"
+msgid "Blocked locations"
+msgstr "Blocked locations"
+
+#. App settings: bonus referral code section
+msgctxt "site_app_bonus_referral"
+msgid "Bonus referral code"
+msgstr "Bonus referral code"
+
+#. App wallets: canceled payout status
+msgctxt "site_app_canceled"
+msgid "Canceled"
+msgstr "Canceled"
+
+#. App payout detail: canceled time
+msgctxt "site_app_canceled_on"
+msgid "Canceled"
+msgstr "Canceled"
+
+#. App connect screen: change location button
+msgctxt "site_app_change"
+msgid "Change"
+msgstr "Change"
+
+#. App account: check my IP quick action
+msgctxt "site_app_check_ip"
+msgid "Check my IP"
+msgstr "Check my IP"
+
+#. App connect location picker: cities section
+msgctxt "site_app_cities"
+msgid "Cities"
+msgstr "Cities"
+
+#. Reliability: clients series
+msgctxt "site_app_clients"
+msgid "Clients"
+msgstr "Clients"
+
+#. App settings: referral code capped error
+msgctxt "site_app_code_capped"
+msgid "This referral code has reached its referral limit"
+msgstr "This referral code has reached its referral limit"
+
+#. App wallets: completed payout status
+msgctxt "site_app_complete"
+msgid "Complete"
+msgstr "Complete"
+
+#. App payout detail: completed time
+msgctxt "site_app_completed_on"
+msgid "Completed"
+msgstr "Completed"
+
+#. Connect drawer: options section label
+msgctxt "site_app_connect_options"
+msgid "Connect options"
+msgstr "Connect options"
+
+#. Disabled stat cards: connect-to-view hint
+msgctxt "site_app_connect_to_view"
+msgid "Connect to view live activity"
+msgstr "Connect to view live activity"
+
+#. App connect screen: connected state
+msgctxt "site_app_connected"
+msgid "Connected"
+msgstr "Connected"
+
+#. App connect screen: connecting state
+msgctxt "site_app_connecting"
+msgid "Connecting…"
+msgstr "Connecting…"
+
+#. App settings: connections section
+msgctxt "site_app_connections"
+msgid "Connections"
+msgstr "Connections"
+
+#. App connect screen: contract details section title
+msgctxt "site_app_contracts"
+msgid "Contracts"
+msgstr "Contracts"
+
+#. App: copied flash
+msgctxt "site_app_copied"
+msgid "Copied"
+msgstr "Copied"
+
+#. App: copy button
+msgctxt "site_app_copy"
+msgid "Copy"
+msgstr "Copy"
+
+#. App connect location picker: countries section
+msgctxt "site_app_countries"
+msgid "Countries"
+msgstr "Countries"
+
+#. Reliability: country column
+msgctxt "site_app_country"
+msgid "Country"
+msgstr "Country"
+
+#. Reliability: country multipliers heading
+msgctxt "site_app_country_multipliers"
+msgid "Country multipliers"
+msgstr "Country multipliers"
+
+#. App settings: create auth code button
+msgctxt "site_app_create_auth_code"
+msgid "Create auth code"
+msgstr "Create auth code"
+
+#. App payout detail: created time
+msgctxt "site_app_created"
+msgid "Created"
+msgstr "Created"
+
+#. App leaderboard: own rank label
+msgctxt "site_app_current_ranking"
+msgid "Current ranking"
+msgstr "Current ranking"
+
+#. App payout detail: data paid for
+msgctxt "site_app_data_paid"
+msgid "Data paid for"
+msgstr "Data paid for"
+
+#. App leaderboard: data shared label
+msgctxt "site_app_data_shared"
+msgid "Data shared"
+msgstr "Data shared"
+
+#. App settings: delete account button
+msgctxt "site_app_delete_account"
+msgid "Delete account"
+msgstr "Delete account"
+
+#. App settings: delete confirm prompt
+msgctxt "site_app_delete_confirm"
+msgid "Type your network name to confirm"
+msgstr "Type your network name to confirm"
+
+#. App settings: delete warning
+msgctxt "site_app_delete_warning"
+msgid "This permanently deletes your network, its data, and its earnings. This cannot be undone."
+msgstr "This permanently deletes your network, its data, and its earnings. This cannot be undone."
+
+#. App connect screen: device rpc attaching hint
+msgctxt "site_app_device_attaching"
+msgid "Attaching device controls…"
+msgstr "Attaching device controls…"
+
+#. App connect screen: disconnecting state
+msgctxt "site_app_disconnecting"
+msgid "Disconnecting…"
+msgstr "Disconnecting…"
+
+#. App connect: custom DNS section
+msgctxt "site_app_dns"
+msgid "DNS"
+msgstr "DNS"
+
+#. App connect: DNS summary encrypted
+msgctxt "site_app_dns_encrypted"
+msgid "Encrypted (DoH)"
+msgstr "Encrypted (DoH)"
+
+#. App connect DNS: fallback toggle
+msgctxt "site_app_dns_fallback"
+msgid "Fast fallback during startup"
+msgstr "Fast fallback during startup"
+
+#. App connect DNS: local plain DNS toggle
+msgctxt "site_app_dns_local_dns"
+msgid "Standard DNS on this device"
+msgstr "Standard DNS on this device"
+
+#. App connect DNS: local DoH toggle
+msgctxt "site_app_dns_local_doh"
+msgid "Encrypted DNS on this device"
+msgstr "Encrypted DNS on this device"
+
+#. App connect: DNS summary plain
+msgctxt "site_app_dns_plain"
+msgid "Standard"
+msgstr "Standard"
+
+#. App connect DNS: remote plain DNS toggle
+msgctxt "site_app_dns_remote_dns"
+msgid "Standard DNS through the tunnel"
+msgstr "Standard DNS through the tunnel"
+
+#. App connect DNS: remote DoH toggle
+msgctxt "site_app_dns_remote_doh"
+msgid "Encrypted DNS through the tunnel"
+msgstr "Encrypted DNS through the tunnel"
+
+#. App connect DNS: reset to default
+msgctxt "site_app_dns_reset"
+msgid "Reset to recommended"
+msgstr "Reset to recommended"
+
+#. App account: network earnings card
+msgctxt "site_app_earnings"
+msgid "Network earnings"
+msgstr "Network earnings"
+
+#. App profile: email label
+msgctxt "site_app_email"
+msgid "Email"
+msgstr "Email"
+
+#. App settings: referral code input placeholder
+msgctxt "site_app_enter_referral"
+msgid "Enter referral code"
+msgstr "Enter referral code"
+
+#. App settings: extension unavailable note
+msgctxt "site_app_ext_needed"
+msgid "The URnetwork browser extension is not available in this browser"
+msgstr "The URnetwork browser extension is not available in this browser"
+
+#. App support: feedback textarea placeholder
+msgctxt "site_app_feedback_placeholder"
+msgid "Tell us what's working and what could be better…"
+msgstr "Tell us what's working and what could be better…"
+
+#. App support: sent confirmation
+msgctxt "site_app_feedback_sent"
+msgid "Sent! Thanks for your feedback."
+msgstr "Sent! Thanks for your feedback."
+
+#. Connect drawer: fixed-IP toggle
+msgctxt "site_app_fixed_ip"
+msgid "Fixed IP"
+msgstr "Fixed IP"
+
+#. App balance codes: redeem success flash
+msgctxt "site_app_gib_added"
+msgid "+{gib} GiB added"
+msgstr "+{gib} GiB added"
+
+#. App support: star rating label
+msgctxt "site_app_how_are_we_doing"
+msgid "How are we doing?"
+msgstr "How are we doing?"
+
+#. App wallets: invalid address error
+msgctxt "site_app_invalid_address"
+msgid "This address is not valid for the selected chain"
+msgstr "This address is not valid for the selected chain"
+
+#. App settings: invalid referral code error
+msgctxt "site_app_invalid_code"
+msgid "This referral code is not valid"
+msgstr "This referral code is not valid"
+
+#. App support: Discord community card
+msgctxt "site_app_join_discord"
+msgid "Join the community on Discord"
+msgstr "Join the community on Discord"
+
+#. App settings: kill switch toggle
+msgctxt "site_app_kill_switch"
+msgid "Kill switch"
+msgstr "Kill switch"
+
+#. App settings: kill switch note
+msgctxt "site_app_kill_switch_note"
+msgid "Block browser traffic when URnetwork is disconnected"
+msgstr "Block browser traffic when URnetwork is disconnected"
+
+#. App leaderboard: empty state
+msgctxt "site_app_leaderboard_empty"
+msgid "No networks on the leaderboard yet."
+msgstr "No networks on the leaderboard yet."
+
+#. App leaderboard: explainer note
+msgctxt "site_app_leaderboard_note"
+msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
+msgstr "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
+
+#. App: loading state
+msgctxt "site_app_loading"
+msgid "Loading…"
+msgstr "Loading…"
+
+#. App profile: login methods section
+msgctxt "site_app_login_methods"
+msgid "Login methods"
+msgstr "Login methods"
+
+#. App wallets: make payout wallet action
+msgctxt "site_app_make_payout_wallet"
+msgid "Make payout wallet"
+msgstr "Make payout wallet"
+
+#. App sidebar: manage subscription button (opens the Stripe billing portal)
+msgctxt "site_app_manage_subscription"
+msgid "Manage Subscription"
+msgstr "Manage Subscription"
+
+#. App provider: mean reliability metric
+msgctxt "site_app_mean_reliability"
+msgid "Mean reliability"
+msgstr "Mean reliability"
+
+#. Connect drawer: connection mode Auto
+msgctxt "site_app_mode_auto"
+msgid "Auto"
+msgstr "Auto"
+
+#. Connect drawer: connection mode Streaming
+msgctxt "site_app_mode_streaming"
+msgid "Streaming"
+msgstr "Streaming"
+
+#. Connect drawer: connection mode Web
+msgctxt "site_app_mode_web"
+msgid "Web"
+msgstr "Web"
+
+#. Reliability: multiplier column
+msgctxt "site_app_multiplier"
+msgid "Multiplier"
+msgstr "Multiplier"
+
+#. App profile: network name label
+msgctxt "site_app_network_name"
+msgid "Network name"
+msgstr "Network name"
+
+#. App provider: reliability section
+msgctxt "site_app_network_reliability"
+msgid "Network reliability"
+msgstr "Network reliability"
+
+#. App balance codes: empty state
+msgctxt "site_app_no_balance_codes"
+msgid "No balance codes redeemed yet"
+msgstr "No balance codes redeemed yet"
+
+#. App blocked locations: empty state
+msgctxt "site_app_no_blocked"
+msgid "No blocked locations yet"
+msgstr "No blocked locations yet"
+
+#. App wallets: payouts empty state
+msgctxt "site_app_no_payouts"
+msgid "No payouts yet"
+msgstr "No payouts yet"
+
+#. App provider: no provider throughput
+msgctxt "site_app_no_provider_activity"
+msgid "No providing activity in this window."
+msgstr "No providing activity in this window."
+
+#. App provider: no provider contracts
+msgctxt "site_app_no_provider_contracts"
+msgid "No active provider contracts."
+msgstr "No active provider contracts."
+
+#. App provider: no reliability data
+msgctxt "site_app_no_reliability"
+msgid "No reliability data yet."
+msgstr "No reliability data yet."
+
+#. Connect drawer: throughput empty state
+msgctxt "site_app_no_traffic"
+msgid "No traffic yet"
+msgstr "No traffic yet"
+
+#. App wallets: empty state
+msgctxt "site_app_no_wallets"
+msgid "No wallets yet — add one to receive payouts"
+msgstr "No wallets yet — add one to receive payouts"
+
+#. App payout detail: paid time
+msgctxt "site_app_paid_on"
+msgid "Paid"
+msgstr "Paid"
+
+#. App payout detail: not found
+msgctxt "site_app_payout_not_found"
+msgid "This payout could not be found."
+msgstr "This payout could not be found."
+
+#. App wallets: payout wallet label
+msgctxt "site_app_payout_wallet"
+msgid "Payout wallet"
+msgstr "Payout wallet"
+
+#. App wallets: payouts section
+msgctxt "site_app_payouts"
+msgid "Payouts"
+msgstr "Payouts"
+
+#. App provider: peak clients metric
+msgctxt "site_app_peak_clients"
+msgid "Peak clients"
+msgstr "Peak clients"
+
+#. App connect screen: online devices section title
+msgctxt "site_app_peers"
+msgid "Your devices online"
+msgstr "Your devices online"
+
+#. App wallets: pending payout status
+msgctxt "site_app_pending"
+msgid "Pending"
+msgstr "Pending"
+
+#. Connect drawer: plan section label
+msgctxt "site_app_plan"
+msgid "Plan"
+msgstr "Plan"
+
+#. App leaderboard: hidden network row label
+msgctxt "site_app_private_network"
+msgid "Private network"
+msgstr "Private network"
+
+#. App account: profile row/screen title
+msgctxt "site_app_profile"
+msgid "Profile"
+msgstr "Profile"
+
+#. App account: provider row + screen title
+msgctxt "site_app_provider"
+msgid "Providing"
+msgstr "Providing"
+
+#. App provider: contracts section
+msgctxt "site_app_provider_contracts"
+msgid "Provider contracts"
+msgstr "Provider contracts"
+
+#. App provider screen: intro
+msgctxt "site_app_provider_intro"
+msgid "How your network's devices are providing bandwidth and earning."
+msgstr "How your network's devices are providing bandwidth and earning."
+
+#. App provider: connect prompt for live stats
+msgctxt "site_app_provider_needs_connect"
+msgid "Connect to see live providing statistics."
+msgstr "Connect to see live providing statistics."
+
+#. App provider: throughput section
+msgctxt "site_app_provider_stats"
+msgid "Provider statistics"
+msgstr "Provider statistics"
+
+#. App connect screen: provider grid section title
+msgctxt "site_app_providers"
+msgid "Providers"
+msgstr "Providers"
+
+#. App account: proxies row/screen title
+msgctxt "site_app_proxies"
+msgid "Proxies"
+msgstr "Proxies"
+
+#. App provider: bytes received metric
+msgctxt "site_app_received"
+msgid "Received"
+msgstr "Received"
+
+#. App balance codes: redeemed date row
+msgctxt "site_app_redeemed_on"
+msgid "Redeemed {date}"
+msgstr "Redeemed {date}"
+
+#. App account: refer friends card
+msgctxt "site_app_refer_friends"
+msgid "Refer friends"
+msgstr "Refer friends"
+
+#. App settings: referral network section
+msgctxt "site_app_referral_network"
+msgid "Referral network"
+msgstr "Referral network"
+
+#. App connect location picker: regions section
+msgctxt "site_app_regions"
+msgid "Regions"
+msgstr "Regions"
+
+#. Reliability: weight series
+msgctxt "site_app_reliability_weight"
+msgid "Reliability weight"
+msgstr "Reliability weight"
+
+#. App: remove button
+msgctxt "site_app_remove"
+msgid "Remove"
+msgstr "Remove"
+
+#. App screens: retry button
+msgctxt "site_app_retry"
+msgid "Try again"
+msgstr "Try again"
+
+#. App: save button
+msgctxt "site_app_save"
+msgid "Save"
+msgstr "Save"
+
+#. App support: send button
+msgctxt "site_app_send"
+msgid "Send"
+msgstr "Send"
+
+#. App provider: bytes served metric
+msgctxt "site_app_served"
+msgid "Served"
+msgstr "Served"
+
+#. App leaderboard: public visibility toggle
+msgctxt "site_app_show_on_leaderboard"
+msgid "Show my network on the leaderboard"
+msgstr "Show my network on the leaderboard"
+
+#. App connect screen: shuffle providers button
+msgctxt "site_app_shuffle"
+msgid "Shuffle"
+msgstr "Shuffle"
+
+#. App settings: stay in touch section
+msgctxt "site_app_stay_in_touch"
+msgid "Stay in touch"
+msgstr "Stay in touch"
+
+#. Connect drawer: strong-anonymization toggle
+msgctxt "site_app_strong_anon"
+msgid "Strong Anonymization"
+msgstr "Strong Anonymization"
+
+#. App support: intro line
+msgctxt "site_app_support_intro"
+msgid "Send us your feedback directly, or join the community for direct support."
+msgstr "Send us your feedback directly, or join the community for direct support."
+
+#. Connect drawer: live transfer timeseries section
+msgctxt "site_app_throughput"
+msgid "Transfer"
+msgstr "Transfer"
+
+#. App account: total referrals label
+msgctxt "site_app_total_referrals"
+msgid "Total referrals"
+msgstr "Total referrals"
+
+#. App payout detail: transaction hash
+msgctxt "site_app_transaction"
+msgid "Transaction"
+msgstr "Transaction"
+
+#. App settings: unlink referral network
+msgctxt "site_app_unlink"
+msgid "Unlink"
+msgstr "Unlink"
+
+#. App profile: verified badge
+msgctxt "site_app_verified"
+msgid "Verified"
+msgstr "Verified"
+
+#. App wallets: wallet label
+msgctxt "site_app_wallet"
+msgid "Wallet"
+msgstr "Wallet"
+
+#. App wallets: wallet address input
+msgctxt "site_app_wallet_address"
+msgid "Wallet address"
+msgstr "Wallet address"
+
+#. App account: wallets row/screen title
+msgctxt "site_app_wallets"
+msgid "Wallets"
+msgstr "Wallets"
+
 #. Account panel: any-provider location option
 msgctxt "site_best_available"
 msgid "Best available"
@@ -2615,25 +3250,10 @@ msgctxt "site_best_available_sub"
 msgid "Any provider on the network"
 msgstr "Any provider on the network"
 
-#. Buy data: best-value pack tag
-msgctxt "site_best_value"
-msgid "Best value"
-msgstr "Best value"
-
 #. Account panel: billing portal failed to open
 msgctxt "site_billing_portal_error"
 msgid "Could not open the billing portal."
 msgstr "Could not open the billing portal."
-
-#. Account panel: prompt to buy a balance code
-msgctxt "site_buy_code_prompt"
-msgid "Don't have a code yet? Buy one — it applies to your balance right away."
-msgstr "Don't have a code yet? Buy one — it applies to your balance right away."
-
-#. Upgrade: cancel-anytime reassurance
-msgctxt "site_cancel_anytime"
-msgid "You can cancel anytime from your account."
-msgstr "You can cancel anytime from your account."
 
 #. Account panel: clear the chosen location
 msgctxt "site_clear_location"
@@ -2644,6 +3264,41 @@ msgstr "Clear location"
 msgctxt "site_client_limit_upgrade"
 msgid "Your plan is at its concurrent client limit — Pro raises it to 1,000."
 msgstr "Your plan is at its concurrent client limit — Pro raises it to 1,000."
+
+#. Connect: extension fix alert title
+msgctxt "site_connect_ext_fix_title"
+msgid "Set up the extension to connect"
+msgstr "Set up the extension to connect"
+
+#. Connect: extension different-network alert body
+msgctxt "site_connect_ext_foreign_body"
+msgid "The extension is signed into a different network:"
+msgstr "The extension is signed into a different network:"
+
+#. Connect: extension install alert body
+msgctxt "site_connect_ext_install_body"
+msgid "URnetwork routes this browser through the extension. Install it to start connecting."
+msgstr "URnetwork routes this browser through the extension. Install it to start connecting."
+
+#. Connect: extension install alert title
+msgctxt "site_connect_ext_install_title"
+msgid "Install the extension to connect"
+msgstr "Install the extension to connect"
+
+#. Connect: extension ready status
+msgctxt "site_connect_ext_ready"
+msgid "Extension detected and signed in"
+msgstr "Extension detected and signed in"
+
+#. Connect: extension logged-out alert body
+msgctxt "site_connect_ext_unlinked_body"
+msgid "The extension is installed but signed out. Set it up with your network to connect."
+msgstr "The extension is installed but signed out. Set it up with your network to connect."
+
+#. Connect: disconnected status line
+msgctxt "site_connect_ready"
+msgid "Ready to connect"
+msgstr "Ready to connect"
 
 #. Account panel: copy a proxy's URL
 msgctxt "site_copy_url"
@@ -2665,21 +3320,6 @@ msgctxt "site_create_proxy_error"
 msgid "Could not create the proxy."
 msgstr "Could not create the proxy."
 
-#. Checkout: data-purchase success body
-msgctxt "site_data_on_its_way"
-msgid "Your data is on its way — the balance updates within a few moments."
-msgstr "Your data is on its way — the balance updates within a few moments."
-
-#. Buy data: pack picker aria-label
-msgctxt "site_data_pack"
-msgid "Data pack"
-msgstr "Data pack"
-
-#. Upgrade: dismiss the success sheet
-msgctxt "site_done"
-msgid "Done"
-msgstr "Done"
-
 #. Account panel: download a WireGuard config file
 msgctxt "site_download_conf"
 msgid "Download .conf"
@@ -2690,10 +3330,65 @@ msgctxt "site_download_wg_config"
 msgid "Download WireGuard config"
 msgstr "Download WireGuard config"
 
+#. Extension status: label before the extension's current network name
+msgctxt "site_ext_current_network"
+msgid "Currently set up for"
+msgstr "Currently set up for"
+
+#. Extension status: install pitch
+msgctxt "site_ext_get"
+msgid "Protect this browser with URnetwork."
+msgstr "Protect this browser with URnetwork."
+
+#. Extension status: install CTA
+msgctxt "site_ext_install"
+msgid "Install the extension"
+msgstr "Install the extension"
+
+#. Extension status: linked with the browser connection active
+msgctxt "site_ext_proxy_on"
+msgid "Browser connection active"
+msgstr "Browser connection active"
+
+#. Extension status: linked and idle
+msgctxt "site_ext_ready"
+msgid "Extension connected and ready to use"
+msgstr "Extension connected and ready to use"
+
+#. Extension status: setup in flight
+msgctxt "site_ext_setting_up"
+msgid "Setting up…"
+msgstr "Setting up…"
+
+#. Extension status: hand the page session to the extension
+msgctxt "site_ext_setup"
+msgid "Set up extension to use your network"
+msgstr "Set up extension to use your network"
+
+#. Extension status: compact 'set up extension' badge next to the account pill
+msgctxt "site_ext_setup_badge"
+msgid "Set up extension"
+msgstr "Set up extension"
+
+#. Extension status: warning when replacing another network
+msgctxt "site_ext_setup_foreign_note"
+msgid "This will log the extension out of its current network and disconnect the browser."
+msgstr "This will log the extension out of its current network and disconnect the browser."
+
+#. Extension status: section title
+msgctxt "site_ext_title"
+msgid "Browser extension"
+msgstr "Browser extension"
+
 #. Account panel: generic retry error
 msgctxt "site_generic_error"
 msgid "Something went wrong. Please try again."
 msgstr "Something went wrong. Please try again."
+
+#. Mobile app panel: install-the-native-app CTA
+msgctxt "site_install_app"
+msgid "Install the app"
+msgstr "Install the app"
 
 #. Account panel: invalid balance code
 msgctxt "site_invalid_balance_code"
@@ -2745,11 +3440,6 @@ msgctxt "site_manage_billing_hint"
 msgid "Manage payment details, see invoices, or cancel your subscription."
 msgstr "Manage payment details, see invoices, or cancel your subscription."
 
-#. Upgrade: plan option tagline
-msgctxt "site_most_popular_trial"
-msgid "Most popular · 7-day free trial"
-msgstr "Most popular · 7-day free trial"
-
 #. Account panel: empty redeemed-codes list
 msgctxt "site_no_balance_codes"
 msgid "No balance codes redeemed yet"
@@ -2765,45 +3455,25 @@ msgctxt "site_no_proxies"
 msgid "No proxies yet"
 msgstr "No proxies yet"
 
-#. Checkout: embedded checkout failed to open
-msgctxt "site_open_checkout_error"
-msgid "Could not open checkout."
-msgstr "Could not open checkout."
+#. Account panel: open the in-site web app (/app)
+msgctxt "site_open_app"
+msgid "Open app"
+msgstr "Open app"
 
 #. Account panel: launch the client-manager app
 msgctxt "site_open_client_manager"
 msgid "Open client manager"
 msgstr "Open client manager"
 
-#. Buy data: opening checkout
-msgctxt "site_opening_checkout"
-msgid "Opening checkout…"
-msgstr "Opening checkout…"
-
-#. Checkout: opening embedded Stripe checkout
-msgctxt "site_opening_secure_checkout"
-msgid "Opening secure checkout…"
-msgstr "Opening secure checkout…"
-
-#. Upgrade: pay via Solana button
-msgctxt "site_pay_solana"
-msgid "Pay with Solana"
-msgstr "Pay with Solana"
-
-#. Checkout: payment complete heading
-msgctxt "site_payment_complete"
-msgid "Payment complete"
-msgstr "Payment complete"
+#. App sidebar: open the operator client UI (formerly the client admin UI)
+msgctxt "site_operator_client_ui"
+msgid "Operator Client UI"
+msgstr "Operator Client UI"
 
 #. Account panel: client info — principal label
 msgctxt "site_principal"
 msgid "Principal"
 msgstr "Principal"
-
-#. Upgrade: success body
-msgctxt "site_pro_active_body"
-msgid "Thanks for supporting URnetwork. UR Pro is now active."
-msgstr "Thanks for supporting URnetwork. UR Pro is now active."
 
 #. Account panel: product-updates opt-in checkbox
 msgctxt "site_product_updates_optin"
@@ -2840,55 +3510,40 @@ msgctxt "site_socks_cred_note"
 msgid "Username is the token in the URL; password is empty."
 msgstr "Username is the token in the URL; password is empty."
 
-#. Upgrade: Solana payment failed
-msgctxt "site_solana_failed"
-msgid "Solana payment failed"
-msgstr "Solana payment failed"
+#. Subscription: free plan body
+msgctxt "site_sub_free_body"
+msgid "You're on the Free plan. Upgrade to Pro for more data and features."
+msgstr "You're on the Free plan. Upgrade to Pro for more data and features."
 
-#. Upgrade: Solana payment could not start
-msgctxt "site_solana_start_error"
-msgid "Could not start Solana payment"
-msgstr "Could not start Solana payment"
+#. Subscription: free plan title
+msgctxt "site_sub_free_title"
+msgid "Free plan"
+msgstr "Free plan"
 
-#. Upgrade: Solana Pay unavailable
-msgctxt "site_solana_unavailable"
-msgid "Solana Pay is unavailable right now. You can pay by card instead."
-msgstr "Solana Pay is unavailable right now. You can pay by card instead."
+#. Subscription: manage-on-platform button ({platform})
+msgctxt "site_sub_manage_on"
+msgid "Manage in {platform}"
+msgstr "Manage in {platform}"
 
-#. Checkout: could not start a checkout session
-msgctxt "site_start_checkout_error"
-msgid "Could not start checkout. Please try again."
-msgstr "Could not start checkout. Please try again."
+#. Subscription: unknown platform fallback
+msgctxt "site_sub_other_platform"
+msgid "another platform"
+msgstr "another platform"
 
-#. Checkout: Stripe.js failed to load
-msgctxt "site_stripe_load_error"
-msgid "Could not load Stripe."
-msgstr "Could not load Stripe."
+#. Subscription: other-platform body ({platform})
+msgctxt "site_sub_platform_body"
+msgid "Your Pro subscription is billed through {platform}. To change or cancel it, manage your subscriptions in {platform}."
+msgstr "Your Pro subscription is billed through {platform}. To change or cancel it, manage your subscriptions in {platform}."
 
-#. Upgrade: Stripe unconfigured error
-msgctxt "site_stripe_not_configured"
-msgid "Stripe is not configured in this build"
-msgstr "Stripe is not configured in this build"
-
-#. Upgrade: subscribe via Stripe button
-msgctxt "site_subscribe_stripe"
-msgid "Subscribe with Stripe"
-msgstr "Subscribe with Stripe"
+#. Subscription: Stripe-billed body
+msgctxt "site_sub_stripe_body"
+msgid "Your Pro subscription is billed through Stripe. Update your payment details or cancel anytime below."
+msgstr "Your Pro subscription is billed through Stripe. Update your payment details or cancel anytime below."
 
 #. Account panel: generic unexpected error
 msgctxt "site_unexpected_error"
 msgid "Something unexpected happened."
 msgstr "Something unexpected happened."
-
-#. Upgrade: waiting for payment confirmation
-msgctxt "site_waiting_payment"
-msgid "Waiting for payment confirmation…"
-msgstr "Waiting for payment confirmation…"
-
-#. Upgrade: success heading
-msgctxt "site_youre_pro"
-msgid "You're Pro"
-msgstr "You're Pro"
 
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"

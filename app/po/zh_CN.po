@@ -2561,6 +2561,791 @@ msgctxt "signed_in"
 msgid "Signed in"
 msgstr "已登录"
 
+#. Account panel: tools section heading
+msgctxt "site_account_tools"
+msgid "Account tools"
+msgstr "账户工具"
+
+#. App wallets/blocked: add button
+msgctxt "site_app_add"
+msgid "Add"
+msgstr "添加"
+
+#. App wallets: add wallet heading
+msgctxt "site_app_add_wallet"
+msgid "Add wallet"
+msgstr "添加钱包"
+
+#. App connect: allowed count label
+msgctxt "site_app_allowed"
+msgid "allowed"
+msgstr "已允许"
+
+#. App settings: auth code limit error
+msgctxt "site_app_auth_code_limit"
+msgid "Auth code limit reached. Try again later."
+msgstr "已达授权码上限。请稍后重试。"
+
+#. App settings: auth code expiry note
+msgctxt "site_app_auth_code_note"
+msgid "Created auth codes expire after 5 minutes"
+msgstr "创建的授权码将在5分钟后过期"
+
+#. App connect: block ads and trackers toggle
+msgctxt "site_app_block_ads"
+msgid "Block ads and trackers"
+msgstr "拦截广告和跟踪器"
+
+#. App blocked locations: search hint
+msgctxt "site_app_block_hint"
+msgid "Search for a location to block"
+msgstr "搜索要拦截的位置"
+
+#. App payout detail: blockchain
+msgctxt "site_app_blockchain"
+msgid "Blockchain"
+msgstr "区块链"
+
+#. App connect: blocked count label
+msgctxt "site_app_blocked"
+msgid "blocked"
+msgstr "已拦截"
+
+#. App account: blocked locations row/screen title
+msgctxt "site_app_blocked_locations"
+msgid "Blocked locations"
+msgstr "已拦截的位置"
+
+#. App settings: bonus referral code section
+msgctxt "site_app_bonus_referral"
+msgid "Bonus referral code"
+msgstr "奖励推荐码"
+
+#. App wallets: canceled payout status
+msgctxt "site_app_canceled"
+msgid "Canceled"
+msgstr "已取消"
+
+#. App payout detail: canceled time
+msgctxt "site_app_canceled_on"
+msgid "Canceled"
+msgstr "取消时间"
+
+#. App connect screen: change location button
+msgctxt "site_app_change"
+msgid "Change"
+msgstr "更改"
+
+#. App account: check my IP quick action
+msgctxt "site_app_check_ip"
+msgid "Check my IP"
+msgstr "查看我的IP"
+
+#. App connect location picker: cities section
+msgctxt "site_app_cities"
+msgid "Cities"
+msgstr "城市"
+
+#. App settings: referral code capped error
+msgctxt "site_app_code_capped"
+msgid "This referral code has reached its referral limit"
+msgstr "此推荐码已达推荐上限"
+
+#. App wallets: completed payout status
+msgctxt "site_app_complete"
+msgid "Complete"
+msgstr "已完成"
+
+#. App payout detail: completed time
+msgctxt "site_app_completed_on"
+msgid "Completed"
+msgstr "完成时间"
+
+#. App connect screen: connected state
+msgctxt "site_app_connected"
+msgid "Connected"
+msgstr "已连接"
+
+#. App connect screen: connecting state
+msgctxt "site_app_connecting"
+msgid "Connecting…"
+msgstr "正在连接…"
+
+#. App settings: connections section
+msgctxt "site_app_connections"
+msgid "Connections"
+msgstr "连接"
+
+#. App connect screen: contract details section title
+msgctxt "site_app_contracts"
+msgid "Contracts"
+msgstr "合约"
+
+#. App: copied flash
+msgctxt "site_app_copied"
+msgid "Copied"
+msgstr "已复制"
+
+#. App: copy button
+msgctxt "site_app_copy"
+msgid "Copy"
+msgstr "复制"
+
+#. App connect location picker: countries section
+msgctxt "site_app_countries"
+msgid "Countries"
+msgstr "国家/地区"
+
+#. App settings: create auth code button
+msgctxt "site_app_create_auth_code"
+msgid "Create auth code"
+msgstr "创建授权码"
+
+#. App payout detail: created time
+msgctxt "site_app_created"
+msgid "Created"
+msgstr "创建时间"
+
+#. App leaderboard: own rank label
+msgctxt "site_app_current_ranking"
+msgid "Current ranking"
+msgstr "当前排名"
+
+#. App payout detail: data paid for
+msgctxt "site_app_data_paid"
+msgid "Data paid for"
+msgstr "已付费流量"
+
+#. App leaderboard: data shared label
+msgctxt "site_app_data_shared"
+msgid "Data shared"
+msgstr "已共享流量"
+
+#. App settings: delete account button
+msgctxt "site_app_delete_account"
+msgid "Delete account"
+msgstr "删除账户"
+
+#. App settings: delete confirm prompt
+msgctxt "site_app_delete_confirm"
+msgid "Type your network name to confirm"
+msgstr "输入您的网络名称以确认"
+
+#. App settings: delete warning
+msgctxt "site_app_delete_warning"
+msgid "This permanently deletes your network, its data, and its earnings. This cannot be undone."
+msgstr "这将永久删除您的网络、其数据及收益。此操作无法撤销。"
+
+#. App connect screen: device rpc attaching hint
+msgctxt "site_app_device_attaching"
+msgid "Attaching device controls…"
+msgstr "正在加载设备控制…"
+
+#. App connect screen: disconnecting state
+msgctxt "site_app_disconnecting"
+msgid "Disconnecting…"
+msgstr "正在断开…"
+
+#. App connect: custom DNS section
+msgctxt "site_app_dns"
+msgid "DNS"
+msgstr "DNS"
+
+#. App connect: DNS summary encrypted
+msgctxt "site_app_dns_encrypted"
+msgid "Encrypted (DoH)"
+msgstr "加密(DoH)"
+
+#. App connect DNS: fallback toggle
+msgctxt "site_app_dns_fallback"
+msgid "Fast fallback during startup"
+msgstr "启动期间的快速回退"
+
+#. App connect DNS: local plain DNS toggle
+msgctxt "site_app_dns_local_dns"
+msgid "Standard DNS on this device"
+msgstr "本设备上的标准DNS"
+
+#. App connect DNS: local DoH toggle
+msgctxt "site_app_dns_local_doh"
+msgid "Encrypted DNS on this device"
+msgstr "本设备上的加密DNS"
+
+#. App connect: DNS summary plain
+msgctxt "site_app_dns_plain"
+msgid "Standard"
+msgstr "标准"
+
+#. App connect DNS: remote plain DNS toggle
+msgctxt "site_app_dns_remote_dns"
+msgid "Standard DNS through the tunnel"
+msgstr "通过隧道的标准DNS"
+
+#. App connect DNS: remote DoH toggle
+msgctxt "site_app_dns_remote_doh"
+msgid "Encrypted DNS through the tunnel"
+msgstr "通过隧道的加密DNS"
+
+#. App connect DNS: reset to default
+msgctxt "site_app_dns_reset"
+msgid "Reset to recommended"
+msgstr "重置为推荐设置"
+
+#. App account: network earnings card
+msgctxt "site_app_earnings"
+msgid "Network earnings"
+msgstr "网络收益"
+
+#. App profile: email label
+msgctxt "site_app_email"
+msgid "Email"
+msgstr "电子邮箱"
+
+#. App settings: referral code input placeholder
+msgctxt "site_app_enter_referral"
+msgid "Enter referral code"
+msgstr "输入推荐码"
+
+#. App settings: extension unavailable note
+msgctxt "site_app_ext_needed"
+msgid "The URnetwork browser extension is not available in this browser"
+msgstr "此浏览器不支持URnetwork浏览器扩展"
+
+#. App support: feedback textarea placeholder
+msgctxt "site_app_feedback_placeholder"
+msgid "Tell us what's working and what could be better…"
+msgstr "告诉我们哪些做得好、哪些可以改进…"
+
+#. App support: sent confirmation
+msgctxt "site_app_feedback_sent"
+msgid "Sent! Thanks for your feedback."
+msgstr "已发送！感谢您的反馈。"
+
+#. App balance codes: redeem success flash
+msgctxt "site_app_gib_added"
+msgid "+{gib} GiB added"
+msgstr "已添加+{gib} GiB"
+
+#. App support: star rating label
+msgctxt "site_app_how_are_we_doing"
+msgid "How are we doing?"
+msgstr "我们做得怎么样？"
+
+#. App wallets: invalid address error
+msgctxt "site_app_invalid_address"
+msgid "This address is not valid for the selected chain"
+msgstr "此地址对所选链无效"
+
+#. App settings: invalid referral code error
+msgctxt "site_app_invalid_code"
+msgid "This referral code is not valid"
+msgstr "此推荐码无效"
+
+#. App support: Discord community card
+msgctxt "site_app_join_discord"
+msgid "Join the community on Discord"
+msgstr "在Discord上加入社区"
+
+#. App settings: kill switch toggle
+msgctxt "site_app_kill_switch"
+msgid "Kill switch"
+msgstr "断网保护"
+
+#. App settings: kill switch note
+msgctxt "site_app_kill_switch_note"
+msgid "Block browser traffic when URnetwork is disconnected"
+msgstr "URnetwork断开连接时阻止浏览器流量"
+
+#. App leaderboard: empty state
+msgctxt "site_app_leaderboard_empty"
+msgid "No networks on the leaderboard yet."
+msgstr "排行榜上暂无网络。"
+
+#. App leaderboard: explainer note
+msgctxt "site_app_leaderboard_note"
+msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
+msgstr "排行榜为最近4次付款的总和，每个付款周期更新一次。"
+
+#. App: loading state
+msgctxt "site_app_loading"
+msgid "Loading…"
+msgstr "加载中…"
+
+#. App profile: login methods section
+msgctxt "site_app_login_methods"
+msgid "Login methods"
+msgstr "登录方式"
+
+#. App wallets: make payout wallet action
+msgctxt "site_app_make_payout_wallet"
+msgid "Make payout wallet"
+msgstr "设为收款钱包"
+
+#. App provider: mean reliability metric
+msgctxt "site_app_mean_reliability"
+msgid "Mean reliability"
+msgstr "平均可靠性"
+
+#. App profile: network name label
+msgctxt "site_app_network_name"
+msgid "Network name"
+msgstr "网络名称"
+
+#. App provider: reliability section
+msgctxt "site_app_network_reliability"
+msgid "Network reliability"
+msgstr "网络可靠性"
+
+#. App balance codes: empty state
+msgctxt "site_app_no_balance_codes"
+msgid "No balance codes redeemed yet"
+msgstr "尚未兑换余额码"
+
+#. App blocked locations: empty state
+msgctxt "site_app_no_blocked"
+msgid "No blocked locations yet"
+msgstr "暂无已拦截的位置"
+
+#. App wallets: payouts empty state
+msgctxt "site_app_no_payouts"
+msgid "No payouts yet"
+msgstr "暂无收款"
+
+#. App provider: no provider throughput
+msgctxt "site_app_no_provider_activity"
+msgid "No providing activity in this window."
+msgstr "此时段内暂无提供活动。"
+
+#. App provider: no provider contracts
+msgctxt "site_app_no_provider_contracts"
+msgid "No active provider contracts."
+msgstr "暂无活跃的提供者合约。"
+
+#. App provider: no reliability data
+msgctxt "site_app_no_reliability"
+msgid "No reliability data yet."
+msgstr "暂无可靠性数据。"
+
+#. App wallets: empty state
+msgctxt "site_app_no_wallets"
+msgid "No wallets yet — add one to receive payouts"
+msgstr "暂无钱包——添加一个以接收收款"
+
+#. App payout detail: paid time
+msgctxt "site_app_paid_on"
+msgid "Paid"
+msgstr "付款时间"
+
+#. App payout detail: not found
+msgctxt "site_app_payout_not_found"
+msgid "This payout could not be found."
+msgstr "找不到此笔收款。"
+
+#. App wallets: payout wallet label
+msgctxt "site_app_payout_wallet"
+msgid "Payout wallet"
+msgstr "收款钱包"
+
+#. App wallets: payouts section
+msgctxt "site_app_payouts"
+msgid "Payouts"
+msgstr "收款"
+
+#. App provider: peak clients metric
+msgctxt "site_app_peak_clients"
+msgid "Peak clients"
+msgstr "峰值客户端数"
+
+#. App connect screen: online devices section title
+msgctxt "site_app_peers"
+msgid "Your devices online"
+msgstr "您的在线设备"
+
+#. App wallets: pending payout status
+msgctxt "site_app_pending"
+msgid "Pending"
+msgstr "待处理"
+
+#. App leaderboard: hidden network row label
+msgctxt "site_app_private_network"
+msgid "Private network"
+msgstr "私有网络"
+
+#. App account: profile row/screen title
+msgctxt "site_app_profile"
+msgid "Profile"
+msgstr "个人资料"
+
+#. App account: provider row + screen title
+msgctxt "site_app_provider"
+msgid "Providing"
+msgstr "提供带宽"
+
+#. App provider: contracts section
+msgctxt "site_app_provider_contracts"
+msgid "Provider contracts"
+msgstr "提供者合约"
+
+#. App provider screen: intro
+msgctxt "site_app_provider_intro"
+msgid "How your network's devices are providing bandwidth and earning."
+msgstr "您网络中的设备如何提供带宽并赚取收益。"
+
+#. App provider: connect prompt for live stats
+msgctxt "site_app_provider_needs_connect"
+msgid "Connect to see live providing statistics."
+msgstr "连接后查看实时提供统计。"
+
+#. App provider: throughput section
+msgctxt "site_app_provider_stats"
+msgid "Provider statistics"
+msgstr "提供者统计"
+
+#. App connect screen: provider grid section title
+msgctxt "site_app_providers"
+msgid "Providers"
+msgstr "提供者"
+
+#. App provider: bytes received metric
+msgctxt "site_app_received"
+msgid "Received"
+msgstr "已接收"
+
+#. App balance codes: redeemed date row
+msgctxt "site_app_redeemed_on"
+msgid "Redeemed {date}"
+msgstr "兑换于{date}"
+
+#. App account: refer friends card
+msgctxt "site_app_refer_friends"
+msgid "Refer friends"
+msgstr "推荐好友"
+
+#. App settings: referral network section
+msgctxt "site_app_referral_network"
+msgid "Referral network"
+msgstr "推荐网络"
+
+#. App connect location picker: regions section
+msgctxt "site_app_regions"
+msgid "Regions"
+msgstr "地区"
+
+#. App: remove button
+msgctxt "site_app_remove"
+msgid "Remove"
+msgstr "移除"
+
+#. App screens: retry button
+msgctxt "site_app_retry"
+msgid "Try again"
+msgstr "重试"
+
+#. App: save button
+msgctxt "site_app_save"
+msgid "Save"
+msgstr "保存"
+
+#. App support: send button
+msgctxt "site_app_send"
+msgid "Send"
+msgstr "发送"
+
+#. App provider: bytes served metric
+msgctxt "site_app_served"
+msgid "Served"
+msgstr "已发送"
+
+#. App leaderboard: public visibility toggle
+msgctxt "site_app_show_on_leaderboard"
+msgid "Show my network on the leaderboard"
+msgstr "在排行榜上显示我的网络"
+
+#. App connect screen: shuffle providers button
+msgctxt "site_app_shuffle"
+msgid "Shuffle"
+msgstr "随机切换"
+
+#. App settings: stay in touch section
+msgctxt "site_app_stay_in_touch"
+msgid "Stay in touch"
+msgstr "保持联系"
+
+#. App support: intro line
+msgctxt "site_app_support_intro"
+msgid "Send us your feedback directly, or join the community for direct support."
+msgstr "直接向我们发送反馈，或加入社区获取直接支持。"
+
+#. App account: total referrals label
+msgctxt "site_app_total_referrals"
+msgid "Total referrals"
+msgstr "推荐总数"
+
+#. App payout detail: transaction hash
+msgctxt "site_app_transaction"
+msgid "Transaction"
+msgstr "交易"
+
+#. App settings: unlink referral network
+msgctxt "site_app_unlink"
+msgid "Unlink"
+msgstr "解除关联"
+
+#. App profile: verified badge
+msgctxt "site_app_verified"
+msgid "Verified"
+msgstr "已验证"
+
+#. App wallets: wallet label
+msgctxt "site_app_wallet"
+msgid "Wallet"
+msgstr "钱包"
+
+#. App wallets: wallet address input
+msgctxt "site_app_wallet_address"
+msgid "Wallet address"
+msgstr "钱包地址"
+
+#. App account: wallets row/screen title
+msgctxt "site_app_wallets"
+msgid "Wallets"
+msgstr "钱包"
+
+#. Account panel: any-provider location option
+msgctxt "site_best_available"
+msgid "Best available"
+msgstr "最佳可用"
+
+#. Account panel: 'best available' location subtitle
+msgctxt "site_best_available_sub"
+msgid "Any provider on the network"
+msgstr "网络上的任意提供者"
+
+#. Account panel: billing portal failed to open
+msgctxt "site_billing_portal_error"
+msgid "Could not open the billing portal."
+msgstr "无法打开账单门户。"
+
+#. Account panel: clear the chosen location
+msgctxt "site_clear_location"
+msgid "Clear location"
+msgstr "清除位置"
+
+#. Account panel: concurrent-client-limit upgrade prompt
+msgctxt "site_client_limit_upgrade"
+msgid "Your plan is at its concurrent client limit — Pro raises it to 1,000."
+msgstr "您的套餐已达并发客户端上限——Pro可将上限提升至1,000。"
+
+#. Account panel: copy a proxy's URL
+msgctxt "site_copy_url"
+msgid "Copy URL"
+msgstr "复制URL"
+
+#. Account panel: create another proxy
+msgctxt "site_create_another"
+msgid "Create another"
+msgstr "再创建一个"
+
+#. Account panel: create-proxy button
+msgctxt "site_create_proxy"
+msgid "Create proxy"
+msgstr "创建代理"
+
+#. Account panel: proxy creation failed
+msgctxt "site_create_proxy_error"
+msgid "Could not create the proxy."
+msgstr "无法创建代理。"
+
+#. Account panel: download a WireGuard config file
+msgctxt "site_download_conf"
+msgid "Download .conf"
+msgstr "下载.conf"
+
+#. Account panel: download WireGuard config (created card)
+msgctxt "site_download_wg_config"
+msgid "Download WireGuard config"
+msgstr "下载WireGuard配置"
+
+#. Extension status: label before the extension's current network name
+msgctxt "site_ext_current_network"
+msgid "Currently set up for"
+msgstr "当前设置用于"
+
+#. Extension status: install pitch
+msgctxt "site_ext_get"
+msgid "Protect this browser with URnetwork."
+msgstr "使用URnetwork保护此浏览器。"
+
+#. Extension status: install CTA
+msgctxt "site_ext_install"
+msgid "Install the extension"
+msgstr "安装扩展"
+
+#. Extension status: linked with the browser connection active
+msgctxt "site_ext_proxy_on"
+msgid "Browser connection active"
+msgstr "浏览器连接已激活"
+
+#. Extension status: linked and idle
+msgctxt "site_ext_ready"
+msgid "Extension connected and ready to use"
+msgstr "扩展已连接，可以使用"
+
+#. Extension status: setup in flight
+msgctxt "site_ext_setting_up"
+msgid "Setting up…"
+msgstr "正在设置…"
+
+#. Extension status: hand the page session to the extension
+msgctxt "site_ext_setup"
+msgid "Set up extension to use your network"
+msgstr "设置扩展以使用您的网络"
+
+#. Extension status: compact 'set up extension' badge next to the account pill
+msgctxt "site_ext_setup_badge"
+msgid "Set up extension"
+msgstr "设置扩展"
+
+#. Extension status: warning when replacing another network
+msgctxt "site_ext_setup_foreign_note"
+msgid "This will log the extension out of its current network and disconnect the browser."
+msgstr "这将使扩展退出当前网络并断开浏览器连接。"
+
+#. Extension status: section title
+msgctxt "site_ext_title"
+msgid "Browser extension"
+msgstr "浏览器扩展"
+
+#. Account panel: generic retry error
+msgctxt "site_generic_error"
+msgid "Something went wrong. Please try again."
+msgstr "出错了。请重试。"
+
+#. Account panel: invalid balance code
+msgctxt "site_invalid_balance_code"
+msgid "Invalid balance code."
+msgstr "余额码无效。"
+
+#. Account panel: balance codes load error
+msgctxt "site_load_balance_codes_error"
+msgid "Could not load balance codes"
+msgstr "无法加载余额码"
+
+#. Account panel: online-clients load error
+msgctxt "site_load_clients_error"
+msgid "Could not load clients"
+msgstr "无法加载客户端"
+
+#. Account panel: proxies load error
+msgctxt "site_load_proxies_error"
+msgid "Could not load proxies"
+msgstr "无法加载代理"
+
+#. Account panel: loading balance codes
+msgctxt "site_loading_balance_codes"
+msgid "Loading balance codes…"
+msgstr "正在加载余额码…"
+
+#. Account panel: loading online clients
+msgctxt "site_loading_clients"
+msgid "Loading clients…"
+msgstr "正在加载客户端…"
+
+#. Account panel: loading proxies
+msgctxt "site_loading_proxies"
+msgid "Loading proxies…"
+msgstr "正在加载代理…"
+
+#. Account panel: location chooser search field
+msgctxt "site_location_search_placeholder"
+msgid "Search for any location"
+msgstr "搜索任意位置"
+
+#. Account panel: location chooser list aria-label
+msgctxt "site_locations"
+msgid "Locations"
+msgstr "位置"
+
+#. Account panel: billing portal hint for Pro users
+msgctxt "site_manage_billing_hint"
+msgid "Manage payment details, see invoices, or cancel your subscription."
+msgstr "管理付款信息、查看账单或取消订阅。"
+
+#. Account panel: empty redeemed-codes list
+msgctxt "site_no_balance_codes"
+msgid "No balance codes redeemed yet"
+msgstr "尚未兑换余额码"
+
+#. Account panel: empty online-clients list
+msgctxt "site_no_clients_online"
+msgid "No clients online"
+msgstr "暂无在线客户端"
+
+#. Account panel: empty proxies list
+msgctxt "site_no_proxies"
+msgid "No proxies yet"
+msgstr "暂无代理"
+
+#. Account panel: open the in-site web app (/app)
+msgctxt "site_open_app"
+msgid "Open app"
+msgstr "打开应用"
+
+#. Account panel: launch the client-manager app
+msgctxt "site_open_client_manager"
+msgid "Open client manager"
+msgstr "打开客户端管理器"
+
+#. App sidebar: open the operator client UI (formerly the client admin UI)
+msgctxt "site_operator_client_ui"
+msgid "Operator Client UI"
+msgstr "运营者客户端界面"
+
+#. Account panel: client info — principal label
+msgctxt "site_principal"
+msgid "Principal"
+msgstr "主体"
+
+#. Account panel: product-updates opt-in checkbox
+msgctxt "site_product_updates_optin"
+msgid "You can send me occasional product updates"
+msgstr "可以偶尔向我发送产品更新"
+
+#. Account panel: proxies section heading
+msgctxt "site_proxies"
+msgid "Proxies"
+msgstr "代理"
+
+#. Account panel: proxy-type picker aria-label
+msgctxt "site_proxy_type"
+msgid "Proxy type"
+msgstr "代理类型"
+
+#. Account panel: client info — roles label
+msgctxt "site_roles"
+msgid "Roles"
+msgstr "角色"
+
+#. Account panel: preference saved flash
+msgctxt "site_saved"
+msgid "Saved"
+msgstr "已保存"
+
+#. Account panel: location search in progress
+msgctxt "site_searching"
+msgid "Searching…"
+msgstr "正在搜索…"
+
+#. Account panel: SOCKS credential note
+msgctxt "site_socks_cred_note"
+msgid "Username is the token in the URL; password is empty."
+msgstr "用户名为URL中的令牌；密码为空。"
+
+#. Account panel: generic unexpected error
+msgctxt "site_unexpected_error"
+msgid "Something unexpected happened."
+msgstr "发生了意外错误。"
+
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"
 msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."

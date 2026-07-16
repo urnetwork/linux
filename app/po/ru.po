@@ -2579,6 +2579,791 @@ msgctxt "signed_in"
 msgid "Signed in"
 msgstr "Вы вошли"
 
+#. Account panel: tools section heading
+msgctxt "site_account_tools"
+msgid "Account tools"
+msgstr "Инструменты аккаунта"
+
+#. App wallets/blocked: add button
+msgctxt "site_app_add"
+msgid "Add"
+msgstr "Добавить"
+
+#. App wallets: add wallet heading
+msgctxt "site_app_add_wallet"
+msgid "Add wallet"
+msgstr "Добавить кошелёк"
+
+#. App connect: allowed count label
+msgctxt "site_app_allowed"
+msgid "allowed"
+msgstr "разрешено"
+
+#. App settings: auth code limit error
+msgctxt "site_app_auth_code_limit"
+msgid "Auth code limit reached. Try again later."
+msgstr "Достигнут лимит кодов авторизации. Попробуйте позже."
+
+#. App settings: auth code expiry note
+msgctxt "site_app_auth_code_note"
+msgid "Created auth codes expire after 5 minutes"
+msgstr "Созданные коды авторизации истекают через 5 минут"
+
+#. App connect: block ads and trackers toggle
+msgctxt "site_app_block_ads"
+msgid "Block ads and trackers"
+msgstr "Блокировать рекламу и трекеры"
+
+#. App blocked locations: search hint
+msgctxt "site_app_block_hint"
+msgid "Search for a location to block"
+msgstr "Найдите локацию для блокировки"
+
+#. App payout detail: blockchain
+msgctxt "site_app_blockchain"
+msgid "Blockchain"
+msgstr "Блокчейн"
+
+#. App connect: blocked count label
+msgctxt "site_app_blocked"
+msgid "blocked"
+msgstr "заблокировано"
+
+#. App account: blocked locations row/screen title
+msgctxt "site_app_blocked_locations"
+msgid "Blocked locations"
+msgstr "Заблокированные локации"
+
+#. App settings: bonus referral code section
+msgctxt "site_app_bonus_referral"
+msgid "Bonus referral code"
+msgstr "Бонусный реферальный код"
+
+#. App wallets: canceled payout status
+msgctxt "site_app_canceled"
+msgid "Canceled"
+msgstr "Отменено"
+
+#. App payout detail: canceled time
+msgctxt "site_app_canceled_on"
+msgid "Canceled"
+msgstr "Отменено"
+
+#. App connect screen: change location button
+msgctxt "site_app_change"
+msgid "Change"
+msgstr "Изменить"
+
+#. App account: check my IP quick action
+msgctxt "site_app_check_ip"
+msgid "Check my IP"
+msgstr "Проверить мой IP"
+
+#. App connect location picker: cities section
+msgctxt "site_app_cities"
+msgid "Cities"
+msgstr "Города"
+
+#. App settings: referral code capped error
+msgctxt "site_app_code_capped"
+msgid "This referral code has reached its referral limit"
+msgstr "Этот реферальный код достиг лимита рефералов"
+
+#. App wallets: completed payout status
+msgctxt "site_app_complete"
+msgid "Complete"
+msgstr "Завершено"
+
+#. App payout detail: completed time
+msgctxt "site_app_completed_on"
+msgid "Completed"
+msgstr "Завершено"
+
+#. App connect screen: connected state
+msgctxt "site_app_connected"
+msgid "Connected"
+msgstr "Подключено"
+
+#. App connect screen: connecting state
+msgctxt "site_app_connecting"
+msgid "Connecting…"
+msgstr "Подключение…"
+
+#. App settings: connections section
+msgctxt "site_app_connections"
+msgid "Connections"
+msgstr "Подключения"
+
+#. App connect screen: contract details section title
+msgctxt "site_app_contracts"
+msgid "Contracts"
+msgstr "Контракты"
+
+#. App: copied flash
+msgctxt "site_app_copied"
+msgid "Copied"
+msgstr "Скопировано"
+
+#. App: copy button
+msgctxt "site_app_copy"
+msgid "Copy"
+msgstr "Копировать"
+
+#. App connect location picker: countries section
+msgctxt "site_app_countries"
+msgid "Countries"
+msgstr "Страны"
+
+#. App settings: create auth code button
+msgctxt "site_app_create_auth_code"
+msgid "Create auth code"
+msgstr "Создать код авторизации"
+
+#. App payout detail: created time
+msgctxt "site_app_created"
+msgid "Created"
+msgstr "Создано"
+
+#. App leaderboard: own rank label
+msgctxt "site_app_current_ranking"
+msgid "Current ranking"
+msgstr "Текущий рейтинг"
+
+#. App payout detail: data paid for
+msgctxt "site_app_data_paid"
+msgid "Data paid for"
+msgstr "Оплаченные данные"
+
+#. App leaderboard: data shared label
+msgctxt "site_app_data_shared"
+msgid "Data shared"
+msgstr "Передано данных"
+
+#. App settings: delete account button
+msgctxt "site_app_delete_account"
+msgid "Delete account"
+msgstr "Удалить аккаунт"
+
+#. App settings: delete confirm prompt
+msgctxt "site_app_delete_confirm"
+msgid "Type your network name to confirm"
+msgstr "Введите имя вашей сети для подтверждения"
+
+#. App settings: delete warning
+msgctxt "site_app_delete_warning"
+msgid "This permanently deletes your network, its data, and its earnings. This cannot be undone."
+msgstr "Это навсегда удалит вашу сеть, её данные и заработок. Отменить это действие нельзя."
+
+#. App connect screen: device rpc attaching hint
+msgctxt "site_app_device_attaching"
+msgid "Attaching device controls…"
+msgstr "Подключение управления устройством…"
+
+#. App connect screen: disconnecting state
+msgctxt "site_app_disconnecting"
+msgid "Disconnecting…"
+msgstr "Отключение…"
+
+#. App connect: custom DNS section
+msgctxt "site_app_dns"
+msgid "DNS"
+msgstr "DNS"
+
+#. App connect: DNS summary encrypted
+msgctxt "site_app_dns_encrypted"
+msgid "Encrypted (DoH)"
+msgstr "Зашифрованный (DoH)"
+
+#. App connect DNS: fallback toggle
+msgctxt "site_app_dns_fallback"
+msgid "Fast fallback during startup"
+msgstr "Быстрый резерв при запуске"
+
+#. App connect DNS: local plain DNS toggle
+msgctxt "site_app_dns_local_dns"
+msgid "Standard DNS on this device"
+msgstr "Стандартный DNS на этом устройстве"
+
+#. App connect DNS: local DoH toggle
+msgctxt "site_app_dns_local_doh"
+msgid "Encrypted DNS on this device"
+msgstr "Зашифрованный DNS на этом устройстве"
+
+#. App connect: DNS summary plain
+msgctxt "site_app_dns_plain"
+msgid "Standard"
+msgstr "Стандартный"
+
+#. App connect DNS: remote plain DNS toggle
+msgctxt "site_app_dns_remote_dns"
+msgid "Standard DNS through the tunnel"
+msgstr "Стандартный DNS через туннель"
+
+#. App connect DNS: remote DoH toggle
+msgctxt "site_app_dns_remote_doh"
+msgid "Encrypted DNS through the tunnel"
+msgstr "Зашифрованный DNS через туннель"
+
+#. App connect DNS: reset to default
+msgctxt "site_app_dns_reset"
+msgid "Reset to recommended"
+msgstr "Сбросить до рекомендуемых"
+
+#. App account: network earnings card
+msgctxt "site_app_earnings"
+msgid "Network earnings"
+msgstr "Заработок сети"
+
+#. App profile: email label
+msgctxt "site_app_email"
+msgid "Email"
+msgstr "Email"
+
+#. App settings: referral code input placeholder
+msgctxt "site_app_enter_referral"
+msgid "Enter referral code"
+msgstr "Введите реферальный код"
+
+#. App settings: extension unavailable note
+msgctxt "site_app_ext_needed"
+msgid "The URnetwork browser extension is not available in this browser"
+msgstr "Расширение URnetwork недоступно в этом браузере"
+
+#. App support: feedback textarea placeholder
+msgctxt "site_app_feedback_placeholder"
+msgid "Tell us what's working and what could be better…"
+msgstr "Расскажите, что работает хорошо, а что можно улучшить…"
+
+#. App support: sent confirmation
+msgctxt "site_app_feedback_sent"
+msgid "Sent! Thanks for your feedback."
+msgstr "Отправлено! Спасибо за ваш отзыв."
+
+#. App balance codes: redeem success flash
+msgctxt "site_app_gib_added"
+msgid "+{gib} GiB added"
+msgstr "+{gib} GiB добавлено"
+
+#. App support: star rating label
+msgctxt "site_app_how_are_we_doing"
+msgid "How are we doing?"
+msgstr "Как мы справляемся?"
+
+#. App wallets: invalid address error
+msgctxt "site_app_invalid_address"
+msgid "This address is not valid for the selected chain"
+msgstr "Этот адрес недействителен для выбранной сети"
+
+#. App settings: invalid referral code error
+msgctxt "site_app_invalid_code"
+msgid "This referral code is not valid"
+msgstr "Этот реферальный код недействителен"
+
+#. App support: Discord community card
+msgctxt "site_app_join_discord"
+msgid "Join the community on Discord"
+msgstr "Присоединяйтесь к сообществу в Discord"
+
+#. App settings: kill switch toggle
+msgctxt "site_app_kill_switch"
+msgid "Kill switch"
+msgstr "Kill switch"
+
+#. App settings: kill switch note
+msgctxt "site_app_kill_switch_note"
+msgid "Block browser traffic when URnetwork is disconnected"
+msgstr "Блокировать трафик браузера, когда URnetwork отключён"
+
+#. App leaderboard: empty state
+msgctxt "site_app_leaderboard_empty"
+msgid "No networks on the leaderboard yet."
+msgstr "Пока нет сетей в рейтинге."
+
+#. App leaderboard: explainer note
+msgctxt "site_app_leaderboard_note"
+msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
+msgstr "Рейтинг — это сумма последних 4 выплат. Он обновляется каждый платёжный цикл."
+
+#. App: loading state
+msgctxt "site_app_loading"
+msgid "Loading…"
+msgstr "Загрузка…"
+
+#. App profile: login methods section
+msgctxt "site_app_login_methods"
+msgid "Login methods"
+msgstr "Способы входа"
+
+#. App wallets: make payout wallet action
+msgctxt "site_app_make_payout_wallet"
+msgid "Make payout wallet"
+msgstr "Назначить кошельком для выплат"
+
+#. App provider: mean reliability metric
+msgctxt "site_app_mean_reliability"
+msgid "Mean reliability"
+msgstr "Средняя надёжность"
+
+#. App profile: network name label
+msgctxt "site_app_network_name"
+msgid "Network name"
+msgstr "Имя сети"
+
+#. App provider: reliability section
+msgctxt "site_app_network_reliability"
+msgid "Network reliability"
+msgstr "Надёжность сети"
+
+#. App balance codes: empty state
+msgctxt "site_app_no_balance_codes"
+msgid "No balance codes redeemed yet"
+msgstr "Пока нет активированных кодов баланса"
+
+#. App blocked locations: empty state
+msgctxt "site_app_no_blocked"
+msgid "No blocked locations yet"
+msgstr "Пока нет заблокированных локаций"
+
+#. App wallets: payouts empty state
+msgctxt "site_app_no_payouts"
+msgid "No payouts yet"
+msgstr "Пока нет выплат"
+
+#. App provider: no provider throughput
+msgctxt "site_app_no_provider_activity"
+msgid "No providing activity in this window."
+msgstr "Нет активности раздачи за этот период."
+
+#. App provider: no provider contracts
+msgctxt "site_app_no_provider_contracts"
+msgid "No active provider contracts."
+msgstr "Нет активных контрактов раздачи."
+
+#. App provider: no reliability data
+msgctxt "site_app_no_reliability"
+msgid "No reliability data yet."
+msgstr "Пока нет данных о надёжности."
+
+#. App wallets: empty state
+msgctxt "site_app_no_wallets"
+msgid "No wallets yet — add one to receive payouts"
+msgstr "Пока нет кошельков — добавьте, чтобы получать выплаты"
+
+#. App payout detail: paid time
+msgctxt "site_app_paid_on"
+msgid "Paid"
+msgstr "Оплачено"
+
+#. App payout detail: not found
+msgctxt "site_app_payout_not_found"
+msgid "This payout could not be found."
+msgstr "Эта выплата не найдена."
+
+#. App wallets: payout wallet label
+msgctxt "site_app_payout_wallet"
+msgid "Payout wallet"
+msgstr "Кошелёк для выплат"
+
+#. App wallets: payouts section
+msgctxt "site_app_payouts"
+msgid "Payouts"
+msgstr "Выплаты"
+
+#. App provider: peak clients metric
+msgctxt "site_app_peak_clients"
+msgid "Peak clients"
+msgstr "Пик клиентов"
+
+#. App connect screen: online devices section title
+msgctxt "site_app_peers"
+msgid "Your devices online"
+msgstr "Ваши устройства в сети"
+
+#. App wallets: pending payout status
+msgctxt "site_app_pending"
+msgid "Pending"
+msgstr "В ожидании"
+
+#. App leaderboard: hidden network row label
+msgctxt "site_app_private_network"
+msgid "Private network"
+msgstr "Частная сеть"
+
+#. App account: profile row/screen title
+msgctxt "site_app_profile"
+msgid "Profile"
+msgstr "Профиль"
+
+#. App account: provider row + screen title
+msgctxt "site_app_provider"
+msgid "Providing"
+msgstr "Раздача"
+
+#. App provider: contracts section
+msgctxt "site_app_provider_contracts"
+msgid "Provider contracts"
+msgstr "Контракты раздачи"
+
+#. App provider screen: intro
+msgctxt "site_app_provider_intro"
+msgid "How your network's devices are providing bandwidth and earning."
+msgstr "Как устройства вашей сети раздают трафик и зарабатывают."
+
+#. App provider: connect prompt for live stats
+msgctxt "site_app_provider_needs_connect"
+msgid "Connect to see live providing statistics."
+msgstr "Подключитесь, чтобы видеть статистику раздачи в реальном времени."
+
+#. App provider: throughput section
+msgctxt "site_app_provider_stats"
+msgid "Provider statistics"
+msgstr "Статистика раздачи"
+
+#. App connect screen: provider grid section title
+msgctxt "site_app_providers"
+msgid "Providers"
+msgstr "Провайдеры"
+
+#. App provider: bytes received metric
+msgctxt "site_app_received"
+msgid "Received"
+msgstr "Получено"
+
+#. App balance codes: redeemed date row
+msgctxt "site_app_redeemed_on"
+msgid "Redeemed {date}"
+msgstr "Активировано {date}"
+
+#. App account: refer friends card
+msgctxt "site_app_refer_friends"
+msgid "Refer friends"
+msgstr "Пригласить друзей"
+
+#. App settings: referral network section
+msgctxt "site_app_referral_network"
+msgid "Referral network"
+msgstr "Реферальная сеть"
+
+#. App connect location picker: regions section
+msgctxt "site_app_regions"
+msgid "Regions"
+msgstr "Регионы"
+
+#. App: remove button
+msgctxt "site_app_remove"
+msgid "Remove"
+msgstr "Удалить"
+
+#. App screens: retry button
+msgctxt "site_app_retry"
+msgid "Try again"
+msgstr "Попробовать ещё раз"
+
+#. App: save button
+msgctxt "site_app_save"
+msgid "Save"
+msgstr "Сохранить"
+
+#. App support: send button
+msgctxt "site_app_send"
+msgid "Send"
+msgstr "Отправить"
+
+#. App provider: bytes served metric
+msgctxt "site_app_served"
+msgid "Served"
+msgstr "Отдано"
+
+#. App leaderboard: public visibility toggle
+msgctxt "site_app_show_on_leaderboard"
+msgid "Show my network on the leaderboard"
+msgstr "Показывать мою сеть в рейтинге"
+
+#. App connect screen: shuffle providers button
+msgctxt "site_app_shuffle"
+msgid "Shuffle"
+msgstr "Перемешать"
+
+#. App settings: stay in touch section
+msgctxt "site_app_stay_in_touch"
+msgid "Stay in touch"
+msgstr "Оставайтесь на связи"
+
+#. App support: intro line
+msgctxt "site_app_support_intro"
+msgid "Send us your feedback directly, or join the community for direct support."
+msgstr "Отправьте нам отзыв напрямую или присоединяйтесь к сообществу для поддержки."
+
+#. App account: total referrals label
+msgctxt "site_app_total_referrals"
+msgid "Total referrals"
+msgstr "Всего рефералов"
+
+#. App payout detail: transaction hash
+msgctxt "site_app_transaction"
+msgid "Transaction"
+msgstr "Транзакция"
+
+#. App settings: unlink referral network
+msgctxt "site_app_unlink"
+msgid "Unlink"
+msgstr "Отвязать"
+
+#. App profile: verified badge
+msgctxt "site_app_verified"
+msgid "Verified"
+msgstr "Подтверждено"
+
+#. App wallets: wallet label
+msgctxt "site_app_wallet"
+msgid "Wallet"
+msgstr "Кошелёк"
+
+#. App wallets: wallet address input
+msgctxt "site_app_wallet_address"
+msgid "Wallet address"
+msgstr "Адрес кошелька"
+
+#. App account: wallets row/screen title
+msgctxt "site_app_wallets"
+msgid "Wallets"
+msgstr "Кошельки"
+
+#. Account panel: any-provider location option
+msgctxt "site_best_available"
+msgid "Best available"
+msgstr "Лучший доступный"
+
+#. Account panel: 'best available' location subtitle
+msgctxt "site_best_available_sub"
+msgid "Any provider on the network"
+msgstr "Любой провайдер в сети"
+
+#. Account panel: billing portal failed to open
+msgctxt "site_billing_portal_error"
+msgid "Could not open the billing portal."
+msgstr "Не удалось открыть платёжный портал."
+
+#. Account panel: clear the chosen location
+msgctxt "site_clear_location"
+msgid "Clear location"
+msgstr "Сбросить локацию"
+
+#. Account panel: concurrent-client-limit upgrade prompt
+msgctxt "site_client_limit_upgrade"
+msgid "Your plan is at its concurrent client limit — Pro raises it to 1,000."
+msgstr "Достигнут лимит одновременных клиентов вашего тарифа — Pro повышает его до 1000."
+
+#. Account panel: copy a proxy's URL
+msgctxt "site_copy_url"
+msgid "Copy URL"
+msgstr "Копировать URL"
+
+#. Account panel: create another proxy
+msgctxt "site_create_another"
+msgid "Create another"
+msgstr "Создать ещё"
+
+#. Account panel: create-proxy button
+msgctxt "site_create_proxy"
+msgid "Create proxy"
+msgstr "Создать прокси"
+
+#. Account panel: proxy creation failed
+msgctxt "site_create_proxy_error"
+msgid "Could not create the proxy."
+msgstr "Не удалось создать прокси."
+
+#. Account panel: download a WireGuard config file
+msgctxt "site_download_conf"
+msgid "Download .conf"
+msgstr "Скачать .conf"
+
+#. Account panel: download WireGuard config (created card)
+msgctxt "site_download_wg_config"
+msgid "Download WireGuard config"
+msgstr "Скачать конфиг WireGuard"
+
+#. Extension status: label before the extension's current network name
+msgctxt "site_ext_current_network"
+msgid "Currently set up for"
+msgstr "Сейчас настроено для"
+
+#. Extension status: install pitch
+msgctxt "site_ext_get"
+msgid "Protect this browser with URnetwork."
+msgstr "Защитите этот браузер с помощью URnetwork."
+
+#. Extension status: install CTA
+msgctxt "site_ext_install"
+msgid "Install the extension"
+msgstr "Установить расширение"
+
+#. Extension status: linked with the browser connection active
+msgctxt "site_ext_proxy_on"
+msgid "Browser connection active"
+msgstr "Подключение браузера активно"
+
+#. Extension status: linked and idle
+msgctxt "site_ext_ready"
+msgid "Extension connected and ready to use"
+msgstr "Расширение подключено и готово к работе"
+
+#. Extension status: setup in flight
+msgctxt "site_ext_setting_up"
+msgid "Setting up…"
+msgstr "Настройка…"
+
+#. Extension status: hand the page session to the extension
+msgctxt "site_ext_setup"
+msgid "Set up extension to use your network"
+msgstr "Настроить расширение для вашей сети"
+
+#. Extension status: compact 'set up extension' badge next to the account pill
+msgctxt "site_ext_setup_badge"
+msgid "Set up extension"
+msgstr "Настроить расширение"
+
+#. Extension status: warning when replacing another network
+msgctxt "site_ext_setup_foreign_note"
+msgid "This will log the extension out of its current network and disconnect the browser."
+msgstr "Это отключит расширение от текущей сети и отсоединит браузер."
+
+#. Extension status: section title
+msgctxt "site_ext_title"
+msgid "Browser extension"
+msgstr "Расширение для браузера"
+
+#. Account panel: generic retry error
+msgctxt "site_generic_error"
+msgid "Something went wrong. Please try again."
+msgstr "Что-то пошло не так. Попробуйте ещё раз."
+
+#. Account panel: invalid balance code
+msgctxt "site_invalid_balance_code"
+msgid "Invalid balance code."
+msgstr "Неверный код баланса."
+
+#. Account panel: balance codes load error
+msgctxt "site_load_balance_codes_error"
+msgid "Could not load balance codes"
+msgstr "Не удалось загрузить коды баланса"
+
+#. Account panel: online-clients load error
+msgctxt "site_load_clients_error"
+msgid "Could not load clients"
+msgstr "Не удалось загрузить клиентов"
+
+#. Account panel: proxies load error
+msgctxt "site_load_proxies_error"
+msgid "Could not load proxies"
+msgstr "Не удалось загрузить прокси"
+
+#. Account panel: loading balance codes
+msgctxt "site_loading_balance_codes"
+msgid "Loading balance codes…"
+msgstr "Загрузка кодов баланса…"
+
+#. Account panel: loading online clients
+msgctxt "site_loading_clients"
+msgid "Loading clients…"
+msgstr "Загрузка клиентов…"
+
+#. Account panel: loading proxies
+msgctxt "site_loading_proxies"
+msgid "Loading proxies…"
+msgstr "Загрузка прокси…"
+
+#. Account panel: location chooser search field
+msgctxt "site_location_search_placeholder"
+msgid "Search for any location"
+msgstr "Поиск любой локации"
+
+#. Account panel: location chooser list aria-label
+msgctxt "site_locations"
+msgid "Locations"
+msgstr "Локации"
+
+#. Account panel: billing portal hint for Pro users
+msgctxt "site_manage_billing_hint"
+msgid "Manage payment details, see invoices, or cancel your subscription."
+msgstr "Управляйте платёжными данными, просматривайте счета или отмените подписку."
+
+#. Account panel: empty redeemed-codes list
+msgctxt "site_no_balance_codes"
+msgid "No balance codes redeemed yet"
+msgstr "Пока нет активированных кодов баланса"
+
+#. Account panel: empty online-clients list
+msgctxt "site_no_clients_online"
+msgid "No clients online"
+msgstr "Нет клиентов в сети"
+
+#. Account panel: empty proxies list
+msgctxt "site_no_proxies"
+msgid "No proxies yet"
+msgstr "Пока нет прокси"
+
+#. Account panel: open the in-site web app (/app)
+msgctxt "site_open_app"
+msgid "Open app"
+msgstr "Открыть приложение"
+
+#. Account panel: launch the client-manager app
+msgctxt "site_open_client_manager"
+msgid "Open client manager"
+msgstr "Открыть менеджер клиентов"
+
+#. App sidebar: open the operator client UI (formerly the client admin UI)
+msgctxt "site_operator_client_ui"
+msgid "Operator Client UI"
+msgstr "Интерфейс клиента оператора"
+
+#. Account panel: client info — principal label
+msgctxt "site_principal"
+msgid "Principal"
+msgstr "Принципал"
+
+#. Account panel: product-updates opt-in checkbox
+msgctxt "site_product_updates_optin"
+msgid "You can send me occasional product updates"
+msgstr "Можно иногда присылать мне новости о продукте"
+
+#. Account panel: proxies section heading
+msgctxt "site_proxies"
+msgid "Proxies"
+msgstr "Прокси"
+
+#. Account panel: proxy-type picker aria-label
+msgctxt "site_proxy_type"
+msgid "Proxy type"
+msgstr "Тип прокси"
+
+#. Account panel: client info — roles label
+msgctxt "site_roles"
+msgid "Roles"
+msgstr "Роли"
+
+#. Account panel: preference saved flash
+msgctxt "site_saved"
+msgid "Saved"
+msgstr "Сохранено"
+
+#. Account panel: location search in progress
+msgctxt "site_searching"
+msgid "Searching…"
+msgstr "Поиск…"
+
+#. Account panel: SOCKS credential note
+msgctxt "site_socks_cred_note"
+msgid "Username is the token in the URL; password is empty."
+msgstr "Имя пользователя — это токен из URL; пароль пустой."
+
+#. Account panel: generic unexpected error
+msgctxt "site_unexpected_error"
+msgid "Something unexpected happened."
+msgstr "Произошла непредвиденная ошибка."
+
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"
 msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."

@@ -2606,6 +2606,791 @@ msgctxt "signed_in"
 msgid "Signed in"
 msgstr "تم تسجيل الدخول"
 
+#. Account panel: tools section heading
+msgctxt "site_account_tools"
+msgid "Account tools"
+msgstr "أدوات الحساب"
+
+#. App wallets/blocked: add button
+msgctxt "site_app_add"
+msgid "Add"
+msgstr "إضافة"
+
+#. App wallets: add wallet heading
+msgctxt "site_app_add_wallet"
+msgid "Add wallet"
+msgstr "إضافة محفظة"
+
+#. App connect: allowed count label
+msgctxt "site_app_allowed"
+msgid "allowed"
+msgstr "مسموح"
+
+#. App settings: auth code limit error
+msgctxt "site_app_auth_code_limit"
+msgid "Auth code limit reached. Try again later."
+msgstr "تم بلوغ حد رموز المصادقة. حاول مرة أخرى لاحقاً."
+
+#. App settings: auth code expiry note
+msgctxt "site_app_auth_code_note"
+msgid "Created auth codes expire after 5 minutes"
+msgstr "تنتهي صلاحية رموز المصادقة المُنشأة بعد 5 دقائق"
+
+#. App connect: block ads and trackers toggle
+msgctxt "site_app_block_ads"
+msgid "Block ads and trackers"
+msgstr "حظر الإعلانات والمتتبعات"
+
+#. App blocked locations: search hint
+msgctxt "site_app_block_hint"
+msgid "Search for a location to block"
+msgstr "ابحث عن موقع لحظره"
+
+#. App payout detail: blockchain
+msgctxt "site_app_blockchain"
+msgid "Blockchain"
+msgstr "سلسلة الكتل"
+
+#. App connect: blocked count label
+msgctxt "site_app_blocked"
+msgid "blocked"
+msgstr "محظور"
+
+#. App account: blocked locations row/screen title
+msgctxt "site_app_blocked_locations"
+msgid "Blocked locations"
+msgstr "المواقع المحظورة"
+
+#. App settings: bonus referral code section
+msgctxt "site_app_bonus_referral"
+msgid "Bonus referral code"
+msgstr "رمز الإحالة الإضافي"
+
+#. App wallets: canceled payout status
+msgctxt "site_app_canceled"
+msgid "Canceled"
+msgstr "ملغى"
+
+#. App payout detail: canceled time
+msgctxt "site_app_canceled_on"
+msgid "Canceled"
+msgstr "تاريخ الإلغاء"
+
+#. App connect screen: change location button
+msgctxt "site_app_change"
+msgid "Change"
+msgstr "تغيير"
+
+#. App account: check my IP quick action
+msgctxt "site_app_check_ip"
+msgid "Check my IP"
+msgstr "التحقق من عنوان IP الخاص بي"
+
+#. App connect location picker: cities section
+msgctxt "site_app_cities"
+msgid "Cities"
+msgstr "المدن"
+
+#. App settings: referral code capped error
+msgctxt "site_app_code_capped"
+msgid "This referral code has reached its referral limit"
+msgstr "لقد بلغ رمز الإحالة هذا حدّ الإحالات الخاص به"
+
+#. App wallets: completed payout status
+msgctxt "site_app_complete"
+msgid "Complete"
+msgstr "مكتمل"
+
+#. App payout detail: completed time
+msgctxt "site_app_completed_on"
+msgid "Completed"
+msgstr "تاريخ الإكمال"
+
+#. App connect screen: connected state
+msgctxt "site_app_connected"
+msgid "Connected"
+msgstr "متصل"
+
+#. App connect screen: connecting state
+msgctxt "site_app_connecting"
+msgid "Connecting…"
+msgstr "جارٍ الاتصال…"
+
+#. App settings: connections section
+msgctxt "site_app_connections"
+msgid "Connections"
+msgstr "الاتصالات"
+
+#. App connect screen: contract details section title
+msgctxt "site_app_contracts"
+msgid "Contracts"
+msgstr "العقود"
+
+#. App: copied flash
+msgctxt "site_app_copied"
+msgid "Copied"
+msgstr "تم النسخ"
+
+#. App: copy button
+msgctxt "site_app_copy"
+msgid "Copy"
+msgstr "نسخ"
+
+#. App connect location picker: countries section
+msgctxt "site_app_countries"
+msgid "Countries"
+msgstr "الدول"
+
+#. App settings: create auth code button
+msgctxt "site_app_create_auth_code"
+msgid "Create auth code"
+msgstr "إنشاء رمز مصادقة"
+
+#. App payout detail: created time
+msgctxt "site_app_created"
+msgid "Created"
+msgstr "تاريخ الإنشاء"
+
+#. App leaderboard: own rank label
+msgctxt "site_app_current_ranking"
+msgid "Current ranking"
+msgstr "الترتيب الحالي"
+
+#. App payout detail: data paid for
+msgctxt "site_app_data_paid"
+msgid "Data paid for"
+msgstr "البيانات المدفوعة"
+
+#. App leaderboard: data shared label
+msgctxt "site_app_data_shared"
+msgid "Data shared"
+msgstr "البيانات المُشارَكة"
+
+#. App settings: delete account button
+msgctxt "site_app_delete_account"
+msgid "Delete account"
+msgstr "حذف الحساب"
+
+#. App settings: delete confirm prompt
+msgctxt "site_app_delete_confirm"
+msgid "Type your network name to confirm"
+msgstr "اكتب اسم شبكتك للتأكيد"
+
+#. App settings: delete warning
+msgctxt "site_app_delete_warning"
+msgid "This permanently deletes your network, its data, and its earnings. This cannot be undone."
+msgstr "سيؤدي هذا إلى حذف شبكتك وبياناتها وأرباحها نهائياً. لا يمكن التراجع عن هذا الإجراء."
+
+#. App connect screen: device rpc attaching hint
+msgctxt "site_app_device_attaching"
+msgid "Attaching device controls…"
+msgstr "جارٍ إرفاق عناصر التحكم بالجهاز…"
+
+#. App connect screen: disconnecting state
+msgctxt "site_app_disconnecting"
+msgid "Disconnecting…"
+msgstr "جارٍ قطع الاتصال…"
+
+#. App connect: custom DNS section
+msgctxt "site_app_dns"
+msgid "DNS"
+msgstr "DNS"
+
+#. App connect: DNS summary encrypted
+msgctxt "site_app_dns_encrypted"
+msgid "Encrypted (DoH)"
+msgstr "مُشفّر (DoH)"
+
+#. App connect DNS: fallback toggle
+msgctxt "site_app_dns_fallback"
+msgid "Fast fallback during startup"
+msgstr "احتياطي سريع أثناء بدء التشغيل"
+
+#. App connect DNS: local plain DNS toggle
+msgctxt "site_app_dns_local_dns"
+msgid "Standard DNS on this device"
+msgstr "DNS قياسي على هذا الجهاز"
+
+#. App connect DNS: local DoH toggle
+msgctxt "site_app_dns_local_doh"
+msgid "Encrypted DNS on this device"
+msgstr "DNS مُشفّر على هذا الجهاز"
+
+#. App connect: DNS summary plain
+msgctxt "site_app_dns_plain"
+msgid "Standard"
+msgstr "قياسي"
+
+#. App connect DNS: remote plain DNS toggle
+msgctxt "site_app_dns_remote_dns"
+msgid "Standard DNS through the tunnel"
+msgstr "DNS قياسي عبر النفق"
+
+#. App connect DNS: remote DoH toggle
+msgctxt "site_app_dns_remote_doh"
+msgid "Encrypted DNS through the tunnel"
+msgstr "DNS مُشفّر عبر النفق"
+
+#. App connect DNS: reset to default
+msgctxt "site_app_dns_reset"
+msgid "Reset to recommended"
+msgstr "إعادة التعيين إلى الموصى به"
+
+#. App account: network earnings card
+msgctxt "site_app_earnings"
+msgid "Network earnings"
+msgstr "أرباح الشبكة"
+
+#. App profile: email label
+msgctxt "site_app_email"
+msgid "Email"
+msgstr "البريد الإلكتروني"
+
+#. App settings: referral code input placeholder
+msgctxt "site_app_enter_referral"
+msgid "Enter referral code"
+msgstr "أدخل رمز الإحالة"
+
+#. App settings: extension unavailable note
+msgctxt "site_app_ext_needed"
+msgid "The URnetwork browser extension is not available in this browser"
+msgstr "إضافة متصفح URnetwork غير متوفرة في هذا المتصفح"
+
+#. App support: feedback textarea placeholder
+msgctxt "site_app_feedback_placeholder"
+msgid "Tell us what's working and what could be better…"
+msgstr "أخبرنا بما يعمل جيداً وما يمكن تحسينه…"
+
+#. App support: sent confirmation
+msgctxt "site_app_feedback_sent"
+msgid "Sent! Thanks for your feedback."
+msgstr "تم الإرسال! شكراً لملاحظاتك."
+
+#. App balance codes: redeem success flash
+msgctxt "site_app_gib_added"
+msgid "+{gib} GiB added"
+msgstr "تمت إضافة +{gib} GiB"
+
+#. App support: star rating label
+msgctxt "site_app_how_are_we_doing"
+msgid "How are we doing?"
+msgstr "ما رأيك في أدائنا؟"
+
+#. App wallets: invalid address error
+msgctxt "site_app_invalid_address"
+msgid "This address is not valid for the selected chain"
+msgstr "هذا العنوان غير صالح للسلسلة المحددة"
+
+#. App settings: invalid referral code error
+msgctxt "site_app_invalid_code"
+msgid "This referral code is not valid"
+msgstr "رمز الإحالة هذا غير صالح"
+
+#. App support: Discord community card
+msgctxt "site_app_join_discord"
+msgid "Join the community on Discord"
+msgstr "انضم إلى المجتمع على Discord"
+
+#. App settings: kill switch toggle
+msgctxt "site_app_kill_switch"
+msgid "Kill switch"
+msgstr "مفتاح الإيقاف"
+
+#. App settings: kill switch note
+msgctxt "site_app_kill_switch_note"
+msgid "Block browser traffic when URnetwork is disconnected"
+msgstr "حظر حركة بيانات المتصفح عند قطع اتصال URnetwork"
+
+#. App leaderboard: empty state
+msgctxt "site_app_leaderboard_empty"
+msgid "No networks on the leaderboard yet."
+msgstr "لا توجد شبكات في لوحة المتصدرين بعد."
+
+#. App leaderboard: explainer note
+msgctxt "site_app_leaderboard_note"
+msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
+msgstr "لوحة المتصدرين هي مجموع آخر 4 دفعات. ويتم تحديثها في كل دورة دفع."
+
+#. App: loading state
+msgctxt "site_app_loading"
+msgid "Loading…"
+msgstr "جارٍ التحميل…"
+
+#. App profile: login methods section
+msgctxt "site_app_login_methods"
+msgid "Login methods"
+msgstr "طرق تسجيل الدخول"
+
+#. App wallets: make payout wallet action
+msgctxt "site_app_make_payout_wallet"
+msgid "Make payout wallet"
+msgstr "تعيين محفظة الدفعات"
+
+#. App provider: mean reliability metric
+msgctxt "site_app_mean_reliability"
+msgid "Mean reliability"
+msgstr "متوسط الموثوقية"
+
+#. App profile: network name label
+msgctxt "site_app_network_name"
+msgid "Network name"
+msgstr "اسم الشبكة"
+
+#. App provider: reliability section
+msgctxt "site_app_network_reliability"
+msgid "Network reliability"
+msgstr "موثوقية الشبكة"
+
+#. App balance codes: empty state
+msgctxt "site_app_no_balance_codes"
+msgid "No balance codes redeemed yet"
+msgstr "لم يتم استبدال أي رموز رصيد بعد"
+
+#. App blocked locations: empty state
+msgctxt "site_app_no_blocked"
+msgid "No blocked locations yet"
+msgstr "لا توجد مواقع محظورة بعد"
+
+#. App wallets: payouts empty state
+msgctxt "site_app_no_payouts"
+msgid "No payouts yet"
+msgstr "لا توجد دفعات بعد"
+
+#. App provider: no provider throughput
+msgctxt "site_app_no_provider_activity"
+msgid "No providing activity in this window."
+msgstr "لا يوجد نشاط تزويد في هذه الفترة."
+
+#. App provider: no provider contracts
+msgctxt "site_app_no_provider_contracts"
+msgid "No active provider contracts."
+msgstr "لا توجد عقود مزوّد نشطة."
+
+#. App provider: no reliability data
+msgctxt "site_app_no_reliability"
+msgid "No reliability data yet."
+msgstr "لا توجد بيانات موثوقية بعد."
+
+#. App wallets: empty state
+msgctxt "site_app_no_wallets"
+msgid "No wallets yet — add one to receive payouts"
+msgstr "لا توجد محافظ بعد — أضف واحدة لاستلام الدفعات"
+
+#. App payout detail: paid time
+msgctxt "site_app_paid_on"
+msgid "Paid"
+msgstr "تاريخ الدفع"
+
+#. App payout detail: not found
+msgctxt "site_app_payout_not_found"
+msgid "This payout could not be found."
+msgstr "تعذّر العثور على هذه الدفعة."
+
+#. App wallets: payout wallet label
+msgctxt "site_app_payout_wallet"
+msgid "Payout wallet"
+msgstr "محفظة الدفعات"
+
+#. App wallets: payouts section
+msgctxt "site_app_payouts"
+msgid "Payouts"
+msgstr "الدفعات"
+
+#. App provider: peak clients metric
+msgctxt "site_app_peak_clients"
+msgid "Peak clients"
+msgstr "ذروة العملاء"
+
+#. App connect screen: online devices section title
+msgctxt "site_app_peers"
+msgid "Your devices online"
+msgstr "أجهزتك المتصلة"
+
+#. App wallets: pending payout status
+msgctxt "site_app_pending"
+msgid "Pending"
+msgstr "قيد الانتظار"
+
+#. App leaderboard: hidden network row label
+msgctxt "site_app_private_network"
+msgid "Private network"
+msgstr "شبكة خاصة"
+
+#. App account: profile row/screen title
+msgctxt "site_app_profile"
+msgid "Profile"
+msgstr "الملف الشخصي"
+
+#. App account: provider row + screen title
+msgctxt "site_app_provider"
+msgid "Providing"
+msgstr "التزويد"
+
+#. App provider: contracts section
+msgctxt "site_app_provider_contracts"
+msgid "Provider contracts"
+msgstr "عقود المزوّد"
+
+#. App provider screen: intro
+msgctxt "site_app_provider_intro"
+msgid "How your network's devices are providing bandwidth and earning."
+msgstr "كيف تقوم أجهزة شبكتك بتزويد النطاق الترددي وتحقيق الأرباح."
+
+#. App provider: connect prompt for live stats
+msgctxt "site_app_provider_needs_connect"
+msgid "Connect to see live providing statistics."
+msgstr "اتصل لعرض إحصائيات التزويد المباشرة."
+
+#. App provider: throughput section
+msgctxt "site_app_provider_stats"
+msgid "Provider statistics"
+msgstr "إحصائيات المزوّد"
+
+#. App connect screen: provider grid section title
+msgctxt "site_app_providers"
+msgid "Providers"
+msgstr "المزوّدون"
+
+#. App provider: bytes received metric
+msgctxt "site_app_received"
+msgid "Received"
+msgstr "المُستَلَم"
+
+#. App balance codes: redeemed date row
+msgctxt "site_app_redeemed_on"
+msgid "Redeemed {date}"
+msgstr "تم الاستبدال في {date}"
+
+#. App account: refer friends card
+msgctxt "site_app_refer_friends"
+msgid "Refer friends"
+msgstr "دعوة الأصدقاء"
+
+#. App settings: referral network section
+msgctxt "site_app_referral_network"
+msgid "Referral network"
+msgstr "شبكة الإحالة"
+
+#. App connect location picker: regions section
+msgctxt "site_app_regions"
+msgid "Regions"
+msgstr "المناطق"
+
+#. App: remove button
+msgctxt "site_app_remove"
+msgid "Remove"
+msgstr "إزالة"
+
+#. App screens: retry button
+msgctxt "site_app_retry"
+msgid "Try again"
+msgstr "حاول مرة أخرى"
+
+#. App: save button
+msgctxt "site_app_save"
+msgid "Save"
+msgstr "حفظ"
+
+#. App support: send button
+msgctxt "site_app_send"
+msgid "Send"
+msgstr "إرسال"
+
+#. App provider: bytes served metric
+msgctxt "site_app_served"
+msgid "Served"
+msgstr "المُقدَّم"
+
+#. App leaderboard: public visibility toggle
+msgctxt "site_app_show_on_leaderboard"
+msgid "Show my network on the leaderboard"
+msgstr "إظهار شبكتي في لوحة المتصدرين"
+
+#. App connect screen: shuffle providers button
+msgctxt "site_app_shuffle"
+msgid "Shuffle"
+msgstr "خلط"
+
+#. App settings: stay in touch section
+msgctxt "site_app_stay_in_touch"
+msgid "Stay in touch"
+msgstr "ابقَ على تواصل"
+
+#. App support: intro line
+msgctxt "site_app_support_intro"
+msgid "Send us your feedback directly, or join the community for direct support."
+msgstr "أرسل لنا ملاحظاتك مباشرةً، أو انضم إلى المجتمع للحصول على دعم مباشر."
+
+#. App account: total referrals label
+msgctxt "site_app_total_referrals"
+msgid "Total referrals"
+msgstr "إجمالي الإحالات"
+
+#. App payout detail: transaction hash
+msgctxt "site_app_transaction"
+msgid "Transaction"
+msgstr "المعاملة"
+
+#. App settings: unlink referral network
+msgctxt "site_app_unlink"
+msgid "Unlink"
+msgstr "إلغاء الربط"
+
+#. App profile: verified badge
+msgctxt "site_app_verified"
+msgid "Verified"
+msgstr "تم التحقق"
+
+#. App wallets: wallet label
+msgctxt "site_app_wallet"
+msgid "Wallet"
+msgstr "محفظة"
+
+#. App wallets: wallet address input
+msgctxt "site_app_wallet_address"
+msgid "Wallet address"
+msgstr "عنوان المحفظة"
+
+#. App account: wallets row/screen title
+msgctxt "site_app_wallets"
+msgid "Wallets"
+msgstr "المحافظ"
+
+#. Account panel: any-provider location option
+msgctxt "site_best_available"
+msgid "Best available"
+msgstr "الأفضل المتاح"
+
+#. Account panel: 'best available' location subtitle
+msgctxt "site_best_available_sub"
+msgid "Any provider on the network"
+msgstr "أي مزوّد على الشبكة"
+
+#. Account panel: billing portal failed to open
+msgctxt "site_billing_portal_error"
+msgid "Could not open the billing portal."
+msgstr "تعذّر فتح بوابة الفوترة."
+
+#. Account panel: clear the chosen location
+msgctxt "site_clear_location"
+msgid "Clear location"
+msgstr "مسح الموقع"
+
+#. Account panel: concurrent-client-limit upgrade prompt
+msgctxt "site_client_limit_upgrade"
+msgid "Your plan is at its concurrent client limit — Pro raises it to 1,000."
+msgstr "بلغت خطتك الحد الأقصى للعملاء المتزامنين — يرفعه Pro إلى 1,000."
+
+#. Account panel: copy a proxy's URL
+msgctxt "site_copy_url"
+msgid "Copy URL"
+msgstr "نسخ الرابط"
+
+#. Account panel: create another proxy
+msgctxt "site_create_another"
+msgid "Create another"
+msgstr "إنشاء آخر"
+
+#. Account panel: create-proxy button
+msgctxt "site_create_proxy"
+msgid "Create proxy"
+msgstr "إنشاء وكيل"
+
+#. Account panel: proxy creation failed
+msgctxt "site_create_proxy_error"
+msgid "Could not create the proxy."
+msgstr "تعذّر إنشاء الوكيل."
+
+#. Account panel: download a WireGuard config file
+msgctxt "site_download_conf"
+msgid "Download .conf"
+msgstr "تنزيل ملف .conf"
+
+#. Account panel: download WireGuard config (created card)
+msgctxt "site_download_wg_config"
+msgid "Download WireGuard config"
+msgstr "تنزيل إعدادات WireGuard"
+
+#. Extension status: label before the extension's current network name
+msgctxt "site_ext_current_network"
+msgid "Currently set up for"
+msgstr "مُعدّة حالياً لـ"
+
+#. Extension status: install pitch
+msgctxt "site_ext_get"
+msgid "Protect this browser with URnetwork."
+msgstr "احمِ هذا المتصفح باستخدام URnetwork."
+
+#. Extension status: install CTA
+msgctxt "site_ext_install"
+msgid "Install the extension"
+msgstr "تثبيت الإضافة"
+
+#. Extension status: linked with the browser connection active
+msgctxt "site_ext_proxy_on"
+msgid "Browser connection active"
+msgstr "اتصال المتصفح نشط"
+
+#. Extension status: linked and idle
+msgctxt "site_ext_ready"
+msgid "Extension connected and ready to use"
+msgstr "الإضافة متصلة وجاهزة للاستخدام"
+
+#. Extension status: setup in flight
+msgctxt "site_ext_setting_up"
+msgid "Setting up…"
+msgstr "جارٍ الإعداد…"
+
+#. Extension status: hand the page session to the extension
+msgctxt "site_ext_setup"
+msgid "Set up extension to use your network"
+msgstr "إعداد الإضافة لاستخدام شبكتك"
+
+#. Extension status: compact 'set up extension' badge next to the account pill
+msgctxt "site_ext_setup_badge"
+msgid "Set up extension"
+msgstr "إعداد الإضافة"
+
+#. Extension status: warning when replacing another network
+msgctxt "site_ext_setup_foreign_note"
+msgid "This will log the extension out of its current network and disconnect the browser."
+msgstr "سيؤدي هذا إلى تسجيل خروج الإضافة من شبكتها الحالية وقطع اتصال المتصفح."
+
+#. Extension status: section title
+msgctxt "site_ext_title"
+msgid "Browser extension"
+msgstr "إضافة المتصفح"
+
+#. Account panel: generic retry error
+msgctxt "site_generic_error"
+msgid "Something went wrong. Please try again."
+msgstr "حدث خطأ ما. يُرجى المحاولة مرة أخرى."
+
+#. Account panel: invalid balance code
+msgctxt "site_invalid_balance_code"
+msgid "Invalid balance code."
+msgstr "رمز رصيد غير صالح."
+
+#. Account panel: balance codes load error
+msgctxt "site_load_balance_codes_error"
+msgid "Could not load balance codes"
+msgstr "تعذّر تحميل رموز الرصيد"
+
+#. Account panel: online-clients load error
+msgctxt "site_load_clients_error"
+msgid "Could not load clients"
+msgstr "تعذّر تحميل العملاء"
+
+#. Account panel: proxies load error
+msgctxt "site_load_proxies_error"
+msgid "Could not load proxies"
+msgstr "تعذّر تحميل الوكلاء"
+
+#. Account panel: loading balance codes
+msgctxt "site_loading_balance_codes"
+msgid "Loading balance codes…"
+msgstr "جارٍ تحميل رموز الرصيد…"
+
+#. Account panel: loading online clients
+msgctxt "site_loading_clients"
+msgid "Loading clients…"
+msgstr "جارٍ تحميل العملاء…"
+
+#. Account panel: loading proxies
+msgctxt "site_loading_proxies"
+msgid "Loading proxies…"
+msgstr "جارٍ تحميل الوكلاء…"
+
+#. Account panel: location chooser search field
+msgctxt "site_location_search_placeholder"
+msgid "Search for any location"
+msgstr "ابحث عن أي موقع"
+
+#. Account panel: location chooser list aria-label
+msgctxt "site_locations"
+msgid "Locations"
+msgstr "المواقع"
+
+#. Account panel: billing portal hint for Pro users
+msgctxt "site_manage_billing_hint"
+msgid "Manage payment details, see invoices, or cancel your subscription."
+msgstr "إدارة تفاصيل الدفع، أو عرض الفواتير، أو إلغاء اشتراكك."
+
+#. Account panel: empty redeemed-codes list
+msgctxt "site_no_balance_codes"
+msgid "No balance codes redeemed yet"
+msgstr "لم يتم استبدال أي رموز رصيد بعد"
+
+#. Account panel: empty online-clients list
+msgctxt "site_no_clients_online"
+msgid "No clients online"
+msgstr "لا يوجد عملاء متصلون"
+
+#. Account panel: empty proxies list
+msgctxt "site_no_proxies"
+msgid "No proxies yet"
+msgstr "لا يوجد وكلاء بعد"
+
+#. Account panel: open the in-site web app (/app)
+msgctxt "site_open_app"
+msgid "Open app"
+msgstr "فتح التطبيق"
+
+#. Account panel: launch the client-manager app
+msgctxt "site_open_client_manager"
+msgid "Open client manager"
+msgstr "فتح مدير العملاء"
+
+#. App sidebar: open the operator client UI (formerly the client admin UI)
+msgctxt "site_operator_client_ui"
+msgid "Operator Client UI"
+msgstr "واجهة عميل المشغّل"
+
+#. Account panel: client info — principal label
+msgctxt "site_principal"
+msgid "Principal"
+msgstr "الكيان الأساسي"
+
+#. Account panel: product-updates opt-in checkbox
+msgctxt "site_product_updates_optin"
+msgid "You can send me occasional product updates"
+msgstr "يمكنكم إرسال تحديثات المنتج إليّ من حين لآخر"
+
+#. Account panel: proxies section heading
+msgctxt "site_proxies"
+msgid "Proxies"
+msgstr "الوكلاء"
+
+#. Account panel: proxy-type picker aria-label
+msgctxt "site_proxy_type"
+msgid "Proxy type"
+msgstr "نوع الوكيل"
+
+#. Account panel: client info — roles label
+msgctxt "site_roles"
+msgid "Roles"
+msgstr "الأدوار"
+
+#. Account panel: preference saved flash
+msgctxt "site_saved"
+msgid "Saved"
+msgstr "تم الحفظ"
+
+#. Account panel: location search in progress
+msgctxt "site_searching"
+msgid "Searching…"
+msgstr "جارٍ البحث…"
+
+#. Account panel: SOCKS credential note
+msgctxt "site_socks_cred_note"
+msgid "Username is the token in the URL; password is empty."
+msgstr "اسم المستخدم هو الرمز الموجود في الرابط؛ وكلمة المرور فارغة."
+
+#. Account panel: generic unexpected error
+msgctxt "site_unexpected_error"
+msgid "Something unexpected happened."
+msgstr "حدث خطأ غير متوقع."
+
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"
 msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
