@@ -30,9 +30,15 @@ i18n_args = [
 # Vendored cgo SDK, per arch (fetch-deps.sh unzips URnetworkSdkLinux.zip here).
 sdk_arch = get_option('sdk_arch')
 sdk_root = meson.project_source_root() / 'third_party' / 'urnetwork-sdk' / sdk_arch
-sdk_inc  = include_directories('third_party' / 'urnetwork-sdk' / sdk_arch)
+# is_system: the generated urnetwork_sdk.hpp is third-party (a Go->C++ binding), and
+# with warning_level=2 GCC 13+ flags its members that share a name with their type
+# (e.g. std::optional<BlockOverride> BlockOverride) as -Wchanges-meaning, an error by
+# default. A system include suppresses its warnings; also disable the diagnostic
+# explicitly where the compiler supports it (MSVC on Windows has no such warning).
+sdk_inc  = include_directories('third_party' / 'urnetwork-sdk' / sdk_arch, is_system : true)
 cpp = meson.get_compiler('cpp')
 sdk_lib = cpp.find_library('URnetworkSdk', dirs : sdk_root)
+sdk_warn_args = cpp.get_supported_arguments('-Wno-changes-meaning', '-Wno-error=changes-meaning')
 
 deps = [gtkmm, adwaita, gio, json, threads, sdk_lib]
 
@@ -83,7 +89,7 @@ executable('urnetwork',
   ],
   include_directories : [sdk_inc],
   dependencies : deps,
-  cpp_args : wc_args + i18n_args + webkit_args,
+  cpp_args : wc_args + i18n_args + webkit_args + sdk_warn_args,
   install : true,
   install_rpath : '$ORIGIN/../lib')
 

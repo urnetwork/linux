@@ -33,7 +33,11 @@ unzip -q -o "${zip}" -d "${tmp}"
 
 for arch in amd64 arm64; do
   so="$(find "${tmp}" -name libURnetworkSdk.so -path "*/${arch}/*" | head -1)"
-  hpp="$(find "${tmp}" -name urnetwork_sdk.hpp | head -1)"
+  hpp="$(find "${tmp}" -name urnetwork_sdk.hpp -path "*/${arch}/*" | head -1)"
+  # the c++ wrapper urnetwork_sdk.hpp does #include "urnetwork_sdk.h" (the c abi
+  # header) relative to itself, so the .h MUST be staged next to it or the app
+  # fails to compile: 'urnetwork_sdk.h: No such file or directory'.
+  h="$(find "${tmp}" -name urnetwork_sdk.h -path "*/${arch}/*" | head -1)"
   if [ -z "${so}" ]; then
     echo "warn: no ${arch} libURnetworkSdk.so in zip, skipping" >&2
     continue
@@ -41,5 +45,6 @@ for arch in amd64 arm64; do
   mkdir -p "${dest}/${arch}"
   install -m644 "${so}" "${dest}/${arch}/libURnetworkSdk.so"
   [ -n "${hpp}" ] && install -m644 "${hpp}" "${dest}/${arch}/urnetwork_sdk.hpp"
+  [ -n "${h}" ] && install -m644 "${h}" "${dest}/${arch}/urnetwork_sdk.h"
   echo "vendored ${arch} -> ${dest}/${arch}"
 done

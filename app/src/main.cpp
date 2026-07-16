@@ -51,7 +51,9 @@ int main(int argc, char** argv) {
 
   auto host = std::make_shared<urnw::SdkHost>();
   const std::string storageDir = EnsureDir(Glib::get_user_data_dir(), "urnetwork");
-  const std::string logDir = EnsureDir(Glib::get_user_state_dir(), "urnetwork");
+  // glibmm on core24 (the 2.68 ABI series) has no Glib::get_user_state_dir wrapper;
+  // call the C g_get_user_state_dir() (glib 2.72+) directly for XDG_STATE_HOME.
+  const std::string logDir = EnsureDir(g_get_user_state_dir(), "urnetwork");
   if (!host->Initialize(storageDir, logDir)) {
     g_printerr("failed to initialize SDK\n");
     return 1;
