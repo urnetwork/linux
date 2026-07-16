@@ -84,6 +84,10 @@ bool Tunnel::Configure(const TunnelConfig& cfg) {
     dnsCmd.insert(dnsCmd.end(), cfg.dns_servers.begin(), cfg.dns_servers.end());
     Run(dnsCmd);
     Run({"resolvectl", "domain", name_, "~."});
+    // force plain :53 on this link: never OS-level encrypted DNS for the tunnel.
+    // the UpgradeMux performs the unencrypted-DNS -> DoH upgrade in-tunnel and
+    // needs to see :53, so override any global DNSOverTLS default for this link.
+    Run({"resolvectl", "dnsovertls", name_, "no"});
   }
   return true;
 }

@@ -51,6 +51,7 @@ ConnectDrawer::ConnectDrawer(SdkHost& host, Gtk::Window& parent,
 
   contractsSheet_ = std::make_unique<ContractsSheet>(parent_, host_);
   splitRulesSheet_ = std::make_unique<SplitRulesSheet>(parent_, host_);
+  locationsSheet_ = std::make_unique<LocationsSheet>(parent_, host_);
   dnsSheet_ = std::make_unique<DnsSheet>(parent_, host_);
   redeemSheet_ = std::make_unique<RedeemCodeSheet>(parent_, host_, balance_);
   upgradeSheet_ = std::make_unique<UpgradeSheet>(parent_, host_, balance_);
@@ -125,6 +126,22 @@ void ConnectDrawer::BuildControlsCard() {
   locationCaption_->set_xalign(0);
   locationColumn->append(*locationCaption_);
   locationRow->append(*locationColumn);
+
+  // a trailing chevron signals the row opens the provider chooser
+  auto* chevron = Gtk::make_managed<Gtk::Image>();
+  chevron->set_from_icon_name("go-next-symbolic");
+  chevron->add_css_class("dim-label");
+  chevron->set_valign(Gtk::Align::CENTER);
+  locationRow->append(*chevron);
+
+  // whole-row tap opens the chooser (mirrors the stats cards' MakeCardTappable;
+  // the location row is not a full card so it is wired inline here)
+  locationRow->add_css_class("ur-card-tappable");
+  SetPointerCursor(*locationRow);
+  auto locationGesture = Gtk::GestureClick::create();
+  locationGesture->signal_released().connect(
+      [this](int, double, double) { if (locationsSheet_) locationsSheet_->Open(); });
+  locationRow->add_controller(locationGesture);
   card->append(*locationRow);
 
   auto* optionsCaption = Gtk::make_managed<Gtk::Label>(T_("connect_options", "Connect options"));
@@ -351,11 +368,22 @@ void ConnectDrawer::OnHostEvent(DrawerEvent event) {
       RefreshBlocker();
       break;
     case DrawerEvent::Contracts:
+      // the SDK ContractDetailsViewController already coalesced the egress+ingress
+      // streams and settled the aggregate, so this fires once per real change
       if (contractsSheet_->is_visible()) contractsSheet_->Refresh();
       break;
     case DrawerEvent::Location:
     case DrawerEvent::Profile:
       RefreshControls();
+      break;
+    case DrawerEvent::Peers:
+      // the peers hint + a selected peer's device name both derive from the peer
+      // list; also refresh the chooser's pinned section when it is open
+      RefreshControls();
+      if (locationsSheet_ && locationsSheet_->is_visible()) locationsSheet_->Refresh();
+      break;
+    case DrawerEvent::Locations:
+      if (locationsSheet_ && locationsSheet_->is_visible()) locationsSheet_->Refresh();
       break;
   }
 }
@@ -386,6 +414,10 @@ void ConnectDrawer::SetInsufficientBalance(bool insufficient) {
 
 void ConnectDrawer::OpenUpgrade() { upgradeSheet_->Open(); }
 
+void ConnectDrawer::OpenLocationChooser() {
+  if (locationsSheet_) locationsSheet_->Open();
+}
+
 void ConnectDrawer::RefreshPlanCard() {
   const bool isPro = balance_.IsPro();
   const bool isGuest = balance_.IsGuest();
@@ -405,6 +437,7 @@ void ConnectDrawer::RefreshPlanCard() {
 void ConnectDrawer::RefreshControls() {
   // selected location (read-only; mac parity for the "best available" default)
   const auto location = host_.SelectedLocation();
+  const auto peers = host_.ConnectedProvidePeers();
   const bool bestAvailable =
       !location || (location->connect_location_id &&
                     location->connect_location_id->best_available.value_or(false));
@@ -413,8 +446,21 @@ void ConnectDrawer::RefreshControls() {
     locationDot_->set_markup("<span foreground='" + HexForMarkup(kUrCoral) + "'>●</span>");
     locationCaption_->set_visible(false);
   } else {
-    locationName_->set_text(
-        location->name.value_or(T_("selected_location", "Selected location")));
+    // a selected network peer shows its device name, not the raw client id (req4):
+    // resolve it from the live peer list by client id, falling back to the name
+    // the SDK carries on the connect location
+    std::string displayName = location->name.value_or(std::string());
+    if (peers && location->connect_location_id && location->connect_location_id->client_id &&
+        !location->connect_location_id->client_id->empty()) {
+      for (const auto& peer : *peers) {
+        if (peer.ClientId && *peer.ClientId == *location->connect_location_id->client_id) {
+          displayName = PeerDisplayName(peer);
+          break;
+        }
+      }
+    }
+    if (displayName.empty()) displayName = T_("selected_location", "Selected location");
+    locationName_->set_text(displayName);
     Rgba dotColor{0.5, 0.5, 0.5, 1.0};
     if (location->country_code && !location->country_code->empty()) {
       dotColor = ParseHexColor(urnet::getColorHex(*location->country_code), dotColor);

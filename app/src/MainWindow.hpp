@@ -31,6 +31,7 @@ class MainWindow : public Gtk::ApplicationWindow {
   void BuildLogin();          // initial step: user auth discovery + the other entry points
   void BuildPasswordStep();   // password step of the email-first login
   void BuildHome();
+  void RefreshPeersStatus();  // home-screen peers status line (dot + "{n} peers")
   void BuildAuthPages();  // create network / verify / password reset
   void OnGetStarted();  // authLogin discovery -> password / create / inline error
   void OnSignIn();
@@ -69,6 +70,8 @@ class MainWindow : public Gtk::ApplicationWindow {
   Gtk::Label providerCountLabel_;  // live stats (macOS parity)
   Gtk::Label throughputLabel_;
   Gtk::Label provideStatsLabel_;
+  Gtk::Label peersStatusDot_;   // green when peers > 0, red at 0
+  Gtk::Label peersStatusText_;  // "{n} peers"; tapping opens the chooser
   ConnectDrawer* drawer_ = nullptr;  // connect drawer (controls/stats/dns/blocker/plan cards)
 
   // login-flow pages (stack children; MainWindow wires the navigation)

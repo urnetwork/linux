@@ -12,6 +12,7 @@ src/AuthViews.cpp
 src/ConnectDrawer.cpp
 src/ContractsSheet.cpp
 src/DnsSheet.cpp
+src/LocationsSheet.cpp
 src/MainWindow.cpp
 src/RedeemCodeSheet.cpp
 src/SplitRulesSheet.cpp

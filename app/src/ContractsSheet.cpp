@@ -3,7 +3,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <unordered_map>
+#include <string>
+#include <vector>
 
 #include "Formatters.hpp"
 #include "I18n.hpp"
@@ -14,85 +15,73 @@ namespace {
 
 constexpr double kCircleSize = 56;
 
-// the peer end of the contract transfer path: the side that is not this
-// client, with destination -> source -> contract id fallbacks. The "unknown"
-// sentinel stands in for a missing id and is not translated, matching the
-// android (ContractStatsViewModel) and apple (ContractDetailsStore) apps.
-std::string PeerClientId(const urnet::ContractDetails& details, const std::string& ownClientId) {
-  if (details.ContractTransferPath) {
-    const auto& sourceId = details.ContractTransferPath->SourceId;
-    const auto& destinationId = details.ContractTransferPath->DestinationId;
-    if (!ownClientId.empty()) {
-      if (sourceId && *sourceId == ownClientId && destinationId) return *destinationId;
-      if (destinationId && *destinationId == ownClientId && sourceId) return *sourceId;
-    }
-    if (destinationId) return *destinationId;
-    if (sourceId) return *sourceId;
-  }
-  if (details.ContractId) return *details.ContractId;
-  return "unknown";
-}
+// which way a replaced/closing ring ejects: the contract (green) ring slides off
+// the leading edge, the companion (pink) ring off the trailing edge (apple
+// ContractPairViz removalEdge: .leading / .trailing).
+enum class EjectEdge { Leading, Trailing };
 
 void SetCairoColor(const Cairo::RefPtr<Cairo::Context>& cr, const Rgba& c) {
   cr->set_source_rgba(c.r, c.g, c.b, c.a);
 }
 
+// symmetric ease (apple .easeInOut) for the ring slide-out + fade
+double EaseInOut(double t) {
+  const double p = std::clamp(t, 0.0, 1.0);
+  return p * p * (3 - 2 * p);
+}
+
+// the bare identity ring at the color's 0.8 base alpha; used to draw an ejecting
+// copy (its widget opacity carries the fade).
+void DrawRing(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height, const Rgba& color) {
+  const double cx = width / 2.0;
+  const double cy = height / 2.0;
+  SetCairoColor(cr, color.WithAlpha(0.8));
+  cr->set_line_width(1);
+  cr->arc(cx, cy, kCircleSize / 2 - 0.5, 0, 2 * G_PI);
+  cr->stroke();
+}
+
 }  // namespace
 
-// Outer contract ring with an area-proportional inner usage disc. Size changes
-// ease over 0.5s (mac parity), frame-clock driven.
-class ContractCircle : public Gtk::DrawingArea {
+// The settled circle occupying the slot: its identity ring (alpha driven by the
+// container's fade-in) plus the area-proportional inner usage disc. The disc
+// persists across a contract swap and just resizes -- it never ejects. Pure
+// drawer: the container (ContractCircle) computes the eased ring alpha and disc
+// fraction each frame and pushes them here.
+class CurrentCircle : public Gtk::DrawingArea {
  public:
-  explicit ContractCircle(const Rgba& color) : color_(color) {
+  explicit CurrentCircle(const Rgba& color) : color_(color) {
     set_content_width(static_cast<int>(kCircleSize));
     set_content_height(static_cast<int>(kCircleSize));
-    set_halign(Gtk::Align::CENTER);
-    set_draw_func(sigc::mem_fun(*this, &ContractCircle::OnDraw));
+    set_draw_func(sigc::mem_fun(*this, &CurrentCircle::OnDraw));
   }
 
-  void SetData(int64_t used, int64_t total) {
-    const double target =
-        0 < total ? std::min(1.0, static_cast<double>(used) / static_cast<double>(total)) : 0;
-    if (target == toFraction_) return;
-    const gint64 now = g_get_monotonic_time();
-    fromFraction_ = CurrentFraction(now);
-    toFraction_ = target;
-    easeStart_ = now;
-    if (!animating_) {
-      animating_ = true;
-      add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>&) -> bool {
-        queue_draw();
-        if (kEaseUs <= g_get_monotonic_time() - easeStart_) {
-          animating_ = false;
-          return false;
-        }
-        return true;
-      });
-    }
+  void SetRingAlpha(double alpha) {
+    if (alpha == ringAlpha_) return;
+    ringAlpha_ = alpha;
+    queue_draw();
+  }
+  void SetFraction(double fraction) {
+    if (fraction == fraction_) return;
+    fraction_ = fraction;
     queue_draw();
   }
 
  private:
-  static constexpr gint64 kEaseUs = 500000;  // 0.5s, matching the chart easing
-
-  double CurrentFraction(gint64 now) const {
-    const double progress =
-        std::clamp(static_cast<double>(now - easeStart_) / kEaseUs, 0.0, 1.0);
-    const double eased = 1 - std::pow(1 - progress, 3);
-    return fromFraction_ + (toFraction_ - fromFraction_) * eased;
-  }
-
   void OnDraw(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height) {
     const double cx = width / 2.0;
     const double cy = height / 2.0;
-    SetCairoColor(cr, color_.WithAlpha(0.8));
-    cr->set_line_width(1);
-    cr->arc(cx, cy, kCircleSize / 2 - 0.5, 0, 2 * G_PI);
-    cr->stroke();
+
+    // identity ring (0.8 base alpha, faded in via ringAlpha_)
+    if (0 < ringAlpha_) {
+      SetCairoColor(cr, color_.WithAlpha(0.8 * ringAlpha_));
+      cr->set_line_width(1);
+      cr->arc(cx, cy, kCircleSize / 2 - 0.5, 0, 2 * G_PI);
+      cr->stroke();
+    }
 
     // area-proportional inner disc, with a minimum visible size
-    const double fraction = CurrentFraction(g_get_monotonic_time());
-    const double innerSize = 0 < fraction ? std::max(6.0, kCircleSize * std::sqrt(fraction)) : 0;
+    const double innerSize = 0 < fraction_ ? std::max(6.0, kCircleSize * std::sqrt(fraction_)) : 0;
     if (0 < innerSize) {
       cr->arc(cx, cy, innerSize / 2, 0, 2 * G_PI);
       SetCairoColor(cr, color_.WithAlpha(0.3));
@@ -104,10 +93,255 @@ class ContractCircle : public Gtk::DrawingArea {
   }
 
   Rgba color_;
-  double fromFraction_ = 0;
-  double toFraction_ = 0;
-  gint64 easeStart_ = 0;
-  bool animating_ = false;
+  double ringAlpha_ = 0;  // 0..1, scales the ring's 0.8 base alpha
+  double fraction_ = 0;   // 0..1 usage, area-proportional inner disc
+};
+
+// A contract circle that animates like the apple ContractRing. The identity ring
+// carries the contract-id signature: when it changes, the on-screen ring is
+// EJECTED -- an independent copy slides off toward the eject edge and fades on
+// its own fixed schedule, never reversing; multiple can be leaving at once, and
+// the new ring only fades into the slot once the LAST ejecting copy has left.
+// A closing row (its last contract gone) ejects its ring and shows nothing
+// after. The inner usage disc lives in the settled circle and never ejects; it
+// just resizes. All of it is driven off one frame-clock tick.
+//
+// It is a container (not a DrawingArea) so an ejecting ring can slide clear of
+// the 56px slot and over its neighbors: children draw with overflow visible and
+// are clipped only by the scroll viewport, i.e. off the side of the row.
+class ContractCircle : public Gtk::Widget {
+ public:
+  ContractCircle(const Rgba& color, EjectEdge edge)
+      // register a distinct GType so the measure/size-allocate vfunc overrides
+      // are installed (required for a custom Gtk::Widget container)
+      : Glib::ObjectBase("UrnwContractCircle"), Gtk::Widget(), color_(color), edge_(edge) {
+    set_overflow(Gtk::Overflow::VISIBLE);
+    set_halign(Gtk::Align::CENTER);
+    set_valign(Gtk::Align::START);
+    current_ = Gtk::make_managed<CurrentCircle>(color);
+    current_->set_parent(*this);
+  }
+
+  ~ContractCircle() override {
+    for (auto& e : ejections_) e.widget->unparent();
+    ejections_.clear();
+    if (current_) current_->unparent();
+  }
+
+  // usage disc target; eases over 0.5s (mac parity). Never ejects.
+  void SetData(int64_t used, int64_t total) {
+    const double target =
+        0 < total ? std::min(1.0, static_cast<double>(used) / static_cast<double>(total)) : 0;
+    if (target == discTo_) return;
+    const gint64 now = g_get_monotonic_time();
+    discFrom_ = CurrentFraction(now);
+    discTo_ = target;
+    discStart_ = now;
+    discAnimating_ = true;
+    EnsureTick();
+  }
+
+  // contract-id signature + whether a ring is wanted (false while the row is
+  // closing). Mirrors apple ContractRing.onChange(contractId)/onChange(visible).
+  void SetContract(const std::string& contractId, bool visible) {
+    const gint64 now = g_get_monotonic_time();
+
+    if (!haveId_) {
+      // first data: occupy the slot immediately, no eject/fade
+      haveId_ = true;
+      currentId_ = contractId;
+      present_ = visible;
+      settledVisible_ = visible;
+      settledAlpha_ = visible ? 1.0 : 0.0;
+      current_->SetRingAlpha(settledAlpha_);
+      return;
+    }
+
+    if (contractId != currentId_) {
+      if (settledVisible_) EjectCurrentRing(now);
+      currentId_ = contractId;
+      settledVisible_ = false;
+      settledAlpha_ = 0.0;
+      current_->SetRingAlpha(0.0);
+      // nothing leaving -> the new ring can fade in right away
+      if (present_ && ejections_.empty()) FadeInCurrent(now);
+    }
+
+    if (visible != present_) {
+      present_ = visible;
+      if (visible) {
+        if (!settledVisible_ && ejections_.empty()) FadeInCurrent(now);
+      } else if (settledVisible_) {
+        // the row is closing: eject the ring and show nothing after
+        EjectCurrentRing(now);
+        settledVisible_ = false;
+        settledAlpha_ = 0.0;
+        current_->SetRingAlpha(0.0);
+      }
+    }
+  }
+
+ protected:
+  // fixed 56x56 slot regardless of the ejecting children (which overflow it),
+  // so adding/removing an ejection never disturbs the row layout
+  void measure_vfunc(Gtk::Orientation, int, int& minimum, int& natural,
+                     int& minimum_baseline, int& natural_baseline) const override {
+    minimum = natural = static_cast<int>(kCircleSize);
+    minimum_baseline = natural_baseline = -1;
+  }
+
+  void size_allocate_vfunc(int width, int height, int /*baseline*/) override {
+    const int size = static_cast<int>(kCircleSize);
+    const int baseX = (width - size) / 2;
+    const int baseY = (height - size) / 2;
+    Gtk::Allocation a;
+    a.set_width(size);
+    a.set_height(size);
+    a.set_y(baseY);
+    a.set_x(baseX);
+    current_->size_allocate(a, -1);
+    for (auto& e : ejections_) {
+      Gtk::Allocation ea;
+      ea.set_width(size);
+      ea.set_height(size);
+      ea.set_y(baseY);
+      ea.set_x(baseX + static_cast<int>(std::lround(e.offset)));
+      e.widget->size_allocate(ea, -1);
+    }
+  }
+
+ private:
+  static constexpr gint64 kDiscEaseUs = 500000;  // 0.5s inner-disc ease (mac parity)
+  static constexpr gint64 kSlideUs = 500000;     // 0.5s ring slide-out (apple slideDuration)
+  static constexpr gint64 kFadeInUs = 350000;    // 0.35s ring fade-in (apple fadeInDuration)
+
+  // one in-flight ejection: an independent slide-out + fade that runs once
+  struct Ejection {
+    Gtk::DrawingArea* widget = nullptr;
+    gint64 start = 0;
+    double offset = 0;
+  };
+
+  double CurrentFraction(gint64 now) const {
+    const double progress =
+        std::clamp(static_cast<double>(now - discStart_) / kDiscEaseUs, 0.0, 1.0);
+    const double eased = 1 - std::pow(1 - progress, 3);  // easeOut cubic
+    return discFrom_ + (discTo_ - discFrom_) * eased;
+  }
+
+  double OffscreenOffset() const {
+    const double distance = kCircleSize * 3;  // slide fully clear of the slot
+    return edge_ == EjectEdge::Leading ? -distance : distance;
+  }
+
+  void FadeInCurrent(gint64 now) {
+    settledVisible_ = true;
+    fadeFrom_ = settledAlpha_;
+    fadeStart_ = now;
+    fading_ = true;
+    EnsureTick();
+  }
+
+  // spawn an independent slide-out of the on-screen ring; once started it always
+  // runs to completion (never reverses), even if more changes land meanwhile
+  void EjectCurrentRing(gint64 now) {
+    auto* ring = Gtk::make_managed<Gtk::DrawingArea>();
+    ring->set_content_width(static_cast<int>(kCircleSize));
+    ring->set_content_height(static_cast<int>(kCircleSize));
+    const Rgba color = color_;
+    ring->set_draw_func([color](const Cairo::RefPtr<Cairo::Context>& cr, int w, int h) {
+      DrawRing(cr, w, h, color);
+    });
+    ring->set_parent(*this);
+    ejections_.push_back({ring, now, 0.0});
+    queue_allocate();
+    EnsureTick();
+  }
+
+  void EnsureTick() {
+    if (ticking_) return;
+    ticking_ = true;
+    add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>&) -> bool { return OnTick(); });
+  }
+
+  bool OnTick() {
+    const gint64 now = g_get_monotonic_time();
+    bool active = false;
+
+    // inner usage disc ease
+    if (discAnimating_) {
+      current_->SetFraction(CurrentFraction(now));
+      if (kDiscEaseUs <= now - discStart_) {
+        discAnimating_ = false;
+        current_->SetFraction(discTo_);
+      } else {
+        active = true;
+      }
+    }
+
+    // settled identity ring fade-in
+    if (fading_) {
+      const double p = std::clamp(static_cast<double>(now - fadeStart_) / kFadeInUs, 0.0, 1.0);
+      settledAlpha_ = fadeFrom_ + (1.0 - fadeFrom_) * EaseInOut(p);
+      current_->SetRingAlpha(settledAlpha_);
+      if (1.0 <= p) {
+        fading_ = false;
+        settledAlpha_ = 1.0;
+        current_->SetRingAlpha(1.0);
+      } else {
+        active = true;
+      }
+    }
+
+    // ejecting rings: each slides + fades on its own schedule
+    bool removed = false;
+    const bool hadEjections = !ejections_.empty();
+    for (auto it = ejections_.begin(); it != ejections_.end();) {
+      const double p = std::clamp(static_cast<double>(now - it->start) / kSlideUs, 0.0, 1.0);
+      const double eased = EaseInOut(p);
+      it->offset = eased * OffscreenOffset();
+      it->widget->set_opacity(1.0 - eased);
+      if (1.0 <= p) {
+        it->widget->unparent();  // destroys the managed ring
+        it = ejections_.erase(it);
+        removed = true;
+      } else {
+        active = true;
+        ++it;
+      }
+    }
+    if (hadEjections) queue_allocate();  // reposition remaining / clear removed
+    if (removed && ejections_.empty() && present_ && !settledVisible_) {
+      // the last ejection left -> admit the waiting ring
+      FadeInCurrent(now);
+      active = true;
+    }
+
+    if (!active) ticking_ = false;
+    return active;
+  }
+
+  Rgba color_;
+  EjectEdge edge_;
+  CurrentCircle* current_ = nullptr;
+  std::vector<Ejection> ejections_;
+  bool ticking_ = false;
+
+  // inner usage disc easing
+  double discFrom_ = 0;
+  double discTo_ = 0;
+  gint64 discStart_ = 0;
+  bool discAnimating_ = false;
+
+  // identity ring state (apple ContractRing)
+  std::string currentId_;      // contract-id signature occupying the slot
+  bool haveId_ = false;        // whether the slot has been seeded yet
+  bool present_ = true;        // a ring is wanted in the slot (mirror `visible`)
+  bool settledVisible_ = false;// the settled ring has faded in
+  double settledAlpha_ = 0;    // 0..1 animated settled-ring alpha
+  double fadeFrom_ = 0;        // settledAlpha_ at the start of a fade-in
+  gint64 fadeStart_ = 0;
+  bool fading_ = false;
 };
 
 // The two directional transfer lines between the circles: contract (green)
@@ -215,55 +449,34 @@ void ContractsSheet::Open() {
 }
 
 std::vector<ContractsSheet::PeerRow> ContractsSheet::ReadRows() {
-  const std::string ownClientId = host_.ClientId();
-  const auto egress = host_.EgressContractDetails();
-  const auto ingress = host_.IngressContractDetails();
-
-  std::unordered_map<std::string, PeerRow> rowsByClient;
-  std::vector<std::string> encounterOrder;
-  auto merge = [&](const std::optional<urnet::ContractDetailsList>& list) {
-    if (!list) return;
-    for (const auto& details : *list) {
-      const std::string clientId = PeerClientId(details, ownClientId);
-      auto it = rowsByClient.find(clientId);
-      if (it == rowsByClient.end()) {
-        PeerRow row;
-        row.clientId = clientId;
-        it = rowsByClient.emplace(clientId, std::move(row)).first;
-        encounterOrder.push_back(clientId);
-      }
-      PeerRow& row = it->second;
-      row.contractUsed += details.ContractUsedByteCount;
-      row.contractTotal += details.ContractByteCount;
-      row.contractBitRate += details.ContractBitRate;
-      row.companionUsed += details.CompanionContractUsedByteCount;
-      row.companionTotal += details.CompanionContractByteCount;
-      row.companionBitRate += details.CompanionContractBitRate;
-      row.pairCount += 1;
-    }
-  };
-  merge(egress);
-  merge(ingress);
-
-  // newest first: newly seen clients sort to the top, existing clients keep
-  // their first-seen relative order
-  for (const auto& clientId : encounterOrder) {
-    if (clientOrder_.find(clientId) == clientOrder_.end()) {
-      clientOrder_[clientId] = static_cast<int>(clientOrder_.size());
-    }
-  }
+  // The SDK ContractDetailsViewController already coalesced, aggregated per peer,
+  // and ordered these (newest first), and carries the closing flag -- just map
+  // them onto the render type in order (mirrors apple ContractDetailsStore.update).
   std::vector<PeerRow> rows;
-  rows.reserve(rowsByClient.size());
-  for (auto& entry : rowsByClient) rows.push_back(std::move(entry.second));
-  std::sort(rows.begin(), rows.end(), [this](const PeerRow& a, const PeerRow& b) {
-    return clientOrder_[a.clientId] > clientOrder_[b.clientId];
-  });
+  const auto list = host_.ClientContractRows();
+  if (!list) return rows;
+  rows.reserve(list->size());
+  for (const auto& r : *list) {
+    PeerRow row;
+    row.clientId = r.ClientId;
+    row.contractId = r.ContractId;
+    row.companionContractId = r.CompanionContractId;
+    row.contractUsed = r.ContractUsedByteCount;
+    row.contractTotal = r.ContractByteCount;
+    row.contractBitRate = r.ContractBitRate;
+    row.companionUsed = r.CompanionContractUsedByteCount;
+    row.companionTotal = r.CompanionContractByteCount;
+    row.companionBitRate = r.CompanionContractBitRate;
+    row.pairCount = static_cast<int>(r.PairCount);
+    row.closing = r.Closing;
+    rows.push_back(std::move(row));
+  }
   return rows;
 }
 
 void ContractsSheet::Refresh() {
   std::vector<PeerRow> rows = ReadRows();
-  // both contract listeners funnel here; skip when nothing changed
+  // the SDK settled this already; skip when nothing changed
   if (built_ && rows == rows_) return;
 
   std::vector<std::string> ids;
@@ -339,11 +552,12 @@ Gtk::Widget* ContractsSheet::BuildRow(const PeerRow& row, RowWidgets& outWidgets
 
   // viz: contract circle | transfer lines | companion circle
   auto* viz = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 16);
-  auto makeCircleColumn = [&](const Rgba& color, const char* label, ContractCircle*& outCircle,
-                              Gtk::Label*& outUsed, Gtk::Label*& outTotal) -> Gtk::Widget* {
+  auto makeCircleColumn = [&](const Rgba& color, EjectEdge edge, const char* label,
+                              ContractCircle*& outCircle, Gtk::Label*& outUsed,
+                              Gtk::Label*& outTotal) -> Gtk::Widget* {
     auto* column = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
     column->set_size_request(92, -1);
-    outCircle = Gtk::make_managed<ContractCircle>(color);
+    outCircle = Gtk::make_managed<ContractCircle>(color, edge);
     column->append(*outCircle);
     outUsed = Gtk::make_managed<Gtk::Label>();
     outUsed->add_css_class("ur-caption-11");
@@ -358,12 +572,14 @@ Gtk::Widget* ContractsSheet::BuildRow(const PeerRow& row, RowWidgets& outWidgets
     column->append(*nameLabel);
     return column;
   };
-  viz->append(*makeCircleColumn(kUrGreen, T_("contract", "Contract"), outWidgets.contractCircle,
-                                outWidgets.contractUsed, outWidgets.contractTotal));
+  viz->append(*makeCircleColumn(kUrGreen, EjectEdge::Leading, T_("contract", "Contract"),
+                                outWidgets.contractCircle, outWidgets.contractUsed,
+                                outWidgets.contractTotal));
   outWidgets.lines = Gtk::make_managed<TransferLines>();
   viz->append(*outWidgets.lines);
-  viz->append(*makeCircleColumn(kUrPink, T_("companion", "Companion"), outWidgets.companionCircle,
-                                outWidgets.companionUsed, outWidgets.companionTotal));
+  viz->append(*makeCircleColumn(kUrPink, EjectEdge::Trailing, T_("companion", "Companion"),
+                                outWidgets.companionCircle, outWidgets.companionUsed,
+                                outWidgets.companionTotal));
   rowBox->append(*viz);
 
   UpdateRowWidgets(row, outWidgets);
@@ -373,10 +589,15 @@ Gtk::Widget* ContractsSheet::BuildRow(const PeerRow& row, RowWidgets& outWidgets
 void ContractsSheet::UpdateRowWidgets(const PeerRow& row, RowWidgets& widgets) {
   widgets.pairCount->set_text(Format(T_("contract_count", "{} contracts"), row.pairCount));
   widgets.pairCount->set_visible(1 < row.pairCount);
+  // a changed contract-id signature swaps (ejects) the ring; a closing row ejects
+  // and shows nothing after. the usage disc just eases to its new size.
+  const bool visible = !row.closing;
+  widgets.contractCircle->SetContract(row.contractId, visible);
   widgets.contractCircle->SetData(row.contractUsed, row.contractTotal);
   widgets.contractUsed->set_text(FormatByteCountCompact(row.contractUsed));
   widgets.contractTotal->set_text(
       Format(T_("of_total", "of {}"), FormatByteCountCompact(row.contractTotal)));
+  widgets.companionCircle->SetContract(row.companionContractId, visible);
   widgets.companionCircle->SetData(row.companionUsed, row.companionTotal);
   widgets.companionUsed->set_text(FormatByteCountCompact(row.companionUsed));
   widgets.companionTotal->set_text(

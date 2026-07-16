@@ -32,6 +32,7 @@ inline constexpr Rgba kUrGreen{0x87 / 255.0, 0xFB / 255.0, 0x67 / 255.0, 1.0};  
 inline constexpr Rgba kUrPink{0xED / 255.0, 0x8F / 255.0, 0xFF / 255.0, 1.0};       // #ED8FFF
 inline constexpr Rgba kUrCoral{0xFF / 255.0, 0x6C / 255.0, 0x58 / 255.0, 1.0};      // #FF6C58
 inline constexpr Rgba kUrMutedCoral{0xC8 / 255.0, 0x60 / 255.0, 0x4F / 255.0, 1.0};  // #C8604F
+inline constexpr Rgba kUrAmber{0xF5 / 255.0, 0xC2 / 255.0, 0x42 / 255.0, 1.0};  // #F5C242 (idle/none)
 inline constexpr Rgba kUrElectricBlue{0x00 / 255.0, 0x39 / 255.0, 0xDE / 255.0, 1.0};  // #0039DE
 // Surfaces and text:
 inline constexpr Rgba kUrBackground{0x10 / 255.0, 0x10 / 255.0, 0x10 / 255.0, 1.0};  // #101010

@@ -70,6 +70,8 @@ enum class DrawerEvent {
   Contracts,        // egress/ingress contract details changed
   Location,         // connect location changed
   Profile,          // performance profile changed
+  Locations,        // filtered provider-location list changed (the chooser)
+  Peers,            // connected network peers changed (chooser + drawer label)
 };
 
 // Snapshot of live connection / throughput / provide stats. Pushed to the UI on
@@ -171,6 +173,10 @@ class SdkHost {
 
   bool StartTunnel();  // build DeviceLocal, open tun, wire IoLoop, start connect VC
   void ConnectBestAvailable();
+  // Connect to a chosen provider location (country/region/city/device/peer). The
+  // chooser passes an SDK-supplied ConnectLocation as-is, or one built from a peer
+  // (client id + display name). No-op with the tunnel down (no connect VC).
+  void Connect(const std::optional<urnet::ConnectLocation>& location);
   void Disconnect();
   bool Connected();
 
@@ -220,8 +226,21 @@ class SdkHost {
   void SetBlockActionOverrideHosts(const std::string& overrideId, const urnet::StringList& hosts);
   void RemoveBlockActionOverride(const std::string& overrideId);
   std::string ClientId();
-  std::optional<urnet::ContractDetailsList> EgressContractDetails();
-  std::optional<urnet::ContractDetailsList> IngressContractDetails();
+  // Aggregated per-peer contract rows for the client-traffic sheet, straight from
+  // the SDK ContractDetailsViewController (it owns the egress+ingress coalescing,
+  // renewal-atomic slot holds, per-peer aggregation, and closing/eject lifecycle
+  // the app used to do itself). nullopt with the tunnel down.
+  std::optional<urnet::ContractClientRowList> ClientContractRows();
+
+  // ---- location/provider chooser ---------------------------------------------
+  // LocationsViewController buckets provider locations into sections and owns the
+  // search; PeerViewController surfaces the connected, provide-enabled network
+  // peers pinned atop the chooser. Both live only while the tunnel runs; reads
+  // return nullopt/empty otherwise.
+  std::optional<urnet::FilteredLocations> GetFilteredLocations();
+  void FilterLocations(const std::string& query);
+  std::string GetFilteredLocationState();
+  std::optional<urnet::NetworkPeerList> ConnectedProvidePeers();
 
   // Exposed so the (full-parity) UI/view models can drive the SDK directly.
   urnet::Api& api() { return *api_; }
@@ -257,9 +276,12 @@ class SdkHost {
   std::optional<urnet::DeviceLocal> device_;
   std::optional<urnet::ConnectViewController> connectVc_;
   std::optional<urnet::ContractViewController> contractVc_;  // live throughput feed
+  std::optional<urnet::ContractDetailsViewController> contractDetailsVc_;  // aggregated contract rows feed
   std::optional<urnet::BlockActionViewController> blockActionVc_;  // block actions/stats feed
   // sign-up network-name availability (SDK shared view controller)
   std::optional<urnet::NetworkNameValidationViewController> networkNameVc_;
+  std::optional<urnet::LocationsViewController> locationsVc_;  // provider chooser feed
+  std::optional<urnet::PeerViewController> peerVc_;  // connected provide-enabled peers
   std::optional<urnet::IoLoop> ioLoop_;
   std::unique_ptr<Tunnel> tunnel_;
   std::vector<urnet::Sub> subs_;

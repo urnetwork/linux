@@ -1691,6 +1691,13 @@ msgctxt "network_name_unavailable"
 msgid "Network name unavailable"
 msgstr "Network name unavailable"
 
+#. A label showing the number of connected network peers that have provide enabled. Shown under the location in the connect drawer and as the pinned section title in the location chooser. The argument is the number of peers.
+msgctxt "network_peer_count"
+msgid "You have {} other device online"
+msgid_plural "You have {} other devices online"
+msgstr[0] "You have {} other device online"
+msgstr[1] "You have {} other devices online"
+
 #. A label displayed above the list of connected peers.
 msgctxt "network_peers"
 msgid "Network peers"
@@ -2592,6 +2599,296 @@ msgstr "Sign out"
 msgctxt "signed_in"
 msgid "Signed in"
 msgstr "Signed in"
+
+#. Account panel: tools section heading
+msgctxt "site_account_tools"
+msgid "Account tools"
+msgstr "Account tools"
+
+#. Account panel: any-provider location option
+msgctxt "site_best_available"
+msgid "Best available"
+msgstr "Best available"
+
+#. Account panel: 'best available' location subtitle
+msgctxt "site_best_available_sub"
+msgid "Any provider on the network"
+msgstr "Any provider on the network"
+
+#. Buy data: best-value pack tag
+msgctxt "site_best_value"
+msgid "Best value"
+msgstr "Best value"
+
+#. Account panel: billing portal failed to open
+msgctxt "site_billing_portal_error"
+msgid "Could not open the billing portal."
+msgstr "Could not open the billing portal."
+
+#. Account panel: prompt to buy a balance code
+msgctxt "site_buy_code_prompt"
+msgid "Don't have a code yet? Buy one — it applies to your balance right away."
+msgstr "Don't have a code yet? Buy one — it applies to your balance right away."
+
+#. Upgrade: cancel-anytime reassurance
+msgctxt "site_cancel_anytime"
+msgid "You can cancel anytime from your account."
+msgstr "You can cancel anytime from your account."
+
+#. Account panel: clear the chosen location
+msgctxt "site_clear_location"
+msgid "Clear location"
+msgstr "Clear location"
+
+#. Account panel: concurrent-client-limit upgrade prompt
+msgctxt "site_client_limit_upgrade"
+msgid "Your plan is at its concurrent client limit — Pro raises it to 1,000."
+msgstr "Your plan is at its concurrent client limit — Pro raises it to 1,000."
+
+#. Account panel: copy a proxy's URL
+msgctxt "site_copy_url"
+msgid "Copy URL"
+msgstr "Copy URL"
+
+#. Account panel: create another proxy
+msgctxt "site_create_another"
+msgid "Create another"
+msgstr "Create another"
+
+#. Account panel: create-proxy button
+msgctxt "site_create_proxy"
+msgid "Create proxy"
+msgstr "Create proxy"
+
+#. Account panel: proxy creation failed
+msgctxt "site_create_proxy_error"
+msgid "Could not create the proxy."
+msgstr "Could not create the proxy."
+
+#. Checkout: data-purchase success body
+msgctxt "site_data_on_its_way"
+msgid "Your data is on its way — the balance updates within a few moments."
+msgstr "Your data is on its way — the balance updates within a few moments."
+
+#. Buy data: pack picker aria-label
+msgctxt "site_data_pack"
+msgid "Data pack"
+msgstr "Data pack"
+
+#. Upgrade: dismiss the success sheet
+msgctxt "site_done"
+msgid "Done"
+msgstr "Done"
+
+#. Account panel: download a WireGuard config file
+msgctxt "site_download_conf"
+msgid "Download .conf"
+msgstr "Download .conf"
+
+#. Account panel: download WireGuard config (created card)
+msgctxt "site_download_wg_config"
+msgid "Download WireGuard config"
+msgstr "Download WireGuard config"
+
+#. Account panel: generic retry error
+msgctxt "site_generic_error"
+msgid "Something went wrong. Please try again."
+msgstr "Something went wrong. Please try again."
+
+#. Account panel: invalid balance code
+msgctxt "site_invalid_balance_code"
+msgid "Invalid balance code."
+msgstr "Invalid balance code."
+
+#. Account panel: balance codes load error
+msgctxt "site_load_balance_codes_error"
+msgid "Could not load balance codes"
+msgstr "Could not load balance codes"
+
+#. Account panel: online-clients load error
+msgctxt "site_load_clients_error"
+msgid "Could not load clients"
+msgstr "Could not load clients"
+
+#. Account panel: proxies load error
+msgctxt "site_load_proxies_error"
+msgid "Could not load proxies"
+msgstr "Could not load proxies"
+
+#. Account panel: loading balance codes
+msgctxt "site_loading_balance_codes"
+msgid "Loading balance codes…"
+msgstr "Loading balance codes…"
+
+#. Account panel: loading online clients
+msgctxt "site_loading_clients"
+msgid "Loading clients…"
+msgstr "Loading clients…"
+
+#. Account panel: loading proxies
+msgctxt "site_loading_proxies"
+msgid "Loading proxies…"
+msgstr "Loading proxies…"
+
+#. Account panel: location chooser search field
+msgctxt "site_location_search_placeholder"
+msgid "Search for any location"
+msgstr "Search for any location"
+
+#. Account panel: location chooser list aria-label
+msgctxt "site_locations"
+msgid "Locations"
+msgstr "Locations"
+
+#. Account panel: billing portal hint for Pro users
+msgctxt "site_manage_billing_hint"
+msgid "Manage payment details, see invoices, or cancel your subscription."
+msgstr "Manage payment details, see invoices, or cancel your subscription."
+
+#. Upgrade: plan option tagline
+msgctxt "site_most_popular_trial"
+msgid "Most popular · 7-day free trial"
+msgstr "Most popular · 7-day free trial"
+
+#. Account panel: empty redeemed-codes list
+msgctxt "site_no_balance_codes"
+msgid "No balance codes redeemed yet"
+msgstr "No balance codes redeemed yet"
+
+#. Account panel: empty online-clients list
+msgctxt "site_no_clients_online"
+msgid "No clients online"
+msgstr "No clients online"
+
+#. Account panel: empty proxies list
+msgctxt "site_no_proxies"
+msgid "No proxies yet"
+msgstr "No proxies yet"
+
+#. Checkout: embedded checkout failed to open
+msgctxt "site_open_checkout_error"
+msgid "Could not open checkout."
+msgstr "Could not open checkout."
+
+#. Account panel: launch the client-manager app
+msgctxt "site_open_client_manager"
+msgid "Open client manager"
+msgstr "Open client manager"
+
+#. Buy data: opening checkout
+msgctxt "site_opening_checkout"
+msgid "Opening checkout…"
+msgstr "Opening checkout…"
+
+#. Checkout: opening embedded Stripe checkout
+msgctxt "site_opening_secure_checkout"
+msgid "Opening secure checkout…"
+msgstr "Opening secure checkout…"
+
+#. Upgrade: pay via Solana button
+msgctxt "site_pay_solana"
+msgid "Pay with Solana"
+msgstr "Pay with Solana"
+
+#. Checkout: payment complete heading
+msgctxt "site_payment_complete"
+msgid "Payment complete"
+msgstr "Payment complete"
+
+#. Account panel: client info — principal label
+msgctxt "site_principal"
+msgid "Principal"
+msgstr "Principal"
+
+#. Upgrade: success body
+msgctxt "site_pro_active_body"
+msgid "Thanks for supporting URnetwork. UR Pro is now active."
+msgstr "Thanks for supporting URnetwork. UR Pro is now active."
+
+#. Account panel: product-updates opt-in checkbox
+msgctxt "site_product_updates_optin"
+msgid "You can send me occasional product updates"
+msgstr "You can send me occasional product updates"
+
+#. Account panel: proxies section heading
+msgctxt "site_proxies"
+msgid "Proxies"
+msgstr "Proxies"
+
+#. Account panel: proxy-type picker aria-label
+msgctxt "site_proxy_type"
+msgid "Proxy type"
+msgstr "Proxy type"
+
+#. Account panel: client info — roles label
+msgctxt "site_roles"
+msgid "Roles"
+msgstr "Roles"
+
+#. Account panel: preference saved flash
+msgctxt "site_saved"
+msgid "Saved"
+msgstr "Saved"
+
+#. Account panel: location search in progress
+msgctxt "site_searching"
+msgid "Searching…"
+msgstr "Searching…"
+
+#. Account panel: SOCKS credential note
+msgctxt "site_socks_cred_note"
+msgid "Username is the token in the URL; password is empty."
+msgstr "Username is the token in the URL; password is empty."
+
+#. Upgrade: Solana payment failed
+msgctxt "site_solana_failed"
+msgid "Solana payment failed"
+msgstr "Solana payment failed"
+
+#. Upgrade: Solana payment could not start
+msgctxt "site_solana_start_error"
+msgid "Could not start Solana payment"
+msgstr "Could not start Solana payment"
+
+#. Upgrade: Solana Pay unavailable
+msgctxt "site_solana_unavailable"
+msgid "Solana Pay is unavailable right now. You can pay by card instead."
+msgstr "Solana Pay is unavailable right now. You can pay by card instead."
+
+#. Checkout: could not start a checkout session
+msgctxt "site_start_checkout_error"
+msgid "Could not start checkout. Please try again."
+msgstr "Could not start checkout. Please try again."
+
+#. Checkout: Stripe.js failed to load
+msgctxt "site_stripe_load_error"
+msgid "Could not load Stripe."
+msgstr "Could not load Stripe."
+
+#. Upgrade: Stripe unconfigured error
+msgctxt "site_stripe_not_configured"
+msgid "Stripe is not configured in this build"
+msgstr "Stripe is not configured in this build"
+
+#. Upgrade: subscribe via Stripe button
+msgctxt "site_subscribe_stripe"
+msgid "Subscribe with Stripe"
+msgstr "Subscribe with Stripe"
+
+#. Account panel: generic unexpected error
+msgctxt "site_unexpected_error"
+msgid "Something unexpected happened."
+msgstr "Something unexpected happened."
+
+#. Upgrade: waiting for payment confirmation
+msgctxt "site_waiting_payment"
+msgid "Waiting for payment confirmation…"
+msgstr "Waiting for payment confirmation…"
+
+#. Upgrade: success heading
+msgctxt "site_youre_pro"
+msgid "You're Pro"
+msgstr "You're Pro"
 
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"

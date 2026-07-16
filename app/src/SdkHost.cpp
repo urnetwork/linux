@@ -505,10 +505,14 @@ bool SdkHost::StartTunnel() {
     cfg.local_addr = device_->tunnelLocalAddress();
     if (cfg.local_addr.empty()) cfg.local_addr = "169.254.2.1";
     // dns from the device, like the tunnel address: the dns settings' unencrypted
-    // local servers when set, otherwise the default plain 1.1.1.1 (which the
-    // UpgradeMux can intercept and upgrade). the tunnel is ipv4-only, so only the
-    // ipv4 resolvers apply
+    // local servers when set, otherwise the default plain-DNS resolvers (which the
+    // UpgradeMux can intercept and upgrade). always plain :53, never OS-level
+    // encrypted DNS: the mux performs the unencrypted-DNS -> DoH upgrade in-tunnel.
+    // the tunnel is ipv4-only, so only the ipv4 resolvers apply
     if (auto dns = device_->tunnelDnsAddressesIpv4(); dns && !dns->empty()) cfg.dns_servers = *dns;
+    // static fallback matching the SDK default tunnel resolvers (Quad9 leads so no
+    // OS auto-upgrade to encrypted DNS applies)
+    else cfg.dns_servers = {"9.9.9.9", "1.1.1.1"};
 
     tunnel_ = Tunnel::Open(cfg);
     if (!tunnel_) { device_.reset(); return false; }
@@ -621,16 +625,34 @@ void SdkHost::SubscribeDrawer() {
       }));
   subs_.push_back(device_->addBlockerEnabledChangeListener(
       [this](bool) { EmitDrawerEvent(DrawerEvent::Blocker); }));
-  subs_.push_back(device_->addEgressContractDetailsChangeListener(
-      [this](std::optional<urnet::ContractDetails>) { EmitDrawerEvent(DrawerEvent::Contracts); }));
-  subs_.push_back(device_->addIngressContractDetailsChangeListener(
-      [this](std::optional<urnet::ContractDetails>) { EmitDrawerEvent(DrawerEvent::Contracts); }));
+  // contract details: the SDK ContractDetailsViewController coalesces the egress +
+  // ingress change streams, holds a renewing contract's slot so a close-then-open
+  // replace is atomic, aggregates per peer, and runs the closing/eject lifecycle
+  // (all of which the sheet used to do itself). It fires ContractRowsChanged once
+  // per settled change; the sheet re-reads ClientContractRows().
+  contractDetailsVc_ = device_->openContractDetailsViewController();
+  subs_.push_back(contractDetailsVc_->addContractRowsListener(
+      [this] { EmitDrawerEvent(DrawerEvent::Contracts); }));
+  contractDetailsVc_->start();
   subs_.push_back(device_->addConnectLocationChangeListener(
       [this](std::optional<urnet::ConnectLocation>) { EmitDrawerEvent(DrawerEvent::Location); }));
   subs_.push_back(device_->addPerformanceProfileChangeListener(
       [this](std::optional<urnet::PerformanceProfile>) {
         EmitDrawerEvent(DrawerEvent::Profile);
       }));
+
+  // provider chooser: the bucketed location feed + the connected, provide-enabled
+  // peers pinned at its top. start() kicks the initial load (FilterLocations("")).
+  locationsVc_ = device_->openLocationsViewController();
+  subs_.push_back(locationsVc_->addFilteredLocationsListener(
+      [this](std::optional<urnet::FilteredLocations>, std::string) {
+        EmitDrawerEvent(DrawerEvent::Locations);
+      }));
+  locationsVc_->start();
+  peerVc_ = device_->openPeerViewController();
+  subs_.push_back(peerVc_->addPeersListener(
+      [this](std::optional<urnet::NetworkPeerList>) { EmitDrawerEvent(DrawerEvent::Peers); }));
+  peerVc_->start();
 }
 
 // ---- connect drawer accessors ----------------------------------------------
@@ -784,21 +806,43 @@ std::string SdkHost::ClientId() {
   return device_ ? device_->getClientId() : std::string();
 }
 
-std::optional<urnet::ContractDetailsList> SdkHost::EgressContractDetails() {
+std::optional<urnet::ContractClientRowList> SdkHost::ClientContractRows() {
   std::scoped_lock lock(mutex_);
-  if (!device_) return std::nullopt;
-  return device_->getEgressContractDetails();
+  if (!contractDetailsVc_) return std::nullopt;
+  return contractDetailsVc_->getClientContractRows();
 }
 
-std::optional<urnet::ContractDetailsList> SdkHost::IngressContractDetails() {
+std::optional<urnet::FilteredLocations> SdkHost::GetFilteredLocations() {
   std::scoped_lock lock(mutex_);
-  if (!device_) return std::nullopt;
-  return device_->getIngressContractDetails();
+  if (locationsVc_) return locationsVc_->getFilteredLocations();
+  return std::nullopt;
+}
+
+void SdkHost::FilterLocations(const std::string& query) {
+  std::scoped_lock lock(mutex_);
+  if (locationsVc_) locationsVc_->filterLocations(query);
+}
+
+std::string SdkHost::GetFilteredLocationState() {
+  std::scoped_lock lock(mutex_);
+  if (locationsVc_) return locationsVc_->getFilteredLocationState();
+  return std::string();
+}
+
+std::optional<urnet::NetworkPeerList> SdkHost::ConnectedProvidePeers() {
+  std::scoped_lock lock(mutex_);
+  if (peerVc_) return peerVc_->getPeers();
+  return std::nullopt;
 }
 
 void SdkHost::ConnectBestAvailable() {
   std::scoped_lock lock(mutex_);
   if (connectVc_) connectVc_->connectBestAvailable();
+}
+
+void SdkHost::Connect(const std::optional<urnet::ConnectLocation>& location) {
+  std::scoped_lock lock(mutex_);
+  if (connectVc_) connectVc_->connect(location);
 }
 
 void SdkHost::Disconnect() {
@@ -848,8 +892,14 @@ void SdkHost::TeardownDeviceLocked() {
   connectVc_.reset();
   if (contractVc_) contractVc_->close();
   contractVc_.reset();
+  if (contractDetailsVc_) contractDetailsVc_->close();
+  contractDetailsVc_.reset();
   if (blockActionVc_) blockActionVc_->close();
   blockActionVc_.reset();
+  if (locationsVc_) locationsVc_->close();
+  locationsVc_.reset();
+  if (peerVc_) peerVc_->close();
+  peerVc_.reset();
   if (device_) device_->setTunnelStarted(false);
   if (ioLoop_) ioLoop_->close();
   ioLoop_.reset();

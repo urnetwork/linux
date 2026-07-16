@@ -96,6 +96,9 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   host_.SetDrawerEventHandler([this](DrawerEvent event) {
     PostToMain([this, event] {
       if (windowVisible_ && drawer_) drawer_->OnHostEvent(event);
+      if (event == DrawerEvent::Peers || event == DrawerEvent::DeviceLifecycle) {
+        RefreshPeersStatus();
+      }
     });
   });
 
@@ -250,6 +253,17 @@ void MainWindow::BuildPasswordStep() {
   stack_.add(*box, "password");
 }
 
+void MainWindow::RefreshPeersStatus() {
+  const auto peers = host_.ConnectedProvidePeers();
+  const int peerCount = peers ? static_cast<int>(peers->size()) : 0;
+  const Rgba dotColor = 0 < peerCount ? kUrGreen : kUrAmber;
+  peersStatusDot_.set_markup("<span foreground='" + HexForMarkup(dotColor) + "'>●</span>");
+  peersStatusText_.set_text(
+      Format(TN_("network_peer_count", "You have {} other device online",
+                 "You have {} other devices online", peerCount),
+             peerCount));
+}
+
 void MainWindow::BuildHome() {
   auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 16);
   box->set_margin(24);
@@ -262,6 +276,24 @@ void MainWindow::BuildHome() {
   connectBtn_.add_css_class("pill");
   connectBtn_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::ToggleConnect));
   box->append(connectBtn_);
+
+  // network peers status line, right under the connect button: a dot (green when
+  // peers are online, red at zero) + "{n} peers", always shown. Tapping opens the
+  // location chooser (owned by the drawer).
+  auto* peersRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  peersRow->set_halign(Gtk::Align::CENTER);
+  peersStatusDot_.set_valign(Gtk::Align::CENTER);
+  peersRow->append(peersStatusDot_);
+  peersStatusText_.add_css_class("dim-label");
+  peersRow->append(peersStatusText_);
+  peersRow->add_css_class("ur-card-tappable");
+  SetPointerCursor(*peersRow);
+  auto peersGesture = Gtk::GestureClick::create();
+  peersGesture->signal_released().connect(
+      [this](int, double, double) { if (drawer_) drawer_->OpenLocationChooser(); });
+  peersRow->add_controller(peersGesture);
+  box->append(*peersRow);
+  RefreshPeersStatus();
 
   // live stats (macOS parity): provider window size, throughput, provide
   providerCountLabel_.add_css_class("dim-label");

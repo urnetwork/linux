@@ -26,6 +26,7 @@
 
 #include "ContractsSheet.hpp"
 #include "DnsSheet.hpp"
+#include "LocationsSheet.hpp"
 #include "RedeemCodeSheet.hpp"
 #include "SdkHost.hpp"
 #include "SplitRulesSheet.hpp"
@@ -51,6 +52,10 @@ class ConnectDrawer : public Gtk::Box {
   void SetInsufficientBalance(bool insufficient);
   // Opens the upgrade sheet (also the target of the insufficient banner).
   void OpenUpgrade();
+
+  // Opens the location/provider chooser (owned here); called from the drawer's
+  // location row and from the home screen's peers status line.
+  void OpenLocationChooser();
 
   // Guest plan card: route into the guest -> full-account create page.
   std::function<void()> on_create_account;
@@ -122,6 +127,7 @@ class ConnectDrawer : public Gtk::Box {
   // detail sheets (kept alive, hidden on close)
   std::unique_ptr<ContractsSheet> contractsSheet_;
   std::unique_ptr<SplitRulesSheet> splitRulesSheet_;
+  std::unique_ptr<LocationsSheet> locationsSheet_;
   std::unique_ptr<DnsSheet> dnsSheet_;
   std::unique_ptr<RedeemCodeSheet> redeemSheet_;
   std::unique_ptr<UpgradeSheet> upgradeSheet_;
