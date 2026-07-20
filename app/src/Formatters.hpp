@@ -20,12 +20,6 @@ std::string FormatPacketRate(int64_t packetsPerSecond);
 // "1.2 Mbps"
 std::string FormatBitRate(int64_t bitsPerSecond);
 
-// Compact rendering of a cluster's host values: >10 host names collapse to
-// "*.<base>" (public-suffix aware via the SDK), then hosts ++ ips compacted to
-// at most 21 shown values. Empty -> "unknown".
-std::string FormatHostClusterText(const std::vector<std::string>& hosts,
-                                  const std::vector<std::string>& ips);
-
 // "now", "42s ago", "3m ago", "2h ago"
 std::string RelativeTime(int64_t secondsAgo);
 

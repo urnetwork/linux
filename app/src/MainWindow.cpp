@@ -61,7 +61,7 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     if (balance_.DidDetectUpgradeToPro() && !provideResetOnUpgrade_) {
       provideResetOnUpgrade_ = true;
       host_.ResetProvideToNever();
-      provideSwitch_.set_active(false);  // reflect it in the home controls
+      SyncProvideControlMode();  // reflect it in the home controls
     }
   });
 
@@ -73,6 +73,9 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   // and return to the login panel. Logout() fires the auth-state handler.
   host_.SetAuthInvalidHandler([this] {
     PostToMain([this] { host_.Logout(); });
+  });
+  host_.SetJwtRefreshedHandler([this] {
+    PostToMain([this] { balance_.OnJwtRefreshed(); });
   });
   host_.SetConnectionStatusHandler([this](std::string status) {
     PostToMain([this, status] {
@@ -254,8 +257,9 @@ void MainWindow::BuildPasswordStep() {
 }
 
 void MainWindow::RefreshPeersStatus() {
-  const auto peers = host_.ConnectedProvidePeers();
-  const int peerCount = peers ? static_cast<int>(peers->size()) : 0;
+  // ALL connected devices (online, provide or not); the chooser's peers
+  // section stays provide-filtered (connectable only)
+  const int peerCount = static_cast<int>(host_.ConnectedPeerCount());
   const Rgba dotColor = 0 < peerCount ? kUrGreen : kUrAmber;
   peersStatusDot_.set_markup("<span foreground='" + HexForMarkup(dotColor) + "'>●</span>");
   peersStatusText_.set_text(
@@ -293,6 +297,10 @@ void MainWindow::BuildHome() {
       [this](int, double, double) { if (drawer_) drawer_->OpenLocationChooser(); });
   peersRow->add_controller(peersGesture);
   box->append(*peersRow);
+  // discoverability (apple/android parity): whether this device is itself
+  // connectable as a same-network peer
+  discoverableLabel_.add_css_class("dim-label");
+  box->append(discoverableLabel_);
   RefreshPeersStatus();
 
   // live stats (macOS parity): provider window size, throughput, provide
@@ -303,13 +311,36 @@ void MainWindow::BuildHome() {
   box->append(throughputLabel_);
   box->append(provideStatsLabel_);
 
+  // provide control mode picker (apple/android parity): Auto | Always |
+  // Network | Never. "Network" is the private provider — the provider is
+  // always on, but provides only to same-network peers, never publicly.
   auto* provideRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
   provideRow->set_halign(Gtk::Align::CENTER);
+  provideModeDot_.set_valign(Gtk::Align::CENTER);
+  provideRow->append(provideModeDot_);
   provideRow->append(*Gtk::make_managed<Gtk::Label>(T_("provide", "Provide")));
-  provideSwitch_.property_active().signal_changed().connect([this] {
-    host_.SetProvideEnabled(provideSwitch_.get_active());
-  });
-  provideRow->append(provideSwitch_);
+  auto* provideSegmented = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL);
+  provideSegmented->add_css_class("linked");
+  provideAuto_ = Gtk::make_managed<Gtk::ToggleButton>(T_("auto", "Auto"));
+  provideAlways_ = Gtk::make_managed<Gtk::ToggleButton>(T_("always", "Always"));
+  provideNetwork_ = Gtk::make_managed<Gtk::ToggleButton>(T_("network", "Network"));
+  provideNever_ = Gtk::make_managed<Gtk::ToggleButton>(T_("never", "Never"));
+  provideAlways_->set_group(*provideAuto_);
+  provideNetwork_->set_group(*provideAuto_);
+  provideNever_->set_group(*provideAuto_);
+  // default matches the stored default ("never" — providing is opt-in); the
+  // real state syncs in ApplyAuthState. Set before the signal connections
+  // below so construction doesn't fire an apply.
+  provideNever_->set_active(true);
+  for (Gtk::ToggleButton* button :
+       {provideAuto_, provideAlways_, provideNetwork_, provideNever_}) {
+    provideSegmented->append(*button);
+    // toggled fires for the deactivated button too; apply once on the activation
+    button->signal_toggled().connect([this, button] {
+      if (button->get_active()) ApplyProvideControlMode();
+    });
+  }
+  provideRow->append(*provideSegmented);
   box->append(*provideRow);
 
   // connect drawer (macOS ConnectActions parity): connection controls, the
@@ -537,13 +568,45 @@ void MainWindow::OnWalletAuth(const AuthResult& result) {
   });
 }
 
+// picker -> host: apply the active segment's mode. The sync guard keeps the
+// programmatic set_active in SyncProvideControlMode from writing back.
+void MainWindow::ApplyProvideControlMode() {
+  if (syncingProvideMode_) return;
+  std::string mode = "never";
+  if (provideAuto_ && provideAuto_->get_active()) {
+    mode = "auto";
+  } else if (provideAlways_ && provideAlways_->get_active()) {
+    mode = "always";
+  } else if (provideNetwork_ && provideNetwork_->get_active()) {
+    mode = "network";
+  }
+  host_.SetProvideControlMode(mode);
+}
+
+// host -> picker: reflect the device/persisted mode ("manual" and any unknown
+// value land on Never, matching the SDK's conservative default case).
+void MainWindow::SyncProvideControlMode() {
+  const std::string mode = host_.GetProvideControlMode();
+  syncingProvideMode_ = true;
+  if (mode == "auto" && provideAuto_) {
+    provideAuto_->set_active(true);
+  } else if (mode == "always" && provideAlways_) {
+    provideAlways_->set_active(true);
+  } else if (mode == "network" && provideNetwork_) {
+    provideNetwork_->set_active(true);
+  } else if (provideNever_) {
+    provideNever_->set_active(true);
+  }
+  syncingProvideMode_ = false;
+}
+
 void MainWindow::ApplyAuthState(bool loggedIn) {
   stack_.set_visible_child(loggedIn ? "home" : "login");
   // a fresh session (either way) re-arms the once-only Pro-upgrade provide
   // reset; the balance store's detection flag resets in Start()/Stop() below
   provideResetOnUpgrade_ = false;
   if (loggedIn) {
-    provideSwitch_.set_active(host_.ProvideEnabled());
+    SyncProvideControlMode();
     SetConnected(host_.Connected());
     // (re)seed the balance/plan store from the (possibly new) jwt: login,
     // guest upgrade, and app start all land here
@@ -615,6 +678,33 @@ void MainWindow::ApplyStats(const LiveStats& stats) {
                            stats.provideClients);
   }
   provideStatsLabel_.set_text(provide);
+
+  // provide indicator (apple parity). The effective provide mode is a bit
+  // set (0 none, 1 network, 2 friends-and-family, 3 public) — per-case only.
+  // "●" = solid dot (Network tier), "◉" = dot with outer ring (Public tier).
+  const char* provideGlyph = "●";
+  Rgba provideColor = kUrCoral;
+  switch (stats.provideMode) {
+    case 3:  // public
+      provideGlyph = "◉";
+      provideColor = stats.providePaused ? kUrAmber : kUrGreen;
+      break;
+    case 1:  // network (also Auto while idle)
+    case 2:  // friends-and-family
+      provideColor = kUrGreen;
+      break;
+    default:
+      break;
+  }
+  provideModeDot_.set_markup("<span foreground='" + HexForMarkup(provideColor) + "'>" +
+                             provideGlyph + "</span>");
+
+  // discoverability line (apple/android parity): a paused device stays
+  // discoverable — pause stops public provide only
+  discoverableLabel_.set_text(
+      stats.provideEnabled && stats.provideHasNetworkKey
+          ? T_("device_discoverable", "This device is discoverable")
+          : T_("device_not_discoverable", "Enable provide mode to make this device discoverable"));
 }
 
 }  // namespace urnw

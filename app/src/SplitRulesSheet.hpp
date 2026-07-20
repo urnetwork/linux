@@ -36,6 +36,10 @@ class SplitRulesSheet : public Gtk::Window {
     int64_t timeMs = 0;
     std::vector<std::string> hosts;
     std::vector<std::string> ips;
+    // the exact hosts/ips that matched an override rule, shown as green chips at the
+    // front (disjoint from hosts/ips)
+    std::vector<std::string> matchedHosts;
+    std::vector<std::string> matchedIps;
     bool block = false;
     bool local = false;
     std::string overrideId;
@@ -44,6 +48,7 @@ class SplitRulesSheet : public Gtk::Window {
     int64_t byteCount = 0;
     bool operator==(const ActionItem& o) const {
       return id == o.id && timeMs == o.timeMs && hosts == o.hosts && ips == o.ips &&
+             matchedHosts == o.matchedHosts && matchedIps == o.matchedIps &&
              block == o.block && local == o.local && overrideId == o.overrideId &&
              hasBlockOverride == o.hasBlockOverride && hasRouteOverride == o.hasRouteOverride &&
              byteCount == o.byteCount;

@@ -31,35 +31,6 @@ std::string FormatScaled(double value, const char* unit) {
   return buf;
 }
 
-// Shows all values when there are 20 or fewer, else the first, middle, and
-// last 7 in alphanumeric order (21 max) with the omitted count.
-std::string CompactValueList(const std::vector<std::string>& values) {
-  auto join = [](auto begin, auto end) {
-    std::string out;
-    for (auto it = begin; it != end; ++it) {
-      if (!out.empty()) out += ", ";
-      out += *it;
-    }
-    return out;
-  };
-  if (values.size() <= 20) {
-    return join(values.begin(), values.end());
-  }
-  std::vector<std::string> sorted = values;
-  std::sort(sorted.begin(), sorted.end());
-  const size_t n = sorted.size();
-  const size_t middleStart = (n - 7) / 2;
-  std::string text = join(sorted.begin(), sorted.begin() + 7) + ", …, " +
-                     join(sorted.begin() + middleStart, sorted.begin() + middleStart + 7) +
-                     ", …, " + join(sorted.begin() + (n - 7), sorted.end());
-  const size_t omitted = n - 21;
-  if (0 < omitted) {
-    // plural rules live in the catalog ("plus_n_more")
-    text += " " + Format(TN_("plus_n_more", "+ {} more", "+ {} more", omitted), omitted);
-  }
-  return text;
-}
-
 }  // namespace
 
 std::string FormatByteCountCompact(int64_t byteCount) {
@@ -101,25 +72,6 @@ std::string FormatBitRate(int64_t bitsPerSecond) {
   if (v < 1e6) return FormatScaled(v / 1e3, "Kbps");
   if (v < 1e9) return FormatScaled(v / 1e6, "Mbps");
   return FormatScaled(v / 1e9, "Gbps");
-}
-
-std::string FormatHostClusterText(const std::vector<std::string>& hosts,
-                                  const std::vector<std::string>& ips) {
-  // host names collapse to public-suffix base names when there are more than 10
-  std::vector<std::string> displayHosts = hosts;
-  if (hosts.size() > 10) {
-    std::unordered_set<std::string> seen;
-    std::vector<std::string> collapsed;
-    for (const auto& host : hosts) {
-      std::string display = "*." + urnet::hostBaseName(host);
-      if (seen.insert(display).second) collapsed.push_back(std::move(display));
-    }
-    displayHosts = std::move(collapsed);
-  }
-  std::vector<std::string> items = std::move(displayHosts);
-  items.insert(items.end(), ips.begin(), ips.end());
-  if (items.empty()) return T_("unknown", "unknown");
-  return CompactValueList(items);
 }
 
 std::string RelativeTime(int64_t secondsAgo) {

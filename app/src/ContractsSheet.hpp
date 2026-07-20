@@ -1,14 +1,20 @@
-// "Client contracts" sheet (port of the apple ContractDetailsView, client
-// mode): a scrollable list with one row per peer client, showing that peer's
-// egress ("contract", green) and ingress ("companion", pink) contracts. Each
-// row shows the full client id (click to copy), an area-proportional usage
-// circle per contract side, and the live transfer lines between them.
+// Live contract-details sheet (port of the apple ContractDetailsView, revised
+// per-contract design): a scrollable list, one row per peer client id. Each row
+// shows every contract of that peer separately -- no pairing, no aggregation --
+// as two independent stacks: send contracts (green) and receive contracts
+// (pink), newest on top. Laid out as four columns mirrored around the row
+// center: send-stats | send-circles | receive-circles | receive-stats. Each
+// circle is one contract, its outer ring area-proportional to the largest
+// contract in that stack ("max N" anchor beneath), its inner disc the used
+// fraction, brightened while it is moving bytes.
 //
-// This is a thin adapter over the SDK ContractDetailsViewController: that view
-// controller owns the egress+ingress coalescing, renewal-atomic slot holds,
-// per-peer aggregation, and the closing/eject lifecycle (all shared with the
-// apple/android/windows apps). The sheet only maps its rows onto widgets and
-// animates the circle swap/eject (mirroring the apple ContractRing).
+// The grouping, ordering (including the at-top activity sort and the scrolled-away
+// freeze), direction resolution, closing/eject lifecycle, the ~1/s rows-update
+// throttle and the "N new" pending count all live in the shared SDK
+// ContractDetailsViewController (single-feed, identical across apple/android/linux);
+// this sheet only maps its already-ordered rows onto widgets, animates the
+// per-contract stacks (contracts sliding off + the pile settling), reports its
+// scroll position, and shows the "N new" chip.
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
@@ -24,78 +30,90 @@
 
 namespace urnw {
 
-class ContractCircle;  // eased area-proportional usage circle (ContractsSheet.cpp)
-class TransferLines;   // directional transfer-rate lines (ContractsSheet.cpp)
+class ContractStackView;  // one direction's animated pile (ContractsSheet.cpp)
+
+// Whether the sheet shows this device's own client traffic or the traffic it
+// relays as a provider (apple ContractDetailsMode). Selects the sheet's title +
+// empty-state copy; the client and provider feeds are two instances of the same
+// single-feed SDK view controller. Only the client sheet is created today (SdkHost
+// wires the client feed); a provider sheet would open its own VC.
+enum class ContractDetailsMode { Client, Provider };
 
 class ContractsSheet : public Gtk::Window {
  public:
-  ContractsSheet(Gtk::Window& parent, SdkHost& host);
+  ContractsSheet(Gtk::Window& parent, SdkHost& host,
+                 ContractDetailsMode mode = ContractDetailsMode::Client);
+  ~ContractsSheet() override;
 
   void Open();
-  // Re-read the SDK view controller's rows and map them onto the list. Same peer
-  // set: the rows update in place (usage discs ease, a contract swap ejects the
-  // old ring); membership/order changes rebuild the list. The SDK already
-  // coalesced the change streams, so this is driven directly off the event.
+  // Re-read the SDK view controller's already-ordered rows (+ pending count) and
+  // reconcile them onto the list. The SDK owns membership + order -- it freezes
+  // them while scrolled away -- and coalesces/throttles the change streams, so this
+  // runs straight off the change event and just renders what it is handed.
   void Refresh();
 
  private:
-  // One peer client's rendered contract pair (mirror of the SDK ContractClientRow
-  // / apple ContractClientRow); the SDK produced these already aggregated.
-  struct PeerRow {
+  // one contract, un-aggregated (mirror of SDK ContractEntry / apple ContractEntry)
+  struct EntryVM {
+    std::string id;
+    int64_t used = 0;
+    int64_t total = 0;
+    int64_t bitRate = 0;
+    // a stream contract (its transfer path carries a stream id) -- drawn as a
+    // double concentric outer ring so streams are visually distinct
+    bool hasStream = false;
+  };
+
+  // one peer client's two contract stacks (mirror of SDK ContractPeerRow). The SDK
+  // already ordered these rows and resolved the closing/eject lifecycle, so the
+  // activity timestamp / closing flag it tracks internally are not mirrored here --
+  // the sheet renders the rows in the order given.
+  struct PeerRowVM {
     std::string clientId;
-    // signatures of the peer's active contract ids; a change means a contract was
-    // replaced -> swap (eject) the ring rather than just resizing the usage disc
-    std::string contractId;
-    std::string companionContractId;
-    int64_t contractUsed = 0;
-    int64_t contractTotal = 0;
-    int64_t contractBitRate = 0;
-    int64_t companionUsed = 0;
-    int64_t companionTotal = 0;
-    int64_t companionBitRate = 0;
-    int pairCount = 0;
-    // the peer's last contract closed; the SDK keeps the row briefly so its
-    // circles can eject, then removes it
-    bool closing = false;
-
-    bool operator==(const PeerRow& o) const {
-      return clientId == o.clientId && contractId == o.contractId &&
-             companionContractId == o.companionContractId && contractUsed == o.contractUsed &&
-             contractTotal == o.contractTotal && contractBitRate == o.contractBitRate &&
-             companionUsed == o.companionUsed && companionTotal == o.companionTotal &&
-             companionBitRate == o.companionBitRate && pairCount == o.pairCount &&
-             closing == o.closing;
-    }
-    bool operator!=(const PeerRow& o) const { return !(*this == o); }
+    std::vector<EntryVM> send;     // newest first
+    std::vector<EntryVM> receive;  // newest first
+    // cumulative bytes moved to / from this peer in the current run (accumulated
+    // across the peer's contracts, reset when it goes idle), for the stack headers
+    int64_t sendByteCount = 0;
+    int64_t receiveByteCount = 0;
   };
 
-  // the live-updated widgets of one peer row
+  // the live-updated widgets of one peer row, keyed by client id so identity is
+  // stable across refreshes (stacks keep their animation state)
   struct RowWidgets {
-    ContractCircle* contractCircle = nullptr;
-    Gtk::Label* contractUsed = nullptr;
-    Gtk::Label* contractTotal = nullptr;
-    ContractCircle* companionCircle = nullptr;
-    Gtk::Label* companionUsed = nullptr;
-    Gtk::Label* companionTotal = nullptr;
-    TransferLines* lines = nullptr;
-    Gtk::Label* pairCount = nullptr;
+    Gtk::Box* container = nullptr;  // the row box + trailing divider
+    ContractStackView* send = nullptr;
+    ContractStackView* receive = nullptr;
   };
 
-  std::vector<PeerRow> ReadRows();
-  void RebuildList();
-  Gtk::Widget* BuildRow(const PeerRow& row, RowWidgets& outWidgets);
-  void UpdateRowWidgets(const PeerRow& row, RowWidgets& widgets);
+  std::vector<PeerRowVM> ReadRows();
+  // reconcile the list widgets to the SDK-ordered `rows_` (add/remove/reorder rows)
+  // and push live values into every shown row's stacks
+  void ApplyRows();
+  Gtk::Widget* BuildRow(const PeerRowVM& row, RowWidgets& outWidgets);
+  void UpdateRow(const PeerRowVM& row, RowWidgets& widgets);
+  void UpdateChip();
+  // forward the scroll position to the SDK VC (which owns the ordering + freeze)
+  // when it changes, and refresh the chip
+  void ReportAtTop(bool atTop);
   void CopyClientId(const std::string& clientId);
+  // fade a removed peer's row out (~250ms) then drop it from the list
+  void FadeOutAndRemove(Gtk::Widget* container);
 
   SdkHost& host_;
+  ContractDetailsMode mode_;
+
   AdwToastOverlay* toastOverlay_ = nullptr;
+  Gtk::Overlay* overlay_ = nullptr;
+  Gtk::ScrolledWindow* scroller_ = nullptr;
   Gtk::Stack stack_;
   Gtk::Box listBox_{Gtk::Orientation::VERTICAL};
+  Gtk::Button* chipButton_ = nullptr;
+  Gtk::Label* chipLabel_ = nullptr;
 
-  bool built_ = false;  // first Refresh always builds the list
-  std::vector<PeerRow> rows_;
-  std::vector<std::string> rowIds_;               // current row order (SDK order)
-  std::map<std::string, RowWidgets> rowWidgets_;  // per-peer live widgets
+  std::vector<PeerRowVM> rows_;  // latest rows, already ordered by the SDK VC
+  std::map<std::string, RowWidgets> rowWidgets_;
+  bool isAtTop_ = true;  // seeded true (a fresh list is at the top); gates the chip
 };
 
 }  // namespace urnw

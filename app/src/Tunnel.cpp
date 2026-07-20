@@ -7,7 +7,6 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include <array>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -65,15 +64,31 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg) {
 
 bool Tunnel::Configure(const TunnelConfig& cfg) {
   const std::string addr = cfg.local_addr + "/" + std::to_string(cfg.prefix);
-  const std::array<std::vector<std::string>, 5> steps = {{
+  std::vector<std::vector<std::string>> steps = {
       {"ip", "link", "set", "dev", name_, "up"},
       {"ip", "link", "set", "dev", name_, "mtu", std::to_string(cfg.mtu)},
       {"ip", "address", "add", addr, "dev", name_},
-      // split-default capture: 0.0.0.0/1 + 128.0.0.0/1 sort above the physical
-      // default route without deleting it (the macOS/wg-quick trick).
-      {"ip", "route", "add", "0.0.0.0/1", "dev", name_},
-      {"ip", "route", "add", "128.0.0.0/1", "dev", name_},
-  }};
+  };
+  // Split-default capture that EXCLUDES the local network, matching Android
+  // (MainService's excludeRoute set) and iOS (NEIPv4Settings.excludedRoutes): the
+  // whole ipv4 space MINUS 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, so LAN
+  // traffic bypasses the tunnel and reaches local devices directly. These are the
+  // complement prefixes of those private ranges within 0.0.0.0/0 (the same set
+  // Android adds on its no-excludeRoute path); the excluded ranges fall through to
+  // the physical/connected routes. Like the old 0.0.0.0/1 + 128.0.0.0/1 capture,
+  // these sort above the physical default without deleting it.
+  static const char* kIncludedV4Prefixes[] = {
+      "0.0.0.0/5", "8.0.0.0/7", "11.0.0.0/8", "12.0.0.0/6", "16.0.0.0/4",
+      "32.0.0.0/3", "64.0.0.0/2", "128.0.0.0/3", "160.0.0.0/5", "168.0.0.0/6",
+      "172.0.0.0/12", "172.32.0.0/11", "172.64.0.0/10", "172.128.0.0/9",
+      "173.0.0.0/8", "174.0.0.0/7", "176.0.0.0/4", "192.0.0.0/9", "192.128.0.0/11",
+      "192.160.0.0/13", "192.169.0.0/16", "192.170.0.0/15", "192.172.0.0/14",
+      "192.176.0.0/12", "192.192.0.0/10", "193.0.0.0/8", "194.0.0.0/7",
+      "196.0.0.0/6", "200.0.0.0/5", "208.0.0.0/4", "224.0.0.0/3",
+  };
+  for (const char* prefix : kIncludedV4Prefixes) {
+    steps.push_back({"ip", "route", "add", prefix, "dev", name_});
+  }
   for (const auto& s : steps) {
     if (!Run(s)) return false;
   }

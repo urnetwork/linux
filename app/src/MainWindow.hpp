@@ -32,6 +32,8 @@ class MainWindow : public Gtk::ApplicationWindow {
   void BuildPasswordStep();   // password step of the email-first login
   void BuildHome();
   void RefreshPeersStatus();  // home-screen peers status line (dot + "{n} peers")
+  void ApplyProvideControlMode();  // picker -> host (guarded during sync)
+  void SyncProvideControlMode();   // host -> picker
   void BuildAuthPages();  // create network / verify / password reset
   void OnGetStarted();  // authLogin discovery -> password / create / inline error
   void OnSignIn();
@@ -66,12 +68,23 @@ class MainWindow : public Gtk::ApplicationWindow {
 
   Gtk::Label status_{"Disconnected"};
   Gtk::Button connectBtn_{"Connect"};
-  Gtk::Switch provideSwitch_;
+  // provide indicator (apple parity): "●" solid dot = Network provide (green;
+  // coral when not providing), "◉" dot + ring = Public provide (amber when
+  // paused — pause stops public only)
+  Gtk::Label provideModeDot_;
+  // provide control mode picker: Auto | Always | Network | Never. "Network" is
+  // the private provider (always on, provides to same-network peers only).
+  Gtk::ToggleButton* provideAuto_ = nullptr;
+  Gtk::ToggleButton* provideAlways_ = nullptr;
+  Gtk::ToggleButton* provideNetwork_ = nullptr;
+  Gtk::ToggleButton* provideNever_ = nullptr;
+  bool syncingProvideMode_ = false;  // guards Apply during programmatic sync
   Gtk::Label providerCountLabel_;  // live stats (macOS parity)
   Gtk::Label throughputLabel_;
   Gtk::Label provideStatsLabel_;
   Gtk::Label peersStatusDot_;   // green when peers > 0, red at 0
   Gtk::Label peersStatusText_;  // "{n} peers"; tapping opens the chooser
+  Gtk::Label discoverableLabel_;  // "This device is discoverable" (apple parity)
   ConnectDrawer* drawer_ = nullptr;  // connect drawer (controls/stats/dns/blocker/plan cards)
 
   // login-flow pages (stack children; MainWindow wires the navigation)

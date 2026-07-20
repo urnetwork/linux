@@ -87,6 +87,12 @@ struct LiveStats {
   bool provideEnabled = false;
   bool providePaused = false;
   int64_t provideClients = 0;
+  // the LIVE effective provide mode (protocol values: 0 none, 1 network,
+  // 2 friends-and-family, 3 public — a bit set, compare per-case)
+  int64_t provideMode = 0;
+  // the provider holds a Network-mode provide key: with provideEnabled this
+  // means the device is discoverable/connectable as a same-network peer
+  bool provideHasNetworkKey = false;
 };
 
 class SdkHost {
@@ -97,6 +103,7 @@ class SdkHost {
   // state. The handler runs on an sdk thread and must only marshal -- the ui
   // marshals onto the main loop and calls Logout().
   using AuthInvalidHandler = std::function<void()>;
+  using JwtRefreshedHandler = std::function<void()>;
   using ConnectionStatusHandler = std::function<void(std::string status)>;
   using StatsHandler = std::function<void(const LiveStats& stats)>;
   using DrawerEventHandler = std::function<void(DrawerEvent event)>;
@@ -180,8 +187,11 @@ class SdkHost {
   void Disconnect();
   bool Connected();
 
-  // Provide/earn: control mode "never"|"always"|"auto"|"manual".
-  void SetProvideEnabled(bool enabled);
+  // Provide/earn: control mode "never"|"always"|"network"|"auto"|"manual".
+  // "network" is the private provider: the provider is always on, but provides
+  // ONLY to same-network peers — never publicly.
+  void SetProvideControlMode(const std::string& mode);
+  std::string GetProvideControlMode();
   bool ProvideEnabled();
   // The free -> Pro upgrade side effect (mac MainView reacts to
   // SubscriptionBalanceViewModel.didDetectUpgradeToPro by setting
@@ -192,6 +202,7 @@ class SdkHost {
 
   void SetAuthStateHandler(AuthStateHandler h) { onAuth_ = std::move(h); }
   void SetAuthInvalidHandler(AuthInvalidHandler h) { onAuthInvalid_ = std::move(h); }
+  void SetJwtRefreshedHandler(JwtRefreshedHandler h) { onJwtRefreshed_ = std::move(h); }
   void SetConnectionStatusHandler(ConnectionStatusHandler h) { onStatus_ = std::move(h); }
   // Live stats push (connection/throughput/provide). Fired on SDK listener
   // callbacks; the UI marshals onto the GTK loop and gates on window visibility.
@@ -226,11 +237,21 @@ class SdkHost {
   void SetBlockActionOverrideHosts(const std::string& overrideId, const urnet::StringList& hosts);
   void RemoveBlockActionOverride(const std::string& overrideId);
   std::string ClientId();
-  // Aggregated per-peer contract rows for the client-traffic sheet, straight from
-  // the SDK ContractDetailsViewController (it owns the egress+ingress coalescing,
-  // renewal-atomic slot holds, per-peer aggregation, and closing/eject lifecycle
-  // the app used to do itself). nullopt with the tunnel down.
-  std::optional<urnet::ContractClientRowList> ClientContractRows();
+  // Per-peer, per-contract rows for this device's own (client) traffic, straight
+  // from the single-feed SDK ContractDetailsViewController. One row per peer client
+  // id; each row carries its send + receive contracts (newest first) un-aggregated
+  // and the two summed bit rates. The VC owns the direction-resolved grouping,
+  // closing/eject lifecycle, rows-update throttle AND the FINAL display ordering --
+  // the at-top activity sort plus the scrolled-away freeze -- so the sheet renders
+  // the rows as-is (shared with apple/android). Report the scroll position with
+  // SetContractsAtTop (true at the very top); ContractsPendingCount is the "N new"
+  // count of rows collected while scrolled away (0 at the top). nullopt/0 with the
+  // tunnel down. (Client + provider are two instances of the same single-feed VC;
+  // only the client feed is wired -- a provider sheet would open its own VC via
+  // openProviderContractDetailsViewController.)
+  std::optional<urnet::ContractPeerRowList> ContractRows();
+  void SetContractsAtTop(bool atTop);
+  int64_t ContractsPendingCount();
 
   // ---- location/provider chooser ---------------------------------------------
   // LocationsViewController buckets provider locations into sections and owns the
@@ -241,6 +262,8 @@ class SdkHost {
   void FilterLocations(const std::string& query);
   std::string GetFilteredLocationState();
   std::optional<urnet::NetworkPeerList> ConnectedProvidePeers();
+  // count of ALL connected peers (online, provide or not)
+  int64_t ConnectedPeerCount();
 
   // Exposed so the (full-parity) UI/view models can drive the SDK directly.
   urnet::Api& api() { return *api_; }
@@ -276,7 +299,10 @@ class SdkHost {
   std::optional<urnet::DeviceLocal> device_;
   std::optional<urnet::ConnectViewController> connectVc_;
   std::optional<urnet::ContractViewController> contractVc_;  // live throughput feed
-  std::optional<urnet::ContractDetailsViewController> contractDetailsVc_;  // aggregated contract rows feed
+  // single-feed per-peer per-contract rows for this device's own (client) traffic;
+  // the VC owns the display ordering + scrolled-away freeze + "N new" pending count
+  // (a provider sheet would open a second, provider-feed VC -- none exists yet)
+  std::optional<urnet::ContractDetailsViewController> clientContractDetailsVc_;
   std::optional<urnet::BlockActionViewController> blockActionVc_;  // block actions/stats feed
   // sign-up network-name availability (SDK shared view controller)
   std::optional<urnet::NetworkNameValidationViewController> networkNameVc_;
@@ -294,6 +320,7 @@ class SdkHost {
 
   AuthStateHandler onAuth_;
   AuthInvalidHandler onAuthInvalid_;
+  JwtRefreshedHandler onJwtRefreshed_;
   ConnectionStatusHandler onStatus_;
   StatsHandler onStats_;
   DrawerEventHandler onDrawerEvent_;

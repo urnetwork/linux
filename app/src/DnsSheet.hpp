@@ -25,6 +25,13 @@ class DnsSheet : public Gtk::Window {
   // not present) when no settings are available.
   bool Open();
 
+  // Field-wise equality of two resolver settings (nullopt server lists compare
+  // equal to empty ones). The canonical comparison for "are these settings the
+  // same" — the connect drawer's Custom DNS pill reuses it to decide whether the
+  // applied settings match the regional recommendation / safe defaults.
+  static bool SettingsEqual(const urnet::DnsResolverSettings& a,
+                            const urnet::DnsResolverSettings& b);
+
  private:
   // one editable IPv4/IPv6 sublist of a server-list section
   struct ListField {
@@ -56,8 +63,6 @@ class DnsSheet : public Gtk::Window {
   void AddListValue(size_t index);
 
   static void Normalize(urnet::DnsResolverSettings& settings);
-  static bool SettingsEqual(const urnet::DnsResolverSettings& a,
-                            const urnet::DnsResolverSettings& b);
   std::string CountryDotMarkup(const std::string& countryCode) const;
 
   SdkHost& host_;

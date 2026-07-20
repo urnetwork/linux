@@ -487,6 +487,14 @@ bool SdkHost::StartTunnel() {
       if (onAuthInvalid_) onAuthInvalid_();
     }));
 
+    // A jwt refresh re-derives Pro from the (now-updated) token — mac's
+    // JwtRefreshListener parity. Without this a mid-session Pro change (notably a
+    // Pro->free lapse, which a Pro network's paused poll won't catch) isn't reflected
+    // until the window is re-shown. Same marshaling rule as the logout listener.
+    subs_.push_back(device_->addJwtRefreshListener([this](std::string) {
+      if (onJwtRefreshed_) onJwtRefreshed_();
+    }));
+
     // Restore the persisted performance profile (connection mode / fixed IP /
     // strong anonymization). Unlike the blocker, dns settings, and overrides,
     // the device does not restore the profile from local state itself (the
@@ -583,6 +591,15 @@ LiveStats SdkHost::ReadStats() {
     if (auto cs = device_->getContractStatus(); cs) s.insufficientBalance = cs->InsufficientBalance;
     s.provideEnabled = device_->getProvideEnabled();
     s.providePaused = device_->getProvidePaused();
+    s.provideMode = static_cast<int64_t>(device_->getProvideMode());
+    if (auto keys = device_->getProvideSecretKeys(); keys) {
+      for (const auto& key : *keys) {
+        if (key.provide_mode == 1 /* network — bit set, per-case */) {
+          s.provideHasNetworkKey = true;
+          break;
+        }
+      }
+    }
     if (auto np = device_->getNetworkPeers(); np && np->Connected) {
       s.provideClients = static_cast<int64_t>(np->Connected->size());
     }
@@ -625,15 +642,19 @@ void SdkHost::SubscribeDrawer() {
       }));
   subs_.push_back(device_->addBlockerEnabledChangeListener(
       [this](bool) { EmitDrawerEvent(DrawerEvent::Blocker); }));
-  // contract details: the SDK ContractDetailsViewController coalesces the egress +
-  // ingress change streams, holds a renewing contract's slot so a close-then-open
-  // replace is atomic, aggregates per peer, and runs the closing/eject lifecycle
-  // (all of which the sheet used to do itself). It fires ContractRowsChanged once
-  // per settled change; the sheet re-reads ClientContractRows().
-  contractDetailsVc_ = device_->openContractDetailsViewController();
-  subs_.push_back(contractDetailsVc_->addContractRowsListener(
+  // contract details: a single-feed ContractDetailsViewController for this device's
+  // own (client) traffic. The VC groups the egress + ingress contracts per peer
+  // (direction-resolved), keeps each direction's contracts un-aggregated and
+  // newest-first, runs the closing/eject lifecycle, owns the display ordering (the
+  // at-top activity sort + the scrolled-away freeze + the "N new" pending count),
+  // and rate-limits recomputes (RowsUpdateThrottle, ~1/s). It fires
+  // ContractRowsChanged once per settled change; the sheet re-reads ContractRows()
+  // + ContractsPendingCount() and animates the per-contract stacks itself. (A
+  // provider sheet would open its own VC via openProviderContractDetailsViewController.)
+  clientContractDetailsVc_ = device_->openClientContractDetailsViewController();
+  subs_.push_back(clientContractDetailsVc_->addContractRowsListener(
       [this] { EmitDrawerEvent(DrawerEvent::Contracts); }));
-  contractDetailsVc_->start();
+  clientContractDetailsVc_->start();
   subs_.push_back(device_->addConnectLocationChangeListener(
       [this](std::optional<urnet::ConnectLocation>) { EmitDrawerEvent(DrawerEvent::Location); }));
   subs_.push_back(device_->addPerformanceProfileChangeListener(
@@ -806,10 +827,23 @@ std::string SdkHost::ClientId() {
   return device_ ? device_->getClientId() : std::string();
 }
 
-std::optional<urnet::ContractClientRowList> SdkHost::ClientContractRows() {
+std::optional<urnet::ContractPeerRowList> SdkHost::ContractRows() {
   std::scoped_lock lock(mutex_);
-  if (!contractDetailsVc_) return std::nullopt;
-  return contractDetailsVc_->getClientContractRows();
+  if (!clientContractDetailsVc_) return std::nullopt;
+  return clientContractDetailsVc_->getContractRows();
+}
+
+void SdkHost::SetContractsAtTop(bool atTop) {
+  std::scoped_lock lock(mutex_);
+  // reports scroll to the VC, which owns the ordering: at the top it re-sorts
+  // active rows above idle ones; scrolled away it freezes membership + order and
+  // collects new rows into pendingCount()
+  if (clientContractDetailsVc_) clientContractDetailsVc_->setAtTop(atTop);
+}
+
+int64_t SdkHost::ContractsPendingCount() {
+  std::scoped_lock lock(mutex_);
+  return clientContractDetailsVc_ ? clientContractDetailsVc_->pendingCount() : 0;
 }
 
 std::optional<urnet::FilteredLocations> SdkHost::GetFilteredLocations() {
@@ -835,6 +869,15 @@ std::optional<urnet::NetworkPeerList> SdkHost::ConnectedProvidePeers() {
   return std::nullopt;
 }
 
+int64_t SdkHost::ConnectedPeerCount() {
+  std::scoped_lock lock(mutex_);
+  // ALL connected peers, whether or not they provide — the "You have {n}
+  // other devices online" count (connecting still requires provide, which is
+  // what ConnectedProvidePeers captures)
+  if (peerVc_) return static_cast<int64_t>(peerVc_->getConnectedCount());
+  return 0;
+}
+
 void SdkHost::ConnectBestAvailable() {
   std::scoped_lock lock(mutex_);
   if (connectVc_) connectVc_->connectBestAvailable();
@@ -855,14 +898,20 @@ bool SdkHost::Connected() {
   return connectVc_ && connectVc_->getConnected();
 }
 
-void SdkHost::SetProvideEnabled(bool enabled) {
+void SdkHost::SetProvideControlMode(const std::string& mode) {
   std::scoped_lock lock(mutex_);
-  const std::string mode = enabled ? "always" : "never";
   if (device_) device_->setProvideControlMode(mode);
   // Persist alongside the device write, like ResetProvideToNever below (mac
   // handleProvideControlModeUpdate does both) — DeviceLocal.SetProvideControlMode
   // alone does not persist, and StartTunnel restores the persisted mode.
   if (localState_) localState_->setProvideControlMode(mode);
+}
+
+std::string SdkHost::GetProvideControlMode() {
+  std::scoped_lock lock(mutex_);
+  if (device_) return device_->getProvideControlMode();
+  if (localState_) return localState_->getProvideControlMode();
+  return "never";
 }
 
 bool SdkHost::ProvideEnabled() {
@@ -892,8 +941,8 @@ void SdkHost::TeardownDeviceLocked() {
   connectVc_.reset();
   if (contractVc_) contractVc_->close();
   contractVc_.reset();
-  if (contractDetailsVc_) contractDetailsVc_->close();
-  contractDetailsVc_.reset();
+  if (clientContractDetailsVc_) clientContractDetailsVc_->close();
+  clientContractDetailsVc_.reset();
   if (blockActionVc_) blockActionVc_->close();
   blockActionVc_.reset();
   if (locationsVc_) locationsVc_->close();

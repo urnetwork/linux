@@ -21,6 +21,8 @@
 #pragma once
 
 #include <memory>
+#include <optional>
+#include <string>
 
 #include <gtkmm.h>
 
@@ -74,6 +76,11 @@ class ConnectDrawer : public Gtk::Box {
   void PullThroughput();       // feed the three charts
   void RefreshSplitRuleCount();
   void RefreshDnsCard();
+  // The "unapplied recommended settings" nudge pill atop the Custom DNS card:
+  // shown when the applied settings differ from the connected country's regional
+  // recommendation (with the country color dot) or, absent one, the safe
+  // defaults; hidden when they already match (apple DnsRecommendationPill).
+  void RefreshDnsPill(const std::optional<urnet::DnsResolverSettings>& current);
   void RefreshBlocker();
   void RefreshPlanCard();      // plan label + usage bar + banner visibility
 
@@ -105,6 +112,9 @@ class ConnectDrawer : public Gtk::Box {
   };
   Gtk::Box* dnsRowsBox_ = nullptr;
   Gtk::Label* dnsUnavailable_ = nullptr;
+  Gtk::Box* dnsPill_ = nullptr;       // the recommendation nudge capsule (hidden when applied)
+  Gtk::Label* dnsPillDot_ = nullptr;  // country-color dot (only for a regional recommendation)
+  Gtk::Label* dnsPillText_ = nullptr;
   DnsStatusRow dnsDohRow_;
   DnsStatusRow dnsUnencryptedRow_;
   DnsStatusRow dnsLocalRow_;

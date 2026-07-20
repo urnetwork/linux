@@ -26,6 +26,13 @@ window.background { background-color: #101010; color: #ffffff; }
 .ur-card-tappable { transition: background-color 150ms ease; }
 .ur-card-tappable:hover { background-color: #242424; }
 .ur-banner { background-color: #1c1c1c; border-radius: 12px; padding: 12px; }
+/* dns recommendation pill: a small left-aligned coral-tinted capsule atop the
+   Custom DNS card, nudging when the applied dns settings differ from the
+   recommended ones (apple ConnectStatsSections.DnsRecommendationPill). font +
+   text color inherit to the dot + message labels; the dot overrides its color
+   with the country hex via inline markup. */
+.ur-dns-pill { font-size: 11px; font-weight: 500; color: #ffffff; padding: 5px 10px;
+  border-radius: 999px; background-color: alpha(#ff6c58, .15); }
 /* capsule state chips */
 .ur-chip { font-size: 10px; font-weight: 600; padding: 3px 7px; border-radius: 999px; }
 .ur-chip-green { color: #87fb67; background-color: alpha(#87fb67, .14); }
@@ -42,6 +49,15 @@ window.background { background-color: #101010; color: #ffffff; }
 .ur-mono-13 { font-family: monospace; font-size: 13px; font-weight: 500; }
 .ur-mono-12 { font-family: monospace; font-size: 12px; }
 .ur-caption-11 { font-size: 11px; }
+.ur-caption-10 { font-size: 10px; }
+/* contract-details direction tints (send green / receive pink): arrow + rate */
+.ur-fg-green { color: #87fb67; }
+.ur-fg-pink { color: #ed8fff; }
+/* the "N new" contract-details chip: accent capsule with dark text */
+button.ur-newchip { background-color: #eff7bb; color: #101010; border-radius: 999px;
+  padding: 6px 12px; min-height: 0; }
+button.ur-newchip:hover { background-color: #f5fad2; }
+button.ur-newchip:active { background-color: #e6efa6; }
 /* accent: pale yellow primary actions with dark text (mac UrButton parity) */
 button.suggested-action { background-color: #eff7bb; color: #101010; }
 button.suggested-action:hover { background-color: #f5fad2; }

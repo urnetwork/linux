@@ -1,12 +1,28 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "ConnectDrawer.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <string>
+
 #include "Formatters.hpp"
 #include "I18n.hpp"
 #include "Ui.hpp"
 
 namespace urnw {
 namespace {
+
+std::string Lowercased(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
+}
+
+std::string Uppercased(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+  return value;
+}
 
 void SetDnsRowState(Gtk::Label* dot, Gtk::Label* state, bool enabled) {
   if (enabled) {
@@ -236,6 +252,23 @@ void ConnectDrawer::BuildDnsCard() {
   auto* card = MakeCard(0);
   card->append(*MakeCardHeader(T_("custom_dns", "Custom DNS")));
 
+  // recommendation nudge pill (atop the card, above the status rows): a small
+  // left-aligned coral capsule with an optional country-color dot + message.
+  // Content + visibility are set in RefreshDnsPill; hidden until then.
+  dnsPill_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
+  dnsPill_->add_css_class("ur-dns-pill");
+  dnsPill_->set_halign(Gtk::Align::START);
+  dnsPill_->set_margin_bottom(8);
+  dnsPillDot_ = Gtk::make_managed<Gtk::Label>("●");
+  dnsPillDot_->set_valign(Gtk::Align::CENTER);
+  dnsPill_->append(*dnsPillDot_);
+  dnsPillText_ = Gtk::make_managed<Gtk::Label>();
+  dnsPillText_->set_xalign(0);
+  dnsPillText_->set_wrap(true);
+  dnsPill_->append(*dnsPillText_);
+  dnsPill_->set_visible(false);
+  card->append(*dnsPill_);
+
   dnsRowsBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
   auto addStatusRow = [&](const char* title) {
     DnsStatusRow row;
@@ -373,6 +406,10 @@ void ConnectDrawer::OnHostEvent(DrawerEvent event) {
       if (contractsSheet_->is_visible()) contractsSheet_->Refresh();
       break;
     case DrawerEvent::Location:
+      RefreshControls();
+      // the dns pill's regional recommendation follows the connected country
+      RefreshDnsCard();
+      break;
     case DrawerEvent::Profile:
       RefreshControls();
       break;
@@ -549,6 +586,7 @@ void ConnectDrawer::RefreshDnsCard() {
   const auto settings = host_.GetDnsResolverSettings();
   dnsRowsBox_->set_visible(settings.has_value());
   dnsUnavailable_->set_visible(!settings.has_value());
+  RefreshDnsPill(settings);
   if (!settings) return;
   SetDnsRowState(dnsDohRow_.dot, dnsDohRow_.state,
                  settings->EnableRemoteDoh || settings->EnableLocalDoh);
@@ -557,6 +595,65 @@ void ConnectDrawer::RefreshDnsCard() {
   SetDnsRowState(dnsLocalRow_.dot, dnsLocalRow_.state,
                  settings->EnableLocalDoh || settings->EnableLocalDns);
   SetDnsRowState(dnsFallbackRow_.dot, dnsFallbackRow_.state, settings->EnableFallback);
+}
+
+void ConnectDrawer::RefreshDnsPill(const std::optional<urnet::DnsResolverSettings>& current) {
+  // shows the pill with the message and an optional country-color dot (empty
+  // code -> no dot, e.g. the safe-defaults nudge)
+  auto show = [this](const std::string& text, const std::string& countryCode) {
+    if (countryCode.empty()) {
+      dnsPillDot_->set_visible(false);
+    } else {
+      Rgba dot{0.5, 0.5, 0.5, 1.0};
+      dot = ParseHexColor(urnet::getColorHex(countryCode), dot);
+      dnsPillDot_->set_markup("<span foreground='" + HexForMarkup(dot) + "'>●</span>");
+      dnsPillDot_->set_visible(true);
+    }
+    dnsPillText_->set_text(text);
+    dnsPill_->set_visible(true);
+  };
+
+  // Nothing to compare against without applied settings (the card shows the
+  // "DNS settings unavailable" label instead).
+  if (!current) {
+    dnsPill_->set_visible(false);
+    return;
+  }
+
+  // A connected country with a known-better regional recommendation takes
+  // precedence: nudge toward it when unapplied, stay silent once applied, and
+  // never fall back to the safe-default check. getRecommendedDnsResolverSettings
+  // is case-insensitive; getColorHex needs the lowercased code (as DnsSheet does).
+  std::string countryCode;
+  std::string countryName;
+  if (const auto location = host_.SelectedLocation()) {
+    if (location->country_code) countryCode = Lowercased(*location->country_code);
+    if (location->country) countryName = *location->country;
+  }
+  if (!countryCode.empty()) {
+    if (const auto recommended = urnet::getRecommendedDnsResolverSettings(countryCode)) {
+      if (!DnsSheet::SettingsEqual(*current, *recommended)) {
+        const std::string country =
+            !countryName.empty() ? countryName : Uppercased(countryCode);
+        show(Format(T_("dns_unapplied_recommended",
+                       "There are unapplied recommended settings for {}"),
+                    country),
+             countryCode);
+      } else {
+        dnsPill_->set_visible(false);  // already on the regional recommendation
+      }
+      return;
+    }
+  }
+
+  // Otherwise nudge toward the safe defaults when they are not applied.
+  if (const auto defaults = urnet::getDefaultDnsResolverSettings()) {
+    if (!DnsSheet::SettingsEqual(*current, *defaults)) {
+      show(T_("dns_default_not_applied", "The default safe settings are not applied"), "");
+      return;
+    }
+  }
+  dnsPill_->set_visible(false);
 }
 
 void ConnectDrawer::RefreshBlocker() {

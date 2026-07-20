@@ -61,6 +61,12 @@ class SubscriptionBalanceStore {
 
   void FetchNow();
 
+  // Re-derive Pro from the (freshly refreshed) jwt. Wired to the sdk's jwt-refresh
+  // listener so a mid-session Pro change — notably a Pro->free lapse, which a Pro
+  // network's paused poll would otherwise miss until the window is re-shown — is
+  // reflected right away. Must be called on the GTK main thread.
+  void OnJwtRefreshed();
+
   // The upgrade/redeem confirmation poll: 5s interval, 2-minute deadline.
   void StartConfirmationPolling();
   void ClearPurchaseConfirmationTimeout();

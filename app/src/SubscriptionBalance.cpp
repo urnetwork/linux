@@ -84,6 +84,15 @@ void SubscriptionBalanceStore::FetchNow() {
   FetchReferralCode();
 }
 
+void SubscriptionBalanceStore::OnJwtRefreshed() {
+  if (!started_) return;
+  auto byJwt = host_.ParseByJwt();
+  if (!byJwt) return;
+  const bool before = isPro_;
+  UpdateIsPro(byJwt->Pro);  // flips the polling mode if Pro changed
+  if (isPro_ != before) Emit();
+}
+
 // mac updateIsPro: Pro stops all polling; a lapse back to free restarts the
 // background poll.
 void SubscriptionBalanceStore::UpdateIsPro(bool isPro) {

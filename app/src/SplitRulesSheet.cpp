@@ -13,14 +13,16 @@
 namespace urnw {
 namespace {
 
-// rule display text: the rule's host values split into names and ip literals
-std::string RuleDisplayText(const std::vector<std::string>& hosts) {
-  std::vector<std::string> hostNames;
-  std::vector<std::string> ips;
-  for (const auto& value : hosts) {
-    (IsIpAddressValue(value) ? ips : hostNames).push_back(value);
-  }
-  return FormatHostClusterText(hostNames, ips);
+// a horizontal, wrapping flow of host/ip chips (item 1's chip row)
+Gtk::FlowBox* MakeChipFlow() {
+  auto* flow = Gtk::make_managed<Gtk::FlowBox>();
+  flow->set_orientation(Gtk::Orientation::HORIZONTAL);
+  flow->set_selection_mode(Gtk::SelectionMode::NONE);
+  flow->set_max_children_per_line(100);
+  flow->set_row_spacing(6);
+  flow->set_column_spacing(6);
+  flow->set_hexpand(true);
+  return flow;
 }
 
 // a + b deduped, preserving first-seen order
@@ -115,6 +117,8 @@ void SplitRulesSheet::Refresh() {
       item.timeMs = it->Time;
       if (it->Hosts) item.hosts = *it->Hosts;
       if (it->Ips) item.ips = *it->Ips;
+      if (it->MatchedHosts) item.matchedHosts = *it->MatchedHosts;
+      if (it->MatchedIps) item.matchedIps = *it->MatchedIps;
       item.block = it->Block;
       item.local = it->Local;
       item.overrideId = it->OverrideId ? *it->OverrideId : std::string();
@@ -169,19 +173,20 @@ void SplitRulesSheet::RebuildRules() {
     row->set_margin_bottom(2);
     SetPointerCursor(*row);
 
-    auto* textColumn = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
-    textColumn->set_hexpand(true);
-    auto* display = Gtk::make_managed<Gtk::Label>(RuleDisplayText(rule.hosts));
-    display->set_wrap(true);
-    display->set_xalign(0);
-    textColumn->append(*display);
-    auto* hostCount = Gtk::make_managed<Gtk::Label>(
-        Format(TN_("host_count", "{} host", "{} hosts", rule.hosts.size()), rule.hosts.size()));
-    hostCount->add_css_class("dim-label");
-    hostCount->add_css_class("caption");
-    hostCount->set_xalign(0);
-    textColumn->append(*hostCount);
-    row->append(*textColumn);
+    // green chips: the rule's host base names and exact ips (the whole rule is active)
+    std::vector<std::string> hostNames;
+    std::vector<std::string> ips;
+    for (const auto& value : rule.hosts) {
+      (IsIpAddressValue(value) ? ips : hostNames).push_back(value);
+    }
+    auto* flow = MakeChipFlow();
+    for (const auto& name : urnet::collapseHostNames(hostNames)) {
+      flow->append(*MakeChip(name, "green", true));
+    }
+    for (const auto& ip : ips) {
+      flow->append(*MakeChip(ip, "green", true));
+    }
+    row->append(*flow);
 
     row->append(*MakeChip(T_("local", "Local"), "green", true));
 
@@ -226,10 +231,24 @@ void SplitRulesSheet::RebuildActivity() {
 
     auto* textColumn = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
     textColumn->set_hexpand(true);
-    auto* display = Gtk::make_managed<Gtk::Label>(FormatHostClusterText(action.hosts, action.ips));
-    display->set_wrap(true);
-    display->set_xalign(0);
-    textColumn->append(*display);
+    // host/ip chips: matched (green) first, then the remaining hosts collapsed to
+    // base names (muted), then a single "X IPs" pill for the remaining ips (muted)
+    auto* flow = MakeChipFlow();
+    for (const auto& name : action.matchedHosts) {
+      flow->append(*MakeChip(name, "green", true));
+    }
+    for (const auto& ip : action.matchedIps) {
+      flow->append(*MakeChip(ip, "green", true));
+    }
+    for (const auto& name : urnet::collapseHostNames(action.hosts)) {
+      flow->append(*MakeChip(name, "muted", false));
+    }
+    if (!action.ips.empty()) {
+      flow->append(*MakeChip(
+          Format(TN_("ip_count", "{} IP", "{} IPs", action.ips.size()), action.ips.size()),
+          "muted", false));
+    }
+    textColumn->append(*flow);
     std::string caption = RelativeTime((nowMs - action.timeMs) / 1000);
     if (0 < action.byteCount) caption += "  " + FormatByteCountCompact(action.byteCount);
     auto* captionLabel = Gtk::make_managed<Gtk::Label>(caption);
@@ -260,7 +279,12 @@ void SplitRulesSheet::OpenEditorForRule(const RuleItem& rule) {
 }
 
 void SplitRulesSheet::OpenEditorForAction(const ActionItem& action) {
-  std::vector<std::string> hostValues = action.hosts;
+  // every host value the editor can add, host names first (matched + unmatched),
+  // then ips (matched + unmatched). the matched sets are DISJOINT from hosts/ips,
+  // so the editor still sees the values an override already matched.
+  std::vector<std::string> hostValues = action.matchedHosts;
+  hostValues.insert(hostValues.end(), action.hosts.begin(), action.hosts.end());
+  hostValues.insert(hostValues.end(), action.matchedIps.begin(), action.matchedIps.end());
   hostValues.insert(hostValues.end(), action.ips.begin(), action.ips.end());
 
   // an action decided by a still-existing rule edits that rule
@@ -277,11 +301,10 @@ void SplitRulesSheet::OpenEditorForAction(const ActionItem& action) {
     OpenEditor(OrderedUnion(rule->hosts, hostValues),
                std::set<std::string>(rule->hosts.begin(), rule->hosts.end()), rule->id);
   } else {
-    // new rule from the action's host values, host names pre-selected (or the
-    // ips when the action has no host names)
-    const auto& preselect = action.hosts.empty() ? action.ips : action.hosts;
-    OpenEditor(hostValues, std::set<std::string>(preselect.begin(), preselect.end()),
-               std::string());
+    // new rule from the action's host values, all initially UNSELECTED: the common
+    // case is picking one or a few server names, so pre-selecting everything just
+    // makes the user uncheck the rest
+    OpenEditor(hostValues, {}, std::string());
   }
 }
 
