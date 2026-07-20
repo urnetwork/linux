@@ -169,6 +169,11 @@ msgctxt "app_split_rules"
 msgid "App split rules"
 msgstr ""
 
+#. Generic starter label on the app-split panel when no apps are included or excluded yet (shown instead of "0 apps excluded").
+msgctxt "app_split_starter"
+msgid "0 split apps"
+msgstr ""
+
 #. Call to action
 msgctxt "apply_bonus"
 msgid "Apply bonus"
@@ -712,6 +717,11 @@ msgid_plural "{} contracts"
 msgstr[0] ""
 msgstr[1] ""
 
+#. A faint scale-reference label under a stack of contract circles, giving the size of the largest contract in the stack. The argument is a formatted byte size (e.g. "128 MiB").
+msgctxt "contract_stack_max"
+msgid "max {}"
+msgstr ""
+
 #. A description of the contract details view.
 msgctxt "contracts_appear_connected"
 msgid "Contracts appear here while connected."
@@ -942,9 +952,24 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr ""
 
+#. dns settings
+msgctxt "dns_default_not_applied"
+msgid "The default safe settings are not applied"
+msgstr ""
+
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
+msgstr ""
+
+#. dns settings
+msgctxt "dns_pill_default"
+msgid "The default safe settings are not applied"
+msgstr ""
+
+#. dns settings
+msgctxt "dns_pill_recommended"
+msgid "There are unapplied recommended settings for {}"
 msgstr ""
 
 #. dns settings
@@ -960,6 +985,11 @@ msgstr ""
 #. A message displayed when the dns settings are unavailable.
 msgctxt "dns_settings_unavailable"
 msgid "DNS settings unavailable"
+msgstr ""
+
+#. dns settings
+msgctxt "dns_unapplied_recommended"
+msgid "There are unapplied recommended settings for {}"
 msgstr ""
 
 #. dns settings
@@ -1401,6 +1431,13 @@ msgctxt "ip_address"
 msgid "IP address"
 msgstr ""
 
+#. A label showing the number of IP addresses in a block action cluster, rendered as a single pill. The argument is the number of IPs.
+msgctxt "ip_count"
+msgid "{} IP"
+msgid_plural "{} IPs"
+msgstr[0] ""
+msgstr[1] ""
+
 #. Label for a list of IPv4 addresses.
 msgctxt "ipv4"
 msgid "IPv4"
@@ -1639,6 +1676,11 @@ msgstr ""
 #. Call to action
 msgctxt "net_provided"
 msgid "Net Provided"
+msgstr ""
+
+#. Provide control mode option that provides bandwidth only to peers in the same network.
+msgctxt "network"
+msgid "Network"
 msgstr ""
 
 #. Call to action
@@ -2123,6 +2165,11 @@ msgstr ""
 #. Call to action
 msgctxt "ready_to_connect"
 msgid "Ready to connect"
+msgstr ""
+
+#. Direction label for the stack of contracts receiving data from a peer, shown next to Send.
+msgctxt "receive"
+msgid "Receive"
 msgstr ""
 
 #. Settings
@@ -3790,6 +3837,16 @@ msgstr ""
 #. dns settings
 msgctxt "this_region"
 msgid "this region"
+msgstr ""
+
+#. Subtitle shown under the Quick Settings tile when the VPN is connected.
+msgctxt "tile_status_connected"
+msgid "Connected"
+msgstr ""
+
+#. Subtitle shown under the Quick Settings tile when the VPN is disconnected.
+msgctxt "tile_status_disconnected"
+msgid "Disconnected"
 msgstr ""
 
 msgctxt "title_login"

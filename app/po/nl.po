@@ -707,6 +707,11 @@ msgid_plural "{} contracts"
 msgstr[0] "{} contract"
 msgstr[1] "{} contracten"
 
+#. A faint scale-reference label under a stack of contract circles, giving the size of the largest contract in the stack. The argument is a formatted byte size (e.g. "128 MiB").
+msgctxt "contract_stack_max"
+msgid "max {}"
+msgstr "max {}"
+
 #. A description of the contract details view.
 msgctxt "contracts_appear_connected"
 msgid "Contracts appear here while connected."
@@ -2094,6 +2099,11 @@ msgstr "Stop URnetwork"
 msgctxt "ready_to_connect"
 msgid "Ready to connect"
 msgstr "Klaar om te verbinden"
+
+#. Direction label for the stack of contracts receiving data from a peer, shown next to Send.
+msgctxt "receive"
+msgid "Receive"
+msgstr "Ontvang"
 
 #. Settings
 msgctxt "receive_notifications"

@@ -169,6 +169,11 @@ msgctxt "app_split_rules"
 msgid "App split rules"
 msgstr "App split rules"
 
+#. Generic starter label on the app-split panel when no apps are included or excluded yet (shown instead of "0 apps excluded").
+msgctxt "app_split_starter"
+msgid "0 split apps"
+msgstr "0 split apps"
+
 #. Call to action
 msgctxt "apply_bonus"
 msgid "Apply bonus"
@@ -712,6 +717,11 @@ msgid_plural "{} contracts"
 msgstr[0] "{} contract"
 msgstr[1] "{} contracts"
 
+#. A faint scale-reference label under a stack of contract circles, giving the size of the largest contract in the stack. The argument is a formatted byte size (e.g. "128 MiB").
+msgctxt "contract_stack_max"
+msgid "max {}"
+msgstr "max {}"
+
 #. A description of the contract details view.
 msgctxt "contracts_appear_connected"
 msgid "Contracts appear here while connected."
@@ -942,10 +952,25 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "Display network on leaderboard"
 
+#. dns settings
+msgctxt "dns_default_not_applied"
+msgid "The default safe settings are not applied"
+msgstr "The default safe settings are not applied"
+
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS over HTTPS"
+
+#. dns settings
+msgctxt "dns_pill_default"
+msgid "The default safe settings are not applied"
+msgstr "The default safe settings are not applied"
+
+#. dns settings
+msgctxt "dns_pill_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "There are unapplied recommended settings for {}"
 
 #. dns settings
 msgctxt "dns_recommendation_message"
@@ -961,6 +986,11 @@ msgstr "Restore the most secure settings: encrypted DNS over HTTPS through the t
 msgctxt "dns_settings_unavailable"
 msgid "DNS settings unavailable"
 msgstr "DNS settings unavailable"
+
+#. dns settings
+msgctxt "dns_unapplied_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "There are unapplied recommended settings for {}"
 
 #. dns settings
 msgctxt "dns_using_recommended"
@@ -1401,6 +1431,13 @@ msgctxt "ip_address"
 msgid "IP address"
 msgstr "IP address"
 
+#. A label showing the number of IP addresses in a block action cluster, rendered as a single pill. The argument is the number of IPs.
+msgctxt "ip_count"
+msgid "{} IP"
+msgid_plural "{} IPs"
+msgstr[0] "{} IP"
+msgstr[1] "{} IPs"
+
 #. Label for a list of IPv4 addresses.
 msgctxt "ipv4"
 msgid "IPv4"
@@ -1640,6 +1677,11 @@ msgstr "Net points earned"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Net Provided"
+
+#. Provide control mode option that provides bandwidth only to peers in the same network.
+msgctxt "network"
+msgid "Network"
+msgstr "Network"
 
 #. Call to action
 msgctxt "network_create_bonus_message"
@@ -2124,6 +2166,11 @@ msgstr "Quit URnetwork"
 msgctxt "ready_to_connect"
 msgid "Ready to connect"
 msgstr "Ready to connect"
+
+#. Direction label for the stack of contracts receiving data from a peer, shown next to Send.
+msgctxt "receive"
+msgid "Receive"
+msgstr "Receive"
 
 #. Settings
 msgctxt "receive_notifications"
@@ -3791,6 +3838,16 @@ msgstr "These wallets are not affiliated or controlled by URnetwork. We will sen
 msgctxt "this_region"
 msgid "this region"
 msgstr "this region"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is connected.
+msgctxt "tile_status_connected"
+msgid "Connected"
+msgstr "Connected"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is disconnected.
+msgctxt "tile_status_disconnected"
+msgid "Disconnected"
+msgstr "Disconnected"
 
 msgctxt "title_login"
 msgid "Login"
