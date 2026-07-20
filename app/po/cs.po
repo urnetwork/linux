@@ -465,6 +465,16 @@ msgctxt "change"
 msgid "Change"
 msgstr "Změnit"
 
+#. Button that opens the network API selector, for pointing the app at a custom network domain.
+msgctxt "change_network_api"
+msgid "Change Network API"
+msgstr "Změnit síťové API"
+
+#. Title of the network API selector dialog.
+msgctxt "change_network_api_title"
+msgid "Change Network API"
+msgstr "Změnit síťové API"
+
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -891,6 +901,16 @@ msgctxt "device"
 msgid "Device"
 msgstr "Zařízení"
 
+#. Status label shown when this device can be discovered by peers on the network.
+msgctxt "device_discoverable"
+msgid "This device is discoverable"
+msgstr "Toto zařízení je viditelné pro ostatní"
+
+#. Status label shown when this device can be discovered by peers, with the device's visible name. The argument is the device name.
+msgctxt "device_discoverable_as"
+msgid "This device is discoverable as {}"
+msgstr "Toto zařízení je viditelné jako {}"
+
 #. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "device_name"
 msgid "Device name"
@@ -905,6 +925,11 @@ msgstr "Název"
 msgctxt "device_name_updated"
 msgid "Device name updated"
 msgstr "Název zařízení byl aktualizován"
+
+#. Hint shown when the device is not discoverable because provide mode is off.
+msgctxt "device_not_discoverable"
+msgid "Enable provide mode to make this device discoverable"
+msgstr "Zapněte režim poskytování, aby bylo toto zařízení viditelné"
 
 #. device
 msgctxt "device_spec_label"
@@ -946,10 +971,25 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "Zobrazení sítě na žebříčku"
 
+#. dns settings
+msgctxt "dns_default_not_applied"
+msgid "The default safe settings are not applied"
+msgstr "Výchozí bezpečná nastavení nejsou použita"
+
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS přes HTTPS"
+
+#. DNS status pill shown when the default safe DNS settings are not applied.
+msgctxt "dns_pill_defaults"
+msgid "The default safe settings are not applied"
+msgstr "Výchozí bezpečná nastavení nejsou použita"
+
+#. dns settings
+msgctxt "dns_pill_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "Pro {} existují nepoužitá doporučená nastavení"
 
 #. dns settings
 msgctxt "dns_recommendation_message"
@@ -1632,6 +1672,86 @@ msgstr "Získané \"net\" body"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Poskytnutá čistá hodnota"
+
+#. Help text under the API URL field of the network API selector.
+msgctxt "network_api_api_url_help"
+msgid "Leave blank to derive from the network domain."
+msgstr "Ponechte prázdné pro odvození ze síťové domény."
+
+#. Label of the optional API URL field in the network API selector.
+msgctxt "network_api_api_url_label"
+msgid "API URL (optional)"
+msgstr "URL API (volitelné)"
+
+#. Button that applies the entered network API settings.
+msgctxt "network_api_apply"
+msgid "Apply Network API"
+msgstr "Použít síťové API"
+
+#. Help text under the connect URL field of the network API selector.
+msgctxt "network_api_connect_url_help"
+msgid "Use wss:// for secure custom connect servers."
+msgstr "Pro zabezpečené vlastní connect servery použijte wss://."
+
+#. Label of the optional connect URL field in the network API selector.
+msgctxt "network_api_connect_url_label"
+msgid "Connect URL (optional)"
+msgstr "Connect URL (volitelné)"
+
+#. Shows the API URL currently in use. The argument is the URL.
+msgctxt "network_api_current_api"
+msgid "Current API: {}"
+msgstr "Aktuální API: {}"
+
+#. Shows the connect URL currently in use. The argument is the URL.
+msgctxt "network_api_current_connect"
+msgid "Current connect: {}"
+msgstr "Aktuální connect: {}"
+
+#. Explains the network API selector.
+msgctxt "network_api_description"
+msgid "Choose the network domain used by the app. Leave the API and connect URLs blank to derive them from the domain."
+msgstr "Zvolte síťovou doménu, kterou aplikace používá. Ponechte URL API a connect prázdné, aby se odvodily z domény."
+
+#. Help text under the network domain field of the network API selector.
+msgctxt "network_api_domain_help"
+msgid "Example: ur.network or your custom domain."
+msgstr "Příklad: ur.network nebo vaše vlastní doména."
+
+#. Label of the network domain field in the network API selector.
+msgctxt "network_api_domain_label"
+msgid "Network domain"
+msgstr "Síťová doména"
+
+#. Validation message when the network domain field is empty.
+msgctxt "network_api_enter_domain"
+msgid "Enter a network domain"
+msgstr "Zadejte síťovou doménu"
+
+#. Error shown when switching the network API fails. The argument is the error message.
+msgctxt "network_api_failed"
+msgid "Failed: {}"
+msgstr "Selhalo: {}"
+
+#. Warning shown when a custom endpoint uses plain HTTP/WS instead of HTTPS/WSS.
+msgctxt "network_api_insecure_warning"
+msgid "Warning: one or more custom endpoints are not using HTTPS/WSS. Traffic may be unencrypted."
+msgstr "Upozornění: jeden nebo více vlastních koncových bodů nepoužívá HTTPS/WSS. Provoz může být nešifrovaný."
+
+#. Error shown when the network API manager is not available on this device.
+msgctxt "network_api_manager_unavailable"
+msgid "Network manager unavailable"
+msgstr "Správce sítě není dostupný"
+
+#. Confirmation after switching the network API. The argument is the new network domain.
+msgctxt "network_api_switched_to"
+msgid "Switched to {}"
+msgstr "Přepnuto na {}"
+
+#. Button that resets the network API to the default network.
+msgctxt "network_api_use_default"
+msgid "Use default network"
+msgstr "Použít výchozí síť"
 
 #. Call to action
 msgctxt "network_create_bonus_message"

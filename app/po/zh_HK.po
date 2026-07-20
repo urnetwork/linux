@@ -461,6 +461,16 @@ msgctxt "change"
 msgid "Change"
 msgstr "更改"
 
+#. Button that opens the network API selector, for pointing the app at a custom network domain.
+msgctxt "change_network_api"
+msgid "Change Network API"
+msgstr "更改網絡 API"
+
+#. Title of the network API selector dialog.
+msgctxt "change_network_api_title"
+msgid "Change Network API"
+msgstr "更改網絡 API"
+
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -883,6 +893,16 @@ msgctxt "device"
 msgid "Device"
 msgstr "裝置"
 
+#. Status label shown when this device can be discovered by peers on the network.
+msgctxt "device_discoverable"
+msgid "This device is discoverable"
+msgstr "此裝置可被發現"
+
+#. Status label shown when this device can be discovered by peers, with the device's visible name. The argument is the device name.
+msgctxt "device_discoverable_as"
+msgid "This device is discoverable as {}"
+msgstr "此裝置可被發現，名稱為 {}"
+
 #. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "device_name"
 msgid "Device name"
@@ -897,6 +917,11 @@ msgstr "名稱"
 msgctxt "device_name_updated"
 msgid "Device name updated"
 msgstr "裝置名稱已更新"
+
+#. Hint shown when the device is not discoverable because provide mode is off.
+msgctxt "device_not_discoverable"
+msgid "Enable provide mode to make this device discoverable"
+msgstr "啟用提供模式以使此裝置可被發現"
 
 #. device
 msgctxt "device_spec_label"
@@ -938,10 +963,25 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "在排行榜上顯示網絡"
 
+#. dns settings
+msgctxt "dns_default_not_applied"
+msgid "The default safe settings are not applied"
+msgstr "預設安全設定未套用"
+
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS over HTTPS"
+
+#. DNS status pill shown when the default safe DNS settings are not applied.
+msgctxt "dns_pill_defaults"
+msgid "The default safe settings are not applied"
+msgstr "預設安全設定未套用"
+
+#. dns settings
+msgctxt "dns_pill_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "有適用於 {} 的未套用建議設定"
 
 #. dns settings
 msgctxt "dns_recommendation_message"
@@ -1622,6 +1662,86 @@ msgstr "淨賺積分"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "淨提供"
+
+#. Help text under the API URL field of the network API selector.
+msgctxt "network_api_api_url_help"
+msgid "Leave blank to derive from the network domain."
+msgstr "留空則從網絡網域衍生。"
+
+#. Label of the optional API URL field in the network API selector.
+msgctxt "network_api_api_url_label"
+msgid "API URL (optional)"
+msgstr "API URL（可選）"
+
+#. Button that applies the entered network API settings.
+msgctxt "network_api_apply"
+msgid "Apply Network API"
+msgstr "套用網絡 API"
+
+#. Help text under the connect URL field of the network API selector.
+msgctxt "network_api_connect_url_help"
+msgid "Use wss:// for secure custom connect servers."
+msgstr "自訂 connect 伺服器請使用 wss:// 以確保安全。"
+
+#. Label of the optional connect URL field in the network API selector.
+msgctxt "network_api_connect_url_label"
+msgid "Connect URL (optional)"
+msgstr "Connect URL（可選）"
+
+#. Shows the API URL currently in use. The argument is the URL.
+msgctxt "network_api_current_api"
+msgid "Current API: {}"
+msgstr "目前 API：{}"
+
+#. Shows the connect URL currently in use. The argument is the URL.
+msgctxt "network_api_current_connect"
+msgid "Current connect: {}"
+msgstr "目前 connect：{}"
+
+#. Explains the network API selector.
+msgctxt "network_api_description"
+msgid "Choose the network domain used by the app. Leave the API and connect URLs blank to derive them from the domain."
+msgstr "選擇應用程式使用的網絡網域。將 API 和 connect URL 留空則從網域衍生。"
+
+#. Help text under the network domain field of the network API selector.
+msgctxt "network_api_domain_help"
+msgid "Example: ur.network or your custom domain."
+msgstr "例如：ur.network 或你的自訂網域。"
+
+#. Label of the network domain field in the network API selector.
+msgctxt "network_api_domain_label"
+msgid "Network domain"
+msgstr "網絡網域"
+
+#. Validation message when the network domain field is empty.
+msgctxt "network_api_enter_domain"
+msgid "Enter a network domain"
+msgstr "請輸入網絡網域"
+
+#. Error shown when switching the network API fails. The argument is the error message.
+msgctxt "network_api_failed"
+msgid "Failed: {}"
+msgstr "失敗：{}"
+
+#. Warning shown when a custom endpoint uses plain HTTP/WS instead of HTTPS/WSS.
+msgctxt "network_api_insecure_warning"
+msgid "Warning: one or more custom endpoints are not using HTTPS/WSS. Traffic may be unencrypted."
+msgstr "警告：一個或多個自訂端點未使用 HTTPS/WSS。流量可能未加密。"
+
+#. Error shown when the network API manager is not available on this device.
+msgctxt "network_api_manager_unavailable"
+msgid "Network manager unavailable"
+msgstr "網絡管理員不可用"
+
+#. Confirmation after switching the network API. The argument is the new network domain.
+msgctxt "network_api_switched_to"
+msgid "Switched to {}"
+msgstr "已切換至 {}"
+
+#. Button that resets the network API to the default network.
+msgctxt "network_api_use_default"
+msgid "Use default network"
+msgstr "使用預設網絡"
 
 #. Call to action
 msgctxt "network_create_bonus_message"
