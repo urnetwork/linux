@@ -467,6 +467,16 @@ msgctxt "change"
 msgid "Change"
 msgstr "שנה"
 
+#. Button that opens the network API selector, for pointing the app at a custom network domain.
+msgctxt "change_network_api"
+msgid "Change Network API"
+msgstr "שינוי ה-API של הרשת"
+
+#. Title of the network API selector dialog.
+msgctxt "change_network_api_title"
+msgid "Change Network API"
+msgstr "שינוי ה-API של הרשת"
+
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -895,6 +905,16 @@ msgctxt "device"
 msgid "Device"
 msgstr "מכשיר"
 
+#. Status label shown when this device can be discovered by peers on the network.
+msgctxt "device_discoverable"
+msgid "This device is discoverable"
+msgstr "מכשיר זה ניתן לגילוי"
+
+#. Status label shown when this device can be discovered by peers, with the device's visible name. The argument is the device name.
+msgctxt "device_discoverable_as"
+msgid "This device is discoverable as {}"
+msgstr "מכשיר זה ניתן לגילוי בשם {}"
+
 #. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "device_name"
 msgid "Device name"
@@ -909,6 +929,11 @@ msgstr "שם"
 msgctxt "device_name_updated"
 msgid "Device name updated"
 msgstr "שם המכשיר עודכן"
+
+#. Hint shown when the device is not discoverable because provide mode is off.
+msgctxt "device_not_discoverable"
+msgid "Enable provide mode to make this device discoverable"
+msgstr "הפעל את מצב האספקה כדי שהמכשיר יהיה ניתן לגילוי"
 
 #. device
 msgctxt "device_spec_label"
@@ -950,10 +975,25 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "הצג רשת בטבלת המובילים"
 
+#. dns settings
+msgctxt "dns_default_not_applied"
+msgid "The default safe settings are not applied"
+msgstr "הגדרות ברירת המחדל הבטוחות אינן מוחלות"
+
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS דרך HTTPS"
+
+#. DNS status pill shown when the default safe DNS settings are not applied.
+msgctxt "dns_pill_defaults"
+msgid "The default safe settings are not applied"
+msgstr "הגדרות ברירת המחדל הבטוחות אינן מוחלות"
+
+#. dns settings
+msgctxt "dns_pill_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "יש הגדרות מומלצות שלא הוחלו עבור {}"
 
 #. dns settings
 msgctxt "dns_recommendation_message"
@@ -1637,6 +1677,86 @@ msgstr "נקודות נטו שהושגו"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "סופק נטו"
+
+#. Help text under the API URL field of the network API selector.
+msgctxt "network_api_api_url_help"
+msgid "Leave blank to derive from the network domain."
+msgstr "השאר ריק כדי לגזור מדומיין הרשת."
+
+#. Label of the optional API URL field in the network API selector.
+msgctxt "network_api_api_url_label"
+msgid "API URL (optional)"
+msgstr "כתובת URL של ה-API (אופציונלי)"
+
+#. Button that applies the entered network API settings.
+msgctxt "network_api_apply"
+msgid "Apply Network API"
+msgstr "החל את ה-API של הרשת"
+
+#. Help text under the connect URL field of the network API selector.
+msgctxt "network_api_connect_url_help"
+msgid "Use wss:// for secure custom connect servers."
+msgstr "השתמש ב-wss:// עבור שרתי connect מותאמים ומאובטחים."
+
+#. Label of the optional connect URL field in the network API selector.
+msgctxt "network_api_connect_url_label"
+msgid "Connect URL (optional)"
+msgstr "Connect URL (אופציונלי)"
+
+#. Shows the API URL currently in use. The argument is the URL.
+msgctxt "network_api_current_api"
+msgid "Current API: {}"
+msgstr "ה-API הנוכחי: {}"
+
+#. Shows the connect URL currently in use. The argument is the URL.
+msgctxt "network_api_current_connect"
+msgid "Current connect: {}"
+msgstr "ה-connect הנוכחי: {}"
+
+#. Explains the network API selector.
+msgctxt "network_api_description"
+msgid "Choose the network domain used by the app. Leave the API and connect URLs blank to derive them from the domain."
+msgstr "בחר את דומיין הרשת שבו האפליקציה משתמשת. השאר את כתובות ה-API וה-connect ריקות כדי לגזור אותן מהדומיין."
+
+#. Help text under the network domain field of the network API selector.
+msgctxt "network_api_domain_help"
+msgid "Example: ur.network or your custom domain."
+msgstr "דוגמה: ur.network או הדומיין המותאם שלך."
+
+#. Label of the network domain field in the network API selector.
+msgctxt "network_api_domain_label"
+msgid "Network domain"
+msgstr "דומיין רשת"
+
+#. Validation message when the network domain field is empty.
+msgctxt "network_api_enter_domain"
+msgid "Enter a network domain"
+msgstr "הזן דומיין רשת"
+
+#. Error shown when switching the network API fails. The argument is the error message.
+msgctxt "network_api_failed"
+msgid "Failed: {}"
+msgstr "נכשל: {}"
+
+#. Warning shown when a custom endpoint uses plain HTTP/WS instead of HTTPS/WSS.
+msgctxt "network_api_insecure_warning"
+msgid "Warning: one or more custom endpoints are not using HTTPS/WSS. Traffic may be unencrypted."
+msgstr "אזהרה: נקודת קצה מותאמת אחת או יותר אינה משתמשת ב-HTTPS/WSS. התעבורה עלולה להיות לא מוצפנת."
+
+#. Error shown when the network API manager is not available on this device.
+msgctxt "network_api_manager_unavailable"
+msgid "Network manager unavailable"
+msgstr "מנהל הרשת אינו זמין"
+
+#. Confirmation after switching the network API. The argument is the new network domain.
+msgctxt "network_api_switched_to"
+msgid "Switched to {}"
+msgstr "הוחלף אל {}"
+
+#. Button that resets the network API to the default network.
+msgctxt "network_api_use_default"
+msgid "Use default network"
+msgstr "השתמש ברשת ברירת המחדל"
 
 #. Call to action
 msgctxt "network_create_bonus_message"

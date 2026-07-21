@@ -463,6 +463,16 @@ msgctxt "change"
 msgid "Change"
 msgstr "Badili"
 
+#. Button that opens the network API selector, for pointing the app at a custom network domain.
+msgctxt "change_network_api"
+msgid "Change Network API"
+msgstr "Badilisha API ya mtandao"
+
+#. Title of the network API selector dialog.
+msgctxt "change_network_api_title"
+msgid "Change Network API"
+msgstr "Badilisha API ya mtandao"
+
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -887,6 +897,16 @@ msgctxt "device"
 msgid "Device"
 msgstr "Kifaa"
 
+#. Status label shown when this device can be discovered by peers on the network.
+msgctxt "device_discoverable"
+msgid "This device is discoverable"
+msgstr "Kifaa hiki kinaweza kupatikana"
+
+#. Status label shown when this device can be discovered by peers, with the device's visible name. The argument is the device name.
+msgctxt "device_discoverable_as"
+msgid "This device is discoverable as {}"
+msgstr "Kifaa hiki kinaweza kupatikana kama {}"
+
 #. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "device_name"
 msgid "Device name"
@@ -901,6 +921,11 @@ msgstr "Jina"
 msgctxt "device_name_updated"
 msgid "Device name updated"
 msgstr "Jina la kifaa limesasishwa"
+
+#. Hint shown when the device is not discoverable because provide mode is off.
+msgctxt "device_not_discoverable"
+msgid "Enable provide mode to make this device discoverable"
+msgstr "Washa hali ya utoaji ili kifaa hiki kiweze kupatikana"
 
 #. device
 msgctxt "device_spec_label"
@@ -942,10 +967,25 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "Onyesha mtandao kwenye ubao wa wanaoongoza"
 
+#. dns settings
+msgctxt "dns_default_not_applied"
+msgid "The default safe settings are not applied"
+msgstr "Mipangilio salama ya chaguomsingi haijatumika"
+
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS kupitia HTTPS"
+
+#. DNS status pill shown when the default safe DNS settings are not applied.
+msgctxt "dns_pill_defaults"
+msgid "The default safe settings are not applied"
+msgstr "Mipangilio salama ya chaguomsingi haijatumika"
+
+#. dns settings
+msgctxt "dns_pill_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "Kuna mipangilio inayopendekezwa ambayo haijatumika kwa {}"
 
 #. dns settings
 msgctxt "dns_recommendation_message"
@@ -1627,6 +1667,86 @@ msgstr "Pointi halisi zilizopatikana"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Data Zilizotolewa"
+
+#. Help text under the API URL field of the network API selector.
+msgctxt "network_api_api_url_help"
+msgid "Leave blank to derive from the network domain."
+msgstr "Acha wazi ili itokane na kikoa cha mtandao."
+
+#. Label of the optional API URL field in the network API selector.
+msgctxt "network_api_api_url_label"
+msgid "API URL (optional)"
+msgstr "URL ya API (hiari)"
+
+#. Button that applies the entered network API settings.
+msgctxt "network_api_apply"
+msgid "Apply Network API"
+msgstr "Tumia API ya mtandao"
+
+#. Help text under the connect URL field of the network API selector.
+msgctxt "network_api_connect_url_help"
+msgid "Use wss:// for secure custom connect servers."
+msgstr "Tumia wss:// kwa seva maalum salama za connect."
+
+#. Label of the optional connect URL field in the network API selector.
+msgctxt "network_api_connect_url_label"
+msgid "Connect URL (optional)"
+msgstr "URL ya connect (hiari)"
+
+#. Shows the API URL currently in use. The argument is the URL.
+msgctxt "network_api_current_api"
+msgid "Current API: {}"
+msgstr "API ya sasa: {}"
+
+#. Shows the connect URL currently in use. The argument is the URL.
+msgctxt "network_api_current_connect"
+msgid "Current connect: {}"
+msgstr "Connect ya sasa: {}"
+
+#. Explains the network API selector.
+msgctxt "network_api_description"
+msgid "Choose the network domain used by the app. Leave the API and connect URLs blank to derive them from the domain."
+msgstr "Chagua kikoa cha mtandao kinachotumiwa na programu. Acha URL za API na connect wazi ili zitokane na kikoa."
+
+#. Help text under the network domain field of the network API selector.
+msgctxt "network_api_domain_help"
+msgid "Example: ur.network or your custom domain."
+msgstr "Mfano: ur.network au kikoa chako maalum."
+
+#. Label of the network domain field in the network API selector.
+msgctxt "network_api_domain_label"
+msgid "Network domain"
+msgstr "Kikoa cha mtandao"
+
+#. Validation message when the network domain field is empty.
+msgctxt "network_api_enter_domain"
+msgid "Enter a network domain"
+msgstr "Weka kikoa cha mtandao"
+
+#. Error shown when switching the network API fails. The argument is the error message.
+msgctxt "network_api_failed"
+msgid "Failed: {}"
+msgstr "Imeshindikana: {}"
+
+#. Warning shown when a custom endpoint uses plain HTTP/WS instead of HTTPS/WSS.
+msgctxt "network_api_insecure_warning"
+msgid "Warning: one or more custom endpoints are not using HTTPS/WSS. Traffic may be unencrypted."
+msgstr "Onyo: kituo kimoja au zaidi maalum hakitumii HTTPS/WSS. Trafiki inaweza kuwa haijasimbwa."
+
+#. Error shown when the network API manager is not available on this device.
+msgctxt "network_api_manager_unavailable"
+msgid "Network manager unavailable"
+msgstr "Msimamizi wa mtandao hapatikani"
+
+#. Confirmation after switching the network API. The argument is the new network domain.
+msgctxt "network_api_switched_to"
+msgid "Switched to {}"
+msgstr "Imebadilishwa hadi {}"
+
+#. Button that resets the network API to the default network.
+msgctxt "network_api_use_default"
+msgid "Use default network"
+msgstr "Tumia mtandao wa chaguomsingi"
 
 #. Call to action
 msgctxt "network_create_bonus_message"
