@@ -463,16 +463,6 @@ msgctxt "change"
 msgid "Change"
 msgstr "Change"
 
-#. Button that opens the network API selector, for pointing the app at a custom network domain.
-msgctxt "change_network_api"
-msgid "Change Network API"
-msgstr "Changer l'API réseau"
-
-#. Title of the network API selector dialog.
-msgctxt "change_network_api_title"
-msgid "Change Network API"
-msgstr "Changer l'API réseau"
-
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -897,16 +887,6 @@ msgctxt "device"
 msgid "Device"
 msgstr "Appareil"
 
-#. Status label shown when this device can be discovered by peers on the network.
-msgctxt "device_discoverable"
-msgid "This device is discoverable"
-msgstr "Cet appareil est détectable"
-
-#. Status label shown when this device can be discovered by peers, with the device's visible name. The argument is the device name.
-msgctxt "device_discoverable_as"
-msgid "This device is discoverable as {}"
-msgstr "Cet appareil est détectable sous le nom {}"
-
 #. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "device_name"
 msgid "Device name"
@@ -921,11 +901,6 @@ msgstr "Nom"
 msgctxt "device_name_updated"
 msgid "Device name updated"
 msgstr "Nom de l'appareil mis à jour"
-
-#. Hint shown when the device is not discoverable because provide mode is off.
-msgctxt "device_not_discoverable"
-msgid "Enable provide mode to make this device discoverable"
-msgstr "Activez le mode de fourniture pour rendre cet appareil détectable"
 
 #. device
 msgctxt "device_spec_label"
@@ -967,25 +942,10 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "Afficher le réseau dans le classement"
 
-#. dns settings
-msgctxt "dns_default_not_applied"
-msgid "The default safe settings are not applied"
-msgstr "Les paramètres sûrs par défaut ne sont pas appliqués"
-
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS via HTTPS"
-
-#. DNS status pill shown when the default safe DNS settings are not applied.
-msgctxt "dns_pill_defaults"
-msgid "The default safe settings are not applied"
-msgstr "Les paramètres sûrs par défaut ne sont pas appliqués"
-
-#. dns settings
-msgctxt "dns_pill_recommended"
-msgid "There are unapplied recommended settings for {}"
-msgstr "Des paramètres recommandés pour {} ne sont pas appliqués"
 
 #. dns settings
 msgctxt "dns_recommendation_message"
@@ -1667,86 +1627,6 @@ msgstr "Points nets gagnés"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Données Fournies"
-
-#. Help text under the API URL field of the network API selector.
-msgctxt "network_api_api_url_help"
-msgid "Leave blank to derive from the network domain."
-msgstr "Laissez vide pour la dériver du domaine réseau."
-
-#. Label of the optional API URL field in the network API selector.
-msgctxt "network_api_api_url_label"
-msgid "API URL (optional)"
-msgstr "URL de l'API (optionnelle)"
-
-#. Button that applies the entered network API settings.
-msgctxt "network_api_apply"
-msgid "Apply Network API"
-msgstr "Appliquer l'API réseau"
-
-#. Help text under the connect URL field of the network API selector.
-msgctxt "network_api_connect_url_help"
-msgid "Use wss:// for secure custom connect servers."
-msgstr "Utilisez wss:// pour des serveurs connect personnalisés sécurisés."
-
-#. Label of the optional connect URL field in the network API selector.
-msgctxt "network_api_connect_url_label"
-msgid "Connect URL (optional)"
-msgstr "URL connect (optionnelle)"
-
-#. Shows the API URL currently in use. The argument is the URL.
-msgctxt "network_api_current_api"
-msgid "Current API: {}"
-msgstr "API actuelle : {}"
-
-#. Shows the connect URL currently in use. The argument is the URL.
-msgctxt "network_api_current_connect"
-msgid "Current connect: {}"
-msgstr "Connect actuel : {}"
-
-#. Explains the network API selector.
-msgctxt "network_api_description"
-msgid "Choose the network domain used by the app. Leave the API and connect URLs blank to derive them from the domain."
-msgstr "Choisissez le domaine réseau utilisé par l'application. Laissez les URL API et connect vides pour les dériver du domaine."
-
-#. Help text under the network domain field of the network API selector.
-msgctxt "network_api_domain_help"
-msgid "Example: ur.network or your custom domain."
-msgstr "Exemple : ur.network ou votre domaine personnalisé."
-
-#. Label of the network domain field in the network API selector.
-msgctxt "network_api_domain_label"
-msgid "Network domain"
-msgstr "Domaine réseau"
-
-#. Validation message when the network domain field is empty.
-msgctxt "network_api_enter_domain"
-msgid "Enter a network domain"
-msgstr "Saisissez un domaine réseau"
-
-#. Error shown when switching the network API fails. The argument is the error message.
-msgctxt "network_api_failed"
-msgid "Failed: {}"
-msgstr "Échec : {}"
-
-#. Warning shown when a custom endpoint uses plain HTTP/WS instead of HTTPS/WSS.
-msgctxt "network_api_insecure_warning"
-msgid "Warning: one or more custom endpoints are not using HTTPS/WSS. Traffic may be unencrypted."
-msgstr "Avertissement : un ou plusieurs points de terminaison personnalisés n'utilisent pas HTTPS/WSS. Le trafic peut être non chiffré."
-
-#. Error shown when the network API manager is not available on this device.
-msgctxt "network_api_manager_unavailable"
-msgid "Network manager unavailable"
-msgstr "Gestionnaire réseau indisponible"
-
-#. Confirmation after switching the network API. The argument is the new network domain.
-msgctxt "network_api_switched_to"
-msgid "Switched to {}"
-msgstr "Passé à {}"
-
-#. Button that resets the network API to the default network.
-msgctxt "network_api_use_default"
-msgid "Use default network"
-msgstr "Utiliser le réseau par défaut"
 
 #. Call to action
 msgctxt "network_create_bonus_message"

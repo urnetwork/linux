@@ -463,16 +463,6 @@ msgctxt "change"
 msgid "Change"
 msgstr "बदलें"
 
-#. Button that opens the network API selector, for pointing the app at a custom network domain.
-msgctxt "change_network_api"
-msgid "Change Network API"
-msgstr "नेटवर्क API बदलें"
-
-#. Title of the network API selector dialog.
-msgctxt "change_network_api_title"
-msgid "Change Network API"
-msgstr "नेटवर्क API बदलें"
-
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -897,16 +887,6 @@ msgctxt "device"
 msgid "Device"
 msgstr "डिवाइस"
 
-#. Status label shown when this device can be discovered by peers on the network.
-msgctxt "device_discoverable"
-msgid "This device is discoverable"
-msgstr "यह डिवाइस खोजा जा सकता है"
-
-#. Status label shown when this device can be discovered by peers, with the device's visible name. The argument is the device name.
-msgctxt "device_discoverable_as"
-msgid "This device is discoverable as {}"
-msgstr "यह डिवाइस {} के रूप में खोजा जा सकता है"
-
 #. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "device_name"
 msgid "Device name"
@@ -921,11 +901,6 @@ msgstr "नाम"
 msgctxt "device_name_updated"
 msgid "Device name updated"
 msgstr "डिवाइस का नाम अपडेट किया गया"
-
-#. Hint shown when the device is not discoverable because provide mode is off.
-msgctxt "device_not_discoverable"
-msgid "Enable provide mode to make this device discoverable"
-msgstr "इस डिवाइस को खोजने योग्य बनाने के लिए प्रदान मोड चालू करें"
 
 #. device
 msgctxt "device_spec_label"
@@ -967,25 +942,10 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "लीडरबोर्ड पर नेटवर्क प्रदर्शित करें"
 
-#. dns settings
-msgctxt "dns_default_not_applied"
-msgid "The default safe settings are not applied"
-msgstr "डिफ़ॉल्ट सुरक्षित सेटिंग्स लागू नहीं हैं"
-
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "HTTPS पर DNS"
-
-#. DNS status pill shown when the default safe DNS settings are not applied.
-msgctxt "dns_pill_defaults"
-msgid "The default safe settings are not applied"
-msgstr "डिफ़ॉल्ट सुरक्षित सेटिंग्स लागू नहीं हैं"
-
-#. dns settings
-msgctxt "dns_pill_recommended"
-msgid "There are unapplied recommended settings for {}"
-msgstr "{} के लिए अनुशंसित सेटिंग्स लागू नहीं हैं"
 
 #. dns settings
 msgctxt "dns_recommendation_message"
@@ -1667,86 +1627,6 @@ msgstr "कुल अर्जित अंक"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "प्रदान किया गया नेट"
-
-#. Help text under the API URL field of the network API selector.
-msgctxt "network_api_api_url_help"
-msgid "Leave blank to derive from the network domain."
-msgstr "नेटवर्क डोमेन से प्राप्त करने के लिए खाली छोड़ें।"
-
-#. Label of the optional API URL field in the network API selector.
-msgctxt "network_api_api_url_label"
-msgid "API URL (optional)"
-msgstr "API URL (वैकल्पिक)"
-
-#. Button that applies the entered network API settings.
-msgctxt "network_api_apply"
-msgid "Apply Network API"
-msgstr "नेटवर्क API लागू करें"
-
-#. Help text under the connect URL field of the network API selector.
-msgctxt "network_api_connect_url_help"
-msgid "Use wss:// for secure custom connect servers."
-msgstr "सुरक्षित कस्टम connect सर्वर के लिए wss:// का उपयोग करें।"
-
-#. Label of the optional connect URL field in the network API selector.
-msgctxt "network_api_connect_url_label"
-msgid "Connect URL (optional)"
-msgstr "Connect URL (वैकल्पिक)"
-
-#. Shows the API URL currently in use. The argument is the URL.
-msgctxt "network_api_current_api"
-msgid "Current API: {}"
-msgstr "वर्तमान API: {}"
-
-#. Shows the connect URL currently in use. The argument is the URL.
-msgctxt "network_api_current_connect"
-msgid "Current connect: {}"
-msgstr "वर्तमान connect: {}"
-
-#. Explains the network API selector.
-msgctxt "network_api_description"
-msgid "Choose the network domain used by the app. Leave the API and connect URLs blank to derive them from the domain."
-msgstr "ऐप द्वारा उपयोग किया जाने वाला नेटवर्क डोमेन चुनें। API और connect URL को डोमेन से प्राप्त करने के लिए खाली छोड़ें।"
-
-#. Help text under the network domain field of the network API selector.
-msgctxt "network_api_domain_help"
-msgid "Example: ur.network or your custom domain."
-msgstr "उदाहरण: ur.network या आपका कस्टम डोमेन।"
-
-#. Label of the network domain field in the network API selector.
-msgctxt "network_api_domain_label"
-msgid "Network domain"
-msgstr "नेटवर्क डोमेन"
-
-#. Validation message when the network domain field is empty.
-msgctxt "network_api_enter_domain"
-msgid "Enter a network domain"
-msgstr "नेटवर्क डोमेन दर्ज करें"
-
-#. Error shown when switching the network API fails. The argument is the error message.
-msgctxt "network_api_failed"
-msgid "Failed: {}"
-msgstr "विफल: {}"
-
-#. Warning shown when a custom endpoint uses plain HTTP/WS instead of HTTPS/WSS.
-msgctxt "network_api_insecure_warning"
-msgid "Warning: one or more custom endpoints are not using HTTPS/WSS. Traffic may be unencrypted."
-msgstr "चेतावनी: एक या अधिक कस्टम एंडपॉइंट HTTPS/WSS का उपयोग नहीं कर रहे हैं। ट्रैफ़िक अनएन्क्रिप्टेड हो सकता है।"
-
-#. Error shown when the network API manager is not available on this device.
-msgctxt "network_api_manager_unavailable"
-msgid "Network manager unavailable"
-msgstr "नेटवर्क प्रबंधक उपलब्ध नहीं है"
-
-#. Confirmation after switching the network API. The argument is the new network domain.
-msgctxt "network_api_switched_to"
-msgid "Switched to {}"
-msgstr "{} पर स्विच किया गया"
-
-#. Button that resets the network API to the default network.
-msgctxt "network_api_use_default"
-msgid "Use default network"
-msgstr "डिफ़ॉल्ट नेटवर्क का उपयोग करें"
 
 #. Call to action
 msgctxt "network_create_bonus_message"

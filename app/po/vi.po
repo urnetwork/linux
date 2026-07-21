@@ -461,16 +461,6 @@ msgctxt "change"
 msgid "Change"
 msgstr "Thay đổi"
 
-#. Button that opens the network API selector, for pointing the app at a custom network domain.
-msgctxt "change_network_api"
-msgid "Change Network API"
-msgstr "Đổi API mạng"
-
-#. Title of the network API selector dialog.
-msgctxt "change_network_api_title"
-msgid "Change Network API"
-msgstr "Đổi API mạng"
-
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -893,16 +883,6 @@ msgctxt "device"
 msgid "Device"
 msgstr "Thiết bị"
 
-#. Status label shown when this device can be discovered by peers on the network.
-msgctxt "device_discoverable"
-msgid "This device is discoverable"
-msgstr "Thiết bị này có thể được phát hiện"
-
-#. Status label shown when this device can be discovered by peers, with the device's visible name. The argument is the device name.
-msgctxt "device_discoverable_as"
-msgid "This device is discoverable as {}"
-msgstr "Thiết bị này có thể được phát hiện với tên {}"
-
 #. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "device_name"
 msgid "Device name"
@@ -917,11 +897,6 @@ msgstr "Tên"
 msgctxt "device_name_updated"
 msgid "Device name updated"
 msgstr "Đã cập nhật tên thiết bị"
-
-#. Hint shown when the device is not discoverable because provide mode is off.
-msgctxt "device_not_discoverable"
-msgid "Enable provide mode to make this device discoverable"
-msgstr "Bật chế độ cung cấp để thiết bị này có thể được phát hiện"
 
 #. device
 msgctxt "device_spec_label"
@@ -963,25 +938,10 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "Hiển thị mạng trên bảng xếp hạng"
 
-#. dns settings
-msgctxt "dns_default_not_applied"
-msgid "The default safe settings are not applied"
-msgstr "Cài đặt an toàn mặc định chưa được áp dụng"
-
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS qua HTTPS"
-
-#. DNS status pill shown when the default safe DNS settings are not applied.
-msgctxt "dns_pill_defaults"
-msgid "The default safe settings are not applied"
-msgstr "Cài đặt an toàn mặc định chưa được áp dụng"
-
-#. dns settings
-msgctxt "dns_pill_recommended"
-msgid "There are unapplied recommended settings for {}"
-msgstr "Có cài đặt được đề xuất chưa áp dụng cho {}"
 
 #. dns settings
 msgctxt "dns_recommendation_message"
@@ -1662,86 +1622,6 @@ msgstr "Điểm ròng đã kiếm được"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Mạng cung cấp (ròng)"
-
-#. Help text under the API URL field of the network API selector.
-msgctxt "network_api_api_url_help"
-msgid "Leave blank to derive from the network domain."
-msgstr "Để trống để suy ra từ tên miền mạng."
-
-#. Label of the optional API URL field in the network API selector.
-msgctxt "network_api_api_url_label"
-msgid "API URL (optional)"
-msgstr "URL API (tùy chọn)"
-
-#. Button that applies the entered network API settings.
-msgctxt "network_api_apply"
-msgid "Apply Network API"
-msgstr "Áp dụng API mạng"
-
-#. Help text under the connect URL field of the network API selector.
-msgctxt "network_api_connect_url_help"
-msgid "Use wss:// for secure custom connect servers."
-msgstr "Dùng wss:// cho máy chủ connect tùy chỉnh an toàn."
-
-#. Label of the optional connect URL field in the network API selector.
-msgctxt "network_api_connect_url_label"
-msgid "Connect URL (optional)"
-msgstr "URL connect (tùy chọn)"
-
-#. Shows the API URL currently in use. The argument is the URL.
-msgctxt "network_api_current_api"
-msgid "Current API: {}"
-msgstr "API hiện tại: {}"
-
-#. Shows the connect URL currently in use. The argument is the URL.
-msgctxt "network_api_current_connect"
-msgid "Current connect: {}"
-msgstr "Connect hiện tại: {}"
-
-#. Explains the network API selector.
-msgctxt "network_api_description"
-msgid "Choose the network domain used by the app. Leave the API and connect URLs blank to derive them from the domain."
-msgstr "Chọn tên miền mạng mà ứng dụng sử dụng. Để trống URL API và connect để suy ra từ tên miền."
-
-#. Help text under the network domain field of the network API selector.
-msgctxt "network_api_domain_help"
-msgid "Example: ur.network or your custom domain."
-msgstr "Ví dụ: ur.network hoặc tên miền tùy chỉnh của bạn."
-
-#. Label of the network domain field in the network API selector.
-msgctxt "network_api_domain_label"
-msgid "Network domain"
-msgstr "Tên miền mạng"
-
-#. Validation message when the network domain field is empty.
-msgctxt "network_api_enter_domain"
-msgid "Enter a network domain"
-msgstr "Nhập tên miền mạng"
-
-#. Error shown when switching the network API fails. The argument is the error message.
-msgctxt "network_api_failed"
-msgid "Failed: {}"
-msgstr "Thất bại: {}"
-
-#. Warning shown when a custom endpoint uses plain HTTP/WS instead of HTTPS/WSS.
-msgctxt "network_api_insecure_warning"
-msgid "Warning: one or more custom endpoints are not using HTTPS/WSS. Traffic may be unencrypted."
-msgstr "Cảnh báo: một hoặc nhiều điểm cuối tùy chỉnh không dùng HTTPS/WSS. Lưu lượng có thể không được mã hóa."
-
-#. Error shown when the network API manager is not available on this device.
-msgctxt "network_api_manager_unavailable"
-msgid "Network manager unavailable"
-msgstr "Trình quản lý mạng không khả dụng"
-
-#. Confirmation after switching the network API. The argument is the new network domain.
-msgctxt "network_api_switched_to"
-msgid "Switched to {}"
-msgstr "Đã chuyển sang {}"
-
-#. Button that resets the network API to the default network.
-msgctxt "network_api_use_default"
-msgid "Use default network"
-msgstr "Dùng mạng mặc định"
 
 #. Call to action
 msgctxt "network_create_bonus_message"
