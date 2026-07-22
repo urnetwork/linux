@@ -3,8 +3,10 @@
 //   1. the insufficient-balance banner (ContractStatus.InsufficientBalance and
 //      not Pro), opening the upgrade flow,
 //   2. the connection controls card (selected location read-only, Connection
-//      Mode Auto|Web|Streaming, Fixed IP, Strong Anonymization — all wired to
-//      the device performance profile),
+//      Mode Auto|Web|Streaming, Fixed IP, Strong Anonymization, Post Quantum
+//      Encryption — all wired to the device performance profile; always a
+//      profile, window type "auto" for Auto, so the orthogonal toggles persist
+//      in every mode),
 //   3. the three stats cards (Client statistics with the remote + blocked
 //      charts, Local statistics with the local chart + split-rule count,
 //      Custom DNS status), each opening its detail sheet,
@@ -13,7 +15,10 @@
 //      Pro plan label, the used/pending/available usage bar with the daily
 //      balance + referral rows, "Get UR Pro" into the upgrade sheet, and the
 //      redeem-balance-code entry point. The Linux app has no separate Account
-//      surface yet, so this card is the balance home.
+//      surface yet, so this card is the balance home, and
+//   6. the Post Quantum Identity panel (apple account tab parity): this
+//      device's identity key identicon/hash/client id, the verified provider
+//      identity deck, the provider identities list and the share dialog.
 // All SDK access goes through the SdkHost accessors; change events arrive via
 // OnHostEvent on the GTK main loop. Handles the no-device (tunnel down) state
 // gracefully: charts/lists show their empty states and the toggles read/write
@@ -29,6 +34,7 @@
 #include "ContractsSheet.hpp"
 #include "DnsSheet.hpp"
 #include "LocationsSheet.hpp"
+#include "PostQuantumIdentity.hpp"
 #include "RedeemCodeSheet.hpp"
 #include "SdkHost.hpp"
 #include "SplitRulesSheet.hpp"
@@ -70,6 +76,7 @@ class ConnectDrawer : public Gtk::Box {
   void BuildDnsCard();
   void BuildBlockerCard();
   void BuildPlanCard();
+  void BuildPqiPanel();  // post quantum identity card (the drawer's bottom card)
 
   void RefreshControls();      // selected location + performance profile
   void ApplyControls();        // performance profile <- control states
@@ -97,6 +104,7 @@ class ConnectDrawer : public Gtk::Box {
   Gtk::ToggleButton* modeStreaming_ = nullptr;
   Gtk::Switch* fixedIpSwitch_ = nullptr;
   Gtk::Switch* anonSwitch_ = nullptr;
+  Gtk::Switch* pqeSwitch_ = nullptr;
   bool updatingControls_ = false;
 
   // stats cards
@@ -131,6 +139,9 @@ class ConnectDrawer : public Gtk::Box {
   Gtk::Button* getProBtn_ = nullptr;
   Gtk::Button* createAccountBtn_ = nullptr;
   UsageBar* usageBar_ = nullptr;
+
+  // post quantum identity panel (owns the identities list + share dialog)
+  PostQuantumIdentityPanel* pqiPanel_ = nullptr;
 
   bool introPlayed_ = false;  // entrance animation runs on the first map only
 

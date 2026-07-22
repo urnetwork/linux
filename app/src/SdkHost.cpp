@@ -475,9 +475,40 @@ bool SdkHost::StartTunnel() {
   const std::string instanceId = localState_->getInstanceId();
 
   try {
-    device_ = urnet::newDeviceLocalWithDefaults(*networkSpace_, clientJwt, kDeviceDescription,
-                                                DeviceSpec(), kAppVersion, instanceId,
-                                                /*enable_rpc=*/false);
+    // Stable device identity via persisted key material (Windows
+    // TunnelController / iOS PacketTunnelProvider parity). The identity
+    // (Ed25519 client key seed + provide TLS cert/key) is device-scoped, not
+    // session-scoped: load it unconditionally so peers keep verifying this
+    // device across restarts, token rotation, and re-logins. Only the
+    // explicit Logout() (which wipes the local state dir) rotates it.
+    if (auto keyMaterial = localState_->getDeviceLocalKeyMaterial();
+        keyMaterial && !keyMaterial.isEmpty()) {
+      try {
+        device_ = urnet::newDeviceLocalWithKeyMaterial(*networkSpace_, clientJwt,
+                                                       kDeviceDescription, DeviceSpec(),
+                                                       kAppVersion, instanceId,
+                                                       /*enable_rpc=*/false, keyMaterial);
+      } catch (const std::exception& e) {
+        // unusable stored material: fall back to a fresh identity (the
+        // immediate persist below replaces the stored material)
+        std::fprintf(stderr, "[sdk] restore device key material failed: %s\n", e.what());
+      }
+    }
+    if (!device_) {
+      device_ = urnet::newDeviceLocalWithDefaults(*networkSpace_, clientJwt, kDeviceDescription,
+                                                  DeviceSpec(), kAppVersion, instanceId,
+                                                  /*enable_rpc=*/false);
+    }
+    // Persist the identity immediately: a freshly generated key must survive
+    // even if this session never fires another save trigger, and nothing
+    // event-driven re-saves it here.
+    try {
+      if (auto km = device_->getKeyMaterial(); km && !km.isEmpty()) {
+        localState_->setDeviceLocalKeyMaterial(km);
+      }
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] persist device key material failed: %s\n", e.what());
+    }
 
     // The jwt refresh (which runs immediately at device creation) tells us
     // when the stored client no longer exists on the server. Only marshal from
@@ -496,9 +527,10 @@ bool SdkHost::StartTunnel() {
     }));
 
     // Restore the persisted performance profile (connection mode / fixed IP /
-    // strong anonymization). Unlike the blocker, dns settings, and overrides,
-    // the device does not restore the profile from local state itself (the
-    // macOS DeviceManager does exactly this at device creation).
+    // strong anonymization / post quantum encryption). Unlike the blocker,
+    // dns settings, and overrides, the device does not restore the profile
+    // from local state itself (the macOS DeviceManager does exactly this at
+    // device creation).
     if (auto profile = localState_->getPerformanceProfile(); profile) {
       device_->setPerformanceProfile(profile);
     }
@@ -674,6 +706,16 @@ void SdkHost::SubscribeDrawer() {
   subs_.push_back(peerVc_->addPeersListener(
       [this](std::optional<urnet::NetworkPeerList>) { EmitDrawerEvent(DrawerEvent::Peers); }));
   peerVc_->start();
+
+  // post quantum identity: the device's own identity key (hash) + the
+  // providers with an identity-verified e2e session, via the SDK's shared
+  // view controller (the apple PostQuantumIdentityStore binds the same one —
+  // it re-emits the device's urnet_device_add_provider_identity_change_listener
+  // feed). start() seeds the listener with the current state.
+  pqiVc_ = device_->openPostQuantumIdentityViewController();
+  subs_.push_back(pqiVc_->addPostQuantumIdentityListener(
+      [this] { EmitDrawerEvent(DrawerEvent::ProviderIdentities); }));
+  pqiVc_->start();
 }
 
 // ---- connect drawer accessors ----------------------------------------------
@@ -878,6 +920,25 @@ int64_t SdkHost::ConnectedPeerCount() {
   return 0;
 }
 
+// ---- post quantum identity (PQI) --------------------------------------------
+
+std::optional<urnet::ProviderIdentityList> SdkHost::ProviderIdentities() {
+  std::scoped_lock lock(mutex_);
+  if (!pqiVc_) return std::nullopt;
+  return pqiVc_->getProviderIdentities();
+}
+
+std::string SdkHost::PublicIdentityKeyHash() {
+  std::scoped_lock lock(mutex_);
+  return pqiVc_ ? pqiVc_->getPublicIdentityKeyHash() : std::string();
+}
+
+std::vector<uint8_t> SdkHost::PublicIdentityKey() {
+  std::scoped_lock lock(mutex_);
+  // the raw key comes off the device (the linux cgo VC exposes only the hash)
+  return device_ ? device_->getPublicIdentityKey() : std::vector<uint8_t>();
+}
+
 void SdkHost::ConnectBestAvailable() {
   std::scoped_lock lock(mutex_);
   if (connectVc_) connectVc_->connectBestAvailable();
@@ -949,6 +1010,8 @@ void SdkHost::TeardownDeviceLocked() {
   locationsVc_.reset();
   if (peerVc_) peerVc_->close();
   peerVc_.reset();
+  if (pqiVc_) pqiVc_->close();
+  pqiVc_.reset();
   if (device_) device_->setTunnelStarted(false);
   if (ioLoop_) ioLoop_->close();
   ioLoop_.reset();

@@ -458,6 +458,11 @@ msgctxt "by_subscribing_you_agree_to_urnetwork_s_terms"
 msgid "By subscribing, you agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr ""
 
+#. App split rules: rule choice sending the app around the VPN (local route).
+msgctxt "bypass_vpn"
+msgid "Bypass VPN"
+msgstr ""
+
 #. Call to action
 msgctxt "cancel"
 msgid "Cancel"
@@ -877,6 +882,11 @@ msgctxt "default_bandwidth_earn_more_by"
 msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
 msgstr ""
 
+#. Generic default choice label, e.g. the app split rule combo state meaning no rule.
+msgctxt "default_option"
+msgid "Default"
+msgstr ""
+
 #. Used in Shared/Views/PayoutWalletTag.swift.
 msgctxt "default_txt"
 msgid "DEFAULT"
@@ -887,7 +897,7 @@ msgctxt "default_wallet"
 msgid "Default"
 msgstr ""
 
-#. Used in Main/Account/BlockedLocations/BlockedLocationsView.swift.
+#. Delete button label. Apple: Main/Account/BlockedLocations/BlockedLocationsView.swift. Android: the swipe-to-reveal delete button label (SwipeToRevealRow).
 msgctxt "delete"
 msgid "Delete"
 msgstr ""
@@ -1386,6 +1396,11 @@ msgctxt "i_agree_to_urnetwork_s_terms_and_services_https"
 msgid "I agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr ""
 
+#. Post quantum identity: toast after tapping an identity key hash to copy it.
+msgctxt "identity_key_hash_copied"
+msgid "Identity key hash copied"
+msgstr ""
+
 #. Used in Main/MainView.swift.
 msgctxt "if_the_problem_persists_contact_us_at_support_ur"
 msgid "If the problem persists, contact us at [support@ur.io](mailto:support@ur.io) or [join our Discord](https://discord.com/invite/RUNZXMwPRK) for direct support."
@@ -1409,6 +1424,11 @@ msgstr ""
 #. transfer stats and split rules
 msgctxt "include_app_description"
 msgid "Only included apps use the tunnel."
+msgstr ""
+
+#. App split rules: rule choice routing the app through the VPN.
+msgctxt "include_in_vpn"
+msgid "Include in VPN"
 msgstr ""
 
 #. transfer stats and split rules
@@ -1646,6 +1666,11 @@ msgstr ""
 #. Wallet Screen
 msgctxt "make_default"
 msgid "Make default"
+msgstr ""
+
+#. Split tunnel settings: button opening the app split rules sheet.
+msgctxt "manage_apps"
+msgid "Manage apps"
 msgstr ""
 
 #. Call to action
@@ -1907,6 +1932,11 @@ msgctxt "no_blocked_locations"
 msgid "No blocked locations"
 msgstr ""
 
+#. App split rules: empty state when no installed apps were enumerated.
+msgctxt "no_installed_apps_found"
+msgid "No installed apps found. (Store apps aren't listed.)"
+msgstr ""
+
 #. Call to action
 msgctxt "no_locations_found"
 msgid "No locations found"
@@ -2107,6 +2137,16 @@ msgctxt "payouts_amount_threshold"
 msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
 msgstr ""
 
+#. Post quantum identity panel: peer identity count indicator, singular.
+msgctxt "peer_count_one"
+msgid "1 peer"
+msgstr ""
+
+#. Post quantum identity panel: peer identity count indicator. The argument is the number of peers with an identity-verified e2e session.
+msgctxt "peer_count_other"
+msgid "%d peers"
+msgstr ""
+
 #. Call to action
 msgctxt "pending_data_key"
 msgid "Pending"
@@ -2169,6 +2209,26 @@ msgctxt "points_breakdown"
 msgid "Points breakdown"
 msgstr ""
 
+#. Connect drawer: post quantum encryption toggle label.
+msgctxt "post_quantum_encryption"
+msgid "Post Quantum Encryption"
+msgstr ""
+
+#. Connect drawer: note under the post quantum encryption toggle. Plaintext fallback applies when the provider does not support the e2e sessions.
+msgctxt "post_quantum_encryption_fallback_note"
+msgid "Fallback enabled (temporary)"
+msgstr ""
+
+#. Account tab: post quantum identity panel title.
+msgctxt "post_quantum_identity"
+msgid "Post Quantum Identity"
+msgstr ""
+
+#. Account tab: explanation under the post quantum identity panel — what the identity key is and how verifying provider keys detects interception.
+msgctxt "post_quantum_identity_explanation"
+msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
+msgstr ""
+
 #. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
 msgctxt "pricing_shown_at_checkout"
 msgid "Pricing is shown at checkout."
@@ -2228,6 +2288,11 @@ msgstr[1] ""
 
 msgctxt "provider_count_int"
 msgid "{} providers"
+msgstr ""
+
+#. Post quantum identity: title of the connected provider identity key details view.
+msgctxt "provider_identities"
+msgid "Provider Identities"
 msgstr ""
 
 #. Title of a section that shows statistics about the provider.
@@ -2617,6 +2682,11 @@ msgctxt "select_country_to_block"
 msgid "Select country to block"
 msgstr ""
 
+#. Connect drawer: accessibility label for the globe icon that opens the provider selection list.
+msgctxt "select_location_provider_content_description"
+msgid "Select location provider globe"
+msgstr ""
+
 #. Fallback name for the connect location when the selected location has no name.
 msgctxt "selected_location"
 msgid "Selected location"
@@ -2897,7 +2967,7 @@ msgctxt "site_app_contracts"
 msgid "Contracts"
 msgstr ""
 
-#. App: copied flash
+#. App: copied flash. Also the linux share-dialog toast after copying the identity payload.
 msgctxt "site_app_copied"
 msgid "Copied"
 msgstr ""
@@ -3829,7 +3899,7 @@ msgctxt "stored_for_future_use"
 msgid "stored for future use, no payouts yet"
 msgstr ""
 
-#. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
+#. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
 msgid "Strong Anonymization"
 msgstr ""
@@ -4374,7 +4444,7 @@ msgctxt "when_you_refer_a_friend"
 msgid "When you refer a friend:"
 msgstr ""
 
-#. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
+#. Connect drawer: the auto connection mode (no fixed window type).
 msgctxt "window_type_auto"
 msgid "Auto"
 msgstr ""

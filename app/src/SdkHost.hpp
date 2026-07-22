@@ -72,6 +72,7 @@ enum class DrawerEvent {
   Profile,          // performance profile changed
   Locations,        // filtered provider-location list changed (the chooser)
   Peers,            // connected network peers changed (chooser + drawer label)
+  ProviderIdentities,  // post-quantum identity set changed (PQI panel + list)
 };
 
 // Snapshot of live connection / throughput / provide stats. Pushed to the UI on
@@ -265,6 +266,17 @@ class SdkHost {
   // count of ALL connected peers (online, provide or not)
   int64_t ConnectedPeerCount();
 
+  // ---- post quantum identity (PQI) -----------------------------------------
+  // The device's own public identity key (+ its canonical 52-char display
+  // hash) and the providers with an established, identity-verified e2e
+  // session, through the SDK's shared PostQuantumIdentityViewController (the
+  // apple PostQuantumIdentityStore binds the same one). The VC lives only
+  // while the tunnel runs; reads return empty/nullopt otherwise. Changes
+  // arrive as DrawerEvent::ProviderIdentities.
+  std::optional<urnet::ProviderIdentityList> ProviderIdentities();
+  std::string PublicIdentityKeyHash();
+  std::vector<uint8_t> PublicIdentityKey();
+
   // Exposed so the (full-parity) UI/view models can drive the SDK directly.
   urnet::Api& api() { return *api_; }
   bool hasDevice() { return device_.has_value(); }
@@ -308,6 +320,8 @@ class SdkHost {
   std::optional<urnet::NetworkNameValidationViewController> networkNameVc_;
   std::optional<urnet::LocationsViewController> locationsVc_;  // provider chooser feed
   std::optional<urnet::PeerViewController> peerVc_;  // connected provide-enabled peers
+  // post quantum identity feed: own identity key hash + verified provider identities
+  std::optional<urnet::PostQuantumIdentityViewController> pqiVc_;
   std::optional<urnet::IoLoop> ioLoop_;
   std::unique_ptr<Tunnel> tunnel_;
   std::vector<urnet::Sub> subs_;

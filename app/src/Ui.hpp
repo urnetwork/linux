@@ -67,6 +67,9 @@ Gtk::Box* MakeCardHeader(const std::string& title);
 
 void RemoveAllChildren(Gtk::Box& box);
 void SetPointerCursor(Gtk::Widget& widget);
+// Pop a toast on the nearest enclosing AdwToastOverlay (MainWindow wraps its
+// page stack in one; the detail sheets carry their own). No-op without one.
+void ShowToast(Gtk::Widget& context, const std::string& message);
 // Close (hide) the window on Escape, matching sheet behavior elsewhere.
 void AddEscapeToClose(Gtk::Window& window);
 

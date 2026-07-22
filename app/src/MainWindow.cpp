@@ -34,7 +34,12 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   BuildPasswordStep();
   BuildHome();
   BuildAuthPages();
-  set_child(stack_);
+  // AdwToastOverlay across the page stack: hosts the drawer PQI panel's
+  // copied-to-clipboard toasts (the detail sheets carry their own overlays;
+  // see Ui.hpp ShowToast).
+  GtkWidget* toastOverlay = adw_toast_overlay_new();
+  adw_toast_overlay_set_child(ADW_TOAST_OVERLAY(toastOverlay), GTK_WIDGET(stack_.gobj()));
+  gtk_window_set_child(GTK_WINDOW(gobj()), toastOverlay);
 
   // Track window visibility (tray app: closing hides to tray). Skip window-widget
   // updates while hidden and resync when shown, so a hidden window doesn't churn

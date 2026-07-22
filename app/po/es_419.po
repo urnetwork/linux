@@ -877,7 +877,7 @@ msgctxt "default_wallet"
 msgid "Default"
 msgstr "Predeterminado"
 
-#. Used in Main/Account/BlockedLocations/BlockedLocationsView.swift.
+#. Delete button label. Apple: Main/Account/BlockedLocations/BlockedLocationsView.swift. Android: the swipe-to-reveal delete button label (SwipeToRevealRow).
 msgctxt "delete"
 msgid "Delete"
 msgstr "Eliminar"
@@ -2827,7 +2827,7 @@ msgctxt "stored_for_future_use"
 msgid "stored for future use, no payouts yet"
 msgstr "guardada para uso futuro, aún sin pagos"
 
-#. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
+#. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
 msgid "Strong Anonymization"
 msgstr "Anonimización fuerte"
@@ -3353,7 +3353,7 @@ msgctxt "when_you_refer_a_friend"
 msgid "When you refer a friend:"
 msgstr "Cuando recomiendas a un amigo:"
 
-#. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
+#. Connect drawer: the auto connection mode (no fixed window type).
 msgctxt "window_type_auto"
 msgid "Auto"
 msgstr "Automático"

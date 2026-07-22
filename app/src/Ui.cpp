@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <memory>
 
+#include <adwaita.h>
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtk.h>
 
@@ -45,9 +46,11 @@ window.background { background-color: #101010; color: #ffffff; }
 .ur-dot-on { color: #87fb67; }
 .ur-dot-off { color: alpha(#5a5a5a, .4); }
 .ur-value-on { color: #87fb67; }
-/* monospace values (ids, IPs, URLs) */
+/* monospace values (ids, IPs, URLs, identity key hashes) */
+.ur-mono-15 { font-family: monospace; font-size: 15px; font-weight: 500; }
 .ur-mono-13 { font-family: monospace; font-size: 13px; font-weight: 500; }
 .ur-mono-12 { font-family: monospace; font-size: 12px; }
+.ur-mono-11 { font-family: monospace; font-size: 11px; }
 .ur-caption-11 { font-size: 11px; }
 .ur-caption-10 { font-size: 10px; }
 /* contract-details direction tints (send green / receive pink): arrow + rate */
@@ -209,6 +212,16 @@ void RemoveAllChildren(Gtk::Box& box) {
 
 void SetPointerCursor(Gtk::Widget& widget) {
   gtk_widget_set_cursor_from_name(widget.gobj(), "pointer");
+}
+
+void ShowToast(Gtk::Widget& context, const std::string& message) {
+  for (GtkWidget* widget = GTK_WIDGET(context.gobj()); widget;
+       widget = gtk_widget_get_parent(widget)) {
+    if (ADW_IS_TOAST_OVERLAY(widget)) {
+      adw_toast_overlay_add_toast(ADW_TOAST_OVERLAY(widget), adw_toast_new(message.c_str()));
+      return;
+    }
+  }
 }
 
 void AddEscapeToClose(Gtk::Window& window) {

@@ -64,6 +64,7 @@ ConnectDrawer::ConnectDrawer(SdkHost& host, Gtk::Window& parent,
   BuildDnsCard();
   BuildBlockerCard();
   BuildPlanCard();
+  BuildPqiPanel();
 
   contractsSheet_ = std::make_unique<ContractsSheet>(parent_, host_);
   splitRulesSheet_ = std::make_unique<SplitRulesSheet>(parent_, host_);
@@ -216,6 +217,19 @@ void ConnectDrawer::BuildControlsCard() {
   anonSwitch_->property_active().signal_changed().connect([this] { ApplyControls(); });
   anonRow->append(*anonSwitch_);
   card->append(*anonRow);
+
+  // post quantum encryption (not inverted, default off)
+  auto* pqeRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  auto* pqeLabel =
+      Gtk::make_managed<Gtk::Label>(T_("post_quantum_encryption", "Post Quantum Encryption"));
+  pqeLabel->set_xalign(0);
+  pqeLabel->set_hexpand(true);
+  pqeRow->append(*pqeLabel);
+  pqeSwitch_ = Gtk::make_managed<Gtk::Switch>();
+  pqeSwitch_->set_valign(Gtk::Align::CENTER);
+  pqeSwitch_->property_active().signal_changed().connect([this] { ApplyControls(); });
+  pqeRow->append(*pqeSwitch_);
+  card->append(*pqeRow);
 
   append(*card);
 }
@@ -376,6 +390,18 @@ void ConnectDrawer::BuildPlanCard() {
   append(*card);
 }
 
+// The Post Quantum Identity panel (apple AccountRootView places it at the
+// bottom of the account tab). The Linux app has no separate Account surface
+// yet — the drawer is where the account-level cards live (the plan card above
+// is the balance home) and where the Post Quantum Encryption control sits —
+// so the panel is the drawer's bottom card. The panel owns its provider
+// identities list and share dialog and re-reads through the SdkHost PQI
+// accessors on ProviderIdentities events.
+void ConnectDrawer::BuildPqiPanel() {
+  pqiPanel_ = Gtk::make_managed<PostQuantumIdentityPanel>(host_, parent_);
+  append(*pqiPanel_);
+}
+
 // ---- events ----------------------------------------------------------------
 
 void ConnectDrawer::OnHostEvent(DrawerEvent event) {
@@ -422,6 +448,10 @@ void ConnectDrawer::OnHostEvent(DrawerEvent event) {
     case DrawerEvent::Locations:
       if (locationsSheet_ && locationsSheet_->is_visible()) locationsSheet_->Refresh();
       break;
+    case DrawerEvent::ProviderIdentities:
+      // the panel cascades to the provider identities list while it is open
+      if (pqiPanel_) pqiPanel_->Refresh();
+      break;
   }
 }
 
@@ -432,6 +462,7 @@ void ConnectDrawer::RefreshAll() {
   RefreshDnsCard();
   RefreshBlocker();
   RefreshPlanCard();
+  if (pqiPanel_) pqiPanel_->Refresh();
   if (contractsSheet_->is_visible()) contractsSheet_->Refresh();
   if (splitRulesSheet_->is_visible()) splitRulesSheet_->Refresh();
 }
@@ -513,24 +544,24 @@ void ConnectDrawer::RefreshControls() {
     }
   }
 
-  // performance profile -> controls (profile nil == Auto)
+  // performance profile -> controls. A nil profile and window type auto mean
+  // the same thing; the orthogonal settings (allow direct, post quantum
+  // encryption) read with false defaults in every mode (apple
+  // DeviceManager.loadPerformanceProfileFromDevice).
   const auto profile = host_.GetPerformanceProfile();
   updatingControls_ = true;
-  if (!profile) {
-    modeAuto_->set_active(true);
-    fixedIpSwitch_->set_active(false);
-    anonSwitch_->set_active(true);  // allowDirect false
+  if (profile && profile->window_type == urnet::WindowTypeQuality) {
+    modeWeb_->set_active(true);
+  } else if (profile && profile->window_type == urnet::WindowTypeSpeed) {
+    modeStreaming_->set_active(true);
   } else {
-    if (profile->window_type == urnet::WindowTypeQuality) {
-      modeWeb_->set_active(true);
-    } else {
-      modeStreaming_->set_active(true);
-    }
-    anonSwitch_->set_active(!profile->allow_direct);
-    fixedIpSwitch_->set_active(profile->window_size &&
-                               profile->window_size->window_size_min == 1 &&
-                               profile->window_size->window_size_max == 1);
+    modeAuto_->set_active(true);
   }
+  anonSwitch_->set_active(!(profile && profile->allow_direct));
+  pqeSwitch_->set_active(profile && profile->post_quantum_encryption);
+  fixedIpSwitch_->set_active(profile && profile->window_size &&
+                             profile->window_size->window_size_min == 1 &&
+                             profile->window_size->window_size_max == 1);
   fixedIpSwitch_->set_sensitive(!modeAuto_->get_active());
   updatingControls_ = false;
 }
@@ -539,24 +570,29 @@ void ConnectDrawer::ApplyControls() {
   if (updatingControls_) return;
   const bool autoMode = modeAuto_->get_active();
   if (autoMode && fixedIpSwitch_->get_active()) {
-    // Auto forces Fixed IP off (there is no profile to pin the window size)
+    // Auto forces Fixed IP off (an auto profile carries no pinned window size)
     updatingControls_ = true;
     fixedIpSwitch_->set_active(false);
     updatingControls_ = false;
   }
   fixedIpSwitch_->set_sensitive(!autoMode);
 
-  std::optional<urnet::PerformanceProfile> profile;
-  if (!autoMode) {
-    urnet::PerformanceProfile p;
-    p.window_type = modeWeb_->get_active() ? urnet::WindowTypeQuality : urnet::WindowTypeSpeed;
-    p.allow_direct = !anonSwitch_->get_active();
+  // always a profile, even for window type auto, so the orthogonal settings
+  // (allow direct, post quantum encryption) persist and apply in every mode
+  // (apple DeviceManager.createPerformanceProfile)
+  urnet::PerformanceProfile profile;
+  profile.allow_direct = !anonSwitch_->get_active();
+  profile.post_quantum_encryption = pqeSwitch_->get_active();
+  if (autoMode) {
+    profile.window_type = urnet::WindowTypeAuto;  // no fixed window type or size
+  } else {
+    profile.window_type =
+        modeWeb_->get_active() ? urnet::WindowTypeQuality : urnet::WindowTypeSpeed;
     urnet::WindowSizeSettings windowSize{};
     const bool fixed = fixedIpSwitch_->get_active();
     windowSize.window_size_min = fixed ? 1 : 2;
     windowSize.window_size_max = fixed ? 1 : 4;
-    p.window_size = windowSize;
-    profile = std::move(p);
+    profile.window_size = windowSize;
   }
   host_.SetPerformanceProfile(profile);
 }
