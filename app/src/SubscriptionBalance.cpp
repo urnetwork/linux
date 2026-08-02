@@ -46,10 +46,12 @@ void SubscriptionBalanceStore::Start() {
     isGuest_ = false;
   }
 
-  if (!isPro_) {
-    StartBackgroundPolling();  // fetches immediately, then every 30s
-  } else {
-    FetchNow();  // Pro networks don't poll (mac parity), but the bar needs data once
+  if (windowVisible_) {
+    if (!isPro_) {
+      StartBackgroundPolling();  // fetches immediately, then every 30s
+    } else {
+      FetchNow();  // Pro networks don't poll (mac parity), but the bar needs data once
+    }
   }
   Emit();
 }
@@ -74,8 +76,24 @@ void SubscriptionBalanceStore::Stop() {
 void SubscriptionBalanceStore::SetWindowVisible(bool visible) {
   const bool wasVisible = windowVisible_;
   windowVisible_ = visible;
-  // resync on show: fetches were skipped while hidden
-  if (started_ && visible && !wasVisible) FetchNow();
+  if (!visible) {
+    // Do not keep periodic main-loop wakeups merely to discover that the
+    // window is still hidden. Preserve confirmation state/deadline, but pause
+    // its timer as well.
+    backgroundTimer_.disconnect();
+    pollingTimer_.disconnect();
+    return;
+  }
+  if (!started_ || wasVisible) return;
+  if (isPolling_) {
+    ResumeConfirmationPolling();
+    return;
+  }
+  if (!isPro_ && !isPolling_ && !IsSupporterWithBalance()) {
+    StartBackgroundPolling();
+  } else {
+    FetchNow();
+  }
 }
 
 void SubscriptionBalanceStore::FetchNow() {
@@ -189,13 +207,13 @@ void SubscriptionBalanceStore::FetchReferralCode() {
 }
 
 void SubscriptionBalanceStore::StartBackgroundPolling() {
-  FetchNow();
   backgroundTimer_.disconnect();
+  if (!windowVisible_) return;
+  FetchNow();
   backgroundTimer_ = Glib::signal_timeout().connect_seconds(
       [this]() -> bool {
-        // tray-app gate: skip fetches while hidden; SetWindowVisible resyncs
-        if (windowVisible_) FetchNow();
-        return true;  // keep the timer; StopPolling disconnects it
+        FetchNow();
+        return true;
       },
       kBackgroundPollingSeconds);
 }
@@ -210,15 +228,37 @@ void SubscriptionBalanceStore::StartConfirmationPolling() {
   pollingDeadlineUs_ = g_get_monotonic_time() + kMaxPollingDurationUs;
   isPolling_ = true;
 
+  Emit();
+  ResumeConfirmationPolling();
+}
+
+void SubscriptionBalanceStore::ResumeConfirmationPolling() {
+  if (!started_ || !windowVisible_ || !isPolling_) return;
+  if (hasPollingDeadline_ && g_get_monotonic_time() >= pollingDeadlineUs_) {
+    StopPolling();
+    purchaseConfirmationTimedOut_ = true;
+    if (!isPro_ && !IsSupporterWithBalance()) StartBackgroundPolling();
+    Emit();
+    return;
+  }
+
   FetchNow();
   pollingTimer_.disconnect();
   pollingTimer_ = Glib::signal_timeout().connect_seconds(
       [this]() -> bool {
-        FetchNow();  // deliberately NOT visibility-gated — see the header
+        // Check independently of the API callback. A callback that is delayed
+        // or never arrives must not keep the confirmation timer alive forever.
+        if (hasPollingDeadline_ && g_get_monotonic_time() >= pollingDeadlineUs_) {
+          StopPolling();
+          purchaseConfirmationTimedOut_ = true;
+          if (!isPro_ && !IsSupporterWithBalance()) StartBackgroundPolling();
+          Emit();
+          return false;
+        }
+        FetchNow();
         return true;
       },
       kConfirmationPollingSeconds);
-  Emit();
 }
 
 void SubscriptionBalanceStore::StopPolling() {

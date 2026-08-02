@@ -12,9 +12,9 @@
 //   * a 5s confirmation poll with a 2-MINUTE DEADLINE for right after a
 //     checkout or a redeemed balance code: the purchase reaches the server
 //     asynchronously (Stripe webhook), so we poll to bridge the gap — and give
-//     up loudly instead of spinning forever when a webhook is lost. The
-//     confirmation poll ignores the visibility gate: the user is off in the
-//     browser paying, and Pro must flip even while the window is hidden.
+//     up loudly instead of spinning forever when a webhook is lost. The timer
+//     pauses while hidden but preserves its deadline, then resumes or times out
+//     immediately when the window is shown.
 //   * offline Pro: the jwt's Pro claim (LocalState::parseByJwt) seeds the
 //     state before the first fetch; the server is the source of truth, and
 //     the jwt is refreshed (Device::refreshToken) whenever the two disagree
@@ -55,8 +55,7 @@ class SubscriptionBalanceStore {
   void Stop();
 
   // The tray-app visibility gate (MainWindow::windowVisible_): the background
-  // poll skips fetches while the window is hidden and resyncs on show. The
-  // confirmation poll is NOT gated — see the header comment.
+  // timers are stopped while the window is hidden and resync on show.
   void SetWindowVisible(bool visible);
 
   void FetchNow();
@@ -95,6 +94,7 @@ class SubscriptionBalanceStore {
   void FetchReferralCode();
   void UpdateIsPro(bool isPro);  // mac updateIsPro: flips the polling mode
   void StartBackgroundPolling();
+  void ResumeConfirmationPolling();
   void StopPolling();  // both timers + deadline (mac stopPolling)
   bool IsSupporterWithBalance() const { return isPro_ && availableByteCount_ > 0; }
   void Emit();

@@ -187,6 +187,9 @@ class SdkHost {
   void Connect(const std::optional<urnet::ConnectLocation>& location);
   void Disconnect();
   bool Connected();
+  // Own presentation-only SDK view controllers only while the GTK window is
+  // visible. The DeviceLocal, tunnel and packet loop remain alive in the tray.
+  void SetPresentationActive(bool active);
 
   // Provide/earn: control mode "never"|"always"|"network"|"auto"|"manual".
   // "network" is the private provider: the provider is always on, but provides
@@ -296,8 +299,9 @@ class SdkHost {
   // blockchain: "solana" (ed25519, base64 signature) | urnet::TAO (sr25519, hex)
   void AuthLoginWithWallet(const std::string& address, const std::string& signature,
                            const std::string& message, const std::string& blockchain);
-  void SubscribeStats();  // subscribe the live-stats listeners (in StartTunnel)
-  void SubscribeDrawer();  // subscribe the connect-drawer listeners (in StartTunnel)
+  void SubscribeStats();   // caller holds mutex_; opens presentation controllers
+  void SubscribeDrawer();  // caller holds mutex_; opens presentation controllers
+  void ClosePresentationLocked();
   void EmitDrawerEvent(DrawerEvent event);
   LiveStats ReadStats();  // read the current snapshot from the SDK getters
   void PublishStats();    // ReadStats() -> onStats_
@@ -324,7 +328,9 @@ class SdkHost {
   std::optional<urnet::PostQuantumIdentityViewController> pqiVc_;
   std::optional<urnet::IoLoop> ioLoop_;
   std::unique_ptr<Tunnel> tunnel_;
+  bool presentationActive_ = false;
   std::vector<urnet::Sub> subs_;
+  std::vector<urnet::Sub> presentationSubs_;
 
   WalletConnect wallet_;
   std::function<void(AuthResult)> walletAuthDone_;

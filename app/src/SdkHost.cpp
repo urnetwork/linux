@@ -1,15 +1,31 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "SdkHost.hpp"
 
+#include <unistd.h>
+
 #include <algorithm>
 #include <cstdio>
+#include <string>
 
 namespace urnw {
 namespace {
 constexpr const char* kHostName = "ur.network";
 constexpr const char* kEnvName = "main";
-constexpr const char* kDeviceDescription = "linux-desktop";
+constexpr const char* kDeviceDescriptionFallback = "linux-desktop";
 constexpr const char* kAppVersion = "0.0.1";
+
+// The initial device name defaults to the machine's hostname (the "device
+// name"), e.g. "brien-thinkpad", falling back to a generic label. Users can
+// still rename their device (a separate, server-side device_name); this is
+// only the default a brand-new device registers with.
+std::string DeviceDescription() {
+  char hostname[256];
+  if (::gethostname(hostname, sizeof(hostname)) == 0 && hostname[0] != '\0') {
+    hostname[sizeof(hostname) - 1] = '\0';
+    return std::string(hostname);
+  }
+  return kDeviceDescriptionFallback;
+}
 constexpr int64_t kMemoryLimit = 64ll * 1024 * 1024;
 // The challenge every wallet signs for wallet sign-in — the same static string on
 // every client (apple/NEXTSTEPS2.md §4); no client sends a nonce.
@@ -451,7 +467,7 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
   api_->setByJwt(byJwt);
   asyncLocalState_->setByJwt(byJwt, [](bool) {});
   urnet::AuthNetworkClientArgs args;
-  args.description = kDeviceDescription;
+  args.description = DeviceDescription();
   args.device_spec = DeviceSpec();
   api_->authNetworkClient(args, [this, done](std::optional<urnet::AuthNetworkClientResult> result,
                                              std::optional<std::string> err) {
@@ -485,7 +501,7 @@ bool SdkHost::StartTunnel() {
         keyMaterial && !keyMaterial.isEmpty()) {
       try {
         device_ = urnet::newDeviceLocalWithKeyMaterial(*networkSpace_, clientJwt,
-                                                       kDeviceDescription, DeviceSpec(),
+                                                       DeviceDescription(), DeviceSpec(),
                                                        kAppVersion, instanceId,
                                                        /*enable_rpc=*/false, keyMaterial);
       } catch (const std::exception& e) {
@@ -495,7 +511,7 @@ bool SdkHost::StartTunnel() {
       }
     }
     if (!device_) {
-      device_ = urnet::newDeviceLocalWithDefaults(*networkSpace_, clientJwt, kDeviceDescription,
+      device_ = urnet::newDeviceLocalWithDefaults(*networkSpace_, clientJwt, DeviceDescription(),
                                                   DeviceSpec(), kAppVersion, instanceId,
                                                   /*enable_rpc=*/false);
     }
@@ -544,36 +560,46 @@ bool SdkHost::StartTunnel() {
     TunnelConfig cfg;
     cfg.local_addr = device_->tunnelLocalAddress();
     if (cfg.local_addr.empty()) cfg.local_addr = "169.254.2.1";
-    // dns from the device, like the tunnel address: the dns settings' unencrypted
-    // local servers when set, otherwise the default plain-DNS resolvers (which the
-    // UpgradeMux can intercept and upgrade). always plain :53, never OS-level
+    // dns from the device: the dns settings' unencrypted local servers when set,
+    // otherwise the distinct plain-DNS UpgradeMux mask. always plain :53, never OS-level
     // encrypted DNS: the mux performs the unencrypted-DNS -> DoH upgrade in-tunnel.
     // the tunnel is ipv4-only, so only the ipv4 resolvers apply
     if (auto dns = device_->tunnelDnsAddressesIpv4(); dns && !dns->empty()) cfg.dns_servers = *dns;
-    // static fallback matching the SDK default tunnel resolvers (Quad9 leads so no
-    // OS auto-upgrade to encrypted DNS applies)
-    else cfg.dns_servers = {"9.9.9.9", "1.1.1.1"};
+    // Keep the exceptional fallback coupled to the SDK's separately tested
+    // URnetwork-owned UpgradeMux identity.
+    else cfg.dns_servers = {urnet::getDefaultTunnelDnsAddressIpv4()};
 
     tunnel_ = Tunnel::Open(cfg);
-    if (!tunnel_) { device_.reset(); return false; }
+    if (!tunnel_) {
+      TeardownDeviceLocked();
+      return false;
+    }
 
     // hand the tun fd to the SDK's fd loop (the Android/Linux data plane path)
     ioLoop_ = urnet::newIoLoop(*device_, tunnel_->fd(), [] {});
     device_->setTunnelStarted(true);
 
-    connectVc_ = device_->openConnectViewController();
-    connectVc_->start();
-    subs_.push_back(connectVc_->addConnectionStatusListener([this] {
-      if (onStatus_ && connectVc_) onStatus_(connectVc_->getConnectionStatus());
-    }));
-    SubscribeStats();   // live connection/throughput/provide feed (macOS parity)
-    SubscribeDrawer();  // connect drawer feed: charts, block actions, dns, blocker
+    // Connection choice is data-plane state, so keep this lightweight listener
+    // alive for the tray even when every presentation controller is closed.
+    subs_.push_back(device_->addConnectLocationChangeListener(
+        [this](std::optional<urnet::ConnectLocation> location) {
+          if (onStatus_) onStatus_(location ? "DESTINATION_SET" : "DISCONNECTED");
+        }));
+    if (presentationActive_) {
+      SubscribeStats();
+      SubscribeDrawer();
+    }
+    if (onStatus_) {
+      onStatus_(device_->getConnectLocation() ? "DESTINATION_SET" : "DISCONNECTED");
+    }
     EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
     return true;
   } catch (const std::exception& e) {
     std::fprintf(stderr, "[sdk] start tunnel failed: %s\n", e.what());
-    tunnel_.reset();
-    if (device_) { device_->close(); device_.reset(); }
+    // StartTunnel is retryable. Tear down every partially-created resource and
+    // listener so a failed attempt cannot leave an IoLoop, subscription, or
+    // manager-owned controller behind for the next attempt.
+    TeardownDeviceLocked();
     return false;
   }
 }
@@ -584,19 +610,22 @@ bool SdkHost::StartTunnel() {
 // are thread-safe and Logout clears subs_ before resetting the objects.
 
 void SdkHost::SubscribeStats() {
-  if (!device_ || !connectVc_) return;
+  if (!device_ || connectVc_) return;
+  connectVc_ = device_->openConnectViewController();
+  connectVc_->start();
   contractVc_ = device_->openContractViewController();  // live throughput feed
   auto pub = [this] { PublishStats(); };
-  subs_.push_back(connectVc_->addConnectionStatusListener(pub));  // status -> full refresh
-  subs_.push_back(connectVc_->addGridListener(pub));  // provider window size
-  subs_.push_back(connectVc_->addSelectedLocationListener(
+  presentationSubs_.push_back(connectVc_->addConnectionStatusListener(pub));
+  presentationSubs_.push_back(connectVc_->addGridListener(pub));  // provider window size
+  presentationSubs_.push_back(connectVc_->addSelectedLocationListener(
       [this](std::optional<urnet::ConnectLocation>) { PublishStats(); }));
-  subs_.push_back(contractVc_->addThroughputListener(pub));  // bytes/bit rate up/down
-  subs_.push_back(device_->addContractStatusChangeListener(
+  presentationSubs_.push_back(contractVc_->addThroughputListener(pub));
+  presentationSubs_.push_back(device_->addContractStatusChangeListener(
       [this](std::optional<urnet::ContractStatus>) { PublishStats(); }));
-  subs_.push_back(device_->addProvideChangeListener([this](bool) { PublishStats(); }));
-  subs_.push_back(device_->addProvidePausedChangeListener([this](bool) { PublishStats(); }));
-  subs_.push_back(device_->addTunnelChangeListener([this](bool) { PublishStats(); }));
+  presentationSubs_.push_back(device_->addProvideChangeListener([this](bool) { PublishStats(); }));
+  presentationSubs_.push_back(
+      device_->addProvidePausedChangeListener([this](bool) { PublishStats(); }));
+  presentationSubs_.push_back(device_->addTunnelChangeListener([this](bool) { PublishStats(); }));
   PublishStats();  // initial snapshot
 }
 
@@ -607,6 +636,9 @@ LiveStats SdkHost::ReadStats() {
     s.connected = connectVc_->getConnected();
     auto grid = connectVc_->getGrid();
     s.providerCount = grid.getWindowCurrentSize();
+  } else if (device_) {
+    s.connected = device_->getConnectLocation().has_value();
+    s.connectionStatus = s.connected ? "DESTINATION_SET" : "DISCONNECTED";
   }
   if (contractVc_) {
     if (auto pts = contractVc_->getThroughputPoints(); pts && !pts->empty()) {
@@ -658,21 +690,21 @@ void SdkHost::EmitDrawerEvent(DrawerEvent event) {
 void SdkHost::SubscribeDrawer() {
   if (!device_ || !contractVc_) return;
   blockActionVc_ = device_->openBlockActionViewController();  // block actions/stats feed
-  subs_.push_back(contractVc_->addThroughputListener(
+  presentationSubs_.push_back(contractVc_->addThroughputListener(
       [this] { EmitDrawerEvent(DrawerEvent::Throughput); }));
-  subs_.push_back(blockActionVc_->addBlockActionsListener(
+  presentationSubs_.push_back(blockActionVc_->addBlockActionsListener(
       [this] { EmitDrawerEvent(DrawerEvent::BlockActions); }));
-  subs_.push_back(blockActionVc_->addBlockActionStatsListener(
+  presentationSubs_.push_back(blockActionVc_->addBlockActionStatsListener(
       [this] { EmitDrawerEvent(DrawerEvent::BlockStats); }));
-  subs_.push_back(device_->addBlockActionOverridesChangeListener(
+  presentationSubs_.push_back(device_->addBlockActionOverridesChangeListener(
       [this](std::optional<urnet::BlockActionOverrideList>) {
         EmitDrawerEvent(DrawerEvent::Overrides);
       }));
-  subs_.push_back(device_->addDnsResolverSettingsChangeListener(
+  presentationSubs_.push_back(device_->addDnsResolverSettingsChangeListener(
       [this](std::optional<urnet::DnsResolverSettings>) {
         EmitDrawerEvent(DrawerEvent::DnsSettings);
       }));
-  subs_.push_back(device_->addBlockerEnabledChangeListener(
+  presentationSubs_.push_back(device_->addBlockerEnabledChangeListener(
       [this](bool) { EmitDrawerEvent(DrawerEvent::Blocker); }));
   // contract details: a single-feed ContractDetailsViewController for this device's
   // own (client) traffic. The VC groups the egress + ingress contracts per peer
@@ -684,12 +716,12 @@ void SdkHost::SubscribeDrawer() {
   // + ContractsPendingCount() and animates the per-contract stacks itself. (A
   // provider sheet would open its own VC via openProviderContractDetailsViewController.)
   clientContractDetailsVc_ = device_->openClientContractDetailsViewController();
-  subs_.push_back(clientContractDetailsVc_->addContractRowsListener(
+  presentationSubs_.push_back(clientContractDetailsVc_->addContractRowsListener(
       [this] { EmitDrawerEvent(DrawerEvent::Contracts); }));
   clientContractDetailsVc_->start();
-  subs_.push_back(device_->addConnectLocationChangeListener(
+  presentationSubs_.push_back(device_->addConnectLocationChangeListener(
       [this](std::optional<urnet::ConnectLocation>) { EmitDrawerEvent(DrawerEvent::Location); }));
-  subs_.push_back(device_->addPerformanceProfileChangeListener(
+  presentationSubs_.push_back(device_->addPerformanceProfileChangeListener(
       [this](std::optional<urnet::PerformanceProfile>) {
         EmitDrawerEvent(DrawerEvent::Profile);
       }));
@@ -697,13 +729,13 @@ void SdkHost::SubscribeDrawer() {
   // provider chooser: the bucketed location feed + the connected, provide-enabled
   // peers pinned at its top. start() kicks the initial load (FilterLocations("")).
   locationsVc_ = device_->openLocationsViewController();
-  subs_.push_back(locationsVc_->addFilteredLocationsListener(
+  presentationSubs_.push_back(locationsVc_->addFilteredLocationsListener(
       [this](std::optional<urnet::FilteredLocations>, std::string) {
         EmitDrawerEvent(DrawerEvent::Locations);
       }));
   locationsVc_->start();
   peerVc_ = device_->openPeerViewController();
-  subs_.push_back(peerVc_->addPeersListener(
+  presentationSubs_.push_back(peerVc_->addPeersListener(
       [this](std::optional<urnet::NetworkPeerList>) { EmitDrawerEvent(DrawerEvent::Peers); }));
   peerVc_->start();
 
@@ -713,9 +745,53 @@ void SdkHost::SubscribeDrawer() {
   // it re-emits the device's urnet_device_add_provider_identity_change_listener
   // feed). start() seeds the listener with the current state.
   pqiVc_ = device_->openPostQuantumIdentityViewController();
-  subs_.push_back(pqiVc_->addPostQuantumIdentityListener(
+  presentationSubs_.push_back(pqiVc_->addPostQuantumIdentityListener(
       [this] { EmitDrawerEvent(DrawerEvent::ProviderIdentities); }));
   pqiVc_->start();
+}
+
+void SdkHost::ClosePresentationLocked() {
+  presentationSubs_.clear();
+  if (!device_) {
+    connectVc_.reset();
+    contractVc_.reset();
+    clientContractDetailsVc_.reset();
+    blockActionVc_.reset();
+    locationsVc_.reset();
+    peerVc_.reset();
+    pqiVc_.reset();
+    return;
+  }
+  if (pqiVc_) device_->closePostQuantumIdentityViewController(*pqiVc_);
+  pqiVc_.reset();
+  if (peerVc_) device_->closePeerViewController(*peerVc_);
+  peerVc_.reset();
+  if (locationsVc_) device_->closeLocationsViewController(*locationsVc_);
+  locationsVc_.reset();
+  if (clientContractDetailsVc_) {
+    device_->closeContractDetailsViewController(*clientContractDetailsVc_);
+  }
+  clientContractDetailsVc_.reset();
+  if (blockActionVc_) device_->closeBlockActionViewController(*blockActionVc_);
+  blockActionVc_.reset();
+  if (contractVc_) device_->closeContractViewController(*contractVc_);
+  contractVc_.reset();
+  if (connectVc_) device_->closeConnectViewController(*connectVc_);
+  connectVc_.reset();
+}
+
+void SdkHost::SetPresentationActive(bool active) {
+  std::scoped_lock lock(mutex_);
+  if (presentationActive_ == active) return;
+  presentationActive_ = active;
+  if (!active) {
+    ClosePresentationLocked();
+    return;
+  }
+  if (!device_) return;
+  SubscribeStats();
+  SubscribeDrawer();
+  EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
 }
 
 // ---- connect drawer accessors ----------------------------------------------
@@ -941,22 +1017,41 @@ std::vector<uint8_t> SdkHost::PublicIdentityKey() {
 
 void SdkHost::ConnectBestAvailable() {
   std::scoped_lock lock(mutex_);
-  if (connectVc_) connectVc_->connectBestAvailable();
+  if (connectVc_) {
+    connectVc_->connectBestAvailable();
+  } else if (device_) {
+    auto controller = device_->openConnectViewController();
+    controller.connectBestAvailable();
+    device_->closeConnectViewController(controller);
+  }
 }
 
 void SdkHost::Connect(const std::optional<urnet::ConnectLocation>& location) {
   std::scoped_lock lock(mutex_);
-  if (connectVc_) connectVc_->connect(location);
+  if (connectVc_) {
+    connectVc_->connect(location);
+  } else if (device_) {
+    auto controller = device_->openConnectViewController();
+    controller.connect(location);
+    device_->closeConnectViewController(controller);
+  }
 }
 
 void SdkHost::Disconnect() {
   std::scoped_lock lock(mutex_);
-  if (connectVc_) connectVc_->disconnect();
+  if (connectVc_) {
+    connectVc_->disconnect();
+  } else if (device_) {
+    auto controller = device_->openConnectViewController();
+    controller.disconnect();
+    device_->closeConnectViewController(controller);
+  }
 }
 
 bool SdkHost::Connected() {
   std::scoped_lock lock(mutex_);
-  return connectVc_ && connectVc_->getConnected();
+  if (connectVc_) return connectVc_->getConnected();
+  return device_ && device_->getConnectLocation().has_value();
 }
 
 void SdkHost::SetProvideControlMode(const std::string& mode) {
@@ -994,24 +1089,11 @@ void SdkHost::ResetProvideToNever() {
 // Device/tunnel teardown without touching the stored auth: Logout adds the
 // auth clear; the guest upgrade only swaps the device. Caller holds mutex_.
 void SdkHost::TeardownDeviceLocked() {
+  ClosePresentationLocked();
   subs_.clear();
   // close() actually stops the view controller's monitor goroutines + grid and
   // the IoLoop; reset() alone only releases the handle (urnet_release), leaking
   // them on every logout
-  if (connectVc_) connectVc_->close();
-  connectVc_.reset();
-  if (contractVc_) contractVc_->close();
-  contractVc_.reset();
-  if (clientContractDetailsVc_) clientContractDetailsVc_->close();
-  clientContractDetailsVc_.reset();
-  if (blockActionVc_) blockActionVc_->close();
-  blockActionVc_.reset();
-  if (locationsVc_) locationsVc_->close();
-  locationsVc_.reset();
-  if (peerVc_) peerVc_->close();
-  peerVc_.reset();
-  if (pqiVc_) pqiVc_->close();
-  pqiVc_.reset();
   if (device_) device_->setTunnelStarted(false);
   if (ioLoop_) ioLoop_->close();
   ioLoop_.reset();

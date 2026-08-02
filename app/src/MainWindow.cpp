@@ -24,6 +24,15 @@ bool LooksLikeUserAuth(const std::string& value) {
   return digits >= 7;
 }
 
+constexpr bool WindowPresentationShouldRun(bool visible, bool mapped, bool active) {
+  return visible && mapped && active;
+}
+
+static_assert(WindowPresentationShouldRun(true, true, true));
+static_assert(!WindowPresentationShouldRun(true, true, false));
+static_assert(!WindowPresentationShouldRun(true, false, true));
+static_assert(!WindowPresentationShouldRun(false, true, true));
+
 }  // namespace
 
 MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
@@ -45,8 +54,12 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   // updates while hidden and resync when shown, so a hidden window doesn't churn
   // on high-frequency SDK updates. Live stats and the balance poll follow this
   // same gate (the balance store resyncs itself on show).
-  property_visible().signal_changed().connect([this] {
-    windowVisible_ = get_visible();
+  auto reconcilePresentation = [this] {
+    const bool presentationActive =
+        WindowPresentationShouldRun(get_visible(), get_mapped(), is_active());
+    if (windowVisible_ == presentationActive) return;
+    windowVisible_ = presentationActive;
+    host_.SetPresentationActive(windowVisible_);
     balance_.SetWindowVisible(windowVisible_);
     if (windowVisible_) {
       status_.set_text(lastStatus_);
@@ -54,7 +67,11 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       ApplyStats(lastStats_);
       if (drawer_) drawer_->RefreshAll();  // drawer events are dropped while hidden
     }
-  });
+  };
+  property_visible().signal_changed().connect(reconcilePresentation);
+  property_is_active().signal_changed().connect(reconcilePresentation);
+  signal_map().connect(reconcilePresentation);
+  signal_unmap().connect(reconcilePresentation);
 
   // Balance/plan changes land on the GTK loop already (the store marshals);
   // fan out to the drawer's plan card, banner, and the upgrade sheet states.
