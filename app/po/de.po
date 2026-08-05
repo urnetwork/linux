@@ -473,6 +473,11 @@ msgctxt "change_network_api_title"
 msgid "Change Network API"
 msgstr "Netzwerk-API ändern"
 
+#. A description of the action to change the user's network name.
+msgctxt "change_network_name_hint"
+msgid "Tap the edit icon to change your network name"
+msgstr "Tippe auf das Bearbeiten-Symbol, um deinen Netzwerknamen zu ändern"
+
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -537,6 +542,11 @@ msgstr "Einlösen"
 msgctxt "claim_multiplier"
 msgid "Claim Multiplier"
 msgstr "Multiplikator beanspruchen"
+
+#. A description of the benefits of claiming a custom network name.
+msgctxt "claim_network_name_hint"
+msgid "Claim a custom network name to replace your auto-generated one"
+msgstr "Sichere dir einen eigenen Netzwerknamen, der deinen automatisch generierten ersetzt"
 
 #. transfer stats and split rules
 msgctxt "client_contracts"
@@ -1046,6 +1056,11 @@ msgstr "Du verdienst x2 Punkte"
 msgctxt "edit_device_name"
 msgid "Edit device name"
 msgstr "Gerätenamen bearbeiten"
+
+#. Button on the profile screen to edit the network name.
+msgctxt "edit_network_name"
+msgid "Edit network name"
+msgstr "Netzwerknamen bearbeiten"
 
 #. Profile
 msgctxt "edit_profile"
@@ -1623,6 +1638,101 @@ msgctxt "minutes_ago_abbrev"
 msgid "{}m ago"
 msgstr "vor {} Min."
 
+#. Status shown while the device location is being synced with a provider. The argument is the provider's city or country.
+msgctxt "mock_location_active"
+msgid "Syncing with {}"
+msgstr "Wird mit {} synchronisiert"
+
+#. Disclosure shown with the browser geolocation override toggle: the simulated location is reported only to pages in this browser, not to the device.
+msgctxt "mock_location_disclosure_browser_only"
+msgid "Only pages in this browser see the changed location. Your device's location is unchanged."
+msgstr "Nur Seiten in diesem Browser sehen den geänderten Standort. Der Standort deines Geräts bleibt unverändert."
+
+#. Disclosure shown with the mock location toggle: apps can detect a simulated location and may refuse to work.
+msgctxt "mock_location_disclosure_detectable"
+msgid "Apps can tell the location is simulated. Banking, ride-hailing, delivery and some game apps may refuse to work while this is on."
+msgstr "Apps können erkennen, dass der Standort simuliert ist. Banking-, Fahrdienst-, Liefer- und manche Spiele-Apps funktionieren möglicherweise nicht, solange dies aktiviert ist."
+
+#. Disclosure shown with the mock location toggle: the simulated location is reported to every app on the device, not only URnetwork.
+msgctxt "mock_location_disclosure_device_wide"
+msgid "This changes the location reported to every app on your device, not just URnetwork."
+msgstr "Dies ändert den Standort, der jeder App auf deinem Gerät gemeldet wird, nicht nur URnetwork."
+
+#. Disclosure shown with the browser geolocation override toggle: sites can detect a simulated location and may refuse to work.
+msgctxt "mock_location_disclosure_sites_can_detect"
+msgid "Sites can tell the location is simulated and may refuse to work."
+msgstr "Websites können erkennen, dass der Standort simuliert ist, und funktionieren möglicherweise nicht."
+
+#. Disclosure shown with the mock location toggle: turn the feature off in URnetwork before removing it as the mock location app, or the device location can stay frozen.
+msgctxt "mock_location_disclosure_turn_off_first"
+msgid "Turn this off in URnetwork before you turn off developer options, deselect URnetwork, or uninstall the app — otherwise your device location can stay frozen until you restart."
+msgstr "Schalte dies in URnetwork aus, bevor du die Entwickleroptionen deaktivierst, URnetwork abwählst oder die App deinstallierst — sonst kann dein Gerätestandort bis zum Neustart eingefroren bleiben."
+
+#. Error shown when the app could not remove the simulated location; the user must re-select URnetwork as the mock location app and turn the feature off, or restart.
+msgctxt "mock_location_error_cleanup_required"
+msgid "URnetwork could not remove the simulated location. Re-select URnetwork under developer options and turn this off, or restart your device."
+msgstr "URnetwork konnte den simulierten Standort nicht entfernen. Wähle URnetwork in den Entwickleroptionen erneut aus und schalte diese Funktion aus, oder starte dein Gerät neu."
+
+#. Intro of the mock location guide explaining that apps see the longest-connected provider's location instead of the real one.
+msgctxt "mock_location_guide_intro"
+msgid "When enabled, apps on this device see the location of the provider you have been connected to the longest, instead of your real location."
+msgstr "Wenn aktiviert, sehen Apps auf diesem Gerät statt deines echten Standorts den Standort des Anbieters, mit dem du am längsten verbunden bist."
+
+#. Title of the mock location setup guide.
+msgctxt "mock_location_guide_title"
+msgid "Sync device location"
+msgstr "Gerätestandort synchronisieren"
+
+#. Short status shown when the mock location feature still needs Android setup steps.
+msgctxt "mock_location_needs_setup"
+msgid "Setup required"
+msgstr "Einrichtung erforderlich"
+
+#. Button that opens the Android About phone settings screen.
+msgctxt "mock_location_open_about_phone"
+msgid "Open About phone"
+msgstr "„Über das Telefon“ öffnen"
+
+#. Button that opens the Android developer options settings screen.
+msgctxt "mock_location_open_developer_options"
+msgid "Open developer options"
+msgstr "Entwickleroptionen öffnen"
+
+#. Button that opens the Android system location settings screen.
+msgctxt "mock_location_open_location_settings"
+msgid "Open location settings"
+msgstr "Standorteinstellungen öffnen"
+
+#. Mock location guide status when setup is complete and the toggle can be turned on.
+msgctxt "mock_location_ready"
+msgid "Ready. Turn on the toggle to sync your device location with the oldest provider."
+msgstr "Bereit. Aktiviere den Schalter, um deinen Gerätestandort mit dem am längsten verbundenen Anbieter zu synchronisieren."
+
+#. Settings row label for the device location sync (mock location) feature.
+msgctxt "mock_location_settings_row"
+msgid "Device location sync"
+msgstr "Gerätestandort-Synchronisierung"
+
+#. Mock location setup step: enable Android developer options by tapping the build number in About phone.
+msgctxt "mock_location_step_developer_options"
+msgid "Turn on developer options: open About phone and tap Build number seven times."
+msgstr "Aktiviere die Entwickleroptionen: Öffne „Über das Telefon“ und tippe siebenmal auf „Build-Nummer“."
+
+#. Mock location setup step: turn on the system Location setting so apps receive the simulated location.
+msgctxt "mock_location_step_location_services"
+msgid "Turn on Location in system settings so apps can receive the location."
+msgstr "Aktiviere „Standort“ in den Systemeinstellungen, damit Apps den Standort empfangen können."
+
+#. Mock location setup step: choose URnetwork as the mock location app in Android developer options.
+msgctxt "mock_location_step_select_app"
+msgid "In developer options, tap Select mock location app and choose URnetwork."
+msgstr "Tippe in den Entwickleroptionen auf „App für simulierte Standorte auswählen“ und wähle URnetwork."
+
+#. Status shown while the mock location feature waits for a connected provider's location to become known.
+msgctxt "mock_location_waiting_for_provider"
+msgid "Waiting for a provider location"
+msgstr "Warten auf einen Anbieter-Standort"
+
 #. Billing period name on the monthly subscription product card in the upgrade flow.
 msgctxt "monthly"
 msgid "Monthly"
@@ -2157,6 +2267,21 @@ msgctxt "provide_mode"
 msgid "Provide mode"
 msgstr "Bereitstellungsmodus"
 
+#. Compact duration a provider has been connected, as hours and minutes (e.g. 3h 24m). {hours} is the whole hours, {minutes} the remaining minutes.
+msgctxt "provider_connected_duration_hours"
+msgid "{0}h {1}m"
+msgstr "{0} Std. {1} Min."
+
+#. Compact duration a provider has been connected, as minutes (e.g. 24m).
+msgctxt "provider_connected_duration_minutes"
+msgid "{}m"
+msgstr "{} Min."
+
+#. Compact duration a provider has been connected, as seconds (e.g. 42s).
+msgctxt "provider_connected_duration_seconds"
+msgid "{}s"
+msgstr "{} Sek."
+
 #. A label for the provider contracts screen.
 msgctxt "provider_contracts"
 msgid "Provider contracts"
@@ -2172,6 +2297,21 @@ msgstr[1] "{} Anbieter"
 msgctxt "provider_count_int"
 msgid "{} providers"
 msgstr "{} Anbieter"
+
+#. Row subtitle in the provider locations list when a provider's location is not known.
+msgctxt "provider_location_unknown"
+msgid "Location unknown"
+msgstr "Standort unbekannt"
+
+#. Empty state of the provider locations sheet when no providers are connected.
+msgctxt "provider_locations_empty"
+msgid "No providers connected"
+msgstr "Keine Anbieter verbunden"
+
+#. Title of the sheet that lists the connected providers and their locations.
+msgctxt "provider_locations_title"
+msgid "Provider Locations"
+msgstr "Anbieter-Standorte"
 
 #. Title of a section that shows statistics about the provider.
 msgctxt "provider_statistics"
@@ -3662,6 +3802,16 @@ msgctxt "switch_account_details"
 msgid "Do you want to disconnect from {} and switch accounts?"
 msgstr "Möchten Sie die Verbindung zu {} trennen und das Konto wechseln?"
 
+#. Toggle that makes the device report the location of the longest-connected provider (Android mock location) instead of the real location.
+msgctxt "sync_device_location_with_oldest_provider"
+msgid "Sync device location with oldest provider"
+msgstr "Gerätestandort mit dem am längsten verbundenen Anbieter synchronisieren"
+
+#. Toggle that makes the device (or browser, on the extension) report a connected provider's location instead of the real location. The provider used is the most stable (longest-connected) one.
+msgctxt "sync_device_location_with_provider"
+msgid "Sync device location with provider"
+msgstr "Gerätestandort mit dem Anbieter synchronisieren"
+
 #. Used in Main/Account/Settings/SettingsForm-macOS.swift.
 msgctxt "system"
 msgid "System"
@@ -3960,6 +4110,11 @@ msgstr "USDC-Adressen auf Solana werden derzeit unterstützt"
 msgctxt "usdc_wallet_address"
 msgid "USDC wallet address"
 msgstr "USDC-Wallet-Adresse"
+
+#. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
+msgctxt "use_most_stable_provider"
+msgid "Use most stable provider"
+msgstr "Verwendet den stabilsten Anbieter"
 
 #. dns settings
 msgctxt "use_recommended_settings"

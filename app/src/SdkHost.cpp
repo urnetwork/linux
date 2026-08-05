@@ -1,31 +1,27 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "SdkHost.hpp"
 
-#include <unistd.h>
-
 #include <algorithm>
 #include <cstdio>
 #include <string>
 
+#include "NetworkSpaceConfig.hpp"
+
+// The release version, threaded in via the -Dapp_version meson option (the
+// pipeline passes $VERSION); the fallback matches the option's default.
+#ifndef UR_APP_VERSION
+#define UR_APP_VERSION "0.0.0"
+#endif
+
 namespace urnw {
 namespace {
-constexpr const char* kHostName = "ur.network";
-constexpr const char* kEnvName = "main";
-constexpr const char* kDeviceDescriptionFallback = "linux-desktop";
-constexpr const char* kAppVersion = "0.0.1";
+// Device identity strings (hostname device description, "linux amd64/arm64"
+// spec) and the network-space values are shared with urnetworkd through
+// NetworkSpaceConfig.hpp — the two binaries must agree on them.
+constexpr const char* kAppVersion = UR_APP_VERSION;
 
-// The initial device name defaults to the machine's hostname (the "device
-// name"), e.g. "brien-thinkpad", falling back to a generic label. Users can
-// still rename their device (a separate, server-side device_name); this is
-// only the default a brand-new device registers with.
-std::string DeviceDescription() {
-  char hostname[256];
-  if (::gethostname(hostname, sizeof(hostname)) == 0 && hostname[0] != '\0') {
-    hostname[sizeof(hostname) - 1] = '\0';
-    return std::string(hostname);
-  }
-  return kDeviceDescriptionFallback;
-}
+// The GUI's memory bound. The data plane's budget now lives in urnetworkd
+// (TunnelHost); this only scales the GUI-side SDK (api + DeviceRemote).
 constexpr int64_t kMemoryLimit = 64ll * 1024 * 1024;
 // The challenge every wallet signs for wallet sign-in — the same static string on
 // every client (apple/NEXTSTEPS2.md §4); no client sends a nonce.
@@ -33,14 +29,6 @@ constexpr const char* kWalletSignInMessage = "Welcome to URnetwork";
 // AuthLogin{wallet_auth} blockchain ids. The server matches case-insensitively:
 // "solana" -> ed25519, urnet::TAO ("TAO") -> sr25519 (bittensor).
 constexpr const char* kSolanaBlockchain = "solana";
-
-std::string DeviceSpec() {
-#if defined(__aarch64__)
-  return "linux arm64";
-#else
-  return "linux amd64";
-#endif
-}
 }  // namespace
 
 bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDir) {
@@ -49,34 +37,22 @@ bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDi
     urnet::setLogDir(logDir);
     urnet::setMemoryLimit(kMemoryLimit);
     spaceManager_ = urnet::newNetworkSpaceManager(storageDir);
-    networkSpace_ = BuildNetworkSpace();
+    networkSpace_ = BuildUrNetworkSpace(*spaceManager_);
     api_ = networkSpace_->getApi();
     asyncLocalState_ = networkSpace_->getAsyncLocalState();
     localState_ = asyncLocalState_->getLocalState();
     // sign-up name availability rides the SDK's shared view controller (the
     // apple CreateNetworkViewModel binds the same one)
     networkNameVc_ = urnet::newNetworkNameValidationViewController(*api_);
+    // our SDK build, exact-match checked against the daemon's at hello: the
+    // gob device rpc has no version negotiation of its own
+    control_.SetLocalSdkVersion(urnet::version());
     SetupWalletCallbacks();
     return true;
   } catch (const std::exception& e) {
     std::fprintf(stderr, "[sdk] initialize failed: %s\n", e.what());
     return false;
   }
-}
-
-urnet::NetworkSpace SdkHost::BuildNetworkSpace() {
-  urnet::NetworkSpaceKey key;
-  key.host_name = std::string(kHostName);
-  key.env_name = std::string(kEnvName);
-  urnet::NetworkSpaceValues values;
-  values.bundled = true;
-  values.net_expose_server_ips = true;
-  values.net_expose_server_host_names = true;
-  values.link_host_name = "ur.io";
-  values.migration_host_name = "bringyour.com";
-  values.wallet = "circle";
-  values.sso_google = false;
-  return spaceManager_->updateNetworkSpaceValues(key, values);
 }
 
 bool SdkHost::IsLoggedIn() {
@@ -457,18 +433,20 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
   {
     // a new network jwt invalidates a running device (guest upgrade, verify
     // after an upgrade): tear it down so the UI rebuilds under the new auth.
-    // Fresh sign-ins have no device and skip this.
+    // Fresh sign-ins have no device and skip this. The daemon's tunnel runs
+    // under the old jwt, so stop it too; the UI restarts it under the new one.
     std::scoped_lock lock(mutex_);
     if (device_) {
       TeardownDeviceLocked();
+      control_.StopTunnel();
       EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
     }
   }
   api_->setByJwt(byJwt);
   asyncLocalState_->setByJwt(byJwt, [](bool) {});
   urnet::AuthNetworkClientArgs args;
-  args.description = DeviceDescription();
-  args.device_spec = DeviceSpec();
+  args.description = UrDeviceDescription();
+  args.device_spec = UrDeviceSpec();
   api_->authNetworkClient(args, [this, done](std::optional<urnet::AuthNetworkClientResult> result,
                                              std::optional<std::string> err) {
     if (err) { done({false, false, *err}); return; }
@@ -482,49 +460,76 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
 }
 
 // ---- tunnel ---------------------------------------------------------------
+// The split point (linux/MIGRATION.md). Everything privileged that used to
+// happen here — DeviceLocal construction with persisted key material, the tun
+// open/route/DNS setup, the IoLoop — now lives in urnetworkd (daemon
+// TunnelHost). This side: control-channel handshake, then a DeviceRemote
+// against the daemon's loopback mTLS device RPC. All the listeners and view
+// controllers below are on the shared Device interface and run against the
+// remote unchanged.
 
-bool SdkHost::StartTunnel() {
+TunnelStartResult SdkHost::StartTunnel() {
   std::scoped_lock lock(mutex_);
-  if (device_) return true;
+  lastTunnelError_.clear();
+  if (device_) return TunnelStartResult::Started;
   const std::string clientJwt = localState_->getByClientJwt();
-  if (clientJwt.empty()) return false;
+  if (clientJwt.empty()) {
+    lastTunnelError_ = "not signed in";
+    return TunnelStartResult::Failed;
+  }
   const std::string instanceId = localState_->getInstanceId();
 
+  // 1) daemon session: connect + hello. The protocol version is enforced in
+  //    BOTH directions here (APPIMAGE.md §11b) — each failure mode is a
+  //    distinct, renderable state, never a silent false.
+  std::string error;
+  switch (control_.EnsureSession(&error)) {
+    case DaemonSessionState::Ok:
+      break;
+    case DaemonSessionState::Unreachable:
+      lastTunnelError_ = error;
+      return TunnelStartResult::DaemonUnreachable;
+    case DaemonSessionState::DaemonTooOld:
+      lastTunnelError_ = error;
+      return TunnelStartResult::DaemonTooOld;
+    case DaemonSessionState::ClientTooOld:
+      lastTunnelError_ = error;
+      return TunnelStartResult::AppTooOld;
+    case DaemonSessionState::SdkMismatch:
+      lastTunnelError_ = error;
+      return TunnelStartResult::SdkMismatch;
+    case DaemonSessionState::Error:
+      lastTunnelError_ = error;
+      return TunnelStartResult::Failed;
+  }
+
+  // 2) start_tunnel: the daemon builds the DeviceLocal (rpc enabled), opens
+  //    the tun and wires the IoLoop. First authenticated client wins; a
+  //    tunnel owned by another live client comes back as a plain error.
+  int rpcPort = 0;
+  if (!control_.StartTunnel(clientJwt, instanceId, kAppVersion, &rpcPort, &error)) {
+    lastTunnelError_ = error;
+    switch (control_.LastSessionState()) {
+      case DaemonSessionState::Unreachable:
+        return TunnelStartResult::DaemonUnreachable;
+      case DaemonSessionState::DaemonTooOld:
+        return TunnelStartResult::DaemonTooOld;
+      case DaemonSessionState::ClientTooOld:
+        return TunnelStartResult::AppTooOld;
+      case DaemonSessionState::SdkMismatch:
+        return TunnelStartResult::SdkMismatch;
+      default:
+        return TunnelStartResult::Failed;
+    }
+  }
+
   try {
-    // Stable device identity via persisted key material (Windows
-    // TunnelController / iOS PacketTunnelProvider parity). The identity
-    // (Ed25519 client key seed + provide TLS cert/key) is device-scoped, not
-    // session-scoped: load it unconditionally so peers keep verifying this
-    // device across restarts, token rotation, and re-logins. Only the
-    // explicit Logout() (which wipes the local state dir) rotates it.
-    if (auto keyMaterial = localState_->getDeviceLocalKeyMaterial();
-        keyMaterial && !keyMaterial.isEmpty()) {
-      try {
-        device_ = urnet::newDeviceLocalWithKeyMaterial(*networkSpace_, clientJwt,
-                                                       DeviceDescription(), DeviceSpec(),
-                                                       kAppVersion, instanceId,
-                                                       /*enable_rpc=*/false, keyMaterial);
-      } catch (const std::exception& e) {
-        // unusable stored material: fall back to a fresh identity (the
-        // immediate persist below replaces the stored material)
-        std::fprintf(stderr, "[sdk] restore device key material failed: %s\n", e.what());
-      }
-    }
-    if (!device_) {
-      device_ = urnet::newDeviceLocalWithDefaults(*networkSpace_, clientJwt, DeviceDescription(),
-                                                  DeviceSpec(), kAppVersion, instanceId,
-                                                  /*enable_rpc=*/false);
-    }
-    // Persist the identity immediately: a freshly generated key must survive
-    // even if this session never fires another save trigger, and nothing
-    // event-driven re-saves it here.
-    try {
-      if (auto km = device_->getKeyMaterial(); km && !km.isEmpty()) {
-        localState_->setDeviceLocalKeyMaterial(km);
-      }
-    } catch (const std::exception& e) {
-      std::fprintf(stderr, "[sdk] persist device key material failed: %s\n", e.what());
-    }
+    // 3) the remote face of the daemon's device. Uses the SDK's default
+    //    loopback rpc address — the same one the daemon's DeviceLocal
+    //    (enable_rpc=true) listens on; rpcPort from the reply is
+    //    informational. Same instanceId on both sides: the rpc sync pairs on
+    //    it and the daemon side rejects a mismatch.
+    device_ = urnet::newDeviceRemoteWithDefaults(*networkSpace_, clientJwt, instanceId);
 
     // The jwt refresh (which runs immediately at device creation) tells us
     // when the stored client no longer exists on the server. Only marshal from
@@ -546,7 +551,7 @@ bool SdkHost::StartTunnel() {
     // strong anonymization / post quantum encryption). Unlike the blocker,
     // dns settings, and overrides, the device does not restore the profile
     // from local state itself (the macOS DeviceManager does exactly this at
-    // device creation).
+    // device creation). Applies over the device rpc.
     if (auto profile = localState_->getPerformanceProfile(); profile) {
       device_->setPerformanceProfile(profile);
     }
@@ -556,28 +561,6 @@ bool SdkHost::StartTunnel() {
     // macOS DeviceManager seeds exactly this at device creation). LocalState
     // defaults to "never" when nothing is stored — providing is opt-in.
     device_->setProvideControlMode(localState_->getProvideControlMode());
-
-    TunnelConfig cfg;
-    cfg.local_addr = device_->tunnelLocalAddress();
-    if (cfg.local_addr.empty()) cfg.local_addr = "169.254.2.1";
-    // dns from the device: the dns settings' unencrypted local servers when set,
-    // otherwise the distinct plain-DNS UpgradeMux mask. always plain :53, never OS-level
-    // encrypted DNS: the mux performs the unencrypted-DNS -> DoH upgrade in-tunnel.
-    // the tunnel is ipv4-only, so only the ipv4 resolvers apply
-    if (auto dns = device_->tunnelDnsAddressesIpv4(); dns && !dns->empty()) cfg.dns_servers = *dns;
-    // Keep the exceptional fallback coupled to the SDK's separately tested
-    // URnetwork-owned UpgradeMux identity.
-    else cfg.dns_servers = {urnet::getDefaultTunnelDnsAddressIpv4()};
-
-    tunnel_ = Tunnel::Open(cfg);
-    if (!tunnel_) {
-      TeardownDeviceLocked();
-      return false;
-    }
-
-    // hand the tun fd to the SDK's fd loop (the Android/Linux data plane path)
-    ioLoop_ = urnet::newIoLoop(*device_, tunnel_->fd(), [] {});
-    device_->setTunnelStarted(true);
 
     // Connection choice is data-plane state, so keep this lightweight listener
     // alive for the tray even when every presentation controller is closed.
@@ -593,15 +576,23 @@ bool SdkHost::StartTunnel() {
       onStatus_(device_->getConnectLocation() ? "DESTINATION_SET" : "DISCONNECTED");
     }
     EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
-    return true;
+    return TunnelStartResult::Started;
   } catch (const std::exception& e) {
     std::fprintf(stderr, "[sdk] start tunnel failed: %s\n", e.what());
+    lastTunnelError_ = e.what();
     // StartTunnel is retryable. Tear down every partially-created resource and
-    // listener so a failed attempt cannot leave an IoLoop, subscription, or
-    // manager-owned controller behind for the next attempt.
+    // listener so a failed attempt cannot leave a subscription or
+    // manager-owned controller behind for the next attempt, and stop the
+    // daemon-side tunnel we just started but cannot bind to.
     TeardownDeviceLocked();
-    return false;
+    control_.StopTunnel();
+    return TunnelStartResult::Failed;
   }
+}
+
+std::string SdkHost::LastTunnelError() {
+  std::scoped_lock lock(mutex_);
+  return lastTunnelError_;
 }
 
 // ---- live stats (macOS parity: listener-push, not polling) ----------------
@@ -625,6 +616,23 @@ void SdkHost::SubscribeStats() {
   presentationSubs_.push_back(device_->addProvideChangeListener([this](bool) { PublishStats(); }));
   presentationSubs_.push_back(
       device_->addProvidePausedChangeListener([this](bool) { PublishStats(); }));
+  // The network-visible bit: DeviceRemote exposes the provide secret keys only
+  // as a listener (the getter is DeviceLocal-only), so cache the derived flag
+  // — the Windows GUI does exactly this.
+  presentationSubs_.push_back(device_->addProvideSecretKeysListener(
+      [this](std::optional<urnet::ProvideSecretKeyList> keys) {
+        bool hasNetworkKey = false;
+        if (keys) {
+          for (const auto& key : *keys) {
+            if (key.provide_mode == 1 /* network — bit set, per-case */) {
+              hasNetworkKey = true;
+              break;
+            }
+          }
+        }
+        provideHasNetworkKey_.store(hasNetworkKey);
+        PublishStats();
+      }));
   presentationSubs_.push_back(device_->addTunnelChangeListener([this](bool) { PublishStats(); }));
   PublishStats();  // initial snapshot
 }
@@ -656,14 +664,9 @@ LiveStats SdkHost::ReadStats() {
     s.provideEnabled = device_->getProvideEnabled();
     s.providePaused = device_->getProvidePaused();
     s.provideMode = static_cast<int64_t>(device_->getProvideMode());
-    if (auto keys = device_->getProvideSecretKeys(); keys) {
-      for (const auto& key : *keys) {
-        if (key.provide_mode == 1 /* network — bit set, per-case */) {
-          s.provideHasNetworkKey = true;
-          break;
-        }
-      }
-    }
+    // cached off addProvideSecretKeysListener (no remote getter; see
+    // SubscribeStats)
+    s.provideHasNetworkKey = provideHasNetworkKey_.load();
     if (auto np = device_->getNetworkPeers(); np && np->Connected) {
       s.provideClients = static_cast<int64_t>(np->Connected->size());
     }
@@ -748,6 +751,14 @@ void SdkHost::SubscribeDrawer() {
   presentationSubs_.push_back(pqiVc_->addPostQuantumIdentityListener(
       [this] { EmitDrawerEvent(DrawerEvent::ProviderIdentities); }));
   pqiVc_->start();
+
+  // connected provider locations: a pure derivation over the window monitor, so
+  // there is no view controller to open or start -- just the signal-only change
+  // listener. It carries no payload by design; every consumer re-reads
+  // ConnectedProviderLocations(). It fires on window turnover, which is frequent,
+  // so the sheet dedupes by value before touching widgets.
+  presentationSubs_.push_back(device_->addConnectedProviderLocationChangeListener(
+      [this] { EmitDrawerEvent(DrawerEvent::ProviderLocations); }));
 }
 
 void SdkHost::ClosePresentationLocked() {
@@ -1004,6 +1015,20 @@ std::optional<urnet::ProviderIdentityList> SdkHost::ProviderIdentities() {
   return pqiVc_->getProviderIdentities();
 }
 
+// ---- connected provider locations --------------------------------------------
+
+std::optional<urnet::ConnectedProviderLocationList> SdkHost::ConnectedProviderLocations() {
+  std::scoped_lock lock(mutex_);
+  if (!device_) return std::nullopt;  // tunnel down: the sheet shows the unavailable state
+  return device_->getConnectedProviderLocations();
+}
+
+void SdkHost::RemoveConnectedProvider(const std::string& clientId) {
+  std::scoped_lock lock(mutex_);
+  if (!device_ || clientId.empty()) return;
+  device_->removeConnectedProvider(clientId);
+}
+
 std::string SdkHost::PublicIdentityKeyHash() {
   std::scoped_lock lock(mutex_);
   return pqiVc_ ? pqiVc_->getPublicIdentityKeyHash() : std::string();
@@ -1086,24 +1111,27 @@ void SdkHost::ResetProvideToNever() {
   if (localState_) localState_->setProvideControlMode("never");
 }
 
-// Device/tunnel teardown without touching the stored auth: Logout adds the
-// auth clear; the guest upgrade only swaps the device. Caller holds mutex_.
+// DeviceRemote teardown without touching the stored auth or the daemon:
+// Logout adds the auth clear + stop_tunnel; the guest upgrade only swaps the
+// device. Caller holds mutex_.
 void SdkHost::TeardownDeviceLocked() {
   ClosePresentationLocked();
   subs_.clear();
-  // close() actually stops the view controller's monitor goroutines + grid and
-  // the IoLoop; reset() alone only releases the handle (urnet_release), leaking
-  // them on every logout
-  if (device_) device_->setTunnelStarted(false);
-  if (ioLoop_) ioLoop_->close();
-  ioLoop_.reset();
-  tunnel_.reset();
+  // close() actually stops the remote's rpc connection, sync loop and view
+  // controllers; reset() alone only releases the handle (urnet_release),
+  // leaking them on every logout. The daemon's DeviceLocal, tun and IoLoop
+  // are NOT touched here — stopping the tunnel is an explicit stop_tunnel on
+  // the control channel, decided by the caller.
   if (device_) { device_->close(); device_.reset(); }
+  provideHasNetworkKey_.store(false);
 }
 
 void SdkHost::Logout() {
   std::scoped_lock lock(mutex_);
   TeardownDeviceLocked();
+  // the session is over: bring the daemon's tunnel down too (best effort — an
+  // unreachable daemon has nothing running for us anyway)
+  control_.StopTunnel();
   pendingWalletAuth_.reset();
   if (asyncLocalState_) asyncLocalState_->logout([](bool) {});
   if (onAuth_) onAuth_(false);

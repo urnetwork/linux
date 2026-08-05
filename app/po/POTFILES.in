@@ -4,16 +4,20 @@
 # stops) carrying user-facing text.
 #
 # Not listed, deliberately:
-#   src/I18n.hpp        the T_/TN_ wrappers themselves — no strings of its own
+#   src/I18n.hpp        the T_/TN_ wrappers themselves — the only "T_(" text in
+#                       it is the documentation comment, not a real call site
 #   src/Ui.cpp          stylesheet + widget factories — no user-facing strings
 #   src/main.cpp        only the gettext bootstrap and stderr diagnostics
-#   src/Formatters.cpp  byte/rate/time formatting units
 src/AuthViews.cpp
 src/ConnectDrawer.cpp
 src/ContractsSheet.cpp
 src/DnsSheet.cpp
+src/Formatters.cpp
+src/LocationOverrideGuide.cpp
 src/LocationsSheet.cpp
 src/MainWindow.cpp
+src/PostQuantumIdentity.cpp
+src/ProviderLocationsSheet.cpp
 src/RedeemCodeSheet.cpp
 src/SplitRulesSheet.cpp
 src/Tray.cpp

@@ -471,6 +471,11 @@ msgctxt "change_network_api_title"
 msgid "Change Network API"
 msgstr "네트워크 API 변경"
 
+#. A description of the action to change the user's network name.
+msgctxt "change_network_name_hint"
+msgid "Tap the edit icon to change your network name"
+msgstr "수정 아이콘을 탭하여 네트워크 이름을 변경하세요"
+
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -535,6 +540,11 @@ msgstr "받기"
 msgctxt "claim_multiplier"
 msgid "Claim Multiplier"
 msgstr "배율 받기"
+
+#. A description of the benefits of claiming a custom network name.
+msgctxt "claim_network_name_hint"
+msgid "Claim a custom network name to replace your auto-generated one"
+msgstr "자동 생성된 이름을 대체할 사용자 지정 네트워크 이름을 만드세요"
 
 #. transfer stats and split rules
 msgctxt "client_contracts"
@@ -1042,6 +1052,11 @@ msgstr "x2 포인트를 적립 중입니다"
 msgctxt "edit_device_name"
 msgid "Edit device name"
 msgstr "기기 이름 편집"
+
+#. Button on the profile screen to edit the network name.
+msgctxt "edit_network_name"
+msgid "Edit network name"
+msgstr "네트워크 이름 편집"
 
 #. Profile
 msgctxt "edit_profile"
@@ -1618,6 +1633,101 @@ msgctxt "minutes_ago_abbrev"
 msgid "{}m ago"
 msgstr "{}분 전"
 
+#. Status shown while the device location is being synced with a provider. The argument is the provider's city or country.
+msgctxt "mock_location_active"
+msgid "Syncing with {}"
+msgstr "{}와(과) 동기화 중"
+
+#. Disclosure shown with the browser geolocation override toggle: the simulated location is reported only to pages in this browser, not to the device.
+msgctxt "mock_location_disclosure_browser_only"
+msgid "Only pages in this browser see the changed location. Your device's location is unchanged."
+msgstr "변경된 위치는 이 브라우저의 페이지에만 표시됩니다. 기기의 위치는 그대로입니다."
+
+#. Disclosure shown with the mock location toggle: apps can detect a simulated location and may refuse to work.
+msgctxt "mock_location_disclosure_detectable"
+msgid "Apps can tell the location is simulated. Banking, ride-hailing, delivery and some game apps may refuse to work while this is on."
+msgstr "앱은 위치가 모의 위치임을 감지할 수 있습니다. 은행, 차량 호출, 배달 및 일부 게임 앱은 이 기능이 켜져 있는 동안 작동을 거부할 수 있습니다."
+
+#. Disclosure shown with the mock location toggle: the simulated location is reported to every app on the device, not only URnetwork.
+msgctxt "mock_location_disclosure_device_wide"
+msgid "This changes the location reported to every app on your device, not just URnetwork."
+msgstr "이 설정은 URnetwork뿐만 아니라 기기의 모든 앱에 보고되는 위치를 변경합니다."
+
+#. Disclosure shown with the browser geolocation override toggle: sites can detect a simulated location and may refuse to work.
+msgctxt "mock_location_disclosure_sites_can_detect"
+msgid "Sites can tell the location is simulated and may refuse to work."
+msgstr "사이트는 위치가 모의 위치임을 감지할 수 있으며 작동을 거부할 수 있습니다."
+
+#. Disclosure shown with the mock location toggle: turn the feature off in URnetwork before removing it as the mock location app, or the device location can stay frozen.
+msgctxt "mock_location_disclosure_turn_off_first"
+msgid "Turn this off in URnetwork before you turn off developer options, deselect URnetwork, or uninstall the app — otherwise your device location can stay frozen until you restart."
+msgstr "개발자 옵션을 끄거나 URnetwork 선택을 해제하거나 앱을 제거하기 전에 URnetwork에서 이 기능을 먼저 끄세요. 그러지 않으면 기기를 다시 시작할 때까지 기기 위치가 고정된 상태로 남을 수 있습니다."
+
+#. Error shown when the app could not remove the simulated location; the user must re-select URnetwork as the mock location app and turn the feature off, or restart.
+msgctxt "mock_location_error_cleanup_required"
+msgid "URnetwork could not remove the simulated location. Re-select URnetwork under developer options and turn this off, or restart your device."
+msgstr "URnetwork가 모의 위치를 제거하지 못했습니다. 개발자 옵션에서 URnetwork를 다시 선택한 후 이 기능을 끄거나 기기를 다시 시작하세요."
+
+#. Intro of the mock location guide explaining that apps see the longest-connected provider's location instead of the real one.
+msgctxt "mock_location_guide_intro"
+msgid "When enabled, apps on this device see the location of the provider you have been connected to the longest, instead of your real location."
+msgstr "사용 설정하면 이 기기의 앱에 실제 위치 대신 가장 오래 연결된 제공업체의 위치가 표시됩니다."
+
+#. Title of the mock location setup guide.
+msgctxt "mock_location_guide_title"
+msgid "Sync device location"
+msgstr "기기 위치 동기화"
+
+#. Short status shown when the mock location feature still needs Android setup steps.
+msgctxt "mock_location_needs_setup"
+msgid "Setup required"
+msgstr "설정 필요"
+
+#. Button that opens the Android About phone settings screen.
+msgctxt "mock_location_open_about_phone"
+msgid "Open About phone"
+msgstr "'휴대전화 정보' 열기"
+
+#. Button that opens the Android developer options settings screen.
+msgctxt "mock_location_open_developer_options"
+msgid "Open developer options"
+msgstr "개발자 옵션 열기"
+
+#. Button that opens the Android system location settings screen.
+msgctxt "mock_location_open_location_settings"
+msgid "Open location settings"
+msgstr "위치 설정 열기"
+
+#. Mock location guide status when setup is complete and the toggle can be turned on.
+msgctxt "mock_location_ready"
+msgid "Ready. Turn on the toggle to sync your device location with the oldest provider."
+msgstr "준비되었습니다. 토글을 켜면 기기 위치가 가장 오래 연결된 제공업체와 동기화됩니다."
+
+#. Settings row label for the device location sync (mock location) feature.
+msgctxt "mock_location_settings_row"
+msgid "Device location sync"
+msgstr "기기 위치 동기화"
+
+#. Mock location setup step: enable Android developer options by tapping the build number in About phone.
+msgctxt "mock_location_step_developer_options"
+msgid "Turn on developer options: open About phone and tap Build number seven times."
+msgstr "개발자 옵션을 켭니다. '휴대전화 정보'를 열고 '빌드 번호'를 일곱 번 탭하세요."
+
+#. Mock location setup step: turn on the system Location setting so apps receive the simulated location.
+msgctxt "mock_location_step_location_services"
+msgid "Turn on Location in system settings so apps can receive the location."
+msgstr "앱이 위치를 수신할 수 있도록 시스템 설정에서 '위치'를 켜세요."
+
+#. Mock location setup step: choose URnetwork as the mock location app in Android developer options.
+msgctxt "mock_location_step_select_app"
+msgid "In developer options, tap Select mock location app and choose URnetwork."
+msgstr "개발자 옵션에서 '모의 위치 앱 선택'을 탭한 다음 URnetwork를 선택하세요."
+
+#. Status shown while the mock location feature waits for a connected provider's location to become known.
+msgctxt "mock_location_waiting_for_provider"
+msgid "Waiting for a provider location"
+msgstr "제공업체 위치를 기다리는 중"
+
 #. Billing period name on the monthly subscription product card in the upgrade flow.
 msgctxt "monthly"
 msgid "Monthly"
@@ -2150,6 +2260,21 @@ msgctxt "provide_mode"
 msgid "Provide mode"
 msgstr "제공 모드"
 
+#. Compact duration a provider has been connected, as hours and minutes (e.g. 3h 24m). {hours} is the whole hours, {minutes} the remaining minutes.
+msgctxt "provider_connected_duration_hours"
+msgid "{0}h {1}m"
+msgstr "{0}시간 {1}분"
+
+#. Compact duration a provider has been connected, as minutes (e.g. 24m).
+msgctxt "provider_connected_duration_minutes"
+msgid "{}m"
+msgstr "{}분"
+
+#. Compact duration a provider has been connected, as seconds (e.g. 42s).
+msgctxt "provider_connected_duration_seconds"
+msgid "{}s"
+msgstr "{}초"
+
 #. A label for the provider contracts screen.
 msgctxt "provider_contracts"
 msgid "Provider contracts"
@@ -2164,6 +2289,21 @@ msgstr[0] "{}개 제공자"
 msgctxt "provider_count_int"
 msgid "{} providers"
 msgstr "{}개 제공자"
+
+#. Row subtitle in the provider locations list when a provider's location is not known.
+msgctxt "provider_location_unknown"
+msgid "Location unknown"
+msgstr "위치 알 수 없음"
+
+#. Empty state of the provider locations sheet when no providers are connected.
+msgctxt "provider_locations_empty"
+msgid "No providers connected"
+msgstr "연결된 제공업체가 없습니다"
+
+#. Title of the sheet that lists the connected providers and their locations.
+msgctxt "provider_locations_title"
+msgid "Provider Locations"
+msgstr "제공업체 위치"
 
 #. Title of a section that shows statistics about the provider.
 msgctxt "provider_statistics"
@@ -2867,6 +3007,16 @@ msgctxt "switch_account_details"
 msgid "Do you want to disconnect from {} and switch accounts?"
 msgstr "{}에서 연결을 끊고 계정을 전환하시겠습니까?"
 
+#. Toggle that makes the device report the location of the longest-connected provider (Android mock location) instead of the real location.
+msgctxt "sync_device_location_with_oldest_provider"
+msgid "Sync device location with oldest provider"
+msgstr "기기 위치를 가장 오래 연결된 제공업체와 동기화"
+
+#. Toggle that makes the device (or browser, on the extension) report a connected provider's location instead of the real location. The provider used is the most stable (longest-connected) one.
+msgctxt "sync_device_location_with_provider"
+msgid "Sync device location with provider"
+msgstr "기기 위치를 제공업체와 동기화"
+
 #. Used in Main/Account/Settings/SettingsForm-macOS.swift.
 msgctxt "system"
 msgid "System"
@@ -3164,6 +3314,11 @@ msgstr "Solana의 USDC 주소가 현재 지원됩니다"
 msgctxt "usdc_wallet_address"
 msgid "USDC wallet address"
 msgstr "USDC 월렛 주소"
+
+#. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
+msgctxt "use_most_stable_provider"
+msgid "Use most stable provider"
+msgstr "가장 안정적인 제공업체를 사용합니다"
 
 #. dns settings
 msgctxt "use_recommended_settings"

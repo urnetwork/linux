@@ -1,8 +1,9 @@
 // Opens and configures /dev/net/tun in-process; the fd is handed to the SDK's
-// IoLoop. Routes + DNS are applied like wg-quick (via `ip` and `resolvectl`),
-// which works with the CAP_NET_ADMIN the snap network-control interface grants
-// this process. Non-persistent tun: the interface (and its routes/addresses)
-// disappears when the fd is closed. C++ port of the (retired) Go tunnel.
+// IoLoop. Routes + DNS are applied like wg-quick (via `ip` and `resolvectl`).
+// Since the daemon split (linux/MIGRATION.md) this runs inside urnetworkd,
+// which is root under systemd — the GUI never touches it. Non-persistent tun:
+// the interface (and its routes/addresses) disappears when the fd is closed.
+// C++ port of the (retired) Go tunnel.
 //
 // SPDX-License-Identifier: MPL-2.0
 #pragma once

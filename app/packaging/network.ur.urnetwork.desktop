@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Name=URnetwork
+Comment=URnetwork VPN
+Icon=urnetwork
+# /usr/bin/urnetwork is the launcher script the daemon package installs; it
+# finds the user's AppImage (search order in MIGRATION.md) and execs it with
+# the same arguments. Keeping Exec= on a stable, package-managed path is what
+# lets the AppImage live in a user-writable location and self-update freely.
+Exec=urnetwork %u
+TryExec=urnetwork
+Terminal=false
+Categories=Network;Security;
+Keywords=VPN;URnetwork;proxy;privacy;
+StartupNotify=true
+StartupWMClass=network.ur.urnetwork
+# Register the urnetwork:// scheme so OAuth/SSO callbacks and wallet deep
+# links route back to the app. Shipped as a plain dpkg file so the
+# desktop-file-utils dpkg trigger refreshes mimeinfo.cache automatically
+# (Debian Policy 9.6); the tarball's install.sh has to run
+# update-desktop-database itself (APPIMAGE.md section 5 callout).
+MimeType=x-scheme-handler/urnetwork;

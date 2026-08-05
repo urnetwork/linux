@@ -1,0 +1,56 @@
+#!/bin/sh
+# /usr/bin/urnetwork -- the stable Exec= target for the URnetwork GUI.
+#
+# The GUI ships as an AppImage that must live in a USER-WRITABLE path so
+# appimageupdatetool can replace it with rename(2) (APPIMAGE.md 11a); the
+# desktop entry, scheme handler and autostart template stay package-managed
+# and point here. This script finds the AppImage and execs it.
+#
+# Search order (normative, MIGRATION.md):
+#   1. $URNETWORK_APPIMAGE
+#   2. ~/.local/lib/urnetwork/URnetwork.AppImage
+#   3. ~/Applications/URnetwork*.AppImage   (newest when several match)
+#   4. /usr/lib/urnetwork/URnetwork.AppImage
+#   5. any `urnetwork-gui` on $PATH
+# First hit is exec'd with "$@". No hit: one-line install hint, exit 127.
+
+candidate=""
+
+if [ -n "${URNETWORK_APPIMAGE:-}" ] && [ -f "${URNETWORK_APPIMAGE}" ]; then
+    candidate="${URNETWORK_APPIMAGE}"
+fi
+
+if [ -z "${candidate}" ] && [ -f "${HOME}/.local/lib/urnetwork/URnetwork.AppImage" ]; then
+    candidate="${HOME}/.local/lib/urnetwork/URnetwork.AppImage"
+fi
+
+if [ -z "${candidate}" ]; then
+    # Newest matching file wins: a hand-downloaded newer release next to an
+    # older one should be preferred, and lexical order gets versions wrong.
+    for f in "${HOME}"/Applications/URnetwork*.AppImage; do
+        [ -f "${f}" ] || continue
+        if [ -z "${candidate}" ] || [ "${f}" -nt "${candidate}" ]; then
+            candidate="${f}"
+        fi
+    done
+fi
+
+if [ -z "${candidate}" ] && [ -f /usr/lib/urnetwork/URnetwork.AppImage ]; then
+    candidate=/usr/lib/urnetwork/URnetwork.AppImage
+fi
+
+if [ -z "${candidate}" ]; then
+    candidate="$(command -v urnetwork-gui 2>/dev/null || true)"
+fi
+
+if [ -z "${candidate}" ]; then
+    echo "urnetwork: URnetwork GUI not found -- download the AppImage to ~/.local/lib/urnetwork/URnetwork.AppImage (https://ur.io/download)" >&2
+    exit 127
+fi
+
+if [ ! -x "${candidate}" ]; then
+    echo "urnetwork: found ${candidate} but it is not executable -- run: chmod +x '${candidate}'" >&2
+    exit 126
+fi
+
+exec "${candidate}" "$@"

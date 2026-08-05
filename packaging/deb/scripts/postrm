@@ -1,0 +1,50 @@
+#!/bin/sh
+# postrm for urnetwork-daemon.
+#
+# dh_installsystemd-equivalent bookkeeping, plus the purge cleanup nothing
+# else does (MIGRATION.md / APPIMAGE.md 11g): the system group, /var/lib
+# state, /etc leftovers, and /etc/geolocation if -- and only if -- URnetwork
+# wrote it. No other actor ever reverts that file (APPIMAGE.md section 7),
+# and leaving a faked location behind after purge would be a real bug.
+set -e
+
+UNIT='urnetworkd.service'
+
+if [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+fi
+
+if [ "$1" = "remove" ]; then
+    if command -v deb-systemd-helper >/dev/null 2>&1; then
+        # Mask while removed-but-not-purged so nothing restarts a unit whose
+        # binary is gone; purge (or reinstall) unmasks.
+        deb-systemd-helper mask "$UNIT" >/dev/null || true
+    fi
+fi
+
+if [ "$1" = "purge" ]; then
+    if command -v deb-systemd-helper >/dev/null 2>&1; then
+        deb-systemd-helper purge "$UNIT" >/dev/null || true
+        deb-systemd-helper unmask "$UNIT" >/dev/null || true
+    fi
+    # Daemon state: credentials, instance id.
+    rm -rf /var/lib/urnetwork
+    # dpkg removes the conffiles themselves on purge; this clears anything
+    # else left under our /etc directory (backups, droppings).
+    rm -rf /etc/urnetwork
+    # The location override: the writer stamps the file with an URnetwork
+    # marker line, so only remove what we demonstrably authored.
+    if [ -f /etc/geolocation ] && grep -qi 'urnetwork' /etc/geolocation 2>/dev/null; then
+        rm -f /etc/geolocation
+    fi
+    # The control-socket group goes last, after everything it owns.
+    if getent group urnetwork >/dev/null 2>&1; then
+        if command -v delgroup >/dev/null 2>&1; then
+            delgroup --system urnetwork >/dev/null 2>&1 || true
+        else
+            groupdel urnetwork >/dev/null 2>&1 || true
+        fi
+    fi
+fi
+
+exit 0

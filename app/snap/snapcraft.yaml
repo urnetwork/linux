@@ -1,3 +1,23 @@
+# ############################################################################
+# SUPERSEDED 2026-08-05 — NOT BUILT, NOT SHIPPED, AND NO LONGER ACCURATE.
+#
+# The Linux target moved off Snap: the GUI now ships as an unprivileged user
+# AppImage and the privileged daemon as a .deb or a one-line install.sh tarball
+# (linux/APPIMAGE.md §11, linux/MIGRATION.md). The release pipeline
+# (build/all/linux) no longer invokes snapcraft at all.
+#
+# This file is RETAINED, not deleted, because "does the Snap Store remain a
+# secondary channel?" is still open (APPIMAGE.md §8 item 5). Deleting it would
+# foreclose that; keeping it costs nothing as long as nobody mistakes it for
+# current.
+#
+# It describes the SINGLE-PROCESS architecture, which no longer exists. Reviving
+# it would require rewriting it for the daemon split — the app binary here now
+# holds DeviceRemote and cannot open a tun fd. Do not resurrect this as-is.
+# ############################################################################
+#
+# Historical description follows.
+#
 # URnetwork snap — strict confinement. The single-process C++/GTK4 app opens
 # /dev/net/tun and configures the tunnel itself using the CAP_NET_ADMIN the
 # `network-control` interface grants the confined process (plan §2, R4).

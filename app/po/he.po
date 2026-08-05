@@ -477,6 +477,11 @@ msgctxt "change_network_api_title"
 msgid "Change Network API"
 msgstr "שינוי ה-API של הרשת"
 
+#. A description of the action to change the user's network name.
+msgctxt "change_network_name_hint"
+msgid "Tap the edit icon to change your network name"
+msgstr "הקש על סמל העריכה כדי לשנות את שם הרשת שלך"
+
 #. Profile
 msgctxt "change_password"
 msgid "Change Password"
@@ -541,6 +546,11 @@ msgstr "ממש"
 msgctxt "claim_multiplier"
 msgid "Claim Multiplier"
 msgstr "מכפיל תביעה"
+
+#. A description of the benefits of claiming a custom network name.
+msgctxt "claim_network_name_hint"
+msgid "Claim a custom network name to replace your auto-generated one"
+msgstr "בחר שם רשת מותאם אישית שיחליף את השם שנוצר אוטומטית"
 
 #. transfer stats and split rules
 msgctxt "client_contracts"
@@ -1054,6 +1064,11 @@ msgstr "אתה מרוויח פי 2 נקודות"
 msgctxt "edit_device_name"
 msgid "Edit device name"
 msgstr "ערוך את שם המכשיר"
+
+#. Button on the profile screen to edit the network name.
+msgctxt "edit_network_name"
+msgid "Edit network name"
+msgstr "ערוך את שם הרשת"
 
 #. Profile
 msgctxt "edit_profile"
@@ -1633,6 +1648,101 @@ msgctxt "minutes_ago_abbrev"
 msgid "{}m ago"
 msgstr "לפני {} דק׳"
 
+#. Status shown while the device location is being synced with a provider. The argument is the provider's city or country.
+msgctxt "mock_location_active"
+msgid "Syncing with {}"
+msgstr "מתבצע סנכרון עם {}"
+
+#. Disclosure shown with the browser geolocation override toggle: the simulated location is reported only to pages in this browser, not to the device.
+msgctxt "mock_location_disclosure_browser_only"
+msgid "Only pages in this browser see the changed location. Your device's location is unchanged."
+msgstr "רק דפים בדפדפן הזה רואים את המיקום ששונה. מיקום המכשיר שלך אינו משתנה."
+
+#. Disclosure shown with the mock location toggle: apps can detect a simulated location and may refuse to work.
+msgctxt "mock_location_disclosure_detectable"
+msgid "Apps can tell the location is simulated. Banking, ride-hailing, delivery and some game apps may refuse to work while this is on."
+msgstr "אפליקציות יכולות לזהות שהמיקום מדומה. אפליקציות בנקאות, נסיעות, משלוחים וחלק מהמשחקים עשויות לסרב לפעול כשהאפשרות פועלת."
+
+#. Disclosure shown with the mock location toggle: the simulated location is reported to every app on the device, not only URnetwork.
+msgctxt "mock_location_disclosure_device_wide"
+msgid "This changes the location reported to every app on your device, not just URnetwork."
+msgstr "פעולה זו משנה את המיקום שמדווח לכל אפליקציה במכשיר שלך, לא רק ל-URnetwork."
+
+#. Disclosure shown with the browser geolocation override toggle: sites can detect a simulated location and may refuse to work.
+msgctxt "mock_location_disclosure_sites_can_detect"
+msgid "Sites can tell the location is simulated and may refuse to work."
+msgstr "אתרים יכולים לזהות שהמיקום מדומה ועשויים לסרב לפעול."
+
+#. Disclosure shown with the mock location toggle: turn the feature off in URnetwork before removing it as the mock location app, or the device location can stay frozen.
+msgctxt "mock_location_disclosure_turn_off_first"
+msgid "Turn this off in URnetwork before you turn off developer options, deselect URnetwork, or uninstall the app — otherwise your device location can stay frozen until you restart."
+msgstr "כבה זאת ב-URnetwork לפני שתכבה את אפשרויות המפתחים, תבטל את בחירת URnetwork או תסיר את האפליקציה — אחרת מיקום המכשיר שלך עלול להישאר קפוא עד להפעלה מחדש."
+
+#. Error shown when the app could not remove the simulated location; the user must re-select URnetwork as the mock location app and turn the feature off, or restart.
+msgctxt "mock_location_error_cleanup_required"
+msgid "URnetwork could not remove the simulated location. Re-select URnetwork under developer options and turn this off, or restart your device."
+msgstr "URnetwork לא הצליח להסיר את המיקום המדומה. בחר שוב את URnetwork באפשרויות המפתחים וכבה זאת, או הפעל מחדש את המכשיר."
+
+#. Intro of the mock location guide explaining that apps see the longest-connected provider's location instead of the real one.
+msgctxt "mock_location_guide_intro"
+msgid "When enabled, apps on this device see the location of the provider you have been connected to the longest, instead of your real location."
+msgstr "כשהאפשרות מופעלת, אפליקציות במכשיר זה רואות את המיקום של הספק שאליו אתה מחובר הכי הרבה זמן, במקום את המיקום האמיתי שלך."
+
+#. Title of the mock location setup guide.
+msgctxt "mock_location_guide_title"
+msgid "Sync device location"
+msgstr "סנכרון מיקום המכשיר"
+
+#. Short status shown when the mock location feature still needs Android setup steps.
+msgctxt "mock_location_needs_setup"
+msgid "Setup required"
+msgstr "נדרשת הגדרה"
+
+#. Button that opens the Android About phone settings screen.
+msgctxt "mock_location_open_about_phone"
+msgid "Open About phone"
+msgstr "פתיחת ״מידע על הטלפון״"
+
+#. Button that opens the Android developer options settings screen.
+msgctxt "mock_location_open_developer_options"
+msgid "Open developer options"
+msgstr "פתיחת אפשרויות המפתחים"
+
+#. Button that opens the Android system location settings screen.
+msgctxt "mock_location_open_location_settings"
+msgid "Open location settings"
+msgstr "פתיחת הגדרות מיקום"
+
+#. Mock location guide status when setup is complete and the toggle can be turned on.
+msgctxt "mock_location_ready"
+msgid "Ready. Turn on the toggle to sync your device location with the oldest provider."
+msgstr "מוכן. הפעל את המתג כדי לסנכרן את מיקום המכשיר שלך עם הספק המחובר הוותיק ביותר."
+
+#. Settings row label for the device location sync (mock location) feature.
+msgctxt "mock_location_settings_row"
+msgid "Device location sync"
+msgstr "סנכרון מיקום המכשיר"
+
+#. Mock location setup step: enable Android developer options by tapping the build number in About phone.
+msgctxt "mock_location_step_developer_options"
+msgid "Turn on developer options: open About phone and tap Build number seven times."
+msgstr "הפעל את אפשרויות המפתחים: פתח את ״מידע על הטלפון״ והקש שבע פעמים על ״מספר Build״."
+
+#. Mock location setup step: turn on the system Location setting so apps receive the simulated location.
+msgctxt "mock_location_step_location_services"
+msgid "Turn on Location in system settings so apps can receive the location."
+msgstr "הפעל את ״מיקום״ בהגדרות המערכת כדי שאפליקציות יוכלו לקבל את המיקום."
+
+#. Mock location setup step: choose URnetwork as the mock location app in Android developer options.
+msgctxt "mock_location_step_select_app"
+msgid "In developer options, tap Select mock location app and choose URnetwork."
+msgstr "באפשרויות המפתחים, הקש על ״בחירת אפליקציה למיקום מדומה״ ובחר URnetwork."
+
+#. Status shown while the mock location feature waits for a connected provider's location to become known.
+msgctxt "mock_location_waiting_for_provider"
+msgid "Waiting for a provider location"
+msgstr "ממתין למיקום של ספק"
+
 #. Billing period name on the monthly subscription product card in the upgrade flow.
 msgctxt "monthly"
 msgid "Monthly"
@@ -2171,6 +2281,21 @@ msgctxt "provide_mode"
 msgid "Provide mode"
 msgstr "מצב אספקה"
 
+#. Compact duration a provider has been connected, as hours and minutes (e.g. 3h 24m). {hours} is the whole hours, {minutes} the remaining minutes.
+msgctxt "provider_connected_duration_hours"
+msgid "{0}h {1}m"
+msgstr "{0} שע׳ {1} דק׳"
+
+#. Compact duration a provider has been connected, as minutes (e.g. 24m).
+msgctxt "provider_connected_duration_minutes"
+msgid "{}m"
+msgstr "{} דק׳"
+
+#. Compact duration a provider has been connected, as seconds (e.g. 42s).
+msgctxt "provider_connected_duration_seconds"
+msgid "{}s"
+msgstr "{} שנ׳"
+
 #. A label for the provider contracts screen.
 msgctxt "provider_contracts"
 msgid "Provider contracts"
@@ -2188,6 +2313,21 @@ msgstr[3] "{} ספקים"
 msgctxt "provider_count_int"
 msgid "{} providers"
 msgstr "{} ספקים"
+
+#. Row subtitle in the provider locations list when a provider's location is not known.
+msgctxt "provider_location_unknown"
+msgid "Location unknown"
+msgstr "מיקום לא ידוע"
+
+#. Empty state of the provider locations sheet when no providers are connected.
+msgctxt "provider_locations_empty"
+msgid "No providers connected"
+msgstr "אין ספקים מחוברים"
+
+#. Title of the sheet that lists the connected providers and their locations.
+msgctxt "provider_locations_title"
+msgid "Provider Locations"
+msgstr "מיקומי ספקים"
 
 #. Title of a section that shows statistics about the provider.
 msgctxt "provider_statistics"
@@ -2897,6 +3037,16 @@ msgctxt "switch_account_details"
 msgid "Do you want to disconnect from {} and switch accounts?"
 msgstr "האם ברצונך להתנתק מ-{} ולהחליף חשבון?"
 
+#. Toggle that makes the device report the location of the longest-connected provider (Android mock location) instead of the real location.
+msgctxt "sync_device_location_with_oldest_provider"
+msgid "Sync device location with oldest provider"
+msgstr "סנכרון מיקום המכשיר עם הספק המחובר הוותיק ביותר"
+
+#. Toggle that makes the device (or browser, on the extension) report a connected provider's location instead of the real location. The provider used is the most stable (longest-connected) one.
+msgctxt "sync_device_location_with_provider"
+msgid "Sync device location with provider"
+msgstr "סנכרון מיקום המכשיר עם הספק"
+
 #. Used in Main/Account/Settings/SettingsForm-macOS.swift.
 msgctxt "system"
 msgid "System"
@@ -3197,6 +3347,11 @@ msgstr "כתובות USDC ב-Solana נתמכות כרגע"
 msgctxt "usdc_wallet_address"
 msgid "USDC wallet address"
 msgstr "כתובת ארנק USDC"
+
+#. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
+msgctxt "use_most_stable_provider"
+msgid "Use most stable provider"
+msgstr "משתמש בספק היציב ביותר"
 
 #. dns settings
 msgctxt "use_recommended_settings"

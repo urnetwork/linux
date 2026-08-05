@@ -1,0 +1,576 @@
+#!/bin/bash
+# URnetwork daemon installer -- the native (non-apt) path, APPIMAGE.md 11g.
+#
+#   curl -fsSL https://get.ur.network/urnetwork-daemon.tar.gz | tar xz \
+#       && sudo urnetwork-daemon/install.sh
+#
+# The SAME command installs and upgrades: the script detects an existing
+# install, compares versions and does the right thing -- there is no
+# --upgrade flag. Upgrades preserve /var/lib state, /etc configuration and
+# the urnetwork system group; only binaries, units and integration files are
+# replaced, and the previous install is restored if anything fails while the
+# daemon is stopped.
+#
+# It REFUSES to run where dpkg (or rpm) owns urnetwork-daemon: two package
+# managers owning the same paths is the worst failure available here, and it
+# is silent until an upgrade half-replaces files. Use apt there.
+#
+# Unlike a .deb, nothing refreshes the desktop caches for us (dpkg file
+# triggers fire only for files dpkg installs), so this script runs
+# update-desktop-database and gtk-update-icon-cache itself -- the failure it
+# prevents is invisible on a dev box and breaks only urnetwork:// SSO/deep
+# links in the field (APPIMAGE.md section 5 callout).
+#
+# Options:
+#   --dry-run       print every action without touching anything (safe on
+#                   any OS, including macOS build hosts)
+#   --prefix <dir>  root the file layout under <dir> for testing; skips all
+#                   system mutation (group, systemd, caches)
+#   --update        fetch the current tarball from get.ur.network and run its
+#                   installer (the opt-in update channel where there is no apt)
+#   --force         override downgrade/preflight refusals
+#   --yes           assume yes on prompts
+#
+# This script is standalone on purpose (no sourced libraries): it ships inside
+# the tarball next to its payload, so it can never run against a payload it
+# was not built with.
+set -Eeuo pipefail
+
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PAYLOAD_DIR="${SELF_DIR}/payload"
+
+PKG_NAME='urnetwork-daemon'
+UNIT='urnetworkd.service'
+GLIBC_FLOOR='2.35'      # SDK is cross-built against glibc 2.35 (jammy)
+GEOCLUE_FLOOR='2.7.0'   # static-source location override needs >= 2.7.0
+DEFAULT_URL_BASE='https://get.ur.network'
+
+# Installed bookkeeping (under $PREFIX):
+LIB_DIR='/usr/lib/urnetwork'
+MANIFEST_REL="${LIB_DIR}/.install-manifest"
+VERSION_REL="${LIB_DIR}/.installed-version"
+
+DRY_RUN=0
+PREFIX=''
+FORCE=0
+ASSUME_YES=0
+DO_UPDATE=0
+
+log()  { printf '%s\n' "$*"; }
+note() { printf -- '- %s\n' "$*"; }
+warn() { printf 'warning: %s\n' "$*" >&2; }
+die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+# Every mutating command goes through run(); --dry-run prints instead.
+run() {
+    if [ "${DRY_RUN}" = 1 ]; then
+        printf 'would run: %s\n' "$*"
+    else
+        "$@"
+    fi
+}
+
+confirm() {
+    # confirm <prompt> -> 0 yes / 1 no. Non-interactive default is NO.
+    if [ "${ASSUME_YES}" = 1 ]; then return 0; fi
+    if [ ! -t 0 ]; then return 1; fi
+    printf '%s [y/N] ' "$1"
+    local reply
+    read -r reply
+    case "${reply}" in
+        y|Y|yes|YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# ver_ge A B -> 0 if A >= B (needs sort -V; probed because this can run on
+# macOS in --dry-run where BSD sort may lack it)
+HAVE_SORT_V=0
+if printf '1\n2\n' | sort -V >/dev/null 2>&1; then HAVE_SORT_V=1; fi
+ver_ge() {
+    [ "${HAVE_SORT_V}" = 1 ] || return 0   # cannot compare: do not block
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
+elf_arch() {
+    # ELF e_machine (offset 0x12, LE) -> amd64 | arm64 | unknown
+    local magic machine
+    magic="$(od -An -t x1 -j 0 -N 4 "$1" 2>/dev/null | tr -d ' \n')"
+    [ "${magic}" = "7f454c46" ] || { printf 'unknown'; return 0; }
+    machine="$(od -An -t x1 -j 18 -N 2 "$1" 2>/dev/null | tr -d ' \n')"
+    case "${machine}" in
+        3e00) printf 'amd64' ;;
+        b700) printf 'arm64' ;;
+        *)    printf 'unknown' ;;
+    esac
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        --prefix)  PREFIX="${2:?--prefix needs a directory}"; shift 2 ;;
+        --update)  DO_UPDATE=1; shift ;;
+        --force)   FORCE=1; shift ;;
+        --yes|-y)  ASSUME_YES=1; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) die "unknown argument: $1 (see --help)" ;;
+    esac
+done
+
+# ---------------------------------------------------------------------------
+# Host facts (read-only; safe everywhere including macOS --dry-run)
+# ---------------------------------------------------------------------------
+HOST_OS="$(uname -s)"
+HOST_ARCH_RAW="$(uname -m)"
+case "${HOST_ARCH_RAW}" in
+    x86_64|amd64)  HOST_ARCH='amd64' ;;
+    aarch64|arm64) HOST_ARCH='arm64' ;;
+    *)             HOST_ARCH='unsupported' ;;
+esac
+
+# --update: re-fetch the published tarball and hand over to ITS installer.
+# Opt-in only -- nothing ever auto-upgrades a daemon that may hold a live
+# tunnel without the user asking (APPIMAGE.md 11g).
+if [ "${DO_UPDATE}" = 1 ]; then
+    [ "${HOST_ARCH}" != 'unsupported' ] || die "unsupported architecture '${HOST_ARCH_RAW}' -- URnetwork ships amd64 and arm64 only"
+    # The documented one-liner URL (urnetwork-daemon.tar.gz) is served
+    # per-arch by the download host; this client fetches the explicit
+    # per-arch alias. Override the full URL with UR_TARBALL_URL.
+    UPDATE_URL="${UR_TARBALL_URL:-${DEFAULT_URL_BASE}/urnetwork-daemon-${HOST_ARCH}.tar.gz}"
+    if [ "${DRY_RUN}" = 1 ]; then
+        log "would fetch ${UPDATE_URL}, extract to a temp dir, and run its install.sh"
+        exit 0
+    fi
+    command -v curl >/dev/null 2>&1 || die "--update needs curl"
+    UPDATE_TMP="$(mktemp -d /tmp/urnetwork-update.XXXXXX)"
+    log "fetching ${UPDATE_URL} ..."
+    curl -fsSL "${UPDATE_URL}" | tar xz -C "${UPDATE_TMP}"
+    [ -f "${UPDATE_TMP}/urnetwork-daemon/install.sh" ] || die "downloaded tarball has no urnetwork-daemon/install.sh"
+    UPDATE_ARGS=()
+    [ "${FORCE}" = 1 ] && UPDATE_ARGS[${#UPDATE_ARGS[@]}]='--force'
+    [ "${ASSUME_YES}" = 1 ] && UPDATE_ARGS[${#UPDATE_ARGS[@]}]='--yes'
+    exec bash "${UPDATE_TMP}/urnetwork-daemon/install.sh" ${UPDATE_ARGS[@]+"${UPDATE_ARGS[@]}"}
+fi
+
+# ---------------------------------------------------------------------------
+# Payload facts
+# ---------------------------------------------------------------------------
+[ -d "${PAYLOAD_DIR}" ] || die "no payload/ next to install.sh -- extract the full tarball and run urnetwork-daemon/install.sh from it"
+[ -f "${SELF_DIR}/VERSION" ] || die "no VERSION next to install.sh -- the tarball is incomplete"
+NEW_VERSION="$(tr -d '[:space:]' < "${SELF_DIR}/VERSION")"
+[ -n "${NEW_VERSION}" ] || die "VERSION file is empty"
+
+DAEMON_REL='/usr/lib/urnetwork/urnetworkd'
+[ -f "${PAYLOAD_DIR}${DAEMON_REL}" ] || die "payload is missing ${DAEMON_REL} -- the tarball is incomplete"
+PAYLOAD_ARCH="$(elf_arch "${PAYLOAD_DIR}${DAEMON_REL}")"
+
+log "urnetwork-daemon ${NEW_VERSION} installer (payload: ${PAYLOAD_ARCH})"
+[ "${DRY_RUN}" = 1 ] && log "[dry-run] no changes will be made"
+
+# ---------------------------------------------------------------------------
+# Gate: OS / arch / privileges
+# ---------------------------------------------------------------------------
+if [ "${HOST_OS}" != 'Linux' ]; then
+    if [ "${DRY_RUN}" = 1 ]; then
+        warn "[dry-run] host is ${HOST_OS}, not Linux -- printing the plan only; a real run would abort here"
+    else
+        die "urnetwork-daemon runs on Linux only (this host is ${HOST_OS})"
+    fi
+fi
+
+if [ "${HOST_ARCH}" = 'unsupported' ]; then
+    if [ "${DRY_RUN}" = 1 ]; then
+        warn "[dry-run] unsupported architecture '${HOST_ARCH_RAW}' -- a real run would abort here"
+    else
+        die "unsupported architecture '${HOST_ARCH_RAW}' -- URnetwork ships amd64 and arm64 only"
+    fi
+elif [ "${PAYLOAD_ARCH}" != "${HOST_ARCH}" ] && [ "${HOST_OS}" = 'Linux' ]; then
+    die "this tarball's payload is ${PAYLOAD_ARCH} but this machine is ${HOST_ARCH} -- download urnetwork-daemon-<version>-${HOST_ARCH}.install.tar.gz instead"
+fi
+
+if [ "${DRY_RUN}" = 0 ] && [ -z "${PREFIX}" ] && [ "$(id -u)" != 0 ]; then
+    die "must run as root (sudo urnetwork-daemon/install.sh)"
+fi
+
+# ---------------------------------------------------------------------------
+# Refuse to fight dpkg / rpm (APPIMAGE.md 11g)
+# ---------------------------------------------------------------------------
+if command -v dpkg >/dev/null 2>&1; then
+    # dpkg -s exits 1 for an unknown package; that must not trip set -e.
+    DPKG_STATUS="$( (dpkg -s "${PKG_NAME}" 2>/dev/null || true) | sed -n 's/^Status: //p')"
+    case "${DPKG_STATUS}" in
+        '') : ;;  # unknown to dpkg: fine
+        *config-files*)
+            die "dpkg still owns configuration for ${PKG_NAME} (removed but not purged).
+Run:  sudo apt purge ${PKG_NAME}
+then re-run this installer." ;;
+        *installed*)
+            die "${PKG_NAME} is installed and owned by dpkg/apt (Status: ${DPKG_STATUS}).
+Refusing to overwrite a dpkg-owned install: two package managers owning the
+same paths fails silently until an upgrade half-replaces files.
+Upgrade with apt instead:
+  sudo apt install ./urnetwork-daemon_<version>_${HOST_ARCH}.deb
+or, to switch to this tarball channel:
+  sudo apt purge ${PKG_NAME}   # then re-run this installer" ;;
+        *) warn "dpkg reports unexpected status for ${PKG_NAME}: '${DPKG_STATUS}' -- continuing" ;;
+    esac
+fi
+if command -v rpm >/dev/null 2>&1 && rpm -q "${PKG_NAME}" >/dev/null 2>&1; then
+    die "${PKG_NAME} is installed and owned by rpm -- use dnf/zypper to upgrade or remove it first"
+fi
+
+# ---------------------------------------------------------------------------
+# Existing install detection (idempotency) -- before preflight, so a refused
+# downgrade is reported as exactly that rather than as whichever preflight
+# item happens to fail first.
+# ---------------------------------------------------------------------------
+INSTALLED_VERSION=''
+if [ -f "${PREFIX}${VERSION_REL}" ]; then
+    INSTALLED_VERSION="$(tr -d '[:space:]' < "${PREFIX}${VERSION_REL}")"
+fi
+
+MODE='install'
+if [ -n "${INSTALLED_VERSION}" ]; then
+    if [ "${INSTALLED_VERSION}" = "${NEW_VERSION}" ]; then
+        MODE='reinstall'
+        log ""
+        log "urnetwork-daemon ${INSTALLED_VERSION} is already installed -- reinstalling (repair)."
+    elif ver_ge "${NEW_VERSION}" "${INSTALLED_VERSION}"; then
+        MODE='upgrade'
+        log ""
+        log "Upgrading urnetwork-daemon ${INSTALLED_VERSION} -> ${NEW_VERSION}."
+    else
+        if [ "${FORCE}" = 1 ]; then
+            MODE='upgrade'
+            warn "downgrading ${INSTALLED_VERSION} -> ${NEW_VERSION} because --force"
+        elif [ "${DRY_RUN}" = 1 ]; then
+            MODE='upgrade'
+            warn "[dry-run] would refuse to downgrade ${INSTALLED_VERSION} -> ${NEW_VERSION} without --force"
+        else
+            die "installed version ${INSTALLED_VERSION} is newer than this tarball (${NEW_VERSION}) -- refusing to downgrade (re-run with --force to override)"
+        fi
+    fi
+    log "State under /var/lib/urnetwork, configuration under /etc, and the"
+    log "urnetwork system group are preserved; only binaries, units and"
+    log "integration files are replaced."
+else
+    log ""
+    log "Fresh install of urnetwork-daemon ${NEW_VERSION}."
+fi
+
+# ---------------------------------------------------------------------------
+# Preflight (APPIMAGE.md 11g: say WHY on failure)
+# ---------------------------------------------------------------------------
+preflight_fail() {
+    # Hard preflight failure; --force and --dry-run downgrade to warnings.
+    if [ "${FORCE}" = 1 ]; then
+        warn "$1 (continuing because --force)"
+    elif [ "${DRY_RUN}" = 1 ]; then
+        warn "[dry-run] preflight would fail: $1"
+    else
+        die "$1"
+    fi
+}
+
+log ""
+log "Preflight:"
+
+# systemd
+if [ -d /run/systemd/system ]; then
+    note "systemd: running"
+else
+    preflight_fail "systemd is not running (/run/systemd/system missing) -- urnetworkd is managed as a systemd unit and this installer supports nothing else"
+fi
+
+# glibc floor
+GLIBC_VERSION=''
+if command -v getconf >/dev/null 2>&1; then
+    GLIBC_VERSION="$(getconf GNU_LIBC_VERSION 2>/dev/null | sed -n 's/^glibc //p')" || true
+fi
+if [ -z "${GLIBC_VERSION}" ] && command -v ldd >/dev/null 2>&1; then
+    GLIBC_VERSION="$(ldd --version 2>/dev/null | sed -n '1s/.* \([0-9][0-9.]*\)$/\1/p')" || true
+fi
+if [ -z "${GLIBC_VERSION}" ]; then
+    preflight_fail "could not determine the glibc version (musl-based distros are not supported) -- urnetworkd needs glibc >= ${GLIBC_FLOOR}"
+elif ver_ge "${GLIBC_VERSION}" "${GLIBC_FLOOR}"; then
+    note "glibc: ${GLIBC_VERSION} (>= ${GLIBC_FLOOR})"
+else
+    preflight_fail "glibc ${GLIBC_VERSION} is older than the required ${GLIBC_FLOOR} (Ubuntu 22.04 / Debian 12 or newer) -- the daemon binary would not start"
+fi
+
+# /dev/net/tun
+if [ -e /dev/net/tun ]; then
+    note "/dev/net/tun: present"
+else
+    preflight_fail "/dev/net/tun is missing -- load the tun module (modprobe tun); in a container, pass --device /dev/net/tun"
+fi
+
+# GeoClue floor for the location override -- an OPTIONAL feature: state the
+# outcome plainly and keep going, never half-install or silently degrade.
+GEOCLUE_VERSION=''
+if command -v dpkg-query >/dev/null 2>&1; then
+    GEOCLUE_VERSION="$(dpkg-query -W -f '${Version}' geoclue-2.0 2>/dev/null)" || true
+fi
+if [ -z "${GEOCLUE_VERSION}" ] && command -v rpm >/dev/null 2>&1; then
+    GEOCLUE_VERSION="$(rpm -q --qf '%{VERSION}' geoclue2 2>/dev/null)" || true
+    case "${GEOCLUE_VERSION}" in *not\ installed*) GEOCLUE_VERSION='' ;; esac
+fi
+if [ -z "${GEOCLUE_VERSION}" ] && command -v pacman >/dev/null 2>&1; then
+    GEOCLUE_VERSION="$(pacman -Q geoclue 2>/dev/null | cut -d' ' -f2)" || true
+fi
+# strip epoch and distro revision: 2.7.2-1ubuntu1 / 1:2.7.2-1 -> 2.7.2
+GEOCLUE_VERSION="$(printf '%s' "${GEOCLUE_VERSION}" | sed -e 's/^[0-9]*://' -e 's/-.*$//')"
+if [ -z "${GEOCLUE_VERSION}" ]; then
+    note "GeoClue: not found -- the optional location-override feature will be unavailable (needs geoclue >= ${GEOCLUE_FLOOR}); everything else installs and works"
+elif ver_ge "${GEOCLUE_VERSION}" "${GEOCLUE_FLOOR}"; then
+    note "GeoClue: ${GEOCLUE_VERSION} (location override supported)"
+else
+    note "GeoClue: ${GEOCLUE_VERSION} < ${GEOCLUE_FLOOR}: the location-override feature CANNOT work on this distro (Ubuntu 22.04 and Debian 12 can never satisfy it). The daemon still installs and every other feature works."
+fi
+
+# ---------------------------------------------------------------------------
+# Build the file plan from the payload
+# ---------------------------------------------------------------------------
+# INSTALL_LIST: newline list of payload-relative paths (== install paths).
+INSTALL_LIST="$(cd "${PAYLOAD_DIR}" && find . -type f | sed 's|^\.||' | LC_ALL=C sort)"
+[ -n "${INSTALL_LIST}" ] || die "payload/ is empty"
+
+file_mode() {
+    case "$1" in
+        /usr/bin/urnetwork|/usr/lib/urnetwork/urnetworkd) printf '0755' ;;
+        *) printf '0644' ;;
+    esac
+}
+
+# /etc files are admin-owned once present: keep the existing copy on upgrade
+# (conffile semantics without dpkg).
+is_config() { case "$1" in /etc/*) return 0 ;; *) return 1 ;; esac; }
+
+OLD_MANIFEST=''
+if [ -f "${PREFIX}${MANIFEST_REL}" ]; then
+    OLD_MANIFEST="$(cat "${PREFIX}${MANIFEST_REL}")"
+fi
+
+# ---------------------------------------------------------------------------
+# Dry-run: print the full plan and stop
+# ---------------------------------------------------------------------------
+if [ "${DRY_RUN}" = 1 ]; then
+    log ""
+    log "Plan (${MODE}):"
+    [ -n "${PREFIX}" ] && log "  file layout rooted at prefix: ${PREFIX}"
+    if [ -z "${PREFIX}" ]; then
+        note "create system group 'urnetwork' (if missing)"
+        note "stop ${UNIT} if running (it may hold a live tun fd)"
+        note "back up currently installed files for rollback-on-failure"
+    fi
+    echo "${INSTALL_LIST}" | while IFS= read -r rel; do
+        if is_config "${rel}" && [ -e "${PREFIX}${rel}" ]; then
+            note "keep existing ${PREFIX}${rel} (admin-owned config)"
+        else
+            note "install ${PREFIX}${rel} ($(file_mode "${rel}"))"
+        fi
+    done
+    note "install ${PREFIX}${LIB_DIR}/uninstall.sh, ${PREFIX}${MANIFEST_REL}, ${PREFIX}${VERSION_REL}"
+    if [ -z "${PREFIX}" ]; then
+        note "systemctl daemon-reload; reload udev rules and NetworkManager config"
+        if [ "${MODE}" = 'install' ]; then
+            note "systemctl enable ${UNIT} && start it (the daemon STARTS IDLE -- no tunnel until a client authenticates)"
+        else
+            note "preserve enable/disable state; start ${UNIT} only if it was running"
+        fi
+        note "run update-desktop-database and gtk-update-icon-cache (what dpkg triggers would have done)"
+    fi
+    log ""
+    log "[dry-run] no changes were made."
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Real install
+# ---------------------------------------------------------------------------
+WAS_ACTIVE='inactive'
+BACKUP_DIR=''
+WRITTEN_LOG=''
+REPLACING=0
+
+restore_backup() {
+    # Undo this run's writes: restore what existed, delete what did not.
+    [ -n "${BACKUP_DIR}" ] || return 0
+    local rel
+    while IFS= read -r rel; do
+        [ -n "${rel}" ] || continue
+        if [ -f "${BACKUP_DIR}${rel}" ]; then
+            mkdir -p "$(dirname "${PREFIX}${rel}")"
+            cp -p "${BACKUP_DIR}${rel}" "${PREFIX}${rel}"
+        else
+            rm -f "${PREFIX}${rel}"
+        fi
+    done <<< "${WRITTEN_LOG}"
+}
+
+on_error() {
+    local rc=$?
+    trap - ERR
+    warn "install failed (exit ${rc})"
+    if [ "${REPLACING}" = 1 ]; then
+        warn "restoring the previous installation..."
+        restore_backup || warn "restore incomplete -- inspect ${BACKUP_DIR}"
+        if [ -z "${PREFIX}" ] && [ -d /run/systemd/system ]; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            if [ "${WAS_ACTIVE}" = 'active' ]; then
+                systemctl start "${UNIT}" >/dev/null 2>&1 || true
+            fi
+        fi
+        warn "previous installation restored (backup kept at ${BACKUP_DIR})"
+    fi
+    exit "${rc}"
+}
+trap on_error ERR
+
+# Group first: the unit's Group=urnetwork needs it before first start.
+if [ -z "${PREFIX}" ]; then
+    if ! getent group urnetwork >/dev/null 2>&1; then
+        log "creating system group 'urnetwork'"
+        if command -v groupadd >/dev/null 2>&1; then
+            run groupadd --system urnetwork
+        else
+            run addgroup --system urnetwork
+        fi
+    fi
+fi
+
+# Stop the daemon cleanly BEFORE touching its binary -- it may hold a live
+# tun fd. It comes back up (idle) at the end.
+if [ -z "${PREFIX}" ] && [ -d /run/systemd/system ]; then
+    WAS_ACTIVE="$(systemctl is-active "${UNIT}" 2>/dev/null || true)"
+    if [ "${WAS_ACTIVE}" = 'active' ]; then
+        log "stopping ${UNIT} (open tunnel, if any, goes down for the upgrade)"
+        run systemctl stop "${UNIT}"
+    fi
+fi
+
+TMP_BASE="${TMPDIR:-/tmp}"; TMP_BASE="${TMP_BASE%/}"
+BACKUP_DIR="$(mktemp -d "${TMP_BASE}/urnetwork-daemon-backup.XXXXXX")"
+REPLACING=1
+
+install_one() {
+    # install_one <rel path>; records the write and backs up any prior file.
+    local rel="$1" dst="${PREFIX}$1"
+    if [ -f "${dst}" ]; then
+        mkdir -p "${BACKUP_DIR}$(dirname "${rel}")"
+        cp -p "${dst}" "${BACKUP_DIR}${rel}"
+    fi
+    WRITTEN_LOG="${WRITTEN_LOG}${rel}
+"
+    install -D -m "$(file_mode "${rel}")" "${PAYLOAD_DIR}${rel}" "${dst}"
+}
+
+log "installing files..."
+while IFS= read -r rel; do
+    [ -n "${rel}" ] || continue
+    if is_config "${rel}" && [ -e "${PREFIX}${rel}" ]; then
+        log "  kept existing ${PREFIX}${rel} (admin-owned config; new default stays in the tarball)"
+        continue
+    fi
+    install_one "${rel}"
+done <<< "${INSTALL_LIST}"
+
+# Files the previous version installed that this one no longer ships
+# (never under /etc or /var/lib -- upgrades only replace binaries, units and
+# integration files).
+if [ -n "${OLD_MANIFEST}" ]; then
+    while IFS= read -r rel; do
+        [ -n "${rel}" ] || continue
+        case "${rel}" in /etc/*|/var/lib/*) continue ;; esac
+        if ! printf '%s\n' "${INSTALL_LIST}" | grep -Fxq "${rel}" \
+            && [ "${rel}" != "${LIB_DIR}/uninstall.sh" ] \
+            && [ -f "${PREFIX}${rel}" ]; then
+            log "  removing stale ${PREFIX}${rel} (no longer shipped)"
+            mkdir -p "${BACKUP_DIR}$(dirname "${rel}")"
+            cp -p "${PREFIX}${rel}" "${BACKUP_DIR}${rel}"
+            rm -f "${PREFIX}${rel}"
+        fi
+    done <<< "${OLD_MANIFEST}"
+fi
+
+# Bookkeeping: uninstaller + manifest + version marker.
+install -D -m 0755 "${SELF_DIR}/uninstall.sh" "${PREFIX}${LIB_DIR}/uninstall.sh"
+mkdir -p "${PREFIX}${LIB_DIR}"
+printf '%s\n' "${INSTALL_LIST}" > "${PREFIX}${MANIFEST_REL}"
+printf '%s\n' "${NEW_VERSION}" > "${PREFIX}${VERSION_REL}"
+
+# ---------------------------------------------------------------------------
+# System integration (skipped under --prefix)
+# ---------------------------------------------------------------------------
+if [ -z "${PREFIX}" ]; then
+    # /run/urnetwork: the unit's RuntimeDirectory= owns this; pre-create so
+    # the control path exists before the first start.
+    run install -d -m 0750 -o root -g urnetwork /run/urnetwork
+
+    if [ -d /run/systemd/system ]; then
+        run systemctl daemon-reload
+    fi
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload >/dev/null 2>&1 || true
+    fi
+    if command -v nmcli >/dev/null 2>&1; then
+        # Make the unmanaged-device marking live before the first tunnel;
+        # config reload does not touch existing connections.
+        nmcli general reload conf >/dev/null 2>&1 || true
+    fi
+
+    if [ -d /run/systemd/system ]; then
+        if [ "${MODE}" = 'install' ]; then
+            # Enable+start on install is Debian Policy 9.3.3.1-correct only
+            # because urnetworkd starts idle: no tunnel until a client
+            # authenticates over the control socket.
+            run systemctl enable "${UNIT}"
+            run systemctl start "${UNIT}"
+        else
+            # Upgrade: never undo an admin's enable/disable choice; start
+            # only what was running before we stopped it.
+            if [ "${WAS_ACTIVE}" = 'active' ]; then
+                run systemctl start "${UNIT}"
+            else
+                log "${UNIT} was not running before the upgrade; leaving it stopped"
+            fi
+        fi
+    fi
+
+    # What dpkg file triggers would have done (APPIMAGE.md section 5 callout):
+    # update-desktop-database rebuilds mimeinfo.cache -- the thing
+    # x-scheme-handler/urnetwork lookups consult. Without it the launcher
+    # still appears in menus (so the breakage is invisible on a dev box) but
+    # urnetwork:// SSO callbacks and wallet deep links silently fail, and any
+    # later `apt install` of anything repairs it -- so it escapes testing.
+    if command -v update-desktop-database >/dev/null 2>&1; then
+        update-desktop-database -q /usr/share/applications || \
+            warn "update-desktop-database failed -- urnetwork:// links may not resolve"
+    else
+        warn "update-desktop-database not found (desktop-file-utils): urnetwork:// SSO/deep links will NOT resolve until it runs. Headless servers can ignore this."
+    fi
+    if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+        gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || \
+            warn "gtk-update-icon-cache failed -- the launcher icon may not appear until the cache refreshes"
+    else
+        warn "gtk-update-icon-cache not found: the launcher icon may not appear until the icon cache refreshes. Headless servers can ignore this."
+    fi
+fi
+
+trap - ERR
+REPLACING=0
+rm -rf "${BACKUP_DIR}"
+
+log ""
+log "urnetwork-daemon ${NEW_VERSION} ${MODE} complete."
+if [ -z "${PREFIX}" ]; then
+    log "The daemon is running idle; nothing connects until you sign in from the app."
+    log "Next: install the URnetwork GUI AppImage to ~/.local/lib/urnetwork/URnetwork.AppImage"
+    log "and run 'urnetwork' (https://ur.io/download)."
+    log "Uninstall later with: sudo ${LIB_DIR}/uninstall.sh"
+fi
+log "You can delete the extracted installer directory: rm -rf '${SELF_DIR}'"

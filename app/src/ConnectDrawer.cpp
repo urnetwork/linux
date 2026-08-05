@@ -452,6 +452,11 @@ void ConnectDrawer::OnHostEvent(DrawerEvent event) {
       // the panel cascades to the provider identities list while it is open
       if (pqiPanel_) pqiPanel_->Refresh();
       break;
+    case DrawerEvent::ProviderLocations:
+      // MainWindow owns this one: the provider-locations sheet hangs off the
+      // home screen's provider-count label, not off the drawer, and the location
+      // override has to keep tracking the window even with the drawer unbuilt.
+      break;
   }
 }
 

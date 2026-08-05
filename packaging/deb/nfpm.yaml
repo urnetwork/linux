@@ -1,0 +1,89 @@
+# nfpm (https://nfpm.goreleaser.com) package definition for the URnetwork
+# daemon .deb.
+#
+# Why nfpm over dpkg-deb: pure Go, runs on any host including this macOS
+# build server (no dpkg toolchain, no fakeroot -- ownership is declarative
+# root:root regardless of build uid), and the same config later emits the
+# .rpm for the Fedora path (APPIMAGE.md 10d). The cost is that nfpm does not
+# generate dh maintainer scripts, so scripts/postinst|prerm|postrm implement
+# the dh_installsystemd (--no-restart-after-upgrade) semantics by hand --
+# faithfully; see the header of each script.
+#
+# Do not run nfpm against this file directly: this is a TEMPLATE. make-deb.sh
+# assembles the package root from `meson install --destdir` staging plus the
+# canonical sources in linux/app/packaging/, substitutes ${VERSION} /
+# ${DEB_ARCH} / ${PKGROOT} itself (nfpm does not expand environment variables
+# in contents[].src -- verified against nfpm v2.47), and names the output
+# urnetwork-daemon_<version>_<arch>.deb (normative filename, MIGRATION.md).
+name: urnetwork-daemon
+arch: "${DEB_ARCH}"
+platform: linux
+# VERSION (2026.7.6-985989570) is split by make-deb.sh at the LAST hyphen:
+# handing nfpm the whole string makes it semver-parse "-985989570" as a
+# prerelease and emit "Version: 2026.7.6~985989570" -- and '~' sorts BEFORE
+# the base version in dpkg ordering (verified against nfpm v2.47). As
+# version+release it reassembles to the debian-correct 2026.7.6-985989570.
+version: "${VERSION_BASE}"
+release: "${VERSION_RELEASE}"
+section: net
+priority: optional
+maintainer: "URnetwork <support@ur.io>"
+vendor: "URnetwork"
+homepage: "https://ur.io"
+license: "MPL-2.0"
+description: |
+  URnetwork tunnel daemon
+  Privileged system half of URnetwork for Linux: owns /dev/net/tun, routes
+  and DNS, exposes a root/urnetwork-group-only control socket under
+  /run/urnetwork, and starts idle -- no tunnel comes up until an
+  authenticated desktop client asks. The GUI is the separate, unprivileged
+  URnetwork AppImage, which lives in a user-writable path so it can
+  self-update; this package installs the stable /usr/bin/urnetwork launcher
+  plus the desktop entry, urnetwork:// scheme handler, icons and autostart
+  template that point at it.
+# NO GTK (or any GUI) dependency -- the daemon must install on a headless box.
+depends:
+  # C runtime floor: the SDK is cross-built against glibc 2.35 (jammy),
+  # sdk/cgo/Makefile target gnu.2.35 (APPIMAGE.md 10c). libstdc++ is linked
+  # statically into the binaries per the same section; if `readelf -d
+  # urnetworkd` ever shows libstdc++.so.6 NEEDED, add "libstdc++6 (>= 12)".
+  - "libc6 (>= 2.35)"
+  # The one genuine win of the deb shape (APPIMAGE.md 11d): the GUI AppImage
+  # needs libfuse2 at runtime and Ubuntu 22.04+ does not ship it by default,
+  # so every AppImage-only vendor walks users through installing it by hand.
+  # We just declare it. libfuse2t64 is the post-time_t-transition name
+  # (Ubuntu 24.04+ / Debian 13); older releases still call it libfuse2.
+  - "libfuse2t64 | libfuse2"
+contents:
+  # Assembled tree: /usr (daemon, SDK library, launcher, desktop entry,
+  # icons, shared data, gettext catalogs) and /lib (systemd unit).
+  #
+  # The .desktop file and hicolor icons ride as plain dpkg-shipped files ON
+  # PURPOSE: desktop-file-utils and hicolor-icon-theme declare dpkg file
+  # triggers on those directories (Debian Policy 9.6), so mimeinfo.cache (the
+  # thing x-scheme-handler/urnetwork lookups actually consult) and the icon
+  # cache refresh with zero maintainer-script code. Never create them from
+  # postinst -- a symlink there does not fire the trigger (IVPN's latent bug;
+  # APPIMAGE.md 11d).
+  - src: "${PKGROOT}/usr"
+    dst: /usr
+    type: tree
+  - src: "${PKGROOT}/lib"
+    dst: /lib
+    type: tree
+  # Admin-editable integration files: conffiles, preserved on upgrade.
+  - src: "${PKGROOT}/etc/urnetwork/autostart/network.ur.urnetwork.desktop"
+    dst: /etc/urnetwork/autostart/network.ur.urnetwork.desktop
+    type: config
+  - src: "${PKGROOT}/etc/NetworkManager/conf.d/95-urnetwork.conf"
+    dst: /etc/NetworkManager/conf.d/95-urnetwork.conf
+    type: config
+  - src: "${PKGROOT}/etc/udev/rules.d/85-urnetwork-unmanaged.rules"
+    dst: /etc/udev/rules.d/85-urnetwork-unmanaged.rules
+    type: config
+scripts:
+  postinstall: scripts/postinst
+  preremove: scripts/prerm
+  postremove: scripts/postrm
+deb:
+  compression: xz

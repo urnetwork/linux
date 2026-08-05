@@ -18,6 +18,7 @@
 
 #include "I18n.hpp"
 #include "MainWindow.hpp"
+#include "RuntimePaths.hpp"
 #include "SdkHost.hpp"
 #include "Tray.hpp"
 
@@ -45,7 +46,14 @@ int main(int argc, char** argv) {
   // the localization store generates). GTK sets the locale too, but the SDK
   // host below can already produce user-visible text, so do it first.
   std::setlocale(LC_ALL, "");
-  bindtextdomain(GETTEXT_PACKAGE, UR_LOCALEDIR);
+  // The catalog dir must be resolved AT RUNTIME (APPIMAGE.md §3a): inside a
+  // relocated AppImage the compile-time UR_LOCALEDIR does not exist, so
+  // binding it directly would ship the .mo files as dead weight and hand
+  // every AppImage user English regardless of locale — silently. Same ladder
+  // as every other installed path (RuntimePaths.hpp); on a miss, bind the
+  // compile-time dir anyway, which is exactly the old behaviour.
+  const std::string localeDir = urnw::ResolveRuntimePath(UR_LOCALEDIR, G_FILE_TEST_IS_DIR);
+  bindtextdomain(GETTEXT_PACKAGE, localeDir.empty() ? UR_LOCALEDIR : localeDir.c_str());
   bind_textdomain_codeset(GETTEXT_PACKAGE, "UTF-8");  // the catalogs are UTF-8
   textdomain(GETTEXT_PACKAGE);
 

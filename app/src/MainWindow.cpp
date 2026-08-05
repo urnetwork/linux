@@ -124,15 +124,84 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       if (event == DrawerEvent::Peers || event == DrawerEvent::DeviceLifecycle) {
         RefreshPeersStatus();
       }
+      if (event == DrawerEvent::ProviderLocations || event == DrawerEvent::DeviceLifecycle) {
+        // Deliberately NOT gated on window visibility: the location override
+        // must keep following the connect window while the app sits in the
+        // tray, or it would report a provider we stopped using.
+        SyncLocationOverrideTarget();
+        if (windowVisible_ && providerLocationsSheet_ && providerLocationsSheet_->get_visible()) {
+          providerLocationsSheet_->Refresh();
+        }
+      }
     });
   });
 
+  // Device-location override (GeoClue static source). Built unconditionally at
+  // startup so its cleanup of an override left by a previous run always
+  // happens. The GUI keeps the state machine; the privileged write goes to
+  // urnetworkd over the shared control channel (DaemonGeoClueWriter) — this
+  // process never needs root.
+  locationOverride_ = std::make_unique<GeoClueLocationOverride>(
+      std::make_unique<DaemonGeoClueWriter>(host_.Control()));
+
   if (host_.IsLoggedIn()) {
-    host_.StartTunnel();
+    StartTunnelUi();
     ApplyAuthState(true);
   } else {
     ApplyAuthState(false);
   }
+}
+
+// StartTunnel + render the daemon session state. Each failure is a DISTINCT
+// actionable line (MIGRATION.md; APPIMAGE.md §11b): "service not running",
+// "service out of date", "app out of date" and "builds differ" are different
+// problems with different fixes, and none of them may render as a blank or a
+// zero — the same doctrine as the gray "discovery disabled" the RPC-hosted
+// stats use.
+TunnelStartResult MainWindow::StartTunnelUi() {
+  const TunnelStartResult result = host_.StartTunnel();
+  switch (result) {
+    case TunnelStartResult::Started:
+      daemonStatusLabel_.set_text("");
+      daemonStatusLabel_.set_visible(false);
+      break;
+    case TunnelStartResult::DaemonUnreachable:
+      daemonStatusLabel_.set_text(
+          T_("daemon_unreachable",
+             "The URnetwork system service is not running. Install or start it, then try "
+             "again."));
+      daemonStatusLabel_.set_visible(true);
+      break;
+    case TunnelStartResult::DaemonTooOld:
+      daemonStatusLabel_.set_text(
+          T_("daemon_too_old",
+             "The URnetwork system service is out of date. Update it to connect."));
+      daemonStatusLabel_.set_visible(true);
+      break;
+    case TunnelStartResult::AppTooOld:
+      daemonStatusLabel_.set_text(
+          T_("app_too_old_for_daemon",
+             "This app is older than the installed URnetwork system service. Update the app "
+             "to connect."));
+      daemonStatusLabel_.set_visible(true);
+      break;
+    case TunnelStartResult::SdkMismatch:
+      daemonStatusLabel_.set_text(
+          T_("daemon_sdk_mismatch",
+             "The app and the URnetwork system service are different builds. Update both to "
+             "the same version."));
+      daemonStatusLabel_.set_visible(true);
+      break;
+    case TunnelStartResult::Failed: {
+      const std::string error = host_.LastTunnelError();
+      daemonStatusLabel_.set_text(
+          error.empty() ? T_("tunnel_start_failed", "Could not start the connection")
+                        : error);
+      daemonStatusLabel_.set_visible(true);
+      break;
+    }
+  }
+  return result;
 }
 
 void MainWindow::BuildLogin() {
@@ -298,6 +367,15 @@ void MainWindow::BuildHome() {
   status_.add_css_class("title-2");
   box->append(status_);
 
+  // daemon session problems, right under the status so the reason reads with
+  // the state. Gray (the app's unavailable treatment), wrapped, never a blank
+  // — hidden entirely while the session is healthy.
+  daemonStatusLabel_.add_css_class("dim-label");
+  daemonStatusLabel_.set_wrap(true);
+  daemonStatusLabel_.set_justify(Gtk::Justification::CENTER);
+  daemonStatusLabel_.set_visible(false);
+  box->append(daemonStatusLabel_);
+
   connectBtn_.add_css_class("suggested-action");
   connectBtn_.add_css_class("pill");
   connectBtn_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::ToggleConnect));
@@ -325,8 +403,19 @@ void MainWindow::BuildHome() {
   box->append(discoverableLabel_);
   RefreshPeersStatus();
 
-  // live stats (macOS parity): provider window size, throughput, provide
+  // live stats (macOS parity): provider window size, throughput, provide.
+  // The provider count doubles as the entry point into the provider-locations
+  // sheet; the gesture is installed once and gated on the live connected state
+  // in ApplyStats, so it is inert while disconnected, reconnecting, or showing
+  // the insufficient-balance copy.
   providerCountLabel_.add_css_class("dim-label");
+  {
+    auto gesture = Gtk::GestureClick::create();
+    gesture->signal_released().connect([this](int, double, double) {
+      if (providerCountClickable_) OpenProviderLocations();
+    });
+    providerCountLabel_.add_controller(gesture);
+  }
   throughputLabel_.add_css_class("dim-label");
   provideStatsLabel_.add_css_class("dim-label");
   box->append(providerCountLabel_);
@@ -427,7 +516,7 @@ void MainWindow::BuildAuthPages() {
 
   createPage_ = Gtk::make_managed<CreateNetworkPage>(host_);
   createPage_->on_success = [this] {
-    host_.StartTunnel();  // auth handler flips the view
+    StartTunnelUi();  // auth handler flips the view
   };
   createPage_->on_verify = [this](std::string userAuth) { NavigateVerify(userAuth); };
   createPage_->on_back = [this] {
@@ -437,7 +526,7 @@ void MainWindow::BuildAuthPages() {
 
   verifyPage_ = Gtk::make_managed<VerifyPage>(host_);
   verifyPage_->on_success = [this] {
-    host_.StartTunnel();  // auth handler flips the view
+    StartTunnelUi();  // auth handler flips the view
   };
   verifyPage_->on_back = [this] { stack_.set_visible_child("login"); };
   stack_.add(*wrapInScroller(*verifyPage_), "verify");
@@ -476,7 +565,7 @@ void MainWindow::OnGetStarted() {
       getStartedBtn_->set_sensitive(true);
       switch (routing.route) {
         case LoginRoute::Login:
-          host_.StartTunnel();  // auth handler flips the view
+          StartTunnelUi();  // auth handler flips the view
           break;
         case LoginRoute::Password:
           loginUserAuth_ = routing.userAuth;
@@ -526,7 +615,7 @@ void MainWindow::OnSignIn() {
         passwordError_.set_text(r.error.empty() ? T_("sign_in_failed", "Sign in failed")
                                                 : r.error);
       } else {
-        host_.StartTunnel();  // auth handler flips the view
+        StartTunnelUi();  // auth handler flips the view
       }
     });
   });
@@ -540,7 +629,7 @@ void MainWindow::OnUseCode() {
         loginError_.set_text(r.error.empty() ? T_("code_sign_in_failed", "Code sign in failed")
                                              : r.error);
       } else {
-        host_.StartTunnel();
+        StartTunnelUi();
       }
     });
   });
@@ -554,7 +643,7 @@ void MainWindow::OnGuestMode() {
         loginError_.set_text(r.error.empty() ? T_("guest_mode_failed", "Guest mode failed")
                                              : r.error);
       } else {
-        host_.StartTunnel();
+        StartTunnelUi();
       }
     });
   });
@@ -585,7 +674,7 @@ void MainWindow::OnWalletAuth(const AuthResult& result) {
                                : result.error);
     } else {
       loginError_.set_text("");
-      host_.StartTunnel();  // auth handler flips the view
+      StartTunnelUi();  // auth handler flips the view
     }
   });
 }
@@ -648,9 +737,13 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
 void MainWindow::ToggleConnect() {
   if (connected_) {
     host_.Disconnect();
-  } else {
-    host_.ConnectBestAvailable();
+    return;
   }
+  // No device yet (daemon was missing at startup, or a start failed): retry
+  // the session first, so "install/start the service, then hit Connect" works
+  // without restarting the app. The banner re-renders either way.
+  if (!host_.hasDevice() && StartTunnelUi() != TunnelStartResult::Started) return;
+  host_.ConnectBestAvailable();
   // status handler + SetConnected reflect the real state as it changes
 }
 
@@ -658,6 +751,37 @@ void MainWindow::SetConnected(bool connected) {
   connected_ = connected;
   connectBtn_.set_label(connected ? T_("disconnect", "Disconnect") : T_("connect", "Connect"));
   if (on_connected_change) on_connected_change(connected);
+}
+
+void MainWindow::OpenProviderLocations() {
+  if (!providerLocationsSheet_) {
+    providerLocationsSheet_ =
+        std::make_unique<ProviderLocationsSheet>(*this, host_, locationOverride_.get());
+  }
+  providerLocationsSheet_->Open();
+}
+
+void MainWindow::SyncLocationOverrideTarget() {
+  if (!locationOverride_) return;
+  auto list = host_.ConnectedProviderLocations();
+  if (!list) {
+    // tunnel down: never report a city we are not exiting through
+    locationOverride_->SetTarget(false, nullptr);
+    return;
+  }
+  const std::vector<ProviderLocationRow> rows = MapConnectedProviderLocations(*list);
+  const int index = OldestPlottableIndex(rows);
+  if (index < 0) {
+    locationOverride_->SetTarget(true, nullptr);
+    return;
+  }
+  const ProviderLocationRow& row = rows[static_cast<size_t>(index)];
+  LocationOverrideTarget target;
+  target.clientId = row.clientId;
+  target.label = PlaceLabel(row);
+  target.lat = row.lat;
+  target.lon = row.lon;
+  locationOverride_->SetTarget(true, &target);
 }
 
 void MainWindow::ApplyStats(const LiveStats& stats) {
@@ -673,6 +797,12 @@ void MainWindow::ApplyStats(const LiveStats& stats) {
   };
   // the drawer surfaces the insufficient-balance banner (upgrade flow CTA)
   if (drawer_) drawer_->SetInsufficientBalance(stats.insufficientBalance);
+  // the provider-locations sheet opens only from a genuine connection: not
+  // while reconnecting, and not behind the insufficient-balance copy, where the
+  // label is not a provider count at all
+  providerCountClickable_ = stats.connected && !stats.insufficientBalance;
+  providerCountLabel_.set_cursor(providerCountClickable_ ? Gdk::Cursor::create("pointer")
+                                                         : Glib::RefPtr<Gdk::Cursor>());
   if (stats.insufficientBalance) {
     providerCountLabel_.set_text(T_("insufficient_balance_add_balance_or_plan",
                                     "Insufficient balance — add balance or a plan"));

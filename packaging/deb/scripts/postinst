@@ -1,0 +1,94 @@
+#!/bin/sh
+# postinst for urnetwork-daemon.
+#
+# nfpm does not generate maintainer scripts, so this is written to match what
+# dh_installsystemd (debhelper compat 13) generates for
+#     dh_installsystemd --no-restart-after-upgrade urnetworkd.service
+# with the semantics that matter preserved exactly:
+#   - enable-once via deb-systemd-helper: `was-enabled` consults d-s-h's own
+#     state file, so an admin's deliberate `systemctl disable` survives every
+#     later upgrade instead of being undone behind their back.
+#   - service starts go through deb-systemd-invoke, which respects
+#     /usr/sbin/policy-rc.d (chroots, containers and image builds can veto).
+#   - every systemd interaction is guarded on [ -d /run/systemd/system ].
+#   - stop-then-START across upgrades: prerm stopped the old binary, we plain
+#     `start` the new one here. Never restart-after-upgrade for a daemon
+#     holding a live tun fd.
+# Enabling AND starting on install is correct under Debian Policy 9.3.3.1
+# only because urnetworkd STARTS IDLE -- it never brings up a tunnel until an
+# authenticated client asks over the control socket.
+#
+# Deliberately absent: anything touching /usr/share/applications or
+# /usr/share/icons. Those ship as plain dpkg files precisely so the
+# desktop-file-utils / hicolor-icon-theme dpkg file triggers refresh
+# mimeinfo.cache and the icon cache; creating them here would silently skip
+# the triggers (APPIMAGE.md 11d).
+set -e
+
+UNIT='urnetworkd.service'
+
+case "$1" in
+    configure)
+        # System group gating the control socket (SO_PEERCRED: uid 0 or
+        # members of `urnetwork`; MIGRATION.md). Created before the unit
+        # starts; removed only on purge.
+        if ! getent group urnetwork >/dev/null 2>&1; then
+            if command -v addgroup >/dev/null 2>&1; then
+                addgroup --system urnetwork >/dev/null 2>&1 || groupadd --system urnetwork
+            else
+                groupadd --system urnetwork
+            fi
+        fi
+        # The unit's RuntimeDirectory=urnetwork (0750 root:urnetwork) is the
+        # real owner of /run/urnetwork -- systemd creates it on start and
+        # cleans it on stop. Pre-create it so the control path exists even
+        # before the first start.
+        if [ -d /run ]; then
+            install -d -m 0750 -o root -g urnetwork /run/urnetwork 2>/dev/null || true
+        fi
+        # The NetworkManager conf.d marking must be live before the first
+        # tunnel comes up; `nmcli general reload conf` re-reads configuration
+        # without touching connections. Same for the udev rule.
+        if command -v nmcli >/dev/null 2>&1; then
+            nmcli general reload conf >/dev/null 2>&1 || true
+        fi
+        if command -v udevadm >/dev/null 2>&1; then
+            udevadm control --reload >/dev/null 2>&1 || true
+        fi
+        ;;
+esac
+
+# --- dh_installsystemd-equivalent: enable (once) -----------------------------
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    if command -v deb-systemd-helper >/dev/null 2>&1; then
+        # Removes only masks created by d-s-h on a previous package removal.
+        deb-systemd-helper unmask "$UNIT" >/dev/null || true
+        # was-enabled defaults to true, so the first installation enables the
+        # unit; a recorded admin disable is respected on every upgrade.
+        if deb-systemd-helper --quiet was-enabled "$UNIT"; then
+            deb-systemd-helper enable "$UNIT" >/dev/null || true
+        else
+            deb-systemd-helper update-state "$UNIT" >/dev/null || true
+        fi
+    elif [ -d /run/systemd/system ]; then
+        # Fallback for dpkg systems without init-system-helpers (rare):
+        # enable only on first configure, never on upgrade.
+        if [ -z "${2:-}" ]; then
+            systemctl enable "$UNIT" >/dev/null || true
+        fi
+    fi
+fi
+
+# --- dh_installsystemd-equivalent: start (stop happened in prerm) ------------
+if [ "$1" = "configure" ] || [ "$1" = "abort-upgrade" ] || [ "$1" = "abort-deconfigure" ] || [ "$1" = "abort-remove" ]; then
+    if [ -d /run/systemd/system ]; then
+        systemctl --system daemon-reload >/dev/null || true
+        if command -v deb-systemd-invoke >/dev/null 2>&1; then
+            deb-systemd-invoke start "$UNIT" >/dev/null || true
+        else
+            systemctl start "$UNIT" >/dev/null || true
+        fi
+    fi
+fi
+
+exit 0

@@ -6,9 +6,27 @@
 #include <string>
 
 #include "I18n.hpp"
+#include "RuntimePaths.hpp"
+
+// Where the tray art is installed (meson passes the configured package data
+// dir); the ladder in RuntimePaths.hpp prefixes $APPDIR inside an AppImage
+// and falls back to the build tree.
+#ifndef UR_PKGDATADIR
+#define UR_PKGDATADIR "/usr/share/urnetwork"
+#endif
 
 namespace urnw {
 namespace {
+
+// Resolved once: the directory holding urnetwork-tray-*.png, handed to the
+// SNI host as IconThemePath so it can resolve our bare IconName. Empty when
+// the art is missing, which is the correct signal to the host ("use the
+// theme") rather than a broken path.
+const std::string& TrayIconThemePath() {
+  static const std::string path = ResolveRuntimePath(UR_PKGDATADIR "/icons",
+                                                     G_FILE_TEST_IS_DIR, "assets");
+  return path;
+}
 
 // ---- interface definitions ------------------------------------------------
 
@@ -109,7 +127,15 @@ static GVariant* SniGetProp(GDBusConnection*, const gchar*, const gchar*, const 
   if (g_strcmp0(prop, "IconName") == 0)
     return g_variant_new_string(self->connectedForIcon() ? "urnetwork-tray-connected"
                                                          : "urnetwork-tray-disconnected");
-  if (g_strcmp0(prop, "IconThemePath") == 0) return g_variant_new_string("");
+  // Where our tray PNGs actually live. IconName above is a bare name, so
+  // without this the host can only resolve it from the icon THEME -- and our
+  // art is installed to <pkgdatadir>/icons, not into hicolor, so the tray
+  // silently falls back to a missing-image icon. The path must be resolved at
+  // runtime for the same reason the catalogs are ($APPDIR relocation;
+  // APPIMAGE.md §3b, the icon-staging item on §9's fix list).
+  if (g_strcmp0(prop, "IconThemePath") == 0) {
+    return g_variant_new_string(TrayIconThemePath().c_str());
+  }
   if (g_strcmp0(prop, "Menu") == 0) return g_variant_new_object_path("/MenuBar");
   if (g_strcmp0(prop, "ItemIsMenu") == 0) return g_variant_new_boolean(FALSE);
   return nullptr;

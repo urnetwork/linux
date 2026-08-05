@@ -109,7 +109,7 @@ std::string PeerDisplayName(const urnet::NetworkPeer& peer) {
 
 LocationsSheet::LocationsSheet(Gtk::Window& parent, SdkHost& host) : host_(host) {
   EnsureDrawerCss();
-  set_title(T_("browse_locations", "Browse locations"));
+  set_title(T_("browse_locations", "Browse Locations"));
   set_transient_for(parent);
   set_modal(true);
   set_default_size(480, 600);
@@ -254,7 +254,7 @@ void LocationsSheet::RebuildSections() {
   // 2. searching -> best search matches; idle -> the single best-available row
   //    (both apps ignore the SDK Promoted list; the header is just a label)
   if (searching) {
-    if (filtered) AppendLocationSection(T_("top_matches", "Top matches"), filtered->BestMatches, selected);
+    if (filtered) AppendLocationSection(T_("top_matches", "Top Matches"), filtered->BestMatches, selected);
   } else {
     sectionsBox_.append(*MakeCaption(T_("promoted_locations", "Promoted Locations")));
     auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);

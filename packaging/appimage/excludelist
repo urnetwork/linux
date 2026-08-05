@@ -1,0 +1,95 @@
+# Libraries NEVER bundled into the URnetwork AppImage -- matched by glob
+# against the library soname (basename) during build-appimage.sh's ldd walk.
+# This is deliberately a data file: tuning happens here, not in code, and the
+# first real Linux verification pass is expected to adjust it.
+#
+# Policy (documented decisions, APPIMAGE.md sections 4 and 11e):
+#  - glibc family and the dynamic linker: never bundleable.
+#  - Mesa / GL / DRM: the ecosystem excludelist rule. GTK4's GSK renderer is
+#    GPU-based by default, and a bundled GL stack mismatching the host's
+#    kernel/driver combination aborts inside gsk_gl_renderer_render.
+#    Host-provide; GSK_RENDERER=cairo remains the user-side fallback.
+#  - libstdc++/libgcc_s: excluded, host-provided. Bundling an OLDER libstdc++
+#    is the documented trap: it wins via LD_LIBRARY_PATH and then the host's
+#    Mesa/libLLVM cannot resolve GLIBCXX_* and every DRI driver breaks. The
+#    build container must therefore BE the distro floor (Debian 12 /
+#    Ubuntu 22.04) so the host's libstdc++ is always >= ours.
+#  - fontconfig/freetype: excluded per the ecosystem excludelist (font cache
+#    format mismatches); any GTK-capable host has them.
+#  - X11/xcb/wayland client libs + libxkbcommon: excluded; any host that can
+#    show a window has them, and protocol traffic is version-safe where ABI
+#    pinning is not.
+#  - dbus/systemd client libs: they talk to host daemons; host-provide.
+#
+# Everything NOT matched here gets bundled: gtk4, libadwaita, glib family
+# (WITH its GIO modules -- never split), pango+harfbuzz (version-coupled),
+# cairo, graphene, gdk-pixbuf + loaders, librsvg, epoxy, gettext runtime, ...
+
+# dynamic linker + glibc
+ld-linux*.so*
+libc.so*
+libm.so*
+libdl.so*
+libpthread.so*
+librt.so*
+libresolv.so*
+libanl.so*
+libutil.so*
+libnsl.so*
+libnss_*.so*
+libmvec.so*
+libthread_db.so*
+libBrokenLocale.so*
+
+# C++ runtime (host-provided; build on the floor distro)
+libstdc++.so*
+libgcc_s.so*
+
+# GL / Mesa / DRM / vendor drivers
+libGL.so*
+libGLX*.so*
+libGLdispatch.so*
+libOpenGL.so*
+libEGL.so*
+libGLESv1*.so*
+libGLESv2.so*
+libgbm.so*
+libglapi.so*
+libdrm*.so*
+libvulkan.so*
+libgallium*.so*
+libnvidia*.so*
+nvidia*.so*
+libcuda.so*
+
+# fonts (cache-format coupling; universally present)
+libfontconfig.so*
+libfreetype.so*
+
+# display client libraries (universally present on any graphical host)
+libX11.so*
+libX11-xcb.so*
+libxcb*.so*
+libXau.so*
+libXdmcp.so*
+libXext.so*
+libXrender.so*
+libXi.so*
+libXfixes.so*
+libXcursor.so*
+libXdamage.so*
+libXrandr.so*
+libXcomposite.so*
+libXinerama.so*
+libwayland-*.so*
+libxkbcommon*.so*
+
+# host-daemon clients
+libdbus-1.so*
+libsystemd.so*
+
+# audio (nothing in the app plays audio; cut transitive pulls)
+libasound.so*
+libpulse*.so*
+libjack.so*
+libpipewire*.so*

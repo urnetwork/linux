@@ -1,0 +1,25 @@
+#!/bin/sh
+# prerm for urnetwork-daemon -- the dh_installsystemd
+# --no-restart-after-upgrade shape: stop the unit on BOTH remove and upgrade
+# (this script runs for either, and deliberately does not branch on "$1").
+#
+# The daemon holds a live tun fd; the upgrade discipline is stop (old binary)
+# -> dpkg replaces files -> start (new binary, in postinst). Never an
+# in-flight restart. Stopping tears the tunnel down cleanly via the daemon's
+# own shutdown path; it comes back idle, exactly like a reboot.
+#
+# deb-systemd-invoke respects /usr/sbin/policy-rc.d; everything is guarded on
+# a booted systemd.
+set -e
+
+UNIT='urnetworkd.service'
+
+if [ -d /run/systemd/system ]; then
+    if command -v deb-systemd-invoke >/dev/null 2>&1; then
+        deb-systemd-invoke stop "$UNIT" >/dev/null || true
+    else
+        systemctl stop "$UNIT" >/dev/null || true
+    fi
+fi
+
+exit 0

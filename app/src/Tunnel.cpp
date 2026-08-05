@@ -64,10 +64,15 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg) {
 
 bool Tunnel::Configure(const TunnelConfig& cfg) {
   const std::string addr = cfg.local_addr + "/" + std::to_string(cfg.prefix);
+  // Order matters (wg-quick order: mtu/addr first, up second): NetworkManager
+  // only protects an externally-created tun WHILE THE LINK IS DOWN
+  // (APPIMAGE.md §10c), so do every link-down configuration before `up`. The
+  // authoritative guard is the installed [keyfile] unmanaged-devices marking
+  // + udev rule; this ordering just avoids ever showing NM a bare up link.
   std::vector<std::vector<std::string>> steps = {
-      {"ip", "link", "set", "dev", name_, "up"},
       {"ip", "link", "set", "dev", name_, "mtu", std::to_string(cfg.mtu)},
       {"ip", "address", "add", addr, "dev", name_},
+      {"ip", "link", "set", "dev", name_, "up"},
   };
   // Split-default capture that EXCLUDES the local network, matching Android
   // (MainService's excludeRoute set) and iOS (NEIPv4Settings.excludedRoutes): the

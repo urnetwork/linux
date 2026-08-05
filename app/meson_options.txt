@@ -1,7 +1,36 @@
 # Which vendored SDK slice to link against: third_party/urnetwork-sdk/<sdk_arch>/.
-# Uses debian arch names to match snapcraft's CRAFT_ARCH_BUILD_FOR and the zip layout.
+# Uses debian arch names to match the zip layout (and the retired snapcraft's
+# CRAFT_ARCH_BUILD_FOR).
 option('sdk_arch', type : 'combo', choices : ['amd64', 'arm64'], value : 'amd64',
        description : 'Target arch of the vendored cgo SDK to link (amd64|arm64)')
+
+# The release version (the pipeline passes $EXTERNAL_WARP_VERSION). Compiled in
+# as UR_APP_VERSION: it is what urnetworkd reports as daemon_version in the
+# control hello — the value the GUI's "daemon out of date" state names — and
+# the app_version the GUI registers devices under. A hardcoded default would
+# make the skew check useless, so the default is an obvious dev sentinel.
+option('app_version', type : 'string', value : '0.0.0',
+       description : 'Release version stamped into both binaries (UR_APP_VERSION)')
+
+# The declared C runtime floor, asserted against the built daemon by the
+# `glibc-floor` test (APPIMAGE.md R9/§10c). It MUST equal the `Depends: libc6
+# (>= x)` the packaging declares, because nothing else couples that hand-written
+# dependency to reality (nfpm does not run dpkg-shlibdeps). Measured
+# 2026-08-05: a daemon built on Ubuntu 24.04 (glibc 2.39) references
+# __isoc23_strtoll/strtoull@GLIBC_2.38 -- glibc 2.38's C23 strtol redirect,
+# reached through nlohmann/json's number parser -- so a 24.04 build CANNOT
+# honestly claim 2.35. Build the daemon on the image whose glibc is this floor.
+# Whether to build the GTK4 GUI (the AppImage half). 'auto' builds it when
+# gtkmm-4.0 + libadwaita-1 are present and quietly skips it otherwise, so the
+# daemon can be built on an image with no GTK at all -- notably Ubuntu 22.04,
+# which does not package libgtkmm-4.0 and is where the daemon gets its low
+# glibc floor. Use -Dgui=enabled for the AppImage build so a missing toolkit
+# fails loudly instead of silently shipping no GUI.
+option('gui', type : 'feature', value : 'auto',
+       description : 'Build the GTK4/libadwaita GUI (urnetwork-gui)')
+
+option('glibc_floor', type : 'string', value : '2.35',
+       description : 'Max glibc symbol version the daemon may reference (must match the packaging Depends)')
 
 # WalletConnect Cloud project id, passed to the ur.io/wallet-connect bridge as
 # `wc_project_id` for the Bittensor sign-in (src/Config.hpp; the same id lives in

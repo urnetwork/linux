@@ -9,11 +9,14 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 
 #include <gtkmm.h>
 
 #include "AuthViews.hpp"
 #include "ConnectDrawer.hpp"
+#include "LocationOverride.hpp"
+#include "ProviderLocationsSheet.hpp"
 #include "SdkHost.hpp"
 #include "SubscriptionBalance.hpp"
 
@@ -31,6 +34,10 @@ class MainWindow : public Gtk::ApplicationWindow {
   void BuildLogin();          // initial step: user auth discovery + the other entry points
   void BuildPasswordStep();   // password step of the email-first login
   void BuildHome();
+  // StartTunnel + render the daemon session state. "Daemon unreachable" and
+  // "daemon too old" are DISTINCT actionable lines (MIGRATION.md) — the same
+  // gray treatment as the app's other unavailable states, never a blank.
+  TunnelStartResult StartTunnelUi();
   void RefreshPeersStatus();  // home-screen peers status line (dot + "{n} peers")
   void ApplyProvideControlMode();  // picker -> host (guarded during sync)
   void SyncProvideControlMode();   // host -> picker
@@ -47,6 +54,12 @@ class MainWindow : public Gtk::ApplicationWindow {
   void ApplyAuthState(bool loggedIn);
   void SetConnected(bool connected);
   void ApplyStats(const LiveStats& stats);  // live provider count / throughput / provide
+  void OpenProviderLocations();             // the "Connected to N providers" entry point
+  // Keep the device-location override pointed at the oldest connected provider
+  // that has coordinates. Runs off the SDK change feed rather than from the
+  // sheet, so the override keeps following the window while the sheet is closed
+  // and the window is hidden to the tray.
+  void SyncLocationOverrideTarget();
 
   SdkHost& host_;
   // subscription balance / plan / referral store (the drawer's plan card, the
@@ -67,6 +80,9 @@ class MainWindow : public Gtk::ApplicationWindow {
   bool discoveringLogin_ = false;
 
   Gtk::Label status_{"Disconnected"};
+  // daemon session problems (unreachable / out of date / app out of date /
+  // start failure), rendered under the status line; hidden while healthy
+  Gtk::Label daemonStatusLabel_;
   Gtk::Button connectBtn_{"Connect"};
   // provide indicator (apple parity): "●" solid dot = Network provide (green;
   // coral when not providing), "◉" dot + ring = Public provide (amber when
@@ -79,7 +95,10 @@ class MainWindow : public Gtk::ApplicationWindow {
   Gtk::ToggleButton* provideNetwork_ = nullptr;
   Gtk::ToggleButton* provideNever_ = nullptr;
   bool syncingProvideMode_ = false;  // guards Apply during programmatic sync
-  Gtk::Label providerCountLabel_;  // live stats (macOS parity)
+  // live stats (macOS parity); also the entry point into the provider-locations
+  // sheet, clickable only while genuinely connected
+  Gtk::Label providerCountLabel_;
+  bool providerCountClickable_ = false;
   Gtk::Label throughputLabel_;
   Gtk::Label provideStatsLabel_;
   Gtk::Label peersStatusDot_;   // green when peers > 0, red at 0
@@ -103,6 +122,14 @@ class MainWindow : public Gtk::ApplicationWindow {
   bool windowVisible_ = false;
   std::string lastStatus_ = "Disconnected";
   LiveStats lastStats_;  // resynced into the widgets when the window is shown
+
+  // Device-location override (GeoClue static source). Owned here rather than by
+  // the sheet so that its MANDATORY startup cleanup runs on every launch, even
+  // when the feature's UI is never opened -- nothing on the system reverts
+  // /etc/geolocation for us, so an override left by a killed process would
+  // otherwise persist indefinitely, across reboots.
+  std::unique_ptr<GeoClueLocationOverride> locationOverride_;
+  std::unique_ptr<ProviderLocationsSheet> providerLocationsSheet_;
 };
 
 }  // namespace urnw

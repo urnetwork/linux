@@ -1,0 +1,4 @@
+# Belt to the NetworkManager keyfile braces (95-urnetwork.conf): mark the
+# URnetwork tun unmanaged at the udev layer too, so NM leaves it alone even if
+# conf.d ordering or NM packaging changes underneath us (MIGRATION.md table).
+ACTION=="add|change", SUBSYSTEM=="net", KERNEL=="urnet0", ENV{NM_UNMANAGED}="1"

@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Name=URnetwork
+Comment=URnetwork VPN
+Icon=urnetwork
+Exec=urnetwork
+# TryExec self-disables this entry once the daemon package (and with it the
+# launcher) is removed, so a stale symlink cannot error at every login.
+# X-GNOME-Autostart-enabled is GNOME-only legacy and deliberately absent
+# (APPIMAGE.md 11d).
+TryExec=urnetwork
+Terminal=false
+Categories=Network;Security;
+# Inert template (MIGRATION.md): nothing in the session reads
+# /etc/urnetwork/autostart/ directly. The GUI opts a user in by symlinking
+# this file into ~/.config/autostart/ ATOMICALLY (temp name + rename(2) --
+# never remove-then-create, which leaves a window with no autostart entry
+# that becomes permanent if the process dies during shutdown), and opts out
+# by removing the symlink. Root-owned so an unprivileged process cannot
+# rewrite what runs at every user's login.

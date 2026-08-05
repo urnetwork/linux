@@ -1,9 +1,13 @@
-// SdkHost — the single-process core of the Linux app (the Android-like model).
-// It owns the SDK objects (NetworkSpace, Api, LocalState, DeviceLocal) in-process
-// and drives the tunnel directly through the SDK's fd-based IoLoop. No daemon,
-// no RPC: this process IS the VPN. Consumes the shared cgo urnetwork_sdk.hpp
-// wrapper (same as the WinUI Windows app) — this SDK-host logic is the layer
-// shared across Windows and Linux; only the UI toolkit + tun layer differ.
+// SdkHost — the UNPRIVILEGED core of the Linux GUI (the daemon-split model,
+// linux/MIGRATION.md; the shape Apple and Windows ship). It owns the SDK's
+// api/auth surface (NetworkSpace, Api, LocalState) in-process, but the VPN
+// itself lives in urnetworkd: StartTunnel talks to the daemon over the unix
+// control socket (ControlClient — connect → hello with version enforcement →
+// start_tunnel) and then binds a urnet::DeviceRemote to the daemon's
+// DeviceLocal over the SDK's loopback mTLS device RPC. Everything downstream
+// (view controllers, listeners, the drawer accessors) runs against the shared
+// Device interface exactly as before. This process never needs root and
+// degrades cleanly with no daemon present (TunnelStartResult below).
 //
 // Callbacks fire on SDK background threads; the UI marshals them onto the GTK
 // main loop.
@@ -11,6 +15,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -20,7 +25,7 @@
 
 #include <urnetwork_sdk.hpp>
 
-#include "Tunnel.hpp"
+#include "ControlClient.hpp"
 #include "WalletConnect.hpp"
 
 namespace urnw {
@@ -60,7 +65,7 @@ struct LoginRouting {
 // and from StartTunnel/Logout for DeviceLifecycle — so the UI must marshal
 // onto the GTK loop and re-read through the SdkHost accessors.
 enum class DrawerEvent {
-  DeviceLifecycle,  // DeviceLocal created or destroyed
+  DeviceLifecycle,  // device (remote) created or destroyed
   Throughput,       // new throughput points (charts)
   BlockActions,     // block action window changed
   BlockStats,       // allowed/blocked counts changed
@@ -73,6 +78,22 @@ enum class DrawerEvent {
   Locations,        // filtered provider-location list changed (the chooser)
   Peers,            // connected network peers changed (chooser + drawer label)
   ProviderIdentities,  // post-quantum identity set changed (PQI panel + list)
+  ProviderLocations,   // connected provider set/locations changed (locations sheet)
+};
+
+// Outcome of StartTunnel. Everything except Started is a degraded state the
+// UI must render DISTINCTLY and actionably (MIGRATION.md: "daemon
+// unreachable" and "daemon too old" are never a blank or a zero — the same
+// treatment as the RPC-hosted stats' gray "discovery disabled").
+enum class TunnelStartResult {
+  Started,
+  DaemonUnreachable,  // urnetworkd not installed / not running / socket unauthorized
+  DaemonTooOld,       // daemon control protocol below our supported minimum
+  AppTooOld,          // daemon rejected OUR protocol: this app needs the update
+  SdkMismatch,        // GUI and daemon SDK builds differ (the gob device rpc
+                      // has no version field, so a drifted pair is refused at
+                      // hello): update both to the same version
+  Failed,             // daemon reachable but start failed (see LastTunnelError)
 };
 
 // Snapshot of live connection / throughput / provide stats. Pushed to the UI on
@@ -179,7 +200,12 @@ class SdkHost {
 
   void Logout();
 
-  bool StartTunnel();  // build DeviceLocal, open tun, wire IoLoop, start connect VC
+  // Daemon session: connect → hello (protocol enforced both ways) →
+  // start_tunnel → bind the DeviceRemote to the daemon's device RPC. The
+  // tunnel itself (DeviceLocal, tun fd, IoLoop) lives in urnetworkd.
+  TunnelStartResult StartTunnel();
+  // Human-readable detail for the last non-Started result ("" when none).
+  std::string LastTunnelError();
   void ConnectBestAvailable();
   // Connect to a chosen provider location (country/region/city/device/peer). The
   // chooser passes an SDK-supplied ConnectLocation as-is, or one built from a peer
@@ -217,11 +243,11 @@ class SdkHost {
   void SetDrawerEventHandler(DrawerEventHandler h) { onDrawerEvent_ = std::move(h); }
 
   // ---- connect drawer accessors (all locked; graceful with no device) ------
-  // The DeviceLocal exists only while the tunnel runs. Reads fall back to the
-  // persisted LocalState where one exists so the drawer shows the restored
-  // preferences; writes go to the device when present (the SDK persists the
-  // blocker/dns/overrides itself) and to LocalState otherwise so the next
-  // device creation restores them.
+  // The device (remote) exists only while a tunnel session runs. Reads fall
+  // back to the persisted LocalState where one exists so the drawer shows the
+  // restored preferences; writes go to the device when present (forwarded
+  // over the device rpc; the daemon side persists the blocker/dns/overrides)
+  // and to LocalState otherwise so the next device creation restores them.
   std::optional<urnet::ConnectLocation> SelectedLocation();
   std::optional<urnet::PerformanceProfile> GetPerformanceProfile();
   // Persists to LocalState and applies to the device: unlike the other device
@@ -280,13 +306,27 @@ class SdkHost {
   std::string PublicIdentityKeyHash();
   std::vector<uint8_t> PublicIdentityKey();
 
+  // ---- connected provider locations ------------------------------------------
+  // Where each provider in the current connect window is, sorted by the SDK
+  // OLDEST-CONNECTED FIRST (so the first entry with coordinates is the location
+  // override's target). This is a pure derivation over the window monitor, not a
+  // view controller, so it needs no start/stop and reads straight off the device;
+  // nullopt with the tunnel down. Changes arrive as DrawerEvent::ProviderLocations
+  // -- the listener is signal-only, so re-read the getter on every notification.
+  std::optional<urnet::ConnectedProviderLocationList> ConnectedProviderLocations();
+  // Drops a provider from the connection by its EGRESS client id and excludes it
+  // from re-discovery for the rest of this connection. No-op with no device.
+  void RemoveConnectedProvider(const std::string& clientId);
+
   // Exposed so the (full-parity) UI/view models can drive the SDK directly.
   urnet::Api& api() { return *api_; }
   bool hasDevice() { return device_.has_value(); }
-  urnet::DeviceLocal& device() { return *device_; }
+  urnet::DeviceRemote& device() { return *device_; }
+  // The daemon control channel, shared with the location-override writer
+  // (DaemonGeoClueWriter) — one socket, one hello, one version check.
+  ControlClient& Control() { return control_; }
 
  private:
-  urnet::NetworkSpace BuildNetworkSpace();
   void RegisterNetworkClient(const std::string& byJwt, std::function<void(AuthResult)> done);
   // Shared routing for NetworkCreateResult (sign-up + wallet sign-up).
   void HandleNetworkCreateResult(std::optional<urnet::NetworkCreateResult> result,
@@ -312,7 +352,10 @@ class SdkHost {
   std::optional<urnet::Api> api_;
   std::optional<urnet::AsyncLocalState> asyncLocalState_;
   std::optional<urnet::LocalState> localState_;
-  std::optional<urnet::DeviceLocal> device_;
+  // The remote face of the daemon's DeviceLocal. Exists only while a tunnel
+  // session was successfully started; every accessor below falls back to
+  // LocalState without it, exactly as before the split.
+  std::optional<urnet::DeviceRemote> device_;
   std::optional<urnet::ConnectViewController> connectVc_;
   std::optional<urnet::ContractViewController> contractVc_;  // live throughput feed
   // single-feed per-peer per-contract rows for this device's own (client) traffic;
@@ -326,8 +369,14 @@ class SdkHost {
   std::optional<urnet::PeerViewController> peerVc_;  // connected provide-enabled peers
   // post quantum identity feed: own identity key hash + verified provider identities
   std::optional<urnet::PostQuantumIdentityViewController> pqiVc_;
-  std::optional<urnet::IoLoop> ioLoop_;
-  std::unique_ptr<Tunnel> tunnel_;
+  // control channel to urnetworkd (tunnel lifecycle + location override)
+  ControlClient control_;
+  std::string lastTunnelError_;
+  // The network-provide-key bit, cached off addProvideSecretKeysListener:
+  // DeviceRemote has no getProvideSecretKeys getter (it is DeviceLocal-only),
+  // so like the Windows GUI the listener feeds this atomic and ReadStats
+  // reads it.
+  std::atomic<bool> provideHasNetworkKey_{false};
   bool presentationActive_ = false;
   std::vector<urnet::Sub> subs_;
   std::vector<urnet::Sub> presentationSubs_;

@@ -1,0 +1,74 @@
+# urnetworkd -- the privileged half of URnetwork for Linux (MIGRATION.md).
+# Installed at /lib/systemd/system/urnetworkd.service (in every release's
+# unit load path).
+#
+# THE SINGLE SOURCE. meson installs this exact file and the packaging assembly
+# copies it; there is deliberately no second copy under src/. It carried two
+# divergent versions until 2026-08-05 -- if you edit it, you are editing the
+# one that ships.
+#
+# Always-running, never socket-activated: network-pre.target is passive, so a
+# lazily-activated unit cannot participate in pre-network state at all
+# (APPIMAGE.md 10c -- all five surveyed VPNs are always-enabled).
+#
+# Enabling on install is correct (Debian Policy 9.3.3.1) but the daemon
+# STARTS IDLE: it never brings a tunnel up until a client authenticates on the
+# control socket and issues start_tunnel.
+
+[Unit]
+Description=URnetwork VPN daemon
+Documentation=https://ur.io
+# network-pre.target is PASSIVE -- it only exists if something pulls it in, so
+# the Wants= is load-bearing, not decoration. This is the ordering slot a VPN
+# needs to establish lockdown before any network comes up.
+After=network-pre.target
+Wants=network-pre.target
+Before=network-online.target
+
+[Service]
+# Type=notify, NOT Type=exec: src/daemon/main.cpp speaks READY=1 directly over
+# $NOTIFY_SOCKET (no libsystemd dependency). Under Type=exec that code is dead
+# and systemd would call the unit ready the instant exec() succeeds -- before
+# the control socket exists -- which is exactly the race the readiness
+# protocol is there to prevent. If you ever remove the READY=1 send, change
+# this line in the same commit or every start will hang until timeout.
+Type=notify
+ExecStart=/usr/lib/urnetwork/urnetworkd
+
+# /run/urnetwork: control socket dir. systemd creates it before start and
+# removes it on stop; maintainer scripts pre-create it only as a convenience.
+# The daemon itself chowns the dir root:urnetwork and binds the socket 0660,
+# so systemd.socket(5)'s 0666 default never applies (we never declare a
+# .socket unit). Deliberately NOT Group=urnetwork: that would change the
+# daemon's primary gid for every file it creates, which is a wider blast
+# radius than the one directory we actually want grouped.
+RuntimeDirectory=urnetwork
+RuntimeDirectoryMode=0750
+
+# /var/lib/urnetwork: device identity (key material) + SDK storage. Root-only.
+StateDirectory=urnetwork
+StateDirectoryMode=0700
+
+# /var/log/urnetwork: SDK logs.
+LogsDirectory=urnetwork
+LogsDirectoryMode=0700
+
+# Root is required for /dev/net/tun, routes, resolvectl and /etc/geolocation.
+# Beyond that, give up what we can. No ProtectSystem=: the location override
+# writes /etc/geolocation (APPIMAGE.md section 7). The daemon is headless and
+# must never read user homes.
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+LimitNOFILE=65536
+
+Restart=on-failure
+RestartSec=2
+# Upgrade discipline lives in packaging: stop (old binary) -> replace files ->
+# start (new binary); never an in-flight restart while a live tun fd is held.
+# If the daemon grows a lockdown-before-stop path, consider Mullvad's
+# RestartKillSignal=SIGUSR1 here -- do NOT add it before the daemon actually
+# handles SIGUSR1, or stops-for-restart lose the graceful SIGTERM teardown.
+
+[Install]
+WantedBy=multi-user.target
