@@ -320,8 +320,26 @@ APPIMAGE="${OUT}/URnetwork-${VERSION}-${ARCH}.AppImage"
 # stable "latest" alias so embedded update info never goes stale.
 ZSYNC_URL="${UR_ZSYNC_URL:-https://get.ur.network/URnetwork-latest-${ARCH}.AppImage.zsync}"
 
+# appimagetool fetches the type2 runtime from GitHub on EVERY invocation and
+# has no retry, so a blip fails the whole build after all the AppDir work:
+#   Failed to download runtime: server returned status code 0
+# The builder image bakes the runtime in (Dockerfile.gui) and points
+# UR_APPIMAGE_RUNTIME at it, which also pins exactly which runtime ships rather
+# than taking whatever "continuous" serves that minute. Fall back to letting
+# appimagetool download when the variable is unset, so a bare host still works.
+runtime_args=()
+if [ -n "${UR_APPIMAGE_RUNTIME:-}" ]; then
+    [ -f "${UR_APPIMAGE_RUNTIME}" ] || die \
+        "UR_APPIMAGE_RUNTIME is set but not a file: ${UR_APPIMAGE_RUNTIME}"
+    runtime_args=(--runtime-file "${UR_APPIMAGE_RUNTIME}")
+    log "using the pre-fetched runtime: ${UR_APPIMAGE_RUNTIME}"
+else
+    log "UR_APPIMAGE_RUNTIME unset -- appimagetool will download the runtime (network-dependent)"
+fi
+
 ARCH="${APPIMAGE_ARCH}" "${APPIMAGETOOL}" \
     --updateinformation "zsync|${ZSYNC_URL}" \
+    "${runtime_args[@]}" \
     "${APPDIR}" "${APPIMAGE}"
 
 [ -f "${APPIMAGE}" ] || die "appimagetool did not produce ${APPIMAGE}"

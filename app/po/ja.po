@@ -10,6 +10,19 @@ msgstr ""
 "Language: ja\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#. A description of the seedphrase generation process.
+msgctxt "a_new_seedphrase_will_be_generated_and"
+msgid "A new seedphrase will be generated and linked to your account."
+msgstr "新しいシードフレーズが生成され、アカウントに紐付けられます。"
+
+msgctxt "a_seedphrase_lets_you_recover_your_account"
+msgid "A seedphrase lets you recover your account if you lose access."
+msgstr "シードフレーズがあれば、アクセスできなくなってもアカウントを復元できます。"
+
+msgctxt "a_seedphrase_lets_you_recover_your_account_2"
+msgid "A seedphrase lets you recover your account if you lose access. Store it safely."
+msgstr "シードフレーズがあれば、アクセスできなくなってもアカウントを復元できます。安全な場所に保管してください。"
+
 #. Instructions for accessing the authentication code.
 #. Use the {link}...{/link} markers to wrap the "ur.io" portion, which should be rendered as a clickable link.
 #. Example usage:
@@ -56,6 +69,11 @@ msgctxt "add"
 msgid "Add"
 msgstr "追加"
 
+#. A title for the screen that lets the user add a new sign-in method.
+msgctxt "add_a_sign_in_method"
+msgid "Add a sign-in method"
+msgstr "サインイン方法を追加"
+
 #. Call to action
 msgctxt "add_blocked_location"
 msgid "Add blocked location"
@@ -70,6 +88,15 @@ msgstr "紹介コードを追加"
 msgctxt "add_referral_extra_rewards"
 msgid "Add referral code to earn extra rewards"
 msgstr "紹介コードを追加して追加の特典を獲得"
+
+msgctxt "add_sign_in_method"
+msgid "Add sign-in method"
+msgstr "サインイン方法を追加"
+
+#. Button text for adding a sign-in method.
+msgctxt "add_sign_in_method_2"
+msgid "Add Sign-In Method"
+msgstr "サインイン方法を追加"
 
 #. Wallets Screen
 msgctxt "add_wallet"
@@ -144,6 +171,11 @@ msgctxt "app_included_toast"
 msgid "{} will route through the VPN"
 msgstr "{}はVPN経由でルーティングされます"
 
+#. Android app string: app pinned toast.
+msgctxt "app_pinned_toast"
+msgid "{} will use one provider"
+msgstr "{}は1つのプロバイダーを使用します"
+
 #. transfer stats and split rules
 msgctxt "app_split_active_exclude"
 msgid "Exclude active — excluded apps bypass the VPN"
@@ -168,6 +200,21 @@ msgstr "含めるアプリが優先されます。1つでもアプリを含め�
 msgctxt "app_split_rules"
 msgid "App split rules"
 msgstr "アプリ分割ルール"
+
+#. Generic starter label on the app-split panel when no apps are included or excluded yet (shown instead of "0 apps excluded").
+msgctxt "app_split_starter"
+msgid "0 split apps"
+msgstr "分割アプリ 0 件"
+
+#. Shown on the linux home screen when the urnetworkd system service rejected this app for speaking an older control protocol than the service supports. The fix is updating the app, not the service.
+msgctxt "app_too_old_for_daemon"
+msgid "This app is older than the installed URnetwork system service. Update the app to connect."
+msgstr "このアプリはインストールされている URnetwork システムサービスより古いバージョンです。接続するにはアプリを更新してください。"
+
+#. Snackbar message displayed when an Apple sign-in method is added.
+msgctxt "apple_sign_in_method_added"
+msgid "Apple sign-in method added"
+msgstr "Appleのサインイン方法を追加しました"
 
 #. Call to action
 msgctxt "apply_bonus"
@@ -201,6 +248,10 @@ msgctxt "are_you_sure_delete_account"
 msgid "Are you sure you want to delete your account?"
 msgstr "本当にアカウントを削除しますか？"
 
+msgctxt "are_you_sure_you_want_to_remove"
+msgid "Are you sure you want to remove {} as a sign-in method?"
+msgstr "{} をサインイン方法から削除してもよろしいですか？"
+
 #. Used in Main/Account/AccountNavStackView.swift.
 msgctxt "are_you_sure_you_want_to_remove_this_wallet"
 msgid "Are you sure you want to remove this wallet?"
@@ -210,6 +261,11 @@ msgstr "このウォレットを削除してもよろしいですか？"
 msgctxt "auth_code"
 msgid "Auth code"
 msgstr "認証コード"
+
+#. A message that displays the first and last six characters of an auth code.
+msgctxt "auth_code_2"
+msgid "Auth Code \n\n{0}...{1}"
+msgstr "認証コード \n\n{0}...{1}"
 
 #. Used in Main/Account/Settings/AuthCodeCreate/AuthCodeCreate.swift.
 msgctxt "auth_code_create"
@@ -446,6 +502,11 @@ msgctxt "by_subscribing_you_agree_to_urnetwork_s_terms"
 msgid "By subscribing, you agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr "サブスクライブすると、URnetworkの[利用規約](https://ur.io/terms)および[プライバシーポリシー](https://ur.io/privacy)に同意したことになります"
 
+#. App split rules: rule choice sending the app around the VPN (local route).
+msgctxt "bypass_vpn"
+msgid "Bypass VPN"
+msgstr "VPNを迂回"
+
 #. Call to action
 msgctxt "cancel"
 msgid "Cancel"
@@ -621,6 +682,11 @@ msgctxt "connect"
 msgid "Connect"
 msgstr "接続"
 
+#. A description of how to connect a Solana wallet to add it as a sign-in method.
+msgctxt "connect_a_solana_wallet_phantom_or_solflare"
+msgid "Connect a Solana wallet (Phantom or Solflare) to add it as a sign-in method."
+msgstr "Solanaウォレット（PhantomまたはSolflare）を接続して、サインイン方法として追加します。"
+
 #. Used in Main/Account/Settings/SettingsForm-iOS.swift.
 msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
@@ -681,6 +747,11 @@ msgctxt "connected"
 msgid "Connected"
 msgstr "接続済み"
 
+#. A label showing the public key of the connected wallet.
+msgctxt "connected_n"
+msgid "Connected: {}..."
+msgstr "接続済み: {}..."
+
 #. A message indicating that the device is connected to a certain number of providers. The argument is the number of providers.
 msgctxt "connected_provider_count"
 msgid "Connected to {} provider"
@@ -691,6 +762,11 @@ msgstr[0] "{} プロバイダーに接続済み"
 msgctxt "connecting_status_indicator"
 msgid "Connecting to providers"
 msgstr "プロバイダーに接続中"
+
+#. A message displayed when a user is connecting a wallet.
+msgctxt "connecting_to_wallet"
+msgid "Connecting to wallet..."
+msgstr "ウォレットに接続中..."
 
 #. Used in Main/Connect/ConnectActions/ConnectActions.swift.
 msgctxt "connection_mode"
@@ -743,6 +819,11 @@ msgctxt "contribute_bandwidth"
 msgid "Contribute Bandwidth"
 msgstr "帯域幅の提供"
 
+#. Text for a button that copies the seedphrase to the clipboard.
+msgctxt "copied"
+msgid "Copied!"
+msgstr "コピーしました！"
+
 #. Call to action
 msgctxt "copy"
 msgid "Copy"
@@ -757,6 +838,11 @@ msgstr "認証コードをコピー"
 msgctxt "copy_client_id"
 msgid "Copy client ID"
 msgstr "クライアントIDをコピー"
+
+#. Button text to copy the seedphrase to the clipboard.
+msgctxt "copy_to_clipboard"
+msgid "Copy to Clipboard"
+msgstr "クリップボードにコピー"
 
 #. Snackbar shown when the external wallet app could not be opened. Used in Shared/Views/SolanaSignMessageSheet.swift and Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
 msgctxt "couldnt_open_wallet"
@@ -808,6 +894,11 @@ msgctxt "create_an_account"
 msgid "Create an account"
 msgstr "アカウントを作成"
 
+#. A title for the screen where a user can create an instant account.
+msgctxt "create_instant_account"
+msgid "Create Instant Account"
+msgstr "インスタントアカウントを作成"
+
 #. Call to action
 msgctxt "create_network_error"
 msgid "Something went wrong. Try again."
@@ -817,6 +908,16 @@ msgstr "エラーが発生しました。もう一度お試しください。"
 msgctxt "created_auth_codes_expire_after_5_minutes"
 msgid "Created auth codes expire after 5 minutes"
 msgstr "作成された認証コードは5分後に失効します"
+
+#. A label showing the current network API and connect URLs.
+msgctxt "current_api_n"
+msgid "Current API: {}"
+msgstr "現在のAPI: {}"
+
+#. A label displaying the current connect URL.
+msgctxt "current_connect_n"
+msgid "Current connect: {}"
+msgstr "現在の接続: {}"
 
 #. Call to action
 msgctxt "current_network_referral"
@@ -837,6 +938,21 @@ msgstr "現在のリファラルネットワーク"
 msgctxt "custom_dns"
 msgid "Custom DNS"
 msgstr "カスタムDNS"
+
+#. Shown on the linux home screen when the app and the urnetworkd system service carry different URnetwork SDK builds (they update on independent schedules and must match exactly). The fix is updating both to the same release.
+msgctxt "daemon_sdk_mismatch"
+msgid "The app and the URnetwork system service are different builds. Update both to the same version."
+msgstr "アプリと URnetwork システムサービスのビルドが異なります。両方を同じバージョンに更新してください。"
+
+#. Shown on the linux home screen when the installed urnetworkd system service speaks an older control protocol than this app supports. Distinct from daemon_unreachable by contract; the fix is updating the service, not the app.
+msgctxt "daemon_too_old"
+msgid "The URnetwork system service is out of date. Update it to connect."
+msgstr "URnetwork システムサービスが古くなっています。接続するには更新してください。"
+
+#. Shown on the linux home screen when the privileged urnetworkd system service cannot be reached over its control socket (not installed, not running, or the user lacks access). Distinct from daemon_too_old by contract.
+msgctxt "daemon_unreachable"
+msgid "The URnetwork system service is not running. Install or start it, then try again."
+msgstr "URnetwork システムサービスが実行されていません。インストールまたは起動してから、もう一度お試しください。"
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "daily_data_balance_label"
@@ -872,6 +988,11 @@ msgstr "{} の支払い"
 msgctxt "default_bandwidth_earn_more_by"
 msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
 msgstr "デフォルトでは、{} GiB/月が付与されます。追加の帯域幅を獲得する方法はこちらです："
+
+#. Generic default choice label, e.g. the app split rule combo state meaning no rule.
+msgctxt "default_option"
+msgid "Default"
+msgstr "デフォルト"
 
 #. Used in Shared/Views/PayoutWalletTag.swift.
 msgctxt "default_txt"
@@ -983,6 +1104,11 @@ msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS over HTTPS"
 
+#. dns settings
+msgctxt "dns_pill_default"
+msgid "The default safe settings are not applied"
+msgstr "デフォルトの安全な設定が適用されていません"
+
 #. DNS status pill shown when the default safe DNS settings are not applied.
 msgctxt "dns_pill_defaults"
 msgid "The default safe settings are not applied"
@@ -1009,6 +1135,11 @@ msgid "DNS settings unavailable"
 msgstr "DNS設定は利用できません"
 
 #. dns settings
+msgctxt "dns_unapplied_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "{} 向けの推奨設定が適用されていません"
+
+#. dns settings
 msgctxt "dns_using_recommended"
 msgid "Using recommended regional settings"
 msgstr "地域の推奨設定を使用中"
@@ -1017,6 +1148,11 @@ msgstr "地域の推奨設定を使用中"
 msgctxt "dns_using_secure"
 msgid "Using most secure default settings"
 msgstr "最も安全なデフォルト設定を使用中"
+
+#. A button that dismisses a sheet.
+msgctxt "done"
+msgid "Done"
+msgstr "完了"
 
 #. Prompt shown when user doesn't see the verification email or SMS.
 msgctxt "dont_see_it"
@@ -1093,6 +1229,11 @@ msgctxt "enter_a_name_for_your_network"
 msgid "Enter a name for your network"
 msgstr "ネットワーク名を入力"
 
+#. Placeholder text for the password field in the add auth sheet.
+msgctxt "enter_a_password"
+msgid "Enter a password"
+msgstr "パスワードを入力"
+
 #. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
 msgctxt "enter_a_solana_or_bittensor_wallet_address"
 msgid "Enter a Solana or Bittensor wallet address"
@@ -1106,6 +1247,11 @@ msgstr "Solana USDCウォレットアドレスを入力してください"
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
 msgstr "残高コードを入力"
+
+#. A label for a text field where a user can enter a custom network name.
+msgctxt "enter_network_name"
+msgid "Enter network name"
+msgstr "ネットワーク名を入力"
 
 #. Call to action
 msgctxt "enter_network_referral_code"
@@ -1121,6 +1267,11 @@ msgstr "URnetworkに入る"
 msgctxt "enter_wallet_address"
 msgid "Enter wallet address"
 msgstr "ウォレットアドレスを入力"
+
+#. Error message displayed in a snackbar when there was an error changing the network name.
+msgctxt "error_changing_network_name"
+msgid "Error changing network name"
+msgstr "ネットワーク名の変更中にエラーが発生しました"
 
 #. Snackbar shown when claiming the earnings multiplier fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_claiming_multiplier"
@@ -1297,6 +1448,18 @@ msgctxt "general"
 msgid "General"
 msgstr "一般"
 
+msgctxt "generate"
+msgid "Generate"
+msgstr "生成"
+
+msgctxt "generate_a_recovery_seedphrase"
+msgid "Generate a recovery seedphrase?"
+msgstr "復元用のシードフレーズを生成しますか？"
+
+msgctxt "generate_seedphrase"
+msgid "Generate Seedphrase"
+msgstr "シードフレーズを生成"
+
 #. Call to action
 msgctxt "get_connected"
 msgid "Get connected"
@@ -1321,6 +1484,11 @@ msgstr "参加するだけでURnetworkを一生無料で利用できます"
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
 msgstr "Googleでログイン"
+
+#. Snackbar message displayed when a Google sign-in method is successfully added.
+msgctxt "google_sign_in_method_added"
+msgid "Google sign-in method added"
+msgstr "Googleのサインイン方法を追加しました"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "got_it"
@@ -1368,6 +1536,16 @@ msgctxt "i_agree_to_urnetwork_s_terms_and_services_https"
 msgid "I agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr "URnetworkの[利用規約](https://ur.io/terms)および[プライバシーポリシー](https://ur.io/privacy)に同意します"
 
+#. Button text for confirming that the user has saved their seedphrase.
+msgctxt "i_ve_saved_my_seedphrase"
+msgid "I've Saved My Seedphrase"
+msgstr "シードフレーズを保存しました"
+
+#. Post quantum identity: toast after tapping an identity key hash to copy it.
+msgctxt "identity_key_hash_copied"
+msgid "Identity key hash copied"
+msgstr "IDキーのハッシュをコピーしました"
+
 #. Used in Main/MainView.swift.
 msgctxt "if_the_problem_persists_contact_us_at_support_ur"
 msgid "If the problem persists, contact us at [support@ur.io](mailto:support@ur.io) or [join our Discord](https://discord.com/invite/RUNZXMwPRK) for direct support."
@@ -1392,6 +1570,11 @@ msgstr "VPN経由でルーティング"
 msgctxt "include_app_description"
 msgid "Only included apps use the tunnel."
 msgstr "含めたアプリのみトンネルを使用します。"
+
+#. App split rules: rule choice routing the app through the VPN.
+msgctxt "include_in_vpn"
+msgid "Include in VPN"
+msgstr "VPNに含める"
 
 #. transfer stats and split rules
 msgctxt "included"
@@ -1443,6 +1626,12 @@ msgctxt "ip_address"
 msgid "IP address"
 msgstr "IPアドレス"
 
+#. A label showing the number of IP addresses in a block action cluster, rendered as a single pill. The argument is the number of IPs.
+msgctxt "ip_count"
+msgid "{} IP"
+msgid_plural "{} IPs"
+msgstr[0] "{} 個の IP"
+
 #. Label for a list of IPv4 addresses.
 msgctxt "ipv4"
 msgid "IPv4"
@@ -1488,6 +1677,11 @@ msgctxt "join_urnetwork"
 msgid "Join URnetwork"
 msgstr "参加する URnetwork"
 
+#. Used in Main/Account/Wallets/NetworkReliability/NetworkReliabilityView.swift.
+msgctxt "key"
+msgid "key"
+msgstr "凡例"
+
 #. Call to action
 msgctxt "kill_switch"
 msgid "Kill switch"
@@ -1523,10 +1717,19 @@ msgctxt "learn_more_protocol_page"
 msgid "Learn more at the protocol page"
 msgstr "プロトコルページでさらに詳しく"
 
+#. A description of the add auth sheet.
+msgctxt "link_another_way_to_sign_in_to"
+msgid "Link another way to sign in to your account."
+msgstr "アカウントにサインインする別の方法をリンクします。"
+
 #. Used in ContentView.swift.
 msgctxt "loading"
 msgid "Loading..."
 msgstr "読み込み中..."
+
+msgctxt "loading_sign_in_methods"
+msgid "Loading sign-in methods..."
+msgstr "サインイン方法を読み込み中..."
 
 #. Label for a chart showing local traffic statistics.
 msgctxt "local"
@@ -1573,6 +1776,41 @@ msgctxt "local_statistics"
 msgid "Local statistics"
 msgstr "ローカル統計"
 
+#. Error state on linux: URnetwork wrote the system location file and can no longer remove it, so the machine may still be reporting a provider's location. Gives the user the recovery steps.
+msgctxt "location_override_cleanup_required"
+msgid "URnetwork could not remove the system location file, so this machine may still report a provider's location. Start the URnetwork system service and turn this off, or remove /etc/geolocation as an administrator."
+msgstr "URnetwork はシステムの位置情報ファイルを削除できませんでした。そのため、このマシンはプロバイダーの位置情報を報告し続けている可能性があります。URnetwork システムサービスを起動してこの機能をオフにするか、管理者として /etc/geolocation を削除してください。"
+
+#. Setup guide and info popup on linux: the honest limits of the device location override. Paired with location_override_coverage_geoclue.
+msgctxt "location_override_coverage_gaps"
+msgid "It does not cover everything. Chrome and KDE Plasma never ask GeoClue, and any app that works out your location from your IP address on its own is unaffected. Firefox falls back to its own lookup if the system does not answer quickly."
+msgstr "すべてを網羅するわけではありません。Chrome と KDE Plasma は GeoClue に問い合わせることがなく、IP アドレスから独自に位置を割り出すアプリには影響しません。システムがすぐに応答しない場合、Firefox は独自の位置検索にフォールバックします。"
+
+#. Setup guide and info popup on linux: what the device location override actually covers. Shown alongside location_override_coverage_gaps, which states the limits.
+msgctxt "location_override_coverage_geoclue"
+msgid "Apps that ask the system for your location through GeoClue — including GNOME Settings and Maps, Firefox, and sandboxed Flatpak and Snap apps — report the provider's location instead of yours."
+msgstr "GeoClue を通じてシステムに位置情報を問い合わせるアプリ — GNOME の「設定」と「地図」、Firefox、サンドボックス化された Flatpak および Snap アプリなど — は、あなたの位置情報ではなくプロバイダーの位置情報を報告します。"
+
+#. Setup guide state on linux: every prerequisite for the device location override is met.
+msgctxt "location_override_ready"
+msgid "Ready. Turn on the toggle to report the connected provider's location as this machine's location."
+msgstr "準備完了。トグルをオンにすると、接続中のプロバイダーの位置情報がこのマシンの位置情報として報告されます。"
+
+#. Setup guide step on linux: the GeoClue version requirement for the device location override.
+msgctxt "location_override_step_geoclue"
+msgid "Install GeoClue 2.7 or newer. It is not on every system, and Ubuntu 22.04 and Debian 12 ship an older version that cannot do this."
+msgstr "GeoClue 2.7 以降をインストールしてください。すべてのシステムに入っているわけではなく、Ubuntu 22.04 と Debian 12 に付属するのはこれに対応していない古いバージョンです。"
+
+#. Setup guide step on linux: the privileged helper needed to write the system location file. Reassures the user that the app itself never needs root.
+msgctxt "location_override_step_service"
+msgid "Install the URnetwork system service. The system location file lives under /etc, so a privileged helper has to write it — URnetwork never asks you to run the app itself as an administrator."
+msgstr "URnetwork システムサービスをインストールしてください。システムの位置情報ファイルは /etc 以下にあるため、書き込みには特権ヘルパーが必要です — URnetwork がアプリ自体を管理者として実行するよう求めることはありません。"
+
+#. Setup guide step on linux: keep GeoClue's static location source enabled so the override is read.
+msgctxt "location_override_step_static_source"
+msgid "Keep GeoClue's static location source enabled. It is on by default; check /etc/geoclue/geoclue.conf if you have changed it."
+msgstr "GeoClue の静的位置情報ソースを有効のままにしてください。既定では有効です。変更したことがある場合は /etc/geoclue/geoclue.conf を確認してください。"
+
 #. Call to action
 msgctxt "login_client_error"
 msgid "Something went wrong authenticating the client. Try again."
@@ -1618,15 +1856,30 @@ msgctxt "make_default"
 msgid "Make default"
 msgstr "デフォルトに設定"
 
+#. Split tunnel settings: button opening the app split rules sheet.
+msgctxt "manage_apps"
+msgid "Manage apps"
+msgstr "アプリを管理"
+
 #. Call to action
 msgctxt "manage_subscription"
 msgid "Manage subscription"
 msgstr "サブスクリプションを管理"
 
+#. A label at the bottom of the contract stack
+msgctxt "max_n"
+msgid "max {}"
+msgstr "最大 {}"
+
 #. Display name for the paid plan. The WIRE value stays "supporter" (subscription_type / current_subscription.plan) because already-shipped app versions parse that string; only what the user reads changes.
 msgctxt "member"
 msgid "Member"
 msgstr "メンバー"
+
+#. A label for the picker that lets the user select the sign-in method.
+msgctxt "method"
+msgid "Method"
+msgstr "方法"
 
 #. Compact relative-time label with an abbreviated minutes unit ("7m ago"), shown by the windows and linux stats formatters for events 1-59 minutes old. The argument is the elapsed minutes. Not a plural: the abbreviated unit does not inflect, but the word order and the unit abbreviation localize.
 msgctxt "minutes_ago_abbrev"
@@ -1738,10 +1991,20 @@ msgctxt "most_popular"
 msgid "Most Popular"
 msgstr "最も人気"
 
+#. Android app string: multiple ips.
+msgctxt "multiple_ips"
+msgid "Multiple IPs"
+msgstr "複数のIP"
+
 #. Call to action
 msgctxt "multiplier"
 msgid "Multiplier"
 msgstr "倍率"
+
+#. A label that shows the daily data usage from referrals. The argument is the number of referrals.
+msgctxt "n_gib_day"
+msgid "+{} GiB/Day"
+msgstr "+{} GiB/日"
 
 #. Create Network Form
 msgctxt "name_label"
@@ -1772,6 +2035,11 @@ msgstr "獲得した純ポイント"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "提供済みネット"
+
+#. Provide control mode option that provides bandwidth only to peers in the same network.
+msgctxt "network"
+msgid "Network"
+msgstr "ネットワーク"
 
 #. Help text under the API URL field of the network API selector.
 msgctxt "network_api_api_url_help"
@@ -1863,6 +2131,11 @@ msgctxt "network_earnings"
 msgid "Network earnings"
 msgstr "ネットワーク収益"
 
+#. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
+msgctxt "network_name_changed_to_n"
+msgid "Network name changed to {}"
+msgstr "ネットワーク名を {} に変更しました"
+
 #. Call to action
 msgctxt "network_name_check_error"
 msgid "Not available. Must be at least 3 characters different than an existing network. Make it unique or longer."
@@ -1902,6 +2175,12 @@ msgstr "このネットワーク名は既に使用されています"
 msgctxt "network_name_unavailable"
 msgid "Network name unavailable"
 msgstr "ネットワーク名を使用できません"
+
+#. A label showing the number of connected network peers that have provide enabled. Shown under the location in the connect drawer and as the pinned section title in the location chooser. The argument is the number of peers.
+msgctxt "network_peer_count"
+msgid "You have {} other device online"
+msgid_plural "You have {} other devices online"
+msgstr[0] "他に{}台のデバイスがオンラインです"
 
 #. A label displayed above the list of connected peers.
 msgctxt "network_peers"
@@ -1958,6 +2237,16 @@ msgstr "残高コードが見つかりません"
 msgctxt "no_blocked_locations"
 msgid "No blocked locations"
 msgstr "ブロックされた場所はありません"
+
+#. A description of the benefits of creating an Instant Account.
+msgctxt "no_email_phone_or_password_needed_your"
+msgid "No email, phone, or password needed. Your account is secured by a seedphrase."
+msgstr "メールアドレスも電話番号もパスワードも不要です。アカウントはシードフレーズで保護されます。"
+
+#. App split rules: empty state when no installed apps were enumerated.
+msgctxt "no_installed_apps_found"
+msgid "No installed apps found. (Store apps aren't listed.)"
+msgstr "インストール済みのアプリが見つかりません。(Store アプリは一覧に表示されません。)"
 
 #. Call to action
 msgctxt "no_locations_found"
@@ -2114,6 +2403,11 @@ msgctxt "password_support_txt"
 msgid "Password must be at least 12 characters"
 msgstr "パスワードは12文字以上である必要があります"
 
+#. A placeholder text for the seedphrase field.
+msgctxt "paste_your_24_word_seedphrase_here"
+msgid "Paste your 24-word seedphrase here"
+msgstr "24単語のシードフレーズをここに貼り付け"
+
 #. Call to action
 msgctxt "pay_with_solana_wallet"
 msgid "Pay with Solana Wallet"
@@ -2159,6 +2453,21 @@ msgctxt "payouts_amount_threshold"
 msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
 msgstr "支払いは毎週日曜日の00:00 UTCに行われ、最低USDC基準を満たす必要があります。"
 
+#. Post quantum identity panel: peer identity count indicator, singular.
+msgctxt "peer_count_one"
+msgid "1 peer"
+msgstr "1 ピア"
+
+#. Post quantum identity panel: peer identity count indicator. The argument is the number of peers with an identity-verified e2e session.
+msgctxt "peer_count_other"
+msgid "%d peers"
+msgstr "%d ピア"
+
+#. Replaces the network peer count/list while the app is not attached to its remote device (the network extension or service rpc is down — not connected): the peer state lives in the remote device, so the stat is unavailable rather than zero. Shown with a gray dot.
+msgctxt "peer_discovery_disabled"
+msgid "Peer discovery disabled until connected"
+msgstr "接続するまでピア検出は無効です"
+
 #. Call to action
 msgctxt "pending_data_key"
 msgid "Pending"
@@ -2173,6 +2482,26 @@ msgstr "保留中: {} MB 提供済み"
 msgctxt "pending_payout"
 msgid "Pending payout"
 msgstr "保留中の支払い"
+
+#. Android app string: pin app.
+msgctxt "pin_app"
+msgid "Pin to one provider"
+msgstr "1つのプロバイダーに固定"
+
+#. Android app string: pin app description.
+msgctxt "pin_app_description"
+msgid "Keeps all of this app's connections on a single provider, so its API and images share one IP address. Use for apps whose content fails to load through the VPN"
+msgstr "このアプリのすべての接続を1つのプロバイダーにまとめ、APIと画像が同じIPアドレスを使うようにします。VPN経由でコンテンツが読み込めないアプリに使用してください"
+
+#. Android app string: pinned.
+msgctxt "pinned"
+msgid "Pinned"
+msgstr "固定済み"
+
+#. Placeholder text for an empty text field.
+msgctxt "placeholder"
+msgid "Placeholder"
+msgstr "プレースホルダ"
 
 #. Upgrade subscription overlay
 msgctxt "plan"
@@ -2214,6 +2543,26 @@ msgstr[0] "+ 他{}件"
 msgctxt "points_breakdown"
 msgid "Points breakdown"
 msgstr "ポイントの内訳"
+
+#. Connect drawer: post quantum encryption toggle label.
+msgctxt "post_quantum_encryption"
+msgid "Post Quantum Encryption"
+msgstr "ポスト量子暗号"
+
+#. Connect drawer: note under the post quantum encryption toggle. Plaintext fallback applies when the provider does not support the e2e sessions.
+msgctxt "post_quantum_encryption_fallback_note"
+msgid "Fallback enabled (temporary)"
+msgstr "フォールバック有効（一時的）"
+
+#. Account tab: post quantum identity panel title.
+msgctxt "post_quantum_identity"
+msgid "Post Quantum Identity"
+msgstr "ポスト量子ID"
+
+#. Account tab: explanation under the post quantum identity panel — what the identity key is and how verifying provider keys detects interception.
+msgctxt "post_quantum_identity_explanation"
+msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
+msgstr "あなたのIDキーはこのデバイスにローカル保存されます。いずれかのピアのキーがローカルに保存されたキーと異なって表示される場合、そのネットワーク運営者は信頼できません。"
 
 #. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
 msgctxt "pricing_shown_at_checkout"
@@ -2290,6 +2639,11 @@ msgctxt "provider_count_int"
 msgid "{} providers"
 msgstr "{} プロバイダー"
 
+#. Post quantum identity: title of the connected provider identity key details view.
+msgctxt "provider_identities"
+msgid "Provider Identities"
+msgstr "プロバイダーのID"
+
 #. Row subtitle in the provider locations list when a provider's location is not known.
 msgctxt "provider_location_unknown"
 msgid "Location unknown"
@@ -2304,6 +2658,11 @@ msgstr "接続中のプロバイダーはありません"
 msgctxt "provider_locations_title"
 msgid "Provider Locations"
 msgstr "プロバイダーの場所"
+
+#. Shown instead of the provider list when the device's window state cannot be read, because the network extension hosting it is not running. Never present an empty list as "no providers" in that case.
+msgctxt "provider_locations_unavailable"
+msgid "Provider details are unavailable until connected"
+msgstr "接続するまでプロバイダーの詳細は利用できません"
 
 #. Title of a section that shows statistics about the provider.
 msgctxt "provider_statistics"
@@ -2406,6 +2765,11 @@ msgctxt "refer_a_friend_30_gib_month"
 msgid "Refer a friend = +30 GiB/Month"
 msgstr "友達を紹介 = +30 GiB/月"
 
+#. A bullet point in the introduction view that describes how much extra bandwidth you can earn by referring a friend.
+msgctxt "refer_a_friend_3_gib_day"
+msgid "Refer a friend = +3 GiB/Day"
+msgstr "友達を紹介 = +3 GiB/日"
+
 #. Account Screen
 msgctxt "refer_and_earn"
 msgid "Refer and earn"
@@ -2501,6 +2865,10 @@ msgctxt "referrals"
 msgid "Referrals"
 msgstr "紹介"
 
+msgctxt "regenerate_seedphrase"
+msgid "Regenerate Seedphrase"
+msgstr "シードフレーズを再生成"
+
 #. Provider list group title for regions
 msgctxt "regions"
 msgid "Regions"
@@ -2565,6 +2933,10 @@ msgstr "削除"
 msgctxt "remove_rule"
 msgid "Remove rule"
 msgstr "ルールを削除"
+
+msgctxt "remove_this_sign_in_method"
+msgid "Remove this sign-in method?"
+msgstr "このサインイン方法を削除しますか？"
 
 #. Used in Main/Account/AccountNavStackView.swift.
 msgctxt "remove_wallet"
@@ -2636,6 +3008,11 @@ msgctxt "rules"
 msgid "Rules"
 msgstr "ルール"
 
+#. A description of the benefits of using a Seeker Token.
+msgctxt "s_2x_your_free_and_referral_data"
+msgid "2x your free and referral data"
+msgstr "無料データと紹介データが2倍"
+
 #. Profile
 msgctxt "save"
 msgid "Save"
@@ -2671,6 +3048,11 @@ msgctxt "seconds_ago_abbrev"
 msgid "{}s ago"
 msgstr "{}秒前"
 
+#. The title of the screen.
+msgctxt "secure_your_account"
+msgid "Secure Your Account"
+msgstr "アカウントを保護"
+
 #. Onboarding Carousel
 msgctxt "see_world_content"
 msgid "See all the\nworld's content"
@@ -2681,6 +3063,11 @@ msgctxt "see_world_content_description"
 msgid "See all the world's content with URnetwork"
 msgstr "URnetworkで世界中のコンテンツを見る"
 
+#. A label displayed above a field for entering a seedphrase.
+msgctxt "seedphrase"
+msgid "Seedphrase"
+msgstr "シードフレーズ"
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -2690,6 +3077,11 @@ msgstr "Seekerトークンが認証されました！"
 msgctxt "select_country_to_block"
 msgid "Select country to block"
 msgstr "ブロックする国を選択"
+
+#. Connect drawer: accessibility label for the globe icon that opens the provider selection list.
+msgctxt "select_location_provider_content_description"
+msgid "Select location provider globe"
+msgstr "地球儀: プロバイダーの場所を選択"
 
 #. Fallback name for the connect location when the selected location has no name.
 msgctxt "selected_location"
@@ -2801,6 +3193,11 @@ msgctxt "sign_in"
 msgid "Sign in"
 msgstr "サインイン"
 
+#. Button text for signing in with a seedphrase.
+msgctxt "sign_in_2"
+msgid "Sign In"
+msgstr "サインイン"
+
 #. Call to action
 msgctxt "sign_in_dgen1"
 msgid "Sign in with dGEN1"
@@ -2810,6 +3207,15 @@ msgstr "dGEN1でサインイン"
 msgctxt "sign_in_failed"
 msgid "Sign in failed"
 msgstr "サインインに失敗しました"
+
+#. Snackbar message displayed when a sign-in method is successfully added.
+msgctxt "sign_in_method_added_successfully"
+msgid "Sign-in method added successfully"
+msgstr "サインイン方法が正常に追加されました"
+
+msgctxt "sign_in_methods"
+msgid "Sign-In Methods"
+msgstr "サインイン方法"
 
 #. Button that signs in with a pasted auth code instead of a password.
 msgctxt "sign_in_with_code"
@@ -2821,15 +3227,214 @@ msgctxt "sign_in_with_google"
 msgid "Sign in with Google"
 msgstr "Google でサインイン"
 
+#. A description of how to sign in with Google.
+msgctxt "sign_in_with_google_to_add_it"
+msgid "Sign in with Google to add it as a sign-in method."
+msgstr "Googleでサインインして、サインイン方法として追加します。"
+
+msgctxt "sign_in_with_seedphrase"
+msgid "Sign in with Seedphrase"
+msgstr "シードフレーズでサインイン"
+
+#. A description of the Apple Sign-In process.
+msgctxt "sign_in_with_your_apple_id_to"
+msgid "Sign in with your Apple ID to add it as a sign-in method."
+msgstr "Apple IDでサインインして、サインイン方法として追加します。"
+
 #. Used in NetworkApp.swift.
 msgctxt "sign_out"
 msgid "Sign out"
 msgstr "サインアウト"
 
+#. Button text for signing in with a wallet.
+msgctxt "sign_with_wallet"
+msgid "Sign with Wallet"
+msgstr "ウォレットで署名"
+
 #. Tray notification shown when the account signs in.
 msgctxt "signed_in"
 msgid "Signed in"
 msgstr "サインインしました"
+
+#. Reliability: average label
+msgctxt "site_app_average_reliability"
+msgid "Average reliability"
+msgstr "平均信頼性"
+
+#. Reliability: clients series
+msgctxt "site_app_clients"
+msgid "Clients"
+msgstr "クライアント"
+
+#. Connect drawer: options section label
+msgctxt "site_app_connect_options"
+msgid "Connect options"
+msgstr "接続オプション"
+
+#. Disabled stat cards: connect-to-view hint
+msgctxt "site_app_connect_to_view"
+msgid "Connect to view live activity"
+msgstr "接続するとリアルタイムのアクティビティが表示されます"
+
+#. Reliability: country column
+msgctxt "site_app_country"
+msgid "Country"
+msgstr "国"
+
+#. Reliability: country multipliers heading
+msgctxt "site_app_country_multipliers"
+msgid "Country multipliers"
+msgstr "国別倍率"
+
+#. Connect drawer: fixed-IP toggle
+msgctxt "site_app_fixed_ip"
+msgid "Fixed IP"
+msgstr "固定IP"
+
+#. App sidebar: manage subscription button (opens the Stripe billing portal)
+msgctxt "site_app_manage_subscription"
+msgid "Manage Subscription"
+msgstr "サブスクリプションを管理"
+
+#. Connect drawer: connection mode Auto
+msgctxt "site_app_mode_auto"
+msgid "Auto"
+msgstr "自動"
+
+#. Connect drawer: connection mode Streaming
+msgctxt "site_app_mode_streaming"
+msgid "Streaming"
+msgstr "ストリーミング"
+
+#. Connect drawer: connection mode Web
+msgctxt "site_app_mode_web"
+msgid "Web"
+msgstr "ウェブ"
+
+#. Reliability: multiplier column
+msgctxt "site_app_multiplier"
+msgid "Multiplier"
+msgstr "倍率"
+
+#. Connect drawer: throughput empty state
+msgctxt "site_app_no_traffic"
+msgid "No traffic yet"
+msgstr "まだトラフィックはありません"
+
+#. Connect drawer: plan section label
+msgctxt "site_app_plan"
+msgid "Plan"
+msgstr "プラン"
+
+#. App account: proxies row/screen title
+msgctxt "site_app_proxies"
+msgid "Proxies"
+msgstr "プロキシ"
+
+#. Reliability: weight series
+msgctxt "site_app_reliability_weight"
+msgid "Reliability weight"
+msgstr "信頼性の重み"
+
+#. Connect drawer: strong-anonymization toggle
+msgctxt "site_app_strong_anon"
+msgid "Strong Anonymization"
+msgstr "強力な匿名化"
+
+#. Connect drawer: live transfer timeseries section
+msgctxt "site_app_throughput"
+msgid "Transfer"
+msgstr "転送量"
+
+#. Connect: extension fix alert title
+msgctxt "site_connect_ext_fix_title"
+msgid "Set up the extension to connect"
+msgstr "接続するには拡張機能をセットアップしてください"
+
+#. Connect: extension different-network alert body
+msgctxt "site_connect_ext_foreign_body"
+msgid "The extension is signed into a different network:"
+msgstr "拡張機能は別のネットワークにサインインしています："
+
+#. Connect: extension install alert body
+msgctxt "site_connect_ext_install_body"
+msgid "URnetwork routes this browser through the extension. Install it to start connecting."
+msgstr "URnetwork は拡張機能を通じてこのブラウザーをルーティングします。接続を始めるにはインストールしてください。"
+
+#. Connect: extension install alert title
+msgctxt "site_connect_ext_install_title"
+msgid "Install the extension to connect"
+msgstr "接続するには拡張機能をインストールしてください"
+
+#. Connect: extension ready status
+msgctxt "site_connect_ext_ready"
+msgid "Extension detected and signed in"
+msgstr "拡張機能を検出、サインイン済み"
+
+#. Connect: extension logged-out alert body
+msgctxt "site_connect_ext_unlinked_body"
+msgid "The extension is installed but signed out. Set it up with your network to connect."
+msgstr "拡張機能はインストールされていますが、サインアウトしています。接続するにはご自分のネットワークでセットアップしてください。"
+
+#. Connect: disconnected status line
+msgctxt "site_connect_ready"
+msgid "Ready to connect"
+msgstr "接続準備完了"
+
+#. Mobile app panel: install-the-native-app CTA
+msgctxt "site_install_app"
+msgid "Install the app"
+msgstr "アプリをインストール"
+
+#. Subscription: free plan body
+msgctxt "site_sub_free_body"
+msgid "You're on the Free plan. Upgrade to Pro for more data and features."
+msgstr "現在は Free プランです。データと機能を増やすには Pro にアップグレードしてください。"
+
+#. Subscription: free plan title
+msgctxt "site_sub_free_title"
+msgid "Free plan"
+msgstr "Free プラン"
+
+#. Subscription: manage-on-platform button ({platform})
+msgctxt "site_sub_manage_on"
+msgid "Manage in {platform}"
+msgstr "{platform}で管理"
+
+#. Subscription: manage-on-platform button, Apple. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_apple"
+msgid "Manage in the App Store"
+msgstr "App Storeで管理"
+
+#. Subscription: manage-on-platform button, Google. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_google"
+msgid "Manage in Google Play"
+msgstr "Google Playで管理"
+
+#. Subscription: unknown platform fallback
+msgctxt "site_sub_other_platform"
+msgid "another platform"
+msgstr "別のプラットフォーム"
+
+#. Subscription: other-platform body ({platform})
+msgctxt "site_sub_platform_body"
+msgid "Your Pro subscription is billed through {platform}. To change or cancel it, manage your subscriptions in {platform}."
+msgstr "Pro サブスクリプションは {platform} 経由で請求されています。変更または解約するには、{platform} 経由でサブスクリプションを管理してください。"
+
+#. Subscription: billing explanation, Apple. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_apple"
+msgid "Your Pro subscription is billed through the App Store. To change or cancel it, manage your subscriptions in the App Store."
+msgstr "Pro サブスクリプションは App Store 経由で請求されています。変更または解約するには、App Store でサブスクリプションを管理してください。"
+
+#. Subscription: billing explanation, Google. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_google"
+msgid "Your Pro subscription is billed through Google Play. To change or cancel it, manage your subscriptions in Google Play."
+msgstr "Pro サブスクリプションは Google Play 経由で請求されています。変更または解約するには、Google Play でサブスクリプションを管理してください。"
+
+#. Subscription: Stripe-billed body
+msgctxt "site_sub_stripe_body"
+msgid "Your Pro subscription is billed through Stripe. Update your payment details or cancel anytime below."
+msgstr "Pro サブスクリプションは Stripe 経由で請求されています。以下でいつでもお支払い情報の更新や解約ができます。"
 
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"
@@ -3077,10 +3682,25 @@ msgctxt "these_wallets_are_not_affiliated_or_controlled"
 msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
 msgstr "これらのウォレットはURnetworkと提携しておらず、URnetworkによって管理されていません。収益は接続されたウォレットに送金されます。"
 
+#. A warning message displayed in the seedphrase display view.
+msgctxt "this_is_the_only_time_you_ll"
+msgid "⚠️ This is the ONLY time you'll see this."
+msgstr "⚠️ 表示されるのはこの一度きりです。"
+
 #. dns settings
 msgctxt "this_region"
 msgid "this region"
 msgstr "この地域"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is connected.
+msgctxt "tile_status_connected"
+msgid "Connected"
+msgstr "接続済み"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is disconnected.
+msgctxt "tile_status_disconnected"
+msgid "Disconnected"
+msgstr "未接続"
 
 msgctxt "title_login"
 msgid "Login"
@@ -3176,6 +3796,11 @@ msgstr "ゲストモードを試す"
 msgctxt "try_guest_mode_2"
 msgid "Try guest mode"
 msgstr "ゲストモードを試す"
+
+#. Generic fallback on the linux home screen when the urnetworkd system service accepted the request but starting the VPN tunnel failed and no more specific error text is available.
+msgctxt "tunnel_start_failed"
+msgid "Could not start the connection"
+msgstr "接続を開始できませんでした"
 
 #. A label displayed in the custom dns settings section.
 msgctxt "unencrypted_dns"
@@ -3424,10 +4049,20 @@ msgctxt "version_info"
 msgid "Version and build info"
 msgstr "バージョンおよびビルド情報"
 
+#. Android app string: via exit.
+msgctxt "via_exit"
+msgid "via {}"
+msgstr "{} 経由"
+
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "waiting_for_approval"
 msgid "Waiting for approval"
 msgstr "承認待ち"
+
+#. A message displayed when waiting for a wallet signature.
+msgctxt "waiting_for_wallet_signature"
+msgid "Waiting for wallet signature..."
+msgstr "ウォレットの署名を待っています..."
 
 #. Account Screen
 msgctxt "wallet"
@@ -3477,6 +4112,11 @@ msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
 msgstr "ウォレットでのサインインに失敗しました"
 
+#. Snackbar message displayed when a wallet sign-in method is successfully added.
+msgctxt "wallet_sign_in_method_added"
+msgid "Wallet sign-in method added"
+msgstr "ウォレットのサインイン方法を追加しました"
+
 #. Wallets Screen
 msgctxt "wallets"
 msgid "Wallets"
@@ -3517,6 +4157,11 @@ msgctxt "with_urnetwork"
 msgid "with URnetwork"
 msgstr "URnetworkで"
 
+#. A warning message that instructs the user to write down their seedphrase and store it in a secure location.
+msgctxt "write_it_down_and_store_it_somewhere"
+msgid "Write it down and store it somewhere safe. If you lose it, you'll lose access to your account."
+msgstr "書き留めて安全な場所に保管してください。紛失すると、アカウントにアクセスできなくなります。"
+
 #. Billing period name on the yearly subscription product card in the upgrade flow.
 msgctxt "yearly"
 msgid "Yearly"
@@ -3531,6 +4176,19 @@ msgstr "はい"
 msgctxt "you_get_30_gib_month_for_life"
 msgid "You get 30 GiB/month for life"
 msgstr "30 GiB/月を一生獲得"
+
+#. Text displayed in a scrollable view within a VStack in the body of a view that is displayed when the user is viewing their referral code.
+msgctxt "you_get_3_gib_day_for_life"
+msgid "You get 3 GiB/day for life"
+msgstr "あなたは生涯 3 GiB/日 を獲得できます"
+
+msgctxt "you_have_1_other_device_online"
+msgid "You have 1 other device online"
+msgstr "他に1台のデバイスがオンラインです"
+
+msgctxt "you_have_n_other_devices_online"
+msgid "You have {} other devices online"
+msgstr "他に{}台のデバイスがオンラインです"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "you_ll_unlock_even_faster_speeds_and_first_dibs"
@@ -3562,6 +4220,11 @@ msgctxt "your_friend_gets_30_gib_month_for_life"
 msgid "Your friend gets 30 GiB/month for life"
 msgstr "友達は30 GiB/月を一生獲得"
 
+#. Text displayed in a scrollable view within a VStack in the body of a view that is displayed in a modal.
+msgctxt "your_friend_gets_3_gib_day_for"
+msgid "Your friend gets 3 GiB/day for life"
+msgstr "友達は生涯 3 GiB/日 を獲得できます"
+
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "your_purchase_needs_to_be_approved_before_it_can"
 msgid "Your purchase needs to be approved before it can complete. UR Pro will turn on by itself once it goes through — there's no need to buy again."
@@ -3571,3 +4234,8 @@ msgstr "購入を完了するには承認が必要です。承認されるとUR 
 msgctxt "your_referral_link"
 msgid "Your referral link"
 msgstr "あなたの紹介リンク"
+
+#. A title displayed above the user's seedphrase.
+msgctxt "your_seedphrase"
+msgid "Your Seedphrase"
+msgstr "あなたのシードフレーズ"

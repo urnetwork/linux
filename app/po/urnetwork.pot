@@ -4835,6 +4835,11 @@ msgctxt "site_socks_cred_note"
 msgid "Username is the token in the URL; password is empty."
 msgstr ""
 
+#. Subscription: body for a Pro account with no store subscription to cancel (e.g. Pro from a balance code or a grant)
+msgctxt "site_sub_active_body"
+msgid "Your Pro plan is active. There's no store subscription to manage on this account."
+msgstr ""
+
 #. Subscription: free plan body
 msgctxt "site_sub_free_body"
 msgid "You're on the Free plan. Upgrade to Pro for more data and features."
@@ -4850,6 +4855,26 @@ msgctxt "site_sub_manage_on"
 msgid "Manage in {platform}"
 msgstr ""
 
+#. Subscription: manage-on-platform button, Apple. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_apple"
+msgid "Manage in the App Store"
+msgstr ""
+
+#. Subscription: manage-on-platform button, Google. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_google"
+msgid "Manage in Google Play"
+msgstr ""
+
+#. Subscription: warning shown when a network is billed by more than one store, because cancelling one does not cancel the others
+msgctxt "site_sub_multiple_note"
+msgid "You're being billed for more than one subscription. Each one has to be cancelled where it was purchased."
+msgstr ""
+
+#. Subscription: heading above the list, shown only when more than one store is billing the network
+msgctxt "site_sub_multiple_title"
+msgid "Your subscriptions"
+msgstr ""
+
 #. Subscription: unknown platform fallback
 msgctxt "site_sub_other_platform"
 msgid "another platform"
@@ -4858,6 +4883,16 @@ msgstr ""
 #. Subscription: other-platform body ({platform})
 msgctxt "site_sub_platform_body"
 msgid "Your Pro subscription is billed through {platform}. To change or cancel it, manage your subscriptions in {platform}."
+msgstr ""
+
+#. Subscription: billing explanation, Apple. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_apple"
+msgid "Your Pro subscription is billed through the App Store. To change or cancel it, manage your subscriptions in the App Store."
+msgstr ""
+
+#. Subscription: billing explanation, Google. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_google"
+msgid "Your Pro subscription is billed through Google Play. To change or cancel it, manage your subscriptions in Google Play."
 msgstr ""
 
 #. Subscription: Stripe-billed body

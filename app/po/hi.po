@@ -10,6 +10,19 @@ msgstr ""
 "Language: hi\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+#. A description of the seedphrase generation process.
+msgctxt "a_new_seedphrase_will_be_generated_and"
+msgid "A new seedphrase will be generated and linked to your account."
+msgstr "एक नया सीड फ़्रेज़ बनाया जाएगा और आपके खाते से जोड़ा जाएगा।"
+
+msgctxt "a_seedphrase_lets_you_recover_your_account"
+msgid "A seedphrase lets you recover your account if you lose access."
+msgstr "अगर आपकी पहुंच खो जाती है, तो सीड फ़्रेज़ से आप अपना खाता वापस पा सकते हैं।"
+
+msgctxt "a_seedphrase_lets_you_recover_your_account_2"
+msgid "A seedphrase lets you recover your account if you lose access. Store it safely."
+msgstr "अगर आपकी पहुंच खो जाती है, तो सीड फ़्रेज़ से आप अपना खाता वापस पा सकते हैं। इसे किसी सुरक्षित जगह पर रखें।"
+
 #. Instructions for accessing the authentication code.
 #. Use the {link}...{/link} markers to wrap the "ur.io" portion, which should be rendered as a clickable link.
 #. Example usage:
@@ -56,6 +69,11 @@ msgctxt "add"
 msgid "Add"
 msgstr "जोड़ें"
 
+#. A title for the screen that lets the user add a new sign-in method.
+msgctxt "add_a_sign_in_method"
+msgid "Add a sign-in method"
+msgstr "साइन-इन विधि जोड़ें"
+
 #. Call to action
 msgctxt "add_blocked_location"
 msgid "Add blocked location"
@@ -70,6 +88,15 @@ msgstr "रेफरल कोड जोड़ें"
 msgctxt "add_referral_extra_rewards"
 msgid "Add referral code to earn extra rewards"
 msgstr "अतिरिक्त पुरस्कार पाने के लिए रेफरल कोड जोड़ें"
+
+msgctxt "add_sign_in_method"
+msgid "Add sign-in method"
+msgstr "साइन-इन विधि जोड़ें"
+
+#. Button text for adding a sign-in method.
+msgctxt "add_sign_in_method_2"
+msgid "Add Sign-In Method"
+msgstr "साइन-इन विधि जोड़ें"
 
 #. Wallets Screen
 msgctxt "add_wallet"
@@ -144,6 +171,11 @@ msgctxt "app_included_toast"
 msgid "{} will route through the VPN"
 msgstr "{} VPN से रूट होगा"
 
+#. Android app string: app pinned toast.
+msgctxt "app_pinned_toast"
+msgid "{} will use one provider"
+msgstr "{} एक ही प्रदाता का उपयोग करेगा"
+
 #. transfer stats and split rules
 msgctxt "app_split_active_exclude"
 msgid "Exclude active — excluded apps bypass the VPN"
@@ -168,6 +200,21 @@ msgstr "शामिल ऐप्स को प्राथमिकता म�
 msgctxt "app_split_rules"
 msgid "App split rules"
 msgstr "ऐप स्प्लिट नियम"
+
+#. Generic starter label on the app-split panel when no apps are included or excluded yet (shown instead of "0 apps excluded").
+msgctxt "app_split_starter"
+msgid "0 split apps"
+msgstr "0 स्प्लिट ऐप्स"
+
+#. Shown on the linux home screen when the urnetworkd system service rejected this app for speaking an older control protocol than the service supports. The fix is updating the app, not the service.
+msgctxt "app_too_old_for_daemon"
+msgid "This app is older than the installed URnetwork system service. Update the app to connect."
+msgstr "यह ऐप्लिकेशन इंस्टॉल की गई URnetwork सिस्टम सेवा से पुराना है। कनेक्ट करने के लिए ऐप्लिकेशन को अपडेट करें।"
+
+#. Snackbar message displayed when an Apple sign-in method is added.
+msgctxt "apple_sign_in_method_added"
+msgid "Apple sign-in method added"
+msgstr "Apple साइन-इन विधि जोड़ी गई"
 
 #. Call to action
 msgctxt "apply_bonus"
@@ -203,6 +250,10 @@ msgctxt "are_you_sure_delete_account"
 msgid "Are you sure you want to delete your account?"
 msgstr "क्या आप वाकई अपना अकाउंट डिलीट करना चाहते हैं?"
 
+msgctxt "are_you_sure_you_want_to_remove"
+msgid "Are you sure you want to remove {} as a sign-in method?"
+msgstr "क्या आप वाकई {} को साइन-इन विधि के रूप में हटाना चाहते हैं?"
+
 #. Used in Main/Account/AccountNavStackView.swift.
 msgctxt "are_you_sure_you_want_to_remove_this_wallet"
 msgid "Are you sure you want to remove this wallet?"
@@ -212,6 +263,11 @@ msgstr "क्या आप वाकई इस वॉलेट को हटा
 msgctxt "auth_code"
 msgid "Auth code"
 msgstr "ऑथ कोड"
+
+#. A message that displays the first and last six characters of an auth code.
+msgctxt "auth_code_2"
+msgid "Auth Code \n\n{0}...{1}"
+msgstr "ऑथ कोड \n\n{0}...{1}"
 
 #. Used in Main/Account/Settings/AuthCodeCreate/AuthCodeCreate.swift.
 msgctxt "auth_code_create"
@@ -448,6 +504,11 @@ msgctxt "by_subscribing_you_agree_to_urnetwork_s_terms"
 msgid "By subscribing, you agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr "सदस्यता लेने पर, आप URnetwork के [नियम और सेवाएँ](https://ur.io/terms) और [गोपनीयता नीति](https://ur.io/privacy) से सहमत हैं"
 
+#. App split rules: rule choice sending the app around the VPN (local route).
+msgctxt "bypass_vpn"
+msgid "Bypass VPN"
+msgstr "VPN बायपास करें"
+
 #. Call to action
 msgctxt "cancel"
 msgid "Cancel"
@@ -623,6 +684,11 @@ msgctxt "connect"
 msgid "Connect"
 msgstr "कनेक्ट करें"
 
+#. A description of how to connect a Solana wallet to add it as a sign-in method.
+msgctxt "connect_a_solana_wallet_phantom_or_solflare"
+msgid "Connect a Solana wallet (Phantom or Solflare) to add it as a sign-in method."
+msgstr "Solana वॉलेट (Phantom या Solflare) कनेक्ट करें और उसे साइन-इन विधि के रूप में जोड़ें।"
+
 #. Used in Main/Account/Settings/SettingsForm-iOS.swift.
 msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
@@ -683,6 +749,11 @@ msgctxt "connected"
 msgid "Connected"
 msgstr "कनेक्टेड"
 
+#. A label showing the public key of the connected wallet.
+msgctxt "connected_n"
+msgid "Connected: {}..."
+msgstr "कनेक्टेड: {}..."
+
 #. A message indicating that the device is connected to a certain number of providers. The argument is the number of providers.
 msgctxt "connected_provider_count"
 msgid "Connected to {} provider"
@@ -694,6 +765,11 @@ msgstr[1] "{} प्रदाताओं से कनेक्ट किया
 msgctxt "connecting_status_indicator"
 msgid "Connecting to providers"
 msgstr "प्रदाताओं से कनेक्ट हो रहा है"
+
+#. A message displayed when a user is connecting a wallet.
+msgctxt "connecting_to_wallet"
+msgid "Connecting to wallet..."
+msgstr "वॉलेट से कनेक्ट हो रहा है..."
 
 #. Used in Main/Connect/ConnectActions/ConnectActions.swift.
 msgctxt "connection_mode"
@@ -747,6 +823,11 @@ msgctxt "contribute_bandwidth"
 msgid "Contribute Bandwidth"
 msgstr "बैंडविड्थ में योगदान दें"
 
+#. Text for a button that copies the seedphrase to the clipboard.
+msgctxt "copied"
+msgid "Copied!"
+msgstr "कॉपी हो गया!"
+
 #. Call to action
 msgctxt "copy"
 msgid "Copy"
@@ -761,6 +842,11 @@ msgstr "ऑथ कोड कॉपी करें"
 msgctxt "copy_client_id"
 msgid "Copy client ID"
 msgstr "क्लाइंट ID कॉपी करें"
+
+#. Button text to copy the seedphrase to the clipboard.
+msgctxt "copy_to_clipboard"
+msgid "Copy to Clipboard"
+msgstr "क्लिपबोर्ड पर कॉपी करें"
 
 #. Snackbar shown when the external wallet app could not be opened. Used in Shared/Views/SolanaSignMessageSheet.swift and Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
 msgctxt "couldnt_open_wallet"
@@ -812,6 +898,11 @@ msgctxt "create_an_account"
 msgid "Create an account"
 msgstr "खाता बनाएं"
 
+#. A title for the screen where a user can create an instant account.
+msgctxt "create_instant_account"
+msgid "Create Instant Account"
+msgstr "इंस्टेंट खाता बनाएं"
+
 #. Call to action
 msgctxt "create_network_error"
 msgid "Something went wrong. Try again."
@@ -821,6 +912,16 @@ msgstr "कुछ गलत हो गया. पुनः प्रयास �
 msgctxt "created_auth_codes_expire_after_5_minutes"
 msgid "Created auth codes expire after 5 minutes"
 msgstr "निर्मित प्रमाणीकरण कोड 5 मिनट बाद समाप्त हो जाते हैं"
+
+#. A label showing the current network API and connect URLs.
+msgctxt "current_api_n"
+msgid "Current API: {}"
+msgstr "वर्तमान API: {}"
+
+#. A label displaying the current connect URL.
+msgctxt "current_connect_n"
+msgid "Current connect: {}"
+msgstr "वर्तमान कनेक्ट: {}"
 
 #. Call to action
 msgctxt "current_network_referral"
@@ -841,6 +942,21 @@ msgstr "वर्तमान रेफ़रल नेटवर्क"
 msgctxt "custom_dns"
 msgid "Custom DNS"
 msgstr "कस्टम DNS"
+
+#. Shown on the linux home screen when the app and the urnetworkd system service carry different URnetwork SDK builds (they update on independent schedules and must match exactly). The fix is updating both to the same release.
+msgctxt "daemon_sdk_mismatch"
+msgid "The app and the URnetwork system service are different builds. Update both to the same version."
+msgstr "ऐप्लिकेशन और URnetwork सिस्टम सेवा अलग-अलग बिल्ड हैं। दोनों को एक ही वर्शन पर अपडेट करें।"
+
+#. Shown on the linux home screen when the installed urnetworkd system service speaks an older control protocol than this app supports. Distinct from daemon_unreachable by contract; the fix is updating the service, not the app.
+msgctxt "daemon_too_old"
+msgid "The URnetwork system service is out of date. Update it to connect."
+msgstr "URnetwork सिस्टम सेवा पुरानी है। कनेक्ट करने के लिए इसे अपडेट करें।"
+
+#. Shown on the linux home screen when the privileged urnetworkd system service cannot be reached over its control socket (not installed, not running, or the user lacks access). Distinct from daemon_too_old by contract.
+msgctxt "daemon_unreachable"
+msgid "The URnetwork system service is not running. Install or start it, then try again."
+msgstr "URnetwork सिस्टम सेवा नहीं चल रही है। इसे इंस्टॉल या शुरू करें, फिर दोबारा कोशिश करें।"
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "daily_data_balance_label"
@@ -876,6 +992,11 @@ msgstr "{} भुगतान"
 msgctxt "default_bandwidth_earn_more_by"
 msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
 msgstr "डिफ़ॉल्ट रूप से, आपको {} GiB/महीना मिलता है। ऐसे आप अतिरिक्त बैंडविड्थ कमा सकते हैं:"
+
+#. Generic default choice label, e.g. the app split rule combo state meaning no rule.
+msgctxt "default_option"
+msgid "Default"
+msgstr "डिफ़ॉल्ट"
 
 #. Used in Shared/Views/PayoutWalletTag.swift.
 msgctxt "default_txt"
@@ -987,6 +1108,11 @@ msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "HTTPS पर DNS"
 
+#. dns settings
+msgctxt "dns_pill_default"
+msgid "The default safe settings are not applied"
+msgstr "डिफ़ॉल्ट सुरक्षित सेटिंग्स लागू नहीं हैं"
+
 #. DNS status pill shown when the default safe DNS settings are not applied.
 msgctxt "dns_pill_defaults"
 msgid "The default safe settings are not applied"
@@ -1013,6 +1139,11 @@ msgid "DNS settings unavailable"
 msgstr "DNS सेटिंग्स उपलब्ध नहीं"
 
 #. dns settings
+msgctxt "dns_unapplied_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "{} के लिए अनुशंसित सेटिंग्स लागू नहीं हैं"
+
+#. dns settings
 msgctxt "dns_using_recommended"
 msgid "Using recommended regional settings"
 msgstr "अनुशंसित क्षेत्रीय सेटिंग्स का उपयोग हो रहा है"
@@ -1021,6 +1152,11 @@ msgstr "अनुशंसित क्षेत्रीय सेटिंग�
 msgctxt "dns_using_secure"
 msgid "Using most secure default settings"
 msgstr "सबसे सुरक्षित डिफ़ॉल्ट सेटिंग्स का उपयोग हो रहा है"
+
+#. A button that dismisses a sheet.
+msgctxt "done"
+msgid "Done"
+msgstr "हो गया"
 
 #. Prompt shown when user doesn't see the verification email or SMS.
 msgctxt "dont_see_it"
@@ -1097,6 +1233,11 @@ msgctxt "enter_a_name_for_your_network"
 msgid "Enter a name for your network"
 msgstr "अपने नेटवर्क के लिए एक नाम दर्ज करें"
 
+#. Placeholder text for the password field in the add auth sheet.
+msgctxt "enter_a_password"
+msgid "Enter a password"
+msgstr "पासवर्ड दर्ज करें"
+
 #. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
 msgctxt "enter_a_solana_or_bittensor_wallet_address"
 msgid "Enter a Solana or Bittensor wallet address"
@@ -1110,6 +1251,11 @@ msgstr "Solana USDC वॉलेट पता दर्ज करें"
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
 msgstr "बैलेंस कोड दर्ज करें"
+
+#. A label for a text field where a user can enter a custom network name.
+msgctxt "enter_network_name"
+msgid "Enter network name"
+msgstr "नेटवर्क का नाम दर्ज करें"
 
 #. Call to action
 msgctxt "enter_network_referral_code"
@@ -1125,6 +1271,11 @@ msgstr "URnetwork में प्रवेश करें"
 msgctxt "enter_wallet_address"
 msgid "Enter wallet address"
 msgstr "वॉलेट पता दर्ज करें"
+
+#. Error message displayed in a snackbar when there was an error changing the network name.
+msgctxt "error_changing_network_name"
+msgid "Error changing network name"
+msgstr "नेटवर्क का नाम बदलने में त्रुटि"
 
 #. Snackbar shown when claiming the earnings multiplier fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_claiming_multiplier"
@@ -1301,6 +1452,18 @@ msgctxt "general"
 msgid "General"
 msgstr "सामान्य"
 
+msgctxt "generate"
+msgid "Generate"
+msgstr "बनाएं"
+
+msgctxt "generate_a_recovery_seedphrase"
+msgid "Generate a recovery seedphrase?"
+msgstr "रिकवरी सीड फ़्रेज़ बनाएं?"
+
+msgctxt "generate_seedphrase"
+msgid "Generate Seedphrase"
+msgstr "सीड फ़्रेज़ बनाएं"
+
 #. Call to action
 msgctxt "get_connected"
 msgid "Get connected"
@@ -1325,6 +1488,11 @@ msgstr "भाग लेकर URnetwork जीवनभर मुफ्त प�
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
 msgstr "Google से लॉग इन करें"
+
+#. Snackbar message displayed when a Google sign-in method is successfully added.
+msgctxt "google_sign_in_method_added"
+msgid "Google sign-in method added"
+msgstr "Google साइन-इन विधि जोड़ी गई"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "got_it"
@@ -1373,6 +1541,16 @@ msgctxt "i_agree_to_urnetwork_s_terms_and_services_https"
 msgid "I agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr "मैं URnetwork के [नियम और सेवाएँ](https://ur.io/terms) और [गोपनीयता नीति](https://ur.io/privacy) से सहमत हूँ"
 
+#. Button text for confirming that the user has saved their seedphrase.
+msgctxt "i_ve_saved_my_seedphrase"
+msgid "I've Saved My Seedphrase"
+msgstr "मैंने अपना सीड फ़्रेज़ सहेज लिया"
+
+#. Post quantum identity: toast after tapping an identity key hash to copy it.
+msgctxt "identity_key_hash_copied"
+msgid "Identity key hash copied"
+msgstr "पहचान कुंजी का हैश कॉपी किया गया"
+
 #. Used in Main/MainView.swift.
 msgctxt "if_the_problem_persists_contact_us_at_support_ur"
 msgid "If the problem persists, contact us at [support@ur.io](mailto:support@ur.io) or [join our Discord](https://discord.com/invite/RUNZXMwPRK) for direct support."
@@ -1397,6 +1575,11 @@ msgstr "VPN से रूट करें"
 msgctxt "include_app_description"
 msgid "Only included apps use the tunnel."
 msgstr "केवल शामिल ऐप्स ही टनल का उपयोग करते हैं।"
+
+#. App split rules: rule choice routing the app through the VPN.
+msgctxt "include_in_vpn"
+msgid "Include in VPN"
+msgstr "VPN में शामिल करें"
 
 #. transfer stats and split rules
 msgctxt "included"
@@ -1448,6 +1631,13 @@ msgctxt "ip_address"
 msgid "IP address"
 msgstr "IP पता"
 
+#. A label showing the number of IP addresses in a block action cluster, rendered as a single pill. The argument is the number of IPs.
+msgctxt "ip_count"
+msgid "{} IP"
+msgid_plural "{} IPs"
+msgstr[0] "{} IP"
+msgstr[1] "{} IP"
+
 #. Label for a list of IPv4 addresses.
 msgctxt "ipv4"
 msgid "IPv4"
@@ -1493,6 +1683,11 @@ msgctxt "join_urnetwork"
 msgid "Join URnetwork"
 msgstr "शामिल हों URnetwork"
 
+#. Used in Main/Account/Wallets/NetworkReliability/NetworkReliabilityView.swift.
+msgctxt "key"
+msgid "key"
+msgstr "कुंजी"
+
 #. Call to action
 msgctxt "kill_switch"
 msgid "Kill switch"
@@ -1528,10 +1723,19 @@ msgctxt "learn_more_protocol_page"
 msgid "Learn more at the protocol page"
 msgstr "प्रोटोकॉल पेज पर और जानें"
 
+#. A description of the add auth sheet.
+msgctxt "link_another_way_to_sign_in_to"
+msgid "Link another way to sign in to your account."
+msgstr "अपने खाते में साइन इन करने का एक और तरीका लिंक करें।"
+
 #. Used in ContentView.swift.
 msgctxt "loading"
 msgid "Loading..."
 msgstr "लोड हो रहा है..."
+
+msgctxt "loading_sign_in_methods"
+msgid "Loading sign-in methods..."
+msgstr "साइन-इन विधियाँ लोड हो रही हैं..."
 
 #. Label for a chart showing local traffic statistics.
 msgctxt "local"
@@ -1578,6 +1782,41 @@ msgctxt "local_statistics"
 msgid "Local statistics"
 msgstr "स्थानीय आँकड़े"
 
+#. Error state on linux: URnetwork wrote the system location file and can no longer remove it, so the machine may still be reporting a provider's location. Gives the user the recovery steps.
+msgctxt "location_override_cleanup_required"
+msgid "URnetwork could not remove the system location file, so this machine may still report a provider's location. Start the URnetwork system service and turn this off, or remove /etc/geolocation as an administrator."
+msgstr "URnetwork सिस्टम लोकेशन फ़ाइल नहीं हटा सका, इसलिए यह मशीन अब भी किसी प्रदाता का स्थान बता सकती है। URnetwork सिस्टम सेवा शुरू करें और इसे बंद करें, या व्यवस्थापक के रूप में /etc/geolocation हटाएं।"
+
+#. Setup guide and info popup on linux: the honest limits of the device location override. Paired with location_override_coverage_geoclue.
+msgctxt "location_override_coverage_gaps"
+msgid "It does not cover everything. Chrome and KDE Plasma never ask GeoClue, and any app that works out your location from your IP address on its own is unaffected. Firefox falls back to its own lookup if the system does not answer quickly."
+msgstr "यह सब कुछ कवर नहीं करता। Chrome और KDE Plasma कभी GeoClue से नहीं पूछते, और ऐसा कोई भी ऐप्लिकेशन जो आपके IP पते से खुद ही आपका स्थान निकाल लेता है, उस पर कोई असर नहीं पड़ता। अगर सिस्टम जल्दी जवाब नहीं देता तो Firefox अपनी खुद की लुकअप पर लौट जाता है।"
+
+#. Setup guide and info popup on linux: what the device location override actually covers. Shown alongside location_override_coverage_gaps, which states the limits.
+msgctxt "location_override_coverage_geoclue"
+msgid "Apps that ask the system for your location through GeoClue — including GNOME Settings and Maps, Firefox, and sandboxed Flatpak and Snap apps — report the provider's location instead of yours."
+msgstr "जो ऐप्लिकेशन GeoClue के ज़रिए सिस्टम से आपका स्थान मांगते हैं — जिनमें GNOME Settings and Maps, Firefox, और सैंडबॉक्स में चलने वाले Flatpak और Snap ऐप्लिकेशन शामिल हैं — वे आपके बजाय प्रदाता का स्थान बताते हैं।"
+
+#. Setup guide state on linux: every prerequisite for the device location override is met.
+msgctxt "location_override_ready"
+msgid "Ready. Turn on the toggle to report the connected provider's location as this machine's location."
+msgstr "तैयार है। कनेक्ट किए गए प्रदाता के स्थान को इस मशीन के स्थान के रूप में बताने के लिए टॉगल चालू करें।"
+
+#. Setup guide step on linux: the GeoClue version requirement for the device location override.
+msgctxt "location_override_step_geoclue"
+msgid "Install GeoClue 2.7 or newer. It is not on every system, and Ubuntu 22.04 and Debian 12 ship an older version that cannot do this."
+msgstr "GeoClue 2.7 या नया वर्शन इंस्टॉल करें। यह हर सिस्टम पर नहीं होता, और Ubuntu 22.04 तथा Debian 12 में जो पुराना वर्शन आता है वह यह नहीं कर सकता।"
+
+#. Setup guide step on linux: the privileged helper needed to write the system location file. Reassures the user that the app itself never needs root.
+msgctxt "location_override_step_service"
+msgid "Install the URnetwork system service. The system location file lives under /etc, so a privileged helper has to write it — URnetwork never asks you to run the app itself as an administrator."
+msgstr "URnetwork सिस्टम सेवा इंस्टॉल करें। सिस्टम लोकेशन फ़ाइल /etc के अंदर होती है, इसलिए उसे लिखने के लिए विशेषाधिकार वाले हेल्पर की ज़रूरत होती है — URnetwork आपसे कभी ऐप्लिकेशन को व्यवस्थापक के रूप में चलाने के लिए नहीं कहता।"
+
+#. Setup guide step on linux: keep GeoClue's static location source enabled so the override is read.
+msgctxt "location_override_step_static_source"
+msgid "Keep GeoClue's static location source enabled. It is on by default; check /etc/geoclue/geoclue.conf if you have changed it."
+msgstr "GeoClue का स्टैटिक लोकेशन स्रोत चालू रहने दें। यह डिफ़ॉल्ट रूप से चालू होता है; अगर आपने इसे बदला है तो /etc/geoclue/geoclue.conf देखें।"
+
 #. Call to action
 msgctxt "login_client_error"
 msgid "Something went wrong authenticating the client. Try again."
@@ -1623,15 +1862,30 @@ msgctxt "make_default"
 msgid "Make default"
 msgstr "डिफ़ॉल्ट बनाएं"
 
+#. Split tunnel settings: button opening the app split rules sheet.
+msgctxt "manage_apps"
+msgid "Manage apps"
+msgstr "ऐप्लिकेशन प्रबंधित करें"
+
 #. Call to action
 msgctxt "manage_subscription"
 msgid "Manage subscription"
 msgstr "सदस्यता प्रबंधित करें"
 
+#. A label at the bottom of the contract stack
+msgctxt "max_n"
+msgid "max {}"
+msgstr "अधिकतम {}"
+
 #. Display name for the paid plan. The WIRE value stays "supporter" (subscription_type / current_subscription.plan) because already-shipped app versions parse that string; only what the user reads changes.
 msgctxt "member"
 msgid "Member"
 msgstr "सदस्य"
+
+#. A label for the picker that lets the user select the sign-in method.
+msgctxt "method"
+msgid "Method"
+msgstr "विधि"
 
 #. Compact relative-time label with an abbreviated minutes unit ("7m ago"), shown by the windows and linux stats formatters for events 1-59 minutes old. The argument is the elapsed minutes. Not a plural: the abbreviated unit does not inflect, but the word order and the unit abbreviation localize.
 msgctxt "minutes_ago_abbrev"
@@ -1743,10 +1997,20 @@ msgctxt "most_popular"
 msgid "Most Popular"
 msgstr "सबसे लोकप्रिय"
 
+#. Android app string: multiple ips.
+msgctxt "multiple_ips"
+msgid "Multiple IPs"
+msgstr "एकाधिक IP"
+
 #. Call to action
 msgctxt "multiplier"
 msgid "Multiplier"
 msgstr "गुणक"
+
+#. A label that shows the daily data usage from referrals. The argument is the number of referrals.
+msgctxt "n_gib_day"
+msgid "+{} GiB/Day"
+msgstr "+{} GiB/दिन"
 
 #. Create Network Form
 msgctxt "name_label"
@@ -1777,6 +2041,11 @@ msgstr "कुल अर्जित अंक"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "प्रदान किया गया नेट"
+
+#. Provide control mode option that provides bandwidth only to peers in the same network.
+msgctxt "network"
+msgid "Network"
+msgstr "नेटवर्क"
 
 #. Help text under the API URL field of the network API selector.
 msgctxt "network_api_api_url_help"
@@ -1868,6 +2137,11 @@ msgctxt "network_earnings"
 msgid "Network earnings"
 msgstr "नेटवर्क आय"
 
+#. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
+msgctxt "network_name_changed_to_n"
+msgid "Network name changed to {}"
+msgstr "नेटवर्क का नाम बदलकर {} कर दिया गया"
+
 #. Call to action
 msgctxt "network_name_check_error"
 msgid "Not available. Must be at least 3 characters different than an existing network. Make it unique or longer."
@@ -1907,6 +2181,13 @@ msgstr "यह नेटवर्क नाम पहले से ही लि
 msgctxt "network_name_unavailable"
 msgid "Network name unavailable"
 msgstr "नेटवर्क नाम उपलब्ध नहीं है"
+
+#. A label showing the number of connected network peers that have provide enabled. Shown under the location in the connect drawer and as the pinned section title in the location chooser. The argument is the number of peers.
+msgctxt "network_peer_count"
+msgid "You have {} other device online"
+msgid_plural "You have {} other devices online"
+msgstr[0] "आपका {} अन्य डिवाइस ऑनलाइन है"
+msgstr[1] "आपके {} अन्य डिवाइस ऑनलाइन हैं"
 
 #. A label displayed above the list of connected peers.
 msgctxt "network_peers"
@@ -1964,6 +2245,16 @@ msgstr "कोई बैलेंस कोड नहीं मिला"
 msgctxt "no_blocked_locations"
 msgid "No blocked locations"
 msgstr "कोई अवरुद्ध स्थान नहीं"
+
+#. A description of the benefits of creating an Instant Account.
+msgctxt "no_email_phone_or_password_needed_your"
+msgid "No email, phone, or password needed. Your account is secured by a seedphrase."
+msgstr "किसी ईमेल, फ़ोन या पासवर्ड की ज़रूरत नहीं। आपका खाता सीड फ़्रेज़ से सुरक्षित रहता है।"
+
+#. App split rules: empty state when no installed apps were enumerated.
+msgctxt "no_installed_apps_found"
+msgid "No installed apps found. (Store apps aren't listed.)"
+msgstr "कोई इंस्टॉल किया गया ऐप्लिकेशन नहीं मिला। (Store के ऐप्लिकेशन सूची में नहीं आते।)"
 
 #. Call to action
 msgctxt "no_locations_found"
@@ -2120,6 +2411,11 @@ msgctxt "password_support_txt"
 msgid "Password must be at least 12 characters"
 msgstr "पासवर्ड कम से कम 12 वर्णों का होना चाहिए"
 
+#. A placeholder text for the seedphrase field.
+msgctxt "paste_your_24_word_seedphrase_here"
+msgid "Paste your 24-word seedphrase here"
+msgstr "अपना 24-शब्द वाला सीड फ़्रेज़ यहां पेस्ट करें"
+
 #. Call to action
 msgctxt "pay_with_solana_wallet"
 msgid "Pay with Solana Wallet"
@@ -2165,6 +2461,21 @@ msgctxt "payouts_amount_threshold"
 msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
 msgstr "भुगतान हर रविवार 00:00 UTC पर होते हैं, और न्यूनतम USDC सीमा पूरी करनी होती है।"
 
+#. Post quantum identity panel: peer identity count indicator, singular.
+msgctxt "peer_count_one"
+msgid "1 peer"
+msgstr "1 पीयर"
+
+#. Post quantum identity panel: peer identity count indicator. The argument is the number of peers with an identity-verified e2e session.
+msgctxt "peer_count_other"
+msgid "%d peers"
+msgstr "%d पीयर"
+
+#. Replaces the network peer count/list while the app is not attached to its remote device (the network extension or service rpc is down — not connected): the peer state lives in the remote device, so the stat is unavailable rather than zero. Shown with a gray dot.
+msgctxt "peer_discovery_disabled"
+msgid "Peer discovery disabled until connected"
+msgstr "कनेक्ट होने तक पीयर खोज बंद है"
+
 #. Call to action
 msgctxt "pending_data_key"
 msgid "Pending"
@@ -2179,6 +2490,26 @@ msgstr "लंबित: {} एमबी प्रदान किए गए"
 msgctxt "pending_payout"
 msgid "Pending payout"
 msgstr "लंबित भुगतान"
+
+#. Android app string: pin app.
+msgctxt "pin_app"
+msgid "Pin to one provider"
+msgstr "एक प्रदाता पर पिन करें"
+
+#. Android app string: pin app description.
+msgctxt "pin_app_description"
+msgid "Keeps all of this app's connections on a single provider, so its API and images share one IP address. Use for apps whose content fails to load through the VPN"
+msgstr "इस ऐप के सभी कनेक्शन एक ही प्रदाता पर रखता है, ताकि इसका API और इमेज एक ही IP पता साझा करें। उन ऐप्स के लिए उपयोग करें जिनकी सामग्री VPN के ज़रिए लोड नहीं होती"
+
+#. Android app string: pinned.
+msgctxt "pinned"
+msgid "Pinned"
+msgstr "पिन किया गया"
+
+#. Placeholder text for an empty text field.
+msgctxt "placeholder"
+msgid "Placeholder"
+msgstr "प्लेसहोल्डर"
 
 #. Upgrade subscription overlay
 msgctxt "plan"
@@ -2221,6 +2552,26 @@ msgstr[1] "+ {} और"
 msgctxt "points_breakdown"
 msgid "Points breakdown"
 msgstr "अंक विवरण"
+
+#. Connect drawer: post quantum encryption toggle label.
+msgctxt "post_quantum_encryption"
+msgid "Post Quantum Encryption"
+msgstr "पोस्ट-क्वांटम एन्क्रिप्शन"
+
+#. Connect drawer: note under the post quantum encryption toggle. Plaintext fallback applies when the provider does not support the e2e sessions.
+msgctxt "post_quantum_encryption_fallback_note"
+msgid "Fallback enabled (temporary)"
+msgstr "फ़ॉलबैक चालू (अस्थायी)"
+
+#. Account tab: post quantum identity panel title.
+msgctxt "post_quantum_identity"
+msgid "Post Quantum Identity"
+msgstr "पोस्ट-क्वांटम पहचान"
+
+#. Account tab: explanation under the post quantum identity panel — what the identity key is and how verifying provider keys detects interception.
+msgctxt "post_quantum_identity_explanation"
+msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
+msgstr "आपकी पहचान कुंजी इस डिवाइस पर स्थानीय रूप से संग्रहीत होती है। अगर किसी पीयर की कुंजी स्थानीय रूप से संग्रहीत कुंजी से अलग दिखती है, तो इसका मतलब है कि नेटवर्क ऑपरेटर पर भरोसा नहीं किया जा सकता।"
 
 #. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
 msgctxt "pricing_shown_at_checkout"
@@ -2298,6 +2649,11 @@ msgctxt "provider_count_int"
 msgid "{} providers"
 msgstr "{} प्रदाता"
 
+#. Post quantum identity: title of the connected provider identity key details view.
+msgctxt "provider_identities"
+msgid "Provider Identities"
+msgstr "प्रदाताओं की पहचान"
+
 #. Row subtitle in the provider locations list when a provider's location is not known.
 msgctxt "provider_location_unknown"
 msgid "Location unknown"
@@ -2312,6 +2668,11 @@ msgstr "कोई प्रदाता कनेक्ट नहीं है"
 msgctxt "provider_locations_title"
 msgid "Provider Locations"
 msgstr "प्रदाताओं के स्थान"
+
+#. Shown instead of the provider list when the device's window state cannot be read, because the network extension hosting it is not running. Never present an empty list as "no providers" in that case.
+msgctxt "provider_locations_unavailable"
+msgid "Provider details are unavailable until connected"
+msgstr "कनेक्ट होने तक प्रदाता का विवरण उपलब्ध नहीं है"
 
 #. Title of a section that shows statistics about the provider.
 msgctxt "provider_statistics"
@@ -2415,6 +2776,11 @@ msgctxt "refer_a_friend_30_gib_month"
 msgid "Refer a friend = +30 GiB/Month"
 msgstr "मित्र को रेफ़र करें = +30 GiB/माह"
 
+#. A bullet point in the introduction view that describes how much extra bandwidth you can earn by referring a friend.
+msgctxt "refer_a_friend_3_gib_day"
+msgid "Refer a friend = +3 GiB/Day"
+msgstr "मित्र को रेफ़र करें = +3 GiB/दिन"
+
 #. Account Screen
 msgctxt "refer_and_earn"
 msgid "Refer and earn"
@@ -2510,6 +2876,10 @@ msgctxt "referrals"
 msgid "Referrals"
 msgstr "रेफ़रल"
 
+msgctxt "regenerate_seedphrase"
+msgid "Regenerate Seedphrase"
+msgstr "सीड फ़्रेज़ दोबारा बनाएं"
+
 #. Provider list group title for regions
 msgctxt "regions"
 msgid "Regions"
@@ -2574,6 +2944,10 @@ msgstr "हटाएं"
 msgctxt "remove_rule"
 msgid "Remove rule"
 msgstr "नियम हटाएं"
+
+msgctxt "remove_this_sign_in_method"
+msgid "Remove this sign-in method?"
+msgstr "इस साइन-इन विधि को हटाएं?"
 
 #. Used in Main/Account/AccountNavStackView.swift.
 msgctxt "remove_wallet"
@@ -2645,6 +3019,11 @@ msgctxt "rules"
 msgid "Rules"
 msgstr "नियम"
 
+#. A description of the benefits of using a Seeker Token.
+msgctxt "s_2x_your_free_and_referral_data"
+msgid "2x your free and referral data"
+msgstr "मुफ़्त और रेफ़रल डेटा 2 गुना"
+
 #. Profile
 msgctxt "save"
 msgid "Save"
@@ -2680,6 +3059,11 @@ msgctxt "seconds_ago_abbrev"
 msgid "{}s ago"
 msgstr "{} से. पहले"
 
+#. The title of the screen.
+msgctxt "secure_your_account"
+msgid "Secure Your Account"
+msgstr "अपना खाता सुरक्षित करें"
+
 #. Onboarding Carousel
 msgctxt "see_world_content"
 msgid "See all the\nworld's content"
@@ -2690,6 +3074,11 @@ msgctxt "see_world_content_description"
 msgid "See all the world's content with URnetwork"
 msgstr "URnetwork के साथ दुनिया की सभी सामग्री देखें"
 
+#. A label displayed above a field for entering a seedphrase.
+msgctxt "seedphrase"
+msgid "Seedphrase"
+msgstr "सीड फ़्रेज़"
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -2699,6 +3088,11 @@ msgstr "Seeker टोकन सत्यापित हुआ!"
 msgctxt "select_country_to_block"
 msgid "Select country to block"
 msgstr "ब्लॉक करने के लिए देश चुनें"
+
+#. Connect drawer: accessibility label for the globe icon that opens the provider selection list.
+msgctxt "select_location_provider_content_description"
+msgid "Select location provider globe"
+msgstr "ग्लोब: प्रदाता का स्थान चुनें"
 
 #. Fallback name for the connect location when the selected location has no name.
 msgctxt "selected_location"
@@ -2810,6 +3204,11 @@ msgctxt "sign_in"
 msgid "Sign in"
 msgstr "साइन इन करें"
 
+#. Button text for signing in with a seedphrase.
+msgctxt "sign_in_2"
+msgid "Sign In"
+msgstr "साइन इन करें"
+
 #. Call to action
 msgctxt "sign_in_dgen1"
 msgid "Sign in with dGEN1"
@@ -2819,6 +3218,15 @@ msgstr "dGEN1 से साइन इन करें"
 msgctxt "sign_in_failed"
 msgid "Sign in failed"
 msgstr "साइन इन विफल"
+
+#. Snackbar message displayed when a sign-in method is successfully added.
+msgctxt "sign_in_method_added_successfully"
+msgid "Sign-in method added successfully"
+msgstr "साइन-इन विधि सफलतापूर्वक जोड़ी गई"
+
+msgctxt "sign_in_methods"
+msgid "Sign-In Methods"
+msgstr "साइन-इन विधियाँ"
 
 #. Button that signs in with a pasted auth code instead of a password.
 msgctxt "sign_in_with_code"
@@ -2830,15 +3238,214 @@ msgctxt "sign_in_with_google"
 msgid "Sign in with Google"
 msgstr "Google से साइन इन करें"
 
+#. A description of how to sign in with Google.
+msgctxt "sign_in_with_google_to_add_it"
+msgid "Sign in with Google to add it as a sign-in method."
+msgstr "Google से साइन इन करें और उसे साइन-इन विधि के रूप में जोड़ें।"
+
+msgctxt "sign_in_with_seedphrase"
+msgid "Sign in with Seedphrase"
+msgstr "सीड फ़्रेज़ से साइन इन करें"
+
+#. A description of the Apple Sign-In process.
+msgctxt "sign_in_with_your_apple_id_to"
+msgid "Sign in with your Apple ID to add it as a sign-in method."
+msgstr "अपने Apple ID से साइन इन करें और उसे साइन-इन विधि के रूप में जोड़ें।"
+
 #. Used in NetworkApp.swift.
 msgctxt "sign_out"
 msgid "Sign out"
 msgstr "साइन आउट"
 
+#. Button text for signing in with a wallet.
+msgctxt "sign_with_wallet"
+msgid "Sign with Wallet"
+msgstr "वॉलेट से हस्ताक्षर करें"
+
 #. Tray notification shown when the account signs in.
 msgctxt "signed_in"
 msgid "Signed in"
 msgstr "साइन इन हो गए"
+
+#. Reliability: average label
+msgctxt "site_app_average_reliability"
+msgid "Average reliability"
+msgstr "औसत विश्वसनीयता"
+
+#. Reliability: clients series
+msgctxt "site_app_clients"
+msgid "Clients"
+msgstr "क्लाइंट्स"
+
+#. Connect drawer: options section label
+msgctxt "site_app_connect_options"
+msgid "Connect options"
+msgstr "कनेक्शन विकल्प"
+
+#. Disabled stat cards: connect-to-view hint
+msgctxt "site_app_connect_to_view"
+msgid "Connect to view live activity"
+msgstr "लाइव गतिविधि देखने के लिए कनेक्ट करें"
+
+#. Reliability: country column
+msgctxt "site_app_country"
+msgid "Country"
+msgstr "देश"
+
+#. Reliability: country multipliers heading
+msgctxt "site_app_country_multipliers"
+msgid "Country multipliers"
+msgstr "देश गुणक"
+
+#. Connect drawer: fixed-IP toggle
+msgctxt "site_app_fixed_ip"
+msgid "Fixed IP"
+msgstr "स्थिर IP"
+
+#. App sidebar: manage subscription button (opens the Stripe billing portal)
+msgctxt "site_app_manage_subscription"
+msgid "Manage Subscription"
+msgstr "सदस्यता प्रबंधित करें"
+
+#. Connect drawer: connection mode Auto
+msgctxt "site_app_mode_auto"
+msgid "Auto"
+msgstr "स्वचालित"
+
+#. Connect drawer: connection mode Streaming
+msgctxt "site_app_mode_streaming"
+msgid "Streaming"
+msgstr "स्ट्रीमिंग"
+
+#. Connect drawer: connection mode Web
+msgctxt "site_app_mode_web"
+msgid "Web"
+msgstr "वेब"
+
+#. Reliability: multiplier column
+msgctxt "site_app_multiplier"
+msgid "Multiplier"
+msgstr "गुणक"
+
+#. Connect drawer: throughput empty state
+msgctxt "site_app_no_traffic"
+msgid "No traffic yet"
+msgstr "अभी तक कोई ट्रैफ़िक नहीं"
+
+#. Connect drawer: plan section label
+msgctxt "site_app_plan"
+msgid "Plan"
+msgstr "योजना"
+
+#. App account: proxies row/screen title
+msgctxt "site_app_proxies"
+msgid "Proxies"
+msgstr "प्रॉक्सी"
+
+#. Reliability: weight series
+msgctxt "site_app_reliability_weight"
+msgid "Reliability weight"
+msgstr "विश्वसनीयता भार"
+
+#. Connect drawer: strong-anonymization toggle
+msgctxt "site_app_strong_anon"
+msgid "Strong Anonymization"
+msgstr "मजबूत गुमनामीकरण"
+
+#. Connect drawer: live transfer timeseries section
+msgctxt "site_app_throughput"
+msgid "Transfer"
+msgstr "ट्रांसफर"
+
+#. Connect: extension fix alert title
+msgctxt "site_connect_ext_fix_title"
+msgid "Set up the extension to connect"
+msgstr "कनेक्ट करने के लिए एक्सटेंशन सेट करें"
+
+#. Connect: extension different-network alert body
+msgctxt "site_connect_ext_foreign_body"
+msgid "The extension is signed into a different network:"
+msgstr "एक्सटेंशन किसी दूसरे नेटवर्क में साइन इन है:"
+
+#. Connect: extension install alert body
+msgctxt "site_connect_ext_install_body"
+msgid "URnetwork routes this browser through the extension. Install it to start connecting."
+msgstr "URnetwork इस ब्राउज़र को एक्सटेंशन के ज़रिए रूट करता है। कनेक्ट करना शुरू करने के लिए इसे इंस्टॉल करें।"
+
+#. Connect: extension install alert title
+msgctxt "site_connect_ext_install_title"
+msgid "Install the extension to connect"
+msgstr "कनेक्ट करने के लिए एक्सटेंशन इंस्टॉल करें"
+
+#. Connect: extension ready status
+msgctxt "site_connect_ext_ready"
+msgid "Extension detected and signed in"
+msgstr "एक्सटेंशन मिला और साइन इन है"
+
+#. Connect: extension logged-out alert body
+msgctxt "site_connect_ext_unlinked_body"
+msgid "The extension is installed but signed out. Set it up with your network to connect."
+msgstr "एक्सटेंशन इंस्टॉल है लेकिन साइन आउट है। कनेक्ट करने के लिए इसे अपने नेटवर्क के साथ सेट करें।"
+
+#. Connect: disconnected status line
+msgctxt "site_connect_ready"
+msgid "Ready to connect"
+msgstr "कनेक्ट करने के लिए तैयार"
+
+#. Mobile app panel: install-the-native-app CTA
+msgctxt "site_install_app"
+msgid "Install the app"
+msgstr "ऐप इंस्टॉल करें"
+
+#. Subscription: free plan body
+msgctxt "site_sub_free_body"
+msgid "You're on the Free plan. Upgrade to Pro for more data and features."
+msgstr "आप Free योजना पर हैं। ज़्यादा डेटा और सुविधाओं के लिए Pro में अपग्रेड करें।"
+
+#. Subscription: free plan title
+msgctxt "site_sub_free_title"
+msgid "Free plan"
+msgstr "Free योजना"
+
+#. Subscription: manage-on-platform button ({platform})
+msgctxt "site_sub_manage_on"
+msgid "Manage in {platform}"
+msgstr "{platform} में प्रबंधित करें"
+
+#. Subscription: manage-on-platform button, Apple. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_apple"
+msgid "Manage in the App Store"
+msgstr "App Store में प्रबंधित करें"
+
+#. Subscription: manage-on-platform button, Google. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_google"
+msgid "Manage in Google Play"
+msgstr "Google Play में प्रबंधित करें"
+
+#. Subscription: unknown platform fallback
+msgctxt "site_sub_other_platform"
+msgid "another platform"
+msgstr "किसी अन्य प्लेटफ़ॉर्म"
+
+#. Subscription: other-platform body ({platform})
+msgctxt "site_sub_platform_body"
+msgid "Your Pro subscription is billed through {platform}. To change or cancel it, manage your subscriptions in {platform}."
+msgstr "आपकी Pro सदस्यता {platform} के माध्यम से बिल की जाती है। इसे बदलने या रद्द करने के लिए, अपनी सदस्यताएँ {platform} के माध्यम से प्रबंधित करें।"
+
+#. Subscription: billing explanation, Apple. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_apple"
+msgid "Your Pro subscription is billed through the App Store. To change or cancel it, manage your subscriptions in the App Store."
+msgstr "आपकी Pro सदस्यता App Store के माध्यम से बिल की जाती है। इसे बदलने या रद्द करने के लिए, अपनी सदस्यताएँ App Store में प्रबंधित करें।"
+
+#. Subscription: billing explanation, Google. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_google"
+msgid "Your Pro subscription is billed through Google Play. To change or cancel it, manage your subscriptions in Google Play."
+msgstr "आपकी Pro सदस्यता Google Play के माध्यम से बिल की जाती है। इसे बदलने या रद्द करने के लिए, अपनी सदस्यताएँ Google Play में प्रबंधित करें।"
+
+#. Subscription: Stripe-billed body
+msgctxt "site_sub_stripe_body"
+msgid "Your Pro subscription is billed through Stripe. Update your payment details or cancel anytime below."
+msgstr "आपकी Pro सदस्यता Stripe के माध्यम से बिल की जाती है। नीचे कभी भी अपने भुगतान विवरण अपडेट करें या सदस्यता रद्द करें।"
 
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"
@@ -3087,10 +3694,25 @@ msgctxt "these_wallets_are_not_affiliated_or_controlled"
 msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
 msgstr "ये वॉलेट URnetwork से संबद्ध या नियंत्रित नहीं हैं। हम कनेक्टेड वॉलेट में कमाई भेजेंगे।"
 
+#. A warning message displayed in the seedphrase display view.
+msgctxt "this_is_the_only_time_you_ll"
+msgid "⚠️ This is the ONLY time you'll see this."
+msgstr "⚠️ यह आपको सिर्फ़ इसी एक बार दिखाई देगा।"
+
 #. dns settings
 msgctxt "this_region"
 msgid "this region"
 msgstr "इस क्षेत्र"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is connected.
+msgctxt "tile_status_connected"
+msgid "Connected"
+msgstr "कनेक्टेड"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is disconnected.
+msgctxt "tile_status_disconnected"
+msgid "Disconnected"
+msgstr "डिस्कनेक्टेड"
 
 msgctxt "title_login"
 msgid "Login"
@@ -3187,6 +3809,11 @@ msgstr "गेस्ट मोड आज़माएँ"
 msgctxt "try_guest_mode_2"
 msgid "Try guest mode"
 msgstr "गेस्ट मोड आज़माएं"
+
+#. Generic fallback on the linux home screen when the urnetworkd system service accepted the request but starting the VPN tunnel failed and no more specific error text is available.
+msgctxt "tunnel_start_failed"
+msgid "Could not start the connection"
+msgstr "कनेक्शन शुरू नहीं हो सका"
 
 #. A label displayed in the custom dns settings section.
 msgctxt "unencrypted_dns"
@@ -3435,10 +4062,20 @@ msgctxt "version_info"
 msgid "Version and build info"
 msgstr "संस्करण और बिल्ड जानकारी"
 
+#. Android app string: via exit.
+msgctxt "via_exit"
+msgid "via {}"
+msgstr "{} के ज़रिए"
+
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "waiting_for_approval"
 msgid "Waiting for approval"
 msgstr "अनुमोदन की प्रतीक्षा है"
+
+#. A message displayed when waiting for a wallet signature.
+msgctxt "waiting_for_wallet_signature"
+msgid "Waiting for wallet signature..."
+msgstr "वॉलेट हस्ताक्षर की प्रतीक्षा है..."
 
 #. Account Screen
 msgctxt "wallet"
@@ -3488,6 +4125,11 @@ msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
 msgstr "वॉलेट से साइन इन विफल"
 
+#. Snackbar message displayed when a wallet sign-in method is successfully added.
+msgctxt "wallet_sign_in_method_added"
+msgid "Wallet sign-in method added"
+msgstr "वॉलेट साइन-इन विधि जोड़ी गई"
+
 #. Wallets Screen
 msgctxt "wallets"
 msgid "Wallets"
@@ -3528,6 +4170,11 @@ msgctxt "with_urnetwork"
 msgid "with URnetwork"
 msgstr "URnetwork के साथ"
 
+#. A warning message that instructs the user to write down their seedphrase and store it in a secure location.
+msgctxt "write_it_down_and_store_it_somewhere"
+msgid "Write it down and store it somewhere safe. If you lose it, you'll lose access to your account."
+msgstr "इसे लिखकर किसी सुरक्षित जगह पर रखें। अगर यह खो गया, तो आप अपने खाते तक पहुंच खो देंगे।"
+
 #. Billing period name on the yearly subscription product card in the upgrade flow.
 msgctxt "yearly"
 msgid "Yearly"
@@ -3542,6 +4189,19 @@ msgstr "हाँ"
 msgctxt "you_get_30_gib_month_for_life"
 msgid "You get 30 GiB/month for life"
 msgstr "आपको जीवनभर के लिए 30 GiB/माह मिलता है"
+
+#. Text displayed in a scrollable view within a VStack in the body of a view that is displayed when the user is viewing their referral code.
+msgctxt "you_get_3_gib_day_for_life"
+msgid "You get 3 GiB/day for life"
+msgstr "आपको जीवनभर 3 GiB/दिन मिलते हैं"
+
+msgctxt "you_have_1_other_device_online"
+msgid "You have 1 other device online"
+msgstr "आपका 1 अन्य डिवाइस ऑनलाइन है"
+
+msgctxt "you_have_n_other_devices_online"
+msgid "You have {} other devices online"
+msgstr "आपके {} अन्य डिवाइस ऑनलाइन हैं"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "you_ll_unlock_even_faster_speeds_and_first_dibs"
@@ -3573,6 +4233,11 @@ msgctxt "your_friend_gets_30_gib_month_for_life"
 msgid "Your friend gets 30 GiB/month for life"
 msgstr "आपके मित्र को जीवनभर के लिए 30 GiB/माह मिलता है"
 
+#. Text displayed in a scrollable view within a VStack in the body of a view that is displayed in a modal.
+msgctxt "your_friend_gets_3_gib_day_for"
+msgid "Your friend gets 3 GiB/day for life"
+msgstr "आपके मित्र को जीवनभर 3 GiB/दिन मिलते हैं"
+
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "your_purchase_needs_to_be_approved_before_it_can"
 msgid "Your purchase needs to be approved before it can complete. UR Pro will turn on by itself once it goes through — there's no need to buy again."
@@ -3582,3 +4247,8 @@ msgstr "आपकी खरीद पूरी होने से पहले 
 msgctxt "your_referral_link"
 msgid "Your referral link"
 msgstr "आपका रेफ़रल लिंक"
+
+#. A title displayed above the user's seedphrase.
+msgctxt "your_seedphrase"
+msgid "Your Seedphrase"
+msgstr "आपका सीड फ़्रेज़"

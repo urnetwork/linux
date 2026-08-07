@@ -10,6 +10,19 @@ msgstr ""
 "Language: zh_CN\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#. A description of the seedphrase generation process.
+msgctxt "a_new_seedphrase_will_be_generated_and"
+msgid "A new seedphrase will be generated and linked to your account."
+msgstr "系统将生成一个新的助记词并关联到你的帐户。"
+
+msgctxt "a_seedphrase_lets_you_recover_your_account"
+msgid "A seedphrase lets you recover your account if you lose access."
+msgstr "如果你无法访问帐户，助记词可以帮你恢复。"
+
+msgctxt "a_seedphrase_lets_you_recover_your_account_2"
+msgid "A seedphrase lets you recover your account if you lose access. Store it safely."
+msgstr "如果你无法访问帐户，助记词可以帮你恢复。请妥善保管。"
+
 #. Instructions for accessing the authentication code.
 #. Use the {link}...{/link} markers to wrap the "ur.io" portion, which should be rendered as a clickable link.
 #. Example usage:
@@ -56,6 +69,11 @@ msgctxt "add"
 msgid "Add"
 msgstr "添加"
 
+#. A title for the screen that lets the user add a new sign-in method.
+msgctxt "add_a_sign_in_method"
+msgid "Add a sign-in method"
+msgstr "添加登录方式"
+
 #. Call to action
 msgctxt "add_blocked_location"
 msgid "Add blocked location"
@@ -70,6 +88,15 @@ msgstr "添加推荐码"
 msgctxt "add_referral_extra_rewards"
 msgid "Add referral code to earn extra rewards"
 msgstr "添加推荐码以获得额外奖励"
+
+msgctxt "add_sign_in_method"
+msgid "Add sign-in method"
+msgstr "添加登录方式"
+
+#. Button text for adding a sign-in method.
+msgctxt "add_sign_in_method_2"
+msgid "Add Sign-In Method"
+msgstr "添加登录方式"
 
 #. Wallets Screen
 msgctxt "add_wallet"
@@ -144,6 +171,11 @@ msgctxt "app_included_toast"
 msgid "{} will route through the VPN"
 msgstr "{} 将通过 VPN 路由"
 
+#. Android app string: app pinned toast.
+msgctxt "app_pinned_toast"
+msgid "{} will use one provider"
+msgstr "{} 将使用单个提供商"
+
 #. transfer stats and split rules
 msgctxt "app_split_active_exclude"
 msgid "Exclude active — excluded apps bypass the VPN"
@@ -168,6 +200,21 @@ msgstr "包含优先：只要有应用被包含，就只有已包含的应用使
 msgctxt "app_split_rules"
 msgid "App split rules"
 msgstr "应用分流规则"
+
+#. Generic starter label on the app-split panel when no apps are included or excluded yet (shown instead of "0 apps excluded").
+msgctxt "app_split_starter"
+msgid "0 split apps"
+msgstr "0 个分流应用"
+
+#. Shown on the linux home screen when the urnetworkd system service rejected this app for speaking an older control protocol than the service supports. The fix is updating the app, not the service.
+msgctxt "app_too_old_for_daemon"
+msgid "This app is older than the installed URnetwork system service. Update the app to connect."
+msgstr "此应用比已安装的 URnetwork 系统服务旧。请更新应用以进行连接。"
+
+#. Snackbar message displayed when an Apple sign-in method is added.
+msgctxt "apple_sign_in_method_added"
+msgid "Apple sign-in method added"
+msgstr "已添加 Apple 登录方式"
 
 #. Call to action
 msgctxt "apply_bonus"
@@ -201,6 +248,10 @@ msgctxt "are_you_sure_delete_account"
 msgid "Are you sure you want to delete your account?"
 msgstr "您确定要删除您的帐户吗？"
 
+msgctxt "are_you_sure_you_want_to_remove"
+msgid "Are you sure you want to remove {} as a sign-in method?"
+msgstr "确定要移除 {} 作为登录方式吗？"
+
 #. Used in Main/Account/AccountNavStackView.swift.
 msgctxt "are_you_sure_you_want_to_remove_this_wallet"
 msgid "Are you sure you want to remove this wallet?"
@@ -210,6 +261,11 @@ msgstr "你确定要移除这个钱包吗？"
 msgctxt "auth_code"
 msgid "Auth code"
 msgstr "验证码"
+
+#. A message that displays the first and last six characters of an auth code.
+msgctxt "auth_code_2"
+msgid "Auth Code \n\n{0}...{1}"
+msgstr "验证码 \n\n{0}...{1}"
 
 #. Used in Main/Account/Settings/AuthCodeCreate/AuthCodeCreate.swift.
 msgctxt "auth_code_create"
@@ -446,6 +502,11 @@ msgctxt "by_subscribing_you_agree_to_urnetwork_s_terms"
 msgid "By subscribing, you agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr "订阅即表示您同意 URnetwork 的[条款和服务](https://ur.io/terms)和[隐私政策](https://ur.io/privacy)"
 
+#. App split rules: rule choice sending the app around the VPN (local route).
+msgctxt "bypass_vpn"
+msgid "Bypass VPN"
+msgstr "绕过 VPN"
+
 #. Call to action
 msgctxt "cancel"
 msgid "Cancel"
@@ -621,6 +682,11 @@ msgctxt "connect"
 msgid "Connect"
 msgstr "连接"
 
+#. A description of how to connect a Solana wallet to add it as a sign-in method.
+msgctxt "connect_a_solana_wallet_phantom_or_solflare"
+msgid "Connect a Solana wallet (Phantom or Solflare) to add it as a sign-in method."
+msgstr "连接 Solana 钱包（Phantom 或 Solflare）以将其添加为登录方式。"
+
 #. Used in Main/Account/Settings/SettingsForm-iOS.swift.
 msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
@@ -681,6 +747,11 @@ msgctxt "connected"
 msgid "Connected"
 msgstr "已连接"
 
+#. A label showing the public key of the connected wallet.
+msgctxt "connected_n"
+msgid "Connected: {}..."
+msgstr "已连接：{}..."
+
 #. A message indicating that the device is connected to a certain number of providers. The argument is the number of providers.
 msgctxt "connected_provider_count"
 msgid "Connected to {} provider"
@@ -691,6 +762,11 @@ msgstr[0] "已连接到 {} 个提供商"
 msgctxt "connecting_status_indicator"
 msgid "Connecting to providers"
 msgstr "正在连接到提供商"
+
+#. A message displayed when a user is connecting a wallet.
+msgctxt "connecting_to_wallet"
+msgid "Connecting to wallet..."
+msgstr "正在连接钱包..."
 
 #. Used in Main/Connect/ConnectActions/ConnectActions.swift.
 msgctxt "connection_mode"
@@ -743,6 +819,11 @@ msgctxt "contribute_bandwidth"
 msgid "Contribute Bandwidth"
 msgstr "贡献带宽"
 
+#. Text for a button that copies the seedphrase to the clipboard.
+msgctxt "copied"
+msgid "Copied!"
+msgstr "已复制！"
+
 #. Call to action
 msgctxt "copy"
 msgid "Copy"
@@ -757,6 +838,11 @@ msgstr "复制验证码"
 msgctxt "copy_client_id"
 msgid "Copy client ID"
 msgstr "复制客户端 ID"
+
+#. Button text to copy the seedphrase to the clipboard.
+msgctxt "copy_to_clipboard"
+msgid "Copy to Clipboard"
+msgstr "复制到剪贴板"
 
 #. Snackbar shown when the external wallet app could not be opened. Used in Shared/Views/SolanaSignMessageSheet.swift and Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
 msgctxt "couldnt_open_wallet"
@@ -808,6 +894,11 @@ msgctxt "create_an_account"
 msgid "Create an account"
 msgstr "创建账户"
 
+#. A title for the screen where a user can create an instant account.
+msgctxt "create_instant_account"
+msgid "Create Instant Account"
+msgstr "创建即时帐户"
+
 #. Call to action
 msgctxt "create_network_error"
 msgid "Something went wrong. Try again."
@@ -817,6 +908,16 @@ msgstr "出了些问题。再试一次。"
 msgctxt "created_auth_codes_expire_after_5_minutes"
 msgid "Created auth codes expire after 5 minutes"
 msgstr "创建的认证码将在5分钟后失效"
+
+#. A label showing the current network API and connect URLs.
+msgctxt "current_api_n"
+msgid "Current API: {}"
+msgstr "当前 API：{}"
+
+#. A label displaying the current connect URL.
+msgctxt "current_connect_n"
+msgid "Current connect: {}"
+msgstr "当前连接：{}"
 
 #. Call to action
 msgctxt "current_network_referral"
@@ -837,6 +938,21 @@ msgstr "当前推荐网络"
 msgctxt "custom_dns"
 msgid "Custom DNS"
 msgstr "自定义 DNS"
+
+#. Shown on the linux home screen when the app and the urnetworkd system service carry different URnetwork SDK builds (they update on independent schedules and must match exactly). The fix is updating both to the same release.
+msgctxt "daemon_sdk_mismatch"
+msgid "The app and the URnetwork system service are different builds. Update both to the same version."
+msgstr "应用与 URnetwork 系统服务的构建版本不同。请将两者更新到同一版本。"
+
+#. Shown on the linux home screen when the installed urnetworkd system service speaks an older control protocol than this app supports. Distinct from daemon_unreachable by contract; the fix is updating the service, not the app.
+msgctxt "daemon_too_old"
+msgid "The URnetwork system service is out of date. Update it to connect."
+msgstr "URnetwork 系统服务版本过旧。请更新后再连接。"
+
+#. Shown on the linux home screen when the privileged urnetworkd system service cannot be reached over its control socket (not installed, not running, or the user lacks access). Distinct from daemon_too_old by contract.
+msgctxt "daemon_unreachable"
+msgid "The URnetwork system service is not running. Install or start it, then try again."
+msgstr "URnetwork 系统服务未运行。请安装或启动该服务，然后重试。"
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "daily_data_balance_label"
@@ -872,6 +988,11 @@ msgstr "{} 支付"
 msgctxt "default_bandwidth_earn_more_by"
 msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
 msgstr "默认情况下，您每月获得 {} GiB。以下是赚取额外带宽的方法："
+
+#. Generic default choice label, e.g. the app split rule combo state meaning no rule.
+msgctxt "default_option"
+msgid "Default"
+msgstr "默认"
 
 #. Used in Shared/Views/PayoutWalletTag.swift.
 msgctxt "default_txt"
@@ -983,6 +1104,11 @@ msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS over HTTPS"
 
+#. dns settings
+msgctxt "dns_pill_default"
+msgid "The default safe settings are not applied"
+msgstr "默认安全设置未应用"
+
 #. DNS status pill shown when the default safe DNS settings are not applied.
 msgctxt "dns_pill_defaults"
 msgid "The default safe settings are not applied"
@@ -1009,6 +1135,11 @@ msgid "DNS settings unavailable"
 msgstr "DNS 设置不可用"
 
 #. dns settings
+msgctxt "dns_unapplied_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "有针对 {} 的未应用推荐设置"
+
+#. dns settings
 msgctxt "dns_using_recommended"
 msgid "Using recommended regional settings"
 msgstr "正在使用推荐的地区设置"
@@ -1017,6 +1148,11 @@ msgstr "正在使用推荐的地区设置"
 msgctxt "dns_using_secure"
 msgid "Using most secure default settings"
 msgstr "正在使用最安全的默认设置"
+
+#. A button that dismisses a sheet.
+msgctxt "done"
+msgid "Done"
+msgstr "完成"
 
 #. Prompt shown when user doesn't see the verification email or SMS.
 msgctxt "dont_see_it"
@@ -1093,6 +1229,11 @@ msgctxt "enter_a_name_for_your_network"
 msgid "Enter a name for your network"
 msgstr "输入您的网络名称"
 
+#. Placeholder text for the password field in the add auth sheet.
+msgctxt "enter_a_password"
+msgid "Enter a password"
+msgstr "请输入密码"
+
 #. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
 msgctxt "enter_a_solana_or_bittensor_wallet_address"
 msgid "Enter a Solana or Bittensor wallet address"
@@ -1106,6 +1247,11 @@ msgstr "请输入 Solana USDC 钱包地址"
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
 msgstr "输入余额码"
+
+#. A label for a text field where a user can enter a custom network name.
+msgctxt "enter_network_name"
+msgid "Enter network name"
+msgstr "请输入网络名称"
 
 #. Call to action
 msgctxt "enter_network_referral_code"
@@ -1121,6 +1267,11 @@ msgstr "进入 URnetwork"
 msgctxt "enter_wallet_address"
 msgid "Enter wallet address"
 msgstr "输入钱包地址"
+
+#. Error message displayed in a snackbar when there was an error changing the network name.
+msgctxt "error_changing_network_name"
+msgid "Error changing network name"
+msgstr "更改网络名称时出错"
 
 #. Snackbar shown when claiming the earnings multiplier fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_claiming_multiplier"
@@ -1297,6 +1448,18 @@ msgctxt "general"
 msgid "General"
 msgstr "常规"
 
+msgctxt "generate"
+msgid "Generate"
+msgstr "生成"
+
+msgctxt "generate_a_recovery_seedphrase"
+msgid "Generate a recovery seedphrase?"
+msgstr "要生成恢复助记词吗？"
+
+msgctxt "generate_seedphrase"
+msgid "Generate Seedphrase"
+msgstr "生成助记词"
+
 #. Call to action
 msgctxt "get_connected"
 msgid "Get connected"
@@ -1321,6 +1484,11 @@ msgstr "通过参与，终身免费获得 URnetwork"
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
 msgstr "使用 Google 登录"
+
+#. Snackbar message displayed when a Google sign-in method is successfully added.
+msgctxt "google_sign_in_method_added"
+msgid "Google sign-in method added"
+msgstr "已添加 Google 登录方式"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "got_it"
@@ -1368,6 +1536,16 @@ msgctxt "i_agree_to_urnetwork_s_terms_and_services_https"
 msgid "I agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr "我同意 URnetwork 的[条款和服务](https://ur.io/terms)和[隐私政策](https://ur.io/privacy)"
 
+#. Button text for confirming that the user has saved their seedphrase.
+msgctxt "i_ve_saved_my_seedphrase"
+msgid "I've Saved My Seedphrase"
+msgstr "我已保存助记词"
+
+#. Post quantum identity: toast after tapping an identity key hash to copy it.
+msgctxt "identity_key_hash_copied"
+msgid "Identity key hash copied"
+msgstr "身份密钥哈希已复制"
+
 #. Used in Main/MainView.swift.
 msgctxt "if_the_problem_persists_contact_us_at_support_ur"
 msgid "If the problem persists, contact us at [support@ur.io](mailto:support@ur.io) or [join our Discord](https://discord.com/invite/RUNZXMwPRK) for direct support."
@@ -1392,6 +1570,11 @@ msgstr "通过 VPN 路由"
 msgctxt "include_app_description"
 msgid "Only included apps use the tunnel."
 msgstr "只有已包含的应用会使用隧道。"
+
+#. App split rules: rule choice routing the app through the VPN.
+msgctxt "include_in_vpn"
+msgid "Include in VPN"
+msgstr "纳入 VPN"
 
 #. transfer stats and split rules
 msgctxt "included"
@@ -1443,6 +1626,12 @@ msgctxt "ip_address"
 msgid "IP address"
 msgstr "IP 地址"
 
+#. A label showing the number of IP addresses in a block action cluster, rendered as a single pill. The argument is the number of IPs.
+msgctxt "ip_count"
+msgid "{} IP"
+msgid_plural "{} IPs"
+msgstr[0] "{} 个 IP"
+
 #. Label for a list of IPv4 addresses.
 msgctxt "ipv4"
 msgid "IPv4"
@@ -1488,6 +1677,11 @@ msgctxt "join_urnetwork"
 msgid "Join URnetwork"
 msgstr "加入 URnetwork"
 
+#. Used in Main/Account/Wallets/NetworkReliability/NetworkReliabilityView.swift.
+msgctxt "key"
+msgid "key"
+msgstr "图例"
+
 #. Call to action
 msgctxt "kill_switch"
 msgid "Kill switch"
@@ -1523,10 +1717,19 @@ msgctxt "learn_more_protocol_page"
 msgid "Learn more at the protocol page"
 msgstr "在协议页面了解更多信息"
 
+#. A description of the add auth sheet.
+msgctxt "link_another_way_to_sign_in_to"
+msgid "Link another way to sign in to your account."
+msgstr "关联另一种登录帐户的方式。"
+
 #. Used in ContentView.swift.
 msgctxt "loading"
 msgid "Loading..."
 msgstr "加载中..."
+
+msgctxt "loading_sign_in_methods"
+msgid "Loading sign-in methods..."
+msgstr "正在加载登录方式..."
 
 #. Label for a chart showing local traffic statistics.
 msgctxt "local"
@@ -1573,6 +1776,41 @@ msgctxt "local_statistics"
 msgid "Local statistics"
 msgstr "本地统计"
 
+#. Error state on linux: URnetwork wrote the system location file and can no longer remove it, so the machine may still be reporting a provider's location. Gives the user the recovery steps.
+msgctxt "location_override_cleanup_required"
+msgid "URnetwork could not remove the system location file, so this machine may still report a provider's location. Start the URnetwork system service and turn this off, or remove /etc/geolocation as an administrator."
+msgstr "URnetwork 无法删除系统位置文件，因此本机可能仍在报告某个提供商的位置。请启动 URnetwork 系统服务并关闭此功能，或以管理员身份删除 /etc/geolocation。"
+
+#. Setup guide and info popup on linux: the honest limits of the device location override. Paired with location_override_coverage_geoclue.
+msgctxt "location_override_coverage_gaps"
+msgid "It does not cover everything. Chrome and KDE Plasma never ask GeoClue, and any app that works out your location from your IP address on its own is unaffected. Firefox falls back to its own lookup if the system does not answer quickly."
+msgstr "它并不能覆盖所有情况。Chrome 和 KDE Plasma 从不向 GeoClue 查询，任何自行根据您的 IP 地址推断位置的应用也不受影响。如果系统未能快速响应，Firefox 会回退到它自己的查询。"
+
+#. Setup guide and info popup on linux: what the device location override actually covers. Shown alongside location_override_coverage_gaps, which states the limits.
+msgctxt "location_override_coverage_geoclue"
+msgid "Apps that ask the system for your location through GeoClue — including GNOME Settings and Maps, Firefox, and sandboxed Flatpak and Snap apps — report the provider's location instead of yours."
+msgstr "通过 GeoClue 向系统请求位置的应用 — 包括 GNOME 的“设置”和“地图”、Firefox，以及沙盒化的 Flatpak 和 Snap 应用 — 会报告提供商的位置，而不是您的位置。"
+
+#. Setup guide state on linux: every prerequisite for the device location override is met.
+msgctxt "location_override_ready"
+msgid "Ready. Turn on the toggle to report the connected provider's location as this machine's location."
+msgstr "已就绪。打开开关，即可将已连接提供商的位置报告为本机位置。"
+
+#. Setup guide step on linux: the GeoClue version requirement for the device location override.
+msgctxt "location_override_step_geoclue"
+msgid "Install GeoClue 2.7 or newer. It is not on every system, and Ubuntu 22.04 and Debian 12 ship an older version that cannot do this."
+msgstr "安装 GeoClue 2.7 或更高版本。并非所有系统都自带它，而且 Ubuntu 22.04 和 Debian 12 附带的是无法实现此功能的旧版本。"
+
+#. Setup guide step on linux: the privileged helper needed to write the system location file. Reassures the user that the app itself never needs root.
+msgctxt "location_override_step_service"
+msgid "Install the URnetwork system service. The system location file lives under /etc, so a privileged helper has to write it — URnetwork never asks you to run the app itself as an administrator."
+msgstr "安装 URnetwork 系统服务。系统位置文件位于 /etc 下，因此需要由特权助手写入 — URnetwork 绝不会要求您以管理员身份运行应用本身。"
+
+#. Setup guide step on linux: keep GeoClue's static location source enabled so the override is read.
+msgctxt "location_override_step_static_source"
+msgid "Keep GeoClue's static location source enabled. It is on by default; check /etc/geoclue/geoclue.conf if you have changed it."
+msgstr "保持 GeoClue 的静态位置源处于启用状态。它默认是开启的；如果您改动过，请检查 /etc/geoclue/geoclue.conf。"
+
 #. Call to action
 msgctxt "login_client_error"
 msgid "Something went wrong authenticating the client. Try again."
@@ -1618,15 +1856,30 @@ msgctxt "make_default"
 msgid "Make default"
 msgstr "设为默认"
 
+#. Split tunnel settings: button opening the app split rules sheet.
+msgctxt "manage_apps"
+msgid "Manage apps"
+msgstr "管理应用"
+
 #. Call to action
 msgctxt "manage_subscription"
 msgid "Manage subscription"
 msgstr "管理订阅"
 
+#. A label at the bottom of the contract stack
+msgctxt "max_n"
+msgid "max {}"
+msgstr "最大 {}"
+
 #. Display name for the paid plan. The WIRE value stays "supporter" (subscription_type / current_subscription.plan) because already-shipped app versions parse that string; only what the user reads changes.
 msgctxt "member"
 msgid "Member"
 msgstr "会员"
+
+#. A label for the picker that lets the user select the sign-in method.
+msgctxt "method"
+msgid "Method"
+msgstr "方式"
 
 #. Compact relative-time label with an abbreviated minutes unit ("7m ago"), shown by the windows and linux stats formatters for events 1-59 minutes old. The argument is the elapsed minutes. Not a plural: the abbreviated unit does not inflect, but the word order and the unit abbreviation localize.
 msgctxt "minutes_ago_abbrev"
@@ -1738,10 +1991,20 @@ msgctxt "most_popular"
 msgid "Most Popular"
 msgstr "最受欢迎"
 
+#. Android app string: multiple ips.
+msgctxt "multiple_ips"
+msgid "Multiple IPs"
+msgstr "多个 IP"
+
 #. Call to action
 msgctxt "multiplier"
 msgid "Multiplier"
 msgstr "倍增器"
+
+#. A label that shows the daily data usage from referrals. The argument is the number of referrals.
+msgctxt "n_gib_day"
+msgid "+{} GiB/Day"
+msgstr "+{} GiB/天"
 
 #. Create Network Form
 msgctxt "name_label"
@@ -1772,6 +2035,11 @@ msgstr "净赚积分"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "已提供网络量"
+
+#. Provide control mode option that provides bandwidth only to peers in the same network.
+msgctxt "network"
+msgid "Network"
+msgstr "网络"
 
 #. Help text under the API URL field of the network API selector.
 msgctxt "network_api_api_url_help"
@@ -1863,6 +2131,11 @@ msgctxt "network_earnings"
 msgid "Network earnings"
 msgstr "网络收益"
 
+#. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
+msgctxt "network_name_changed_to_n"
+msgid "Network name changed to {}"
+msgstr "网络名称已更改为 {}"
+
 #. Call to action
 msgctxt "network_name_check_error"
 msgid "Not available. Must be at least 3 characters different than an existing network. Make it unique or longer."
@@ -1902,6 +2175,12 @@ msgstr "此网络名称已被使用"
 msgctxt "network_name_unavailable"
 msgid "Network name unavailable"
 msgstr "网络名称不可用。"
+
+#. A label showing the number of connected network peers that have provide enabled. Shown under the location in the connect drawer and as the pinned section title in the location chooser. The argument is the number of peers.
+msgctxt "network_peer_count"
+msgid "You have {} other device online"
+msgid_plural "You have {} other devices online"
+msgstr[0] "你还有 {} 台其他设备在线"
 
 #. A label displayed above the list of connected peers.
 msgctxt "network_peers"
@@ -1958,6 +2237,16 @@ msgstr "未找到余额码"
 msgctxt "no_blocked_locations"
 msgid "No blocked locations"
 msgstr "没有被屏蔽的位置"
+
+#. A description of the benefits of creating an Instant Account.
+msgctxt "no_email_phone_or_password_needed_your"
+msgid "No email, phone, or password needed. Your account is secured by a seedphrase."
+msgstr "无需邮箱、电话或密码。你的帐户由助记词保护。"
+
+#. App split rules: empty state when no installed apps were enumerated.
+msgctxt "no_installed_apps_found"
+msgid "No installed apps found. (Store apps aren't listed.)"
+msgstr "未找到已安装的应用。（Store 应用不会列出。）"
 
 #. Call to action
 msgctxt "no_locations_found"
@@ -2114,6 +2403,11 @@ msgctxt "password_support_txt"
 msgid "Password must be at least 12 characters"
 msgstr "密码长度必须至少为 12 个字符"
 
+#. A placeholder text for the seedphrase field.
+msgctxt "paste_your_24_word_seedphrase_here"
+msgid "Paste your 24-word seedphrase here"
+msgstr "在此粘贴你的 24 个单词助记词"
+
 #. Call to action
 msgctxt "pay_with_solana_wallet"
 msgid "Pay with Solana Wallet"
@@ -2159,6 +2453,21 @@ msgctxt "payouts_amount_threshold"
 msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
 msgstr "支付在每周日 00:00 UTC 进行，并且需要达到最低 USDC 门槛。"
 
+#. Post quantum identity panel: peer identity count indicator, singular.
+msgctxt "peer_count_one"
+msgid "1 peer"
+msgstr "1 个对等节点"
+
+#. Post quantum identity panel: peer identity count indicator. The argument is the number of peers with an identity-verified e2e session.
+msgctxt "peer_count_other"
+msgid "%d peers"
+msgstr "%d 个对等节点"
+
+#. Replaces the network peer count/list while the app is not attached to its remote device (the network extension or service rpc is down — not connected): the peer state lives in the remote device, so the stat is unavailable rather than zero. Shown with a gray dot.
+msgctxt "peer_discovery_disabled"
+msgid "Peer discovery disabled until connected"
+msgstr "未连接时无法发现对等节点"
+
 #. Call to action
 msgctxt "pending_data_key"
 msgid "Pending"
@@ -2173,6 +2482,26 @@ msgstr "待处理：提供了 {} MB"
 msgctxt "pending_payout"
 msgid "Pending payout"
 msgstr "待支付款项"
+
+#. Android app string: pin app.
+msgctxt "pin_app"
+msgid "Pin to one provider"
+msgstr "固定到一个提供商"
+
+#. Android app string: pin app description.
+msgctxt "pin_app_description"
+msgid "Keeps all of this app's connections on a single provider, so its API and images share one IP address. Use for apps whose content fails to load through the VPN"
+msgstr "将此应用的所有连接保持在同一个提供商上，使其 API 和图片共用同一个 IP 地址。适用于内容无法通过 VPN 加载的应用"
+
+#. Android app string: pinned.
+msgctxt "pinned"
+msgid "Pinned"
+msgstr "已固定"
+
+#. Placeholder text for an empty text field.
+msgctxt "placeholder"
+msgid "Placeholder"
+msgstr "占位符"
 
 #. Upgrade subscription overlay
 msgctxt "plan"
@@ -2214,6 +2543,26 @@ msgstr[0] "+ 另外 {} 个"
 msgctxt "points_breakdown"
 msgid "Points breakdown"
 msgstr "积分明细"
+
+#. Connect drawer: post quantum encryption toggle label.
+msgctxt "post_quantum_encryption"
+msgid "Post Quantum Encryption"
+msgstr "后量子加密"
+
+#. Connect drawer: note under the post quantum encryption toggle. Plaintext fallback applies when the provider does not support the e2e sessions.
+msgctxt "post_quantum_encryption_fallback_note"
+msgid "Fallback enabled (temporary)"
+msgstr "已启用回退（临时）"
+
+#. Account tab: post quantum identity panel title.
+msgctxt "post_quantum_identity"
+msgid "Post Quantum Identity"
+msgstr "后量子身份"
+
+#. Account tab: explanation under the post quantum identity panel — what the identity key is and how verifying provider keys detects interception.
+msgctxt "post_quantum_identity_explanation"
+msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
+msgstr "你的身份密钥存储在本设备本地。如果某个对等节点的密钥与本地存储的密钥不一致，说明网络运营方不可信。"
 
 #. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
 msgctxt "pricing_shown_at_checkout"
@@ -2290,6 +2639,11 @@ msgctxt "provider_count_int"
 msgid "{} providers"
 msgstr "{} 个提供商"
 
+#. Post quantum identity: title of the connected provider identity key details view.
+msgctxt "provider_identities"
+msgid "Provider Identities"
+msgstr "提供商身份"
+
 #. Row subtitle in the provider locations list when a provider's location is not known.
 msgctxt "provider_location_unknown"
 msgid "Location unknown"
@@ -2304,6 +2658,11 @@ msgstr "未连接任何提供商"
 msgctxt "provider_locations_title"
 msgid "Provider Locations"
 msgstr "提供商位置"
+
+#. Shown instead of the provider list when the device's window state cannot be read, because the network extension hosting it is not running. Never present an empty list as "no providers" in that case.
+msgctxt "provider_locations_unavailable"
+msgid "Provider details are unavailable until connected"
+msgstr "连接后才能查看提供商详情"
 
 #. Title of a section that shows statistics about the provider.
 msgctxt "provider_statistics"
@@ -2406,6 +2765,11 @@ msgctxt "refer_a_friend_30_gib_month"
 msgid "Refer a friend = +30 GiB/Month"
 msgstr "推荐朋友 = +30 GiB/月"
 
+#. A bullet point in the introduction view that describes how much extra bandwidth you can earn by referring a friend.
+msgctxt "refer_a_friend_3_gib_day"
+msgid "Refer a friend = +3 GiB/Day"
+msgstr "推荐朋友 = +3 GiB/天"
+
 #. Account Screen
 msgctxt "refer_and_earn"
 msgid "Refer and earn"
@@ -2501,6 +2865,10 @@ msgctxt "referrals"
 msgid "Referrals"
 msgstr "推荐"
 
+msgctxt "regenerate_seedphrase"
+msgid "Regenerate Seedphrase"
+msgstr "重新生成助记词"
+
 #. Provider list group title for regions
 msgctxt "regions"
 msgid "Regions"
@@ -2565,6 +2933,10 @@ msgstr "移除"
 msgctxt "remove_rule"
 msgid "Remove rule"
 msgstr "移除规则"
+
+msgctxt "remove_this_sign_in_method"
+msgid "Remove this sign-in method?"
+msgstr "移除此登录方式？"
 
 #. Used in Main/Account/AccountNavStackView.swift.
 msgctxt "remove_wallet"
@@ -2636,6 +3008,11 @@ msgctxt "rules"
 msgid "Rules"
 msgstr "规则"
 
+#. A description of the benefits of using a Seeker Token.
+msgctxt "s_2x_your_free_and_referral_data"
+msgid "2x your free and referral data"
+msgstr "2 倍免费流量和推荐流量"
+
 #. Profile
 msgctxt "save"
 msgid "Save"
@@ -2671,6 +3048,11 @@ msgctxt "seconds_ago_abbrev"
 msgid "{}s ago"
 msgstr "{}秒前"
 
+#. The title of the screen.
+msgctxt "secure_your_account"
+msgid "Secure Your Account"
+msgstr "保护你的帐户"
+
 #. Onboarding Carousel
 msgctxt "see_world_content"
 msgid "See all the\nworld's content"
@@ -2681,6 +3063,11 @@ msgctxt "see_world_content_description"
 msgid "See all the world's content with URnetwork"
 msgstr "使用 URnetwork 查看所有世界内容"
 
+#. A label displayed above a field for entering a seedphrase.
+msgctxt "seedphrase"
+msgid "Seedphrase"
+msgstr "助记词"
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -2690,6 +3077,11 @@ msgstr "Seeker 令牌已验证"
 msgctxt "select_country_to_block"
 msgid "Select country to block"
 msgstr "选择要屏蔽的国家"
+
+#. Connect drawer: accessibility label for the globe icon that opens the provider selection list.
+msgctxt "select_location_provider_content_description"
+msgid "Select location provider globe"
+msgstr "地球图标：选择提供商位置"
 
 #. Fallback name for the connect location when the selected location has no name.
 msgctxt "selected_location"
@@ -2801,6 +3193,11 @@ msgctxt "sign_in"
 msgid "Sign in"
 msgstr "登录"
 
+#. Button text for signing in with a seedphrase.
+msgctxt "sign_in_2"
+msgid "Sign In"
+msgstr "登录"
+
 #. Call to action
 msgctxt "sign_in_dgen1"
 msgid "Sign in with dGEN1"
@@ -2810,6 +3207,15 @@ msgstr "使用 dGEN1 登录"
 msgctxt "sign_in_failed"
 msgid "Sign in failed"
 msgstr "登录失败"
+
+#. Snackbar message displayed when a sign-in method is successfully added.
+msgctxt "sign_in_method_added_successfully"
+msgid "Sign-in method added successfully"
+msgstr "登录方式添加成功"
+
+msgctxt "sign_in_methods"
+msgid "Sign-In Methods"
+msgstr "登录方式"
 
 #. Button that signs in with a pasted auth code instead of a password.
 msgctxt "sign_in_with_code"
@@ -2821,10 +3227,29 @@ msgctxt "sign_in_with_google"
 msgid "Sign in with Google"
 msgstr "使用 Google 登录"
 
+#. A description of how to sign in with Google.
+msgctxt "sign_in_with_google_to_add_it"
+msgid "Sign in with Google to add it as a sign-in method."
+msgstr "使用 Google 登录，将其添加为登录方式。"
+
+msgctxt "sign_in_with_seedphrase"
+msgid "Sign in with Seedphrase"
+msgstr "使用助记词登录"
+
+#. A description of the Apple Sign-In process.
+msgctxt "sign_in_with_your_apple_id_to"
+msgid "Sign in with your Apple ID to add it as a sign-in method."
+msgstr "使用你的 Apple ID 登录，将其添加为登录方式。"
+
 #. Used in NetworkApp.swift.
 msgctxt "sign_out"
 msgid "Sign out"
 msgstr "退出登录"
+
+#. Button text for signing in with a wallet.
+msgctxt "sign_with_wallet"
+msgid "Sign with Wallet"
+msgstr "使用钱包签名"
 
 #. Tray notification shown when the account signs in.
 msgctxt "signed_in"
@@ -2860,6 +3285,11 @@ msgstr "已达授权码上限。请稍后重试。"
 msgctxt "site_app_auth_code_note"
 msgid "Created auth codes expire after 5 minutes"
 msgstr "创建的授权码将在5分钟后过期"
+
+#. Reliability: average label
+msgctxt "site_app_average_reliability"
+msgid "Average reliability"
+msgstr "平均可靠性"
 
 #. App connect: block ads and trackers toggle
 msgctxt "site_app_block_ads"
@@ -2916,6 +3346,11 @@ msgctxt "site_app_cities"
 msgid "Cities"
 msgstr "城市"
 
+#. Reliability: clients series
+msgctxt "site_app_clients"
+msgid "Clients"
+msgstr "客户端"
+
 #. App settings: referral code capped error
 msgctxt "site_app_code_capped"
 msgid "This referral code has reached its referral limit"
@@ -2930,6 +3365,16 @@ msgstr "已完成"
 msgctxt "site_app_completed_on"
 msgid "Completed"
 msgstr "完成时间"
+
+#. Connect drawer: options section label
+msgctxt "site_app_connect_options"
+msgid "Connect options"
+msgstr "连接选项"
+
+#. Disabled stat cards: connect-to-view hint
+msgctxt "site_app_connect_to_view"
+msgid "Connect to view live activity"
+msgstr "连接后可查看实时活动"
 
 #. App connect screen: connected state
 msgctxt "site_app_connected"
@@ -2965,6 +3410,16 @@ msgstr "复制"
 msgctxt "site_app_countries"
 msgid "Countries"
 msgstr "国家/地区"
+
+#. Reliability: country column
+msgctxt "site_app_country"
+msgid "Country"
+msgstr "国家"
+
+#. Reliability: country multipliers heading
+msgctxt "site_app_country_multipliers"
+msgid "Country multipliers"
+msgstr "国家倍增器"
 
 #. App settings: create auth code button
 msgctxt "site_app_create_auth_code"
@@ -3091,6 +3546,11 @@ msgctxt "site_app_feedback_sent"
 msgid "Sent! Thanks for your feedback."
 msgstr "已发送！感谢您的反馈。"
 
+#. Connect drawer: fixed-IP toggle
+msgctxt "site_app_fixed_ip"
+msgid "Fixed IP"
+msgstr "固定 IP"
+
 #. App balance codes: redeem success flash
 msgctxt "site_app_gib_added"
 msgid "+{gib} GiB added"
@@ -3151,10 +3611,35 @@ msgctxt "site_app_make_payout_wallet"
 msgid "Make payout wallet"
 msgstr "设为收款钱包"
 
+#. App sidebar: manage subscription button (opens the Stripe billing portal)
+msgctxt "site_app_manage_subscription"
+msgid "Manage Subscription"
+msgstr "管理订阅"
+
 #. App provider: mean reliability metric
 msgctxt "site_app_mean_reliability"
 msgid "Mean reliability"
 msgstr "平均可靠性"
+
+#. Connect drawer: connection mode Auto
+msgctxt "site_app_mode_auto"
+msgid "Auto"
+msgstr "自动"
+
+#. Connect drawer: connection mode Streaming
+msgctxt "site_app_mode_streaming"
+msgid "Streaming"
+msgstr "流媒体"
+
+#. Connect drawer: connection mode Web
+msgctxt "site_app_mode_web"
+msgid "Web"
+msgstr "网页"
+
+#. Reliability: multiplier column
+msgctxt "site_app_multiplier"
+msgid "Multiplier"
+msgstr "倍增器"
 
 #. App profile: network name label
 msgctxt "site_app_network_name"
@@ -3196,6 +3681,11 @@ msgctxt "site_app_no_reliability"
 msgid "No reliability data yet."
 msgstr "暂无可靠性数据。"
 
+#. Connect drawer: throughput empty state
+msgctxt "site_app_no_traffic"
+msgid "No traffic yet"
+msgstr "暂无流量"
+
 #. App wallets: empty state
 msgctxt "site_app_no_wallets"
 msgid "No wallets yet — add one to receive payouts"
@@ -3235,6 +3725,11 @@ msgstr "您的在线设备"
 msgctxt "site_app_pending"
 msgid "Pending"
 msgstr "待处理"
+
+#. Connect drawer: plan section label
+msgctxt "site_app_plan"
+msgid "Plan"
+msgstr "计划"
 
 #. App leaderboard: hidden network row label
 msgctxt "site_app_private_network"
@@ -3276,6 +3771,11 @@ msgctxt "site_app_providers"
 msgid "Providers"
 msgstr "提供者"
 
+#. App account: proxies row/screen title
+msgctxt "site_app_proxies"
+msgid "Proxies"
+msgstr "代理"
+
 #. App provider: bytes received metric
 msgctxt "site_app_received"
 msgid "Received"
@@ -3300,6 +3800,11 @@ msgstr "推荐网络"
 msgctxt "site_app_regions"
 msgid "Regions"
 msgstr "地区"
+
+#. Reliability: weight series
+msgctxt "site_app_reliability_weight"
+msgid "Reliability weight"
+msgstr "可靠性权重"
 
 #. App: remove button
 msgctxt "site_app_remove"
@@ -3341,10 +3846,20 @@ msgctxt "site_app_stay_in_touch"
 msgid "Stay in touch"
 msgstr "保持联系"
 
+#. Connect drawer: strong-anonymization toggle
+msgctxt "site_app_strong_anon"
+msgid "Strong Anonymization"
+msgstr "强匿名化"
+
 #. App support: intro line
 msgctxt "site_app_support_intro"
 msgid "Send us your feedback directly, or join the community for direct support."
 msgstr "直接向我们发送反馈，或加入社区获取直接支持。"
+
+#. Connect drawer: live transfer timeseries section
+msgctxt "site_app_throughput"
+msgid "Transfer"
+msgstr "传输"
 
 #. App account: total referrals label
 msgctxt "site_app_total_referrals"
@@ -3405,6 +3920,41 @@ msgstr "清除位置"
 msgctxt "site_client_limit_upgrade"
 msgid "Your plan is at its concurrent client limit — Pro raises it to 1,000."
 msgstr "您的套餐已达并发客户端上限——Pro可将上限提升至1,000。"
+
+#. Connect: extension fix alert title
+msgctxt "site_connect_ext_fix_title"
+msgid "Set up the extension to connect"
+msgstr "设置扩展以进行连接"
+
+#. Connect: extension different-network alert body
+msgctxt "site_connect_ext_foreign_body"
+msgid "The extension is signed into a different network:"
+msgstr "扩展已登录到其他网络："
+
+#. Connect: extension install alert body
+msgctxt "site_connect_ext_install_body"
+msgid "URnetwork routes this browser through the extension. Install it to start connecting."
+msgstr "URnetwork 通过扩展为此浏览器转发流量。请安装扩展以开始连接。"
+
+#. Connect: extension install alert title
+msgctxt "site_connect_ext_install_title"
+msgid "Install the extension to connect"
+msgstr "安装扩展以进行连接"
+
+#. Connect: extension ready status
+msgctxt "site_connect_ext_ready"
+msgid "Extension detected and signed in"
+msgstr "已检测到扩展并已登录"
+
+#. Connect: extension logged-out alert body
+msgctxt "site_connect_ext_unlinked_body"
+msgid "The extension is installed but signed out. Set it up with your network to connect."
+msgstr "扩展已安装但尚未登录。请使用您的网络进行设置以便连接。"
+
+#. Connect: disconnected status line
+msgctxt "site_connect_ready"
+msgid "Ready to connect"
+msgstr "准备连接"
 
 #. Account panel: copy a proxy's URL
 msgctxt "site_copy_url"
@@ -3490,6 +4040,11 @@ msgstr "浏览器扩展"
 msgctxt "site_generic_error"
 msgid "Something went wrong. Please try again."
 msgstr "出错了。请重试。"
+
+#. Mobile app panel: install-the-native-app CTA
+msgctxt "site_install_app"
+msgid "Install the app"
+msgstr "安装应用"
 
 #. Account panel: invalid balance code
 msgctxt "site_invalid_balance_code"
@@ -3610,6 +4165,56 @@ msgstr "正在搜索…"
 msgctxt "site_socks_cred_note"
 msgid "Username is the token in the URL; password is empty."
 msgstr "用户名为URL中的令牌；密码为空。"
+
+#. Subscription: free plan body
+msgctxt "site_sub_free_body"
+msgid "You're on the Free plan. Upgrade to Pro for more data and features."
+msgstr "您当前使用 Free 方案。升级到 Pro 可获得更多流量和功能。"
+
+#. Subscription: free plan title
+msgctxt "site_sub_free_title"
+msgid "Free plan"
+msgstr "Free 方案"
+
+#. Subscription: manage-on-platform button ({platform})
+msgctxt "site_sub_manage_on"
+msgid "Manage in {platform}"
+msgstr "在 {platform} 中管理"
+
+#. Subscription: manage-on-platform button, Apple. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_apple"
+msgid "Manage in the App Store"
+msgstr "在 App Store 中管理"
+
+#. Subscription: manage-on-platform button, Google. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_google"
+msgid "Manage in Google Play"
+msgstr "在 Google Play 中管理"
+
+#. Subscription: unknown platform fallback
+msgctxt "site_sub_other_platform"
+msgid "another platform"
+msgstr "其他平台"
+
+#. Subscription: other-platform body ({platform})
+msgctxt "site_sub_platform_body"
+msgid "Your Pro subscription is billed through {platform}. To change or cancel it, manage your subscriptions in {platform}."
+msgstr "您的 Pro 订阅通过 {platform} 计费。如需更改或取消，请通过 {platform} 管理您的订阅。"
+
+#. Subscription: billing explanation, Apple. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_apple"
+msgid "Your Pro subscription is billed through the App Store. To change or cancel it, manage your subscriptions in the App Store."
+msgstr "您的 Pro 订阅通过 App Store 计费。如需更改或取消，请在 App Store 中管理您的订阅。"
+
+#. Subscription: billing explanation, Google. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_google"
+msgid "Your Pro subscription is billed through Google Play. To change or cancel it, manage your subscriptions in Google Play."
+msgstr "您的 Pro 订阅通过 Google Play 计费。如需更改或取消，请在 Google Play 中管理您的订阅。"
+
+#. Subscription: Stripe-billed body
+msgctxt "site_sub_stripe_body"
+msgid "Your Pro subscription is billed through Stripe. Update your payment details or cancel anytime below."
+msgstr "您的 Pro 订阅通过 Stripe 计费。您可以在下方随时更新付款信息或取消订阅。"
 
 #. Account panel: generic unexpected error
 msgctxt "site_unexpected_error"
@@ -3862,10 +4467,25 @@ msgctxt "these_wallets_are_not_affiliated_or_controlled"
 msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
 msgstr "这些钱包与URnetwork无关，也不受URnetwork控制。我们将收益发送到连接的钱包中。"
 
+#. A warning message displayed in the seedphrase display view.
+msgctxt "this_is_the_only_time_you_ll"
+msgid "⚠️ This is the ONLY time you'll see this."
+msgstr "⚠️ 这是你唯一一次看到它的机会。"
+
 #. dns settings
 msgctxt "this_region"
 msgid "this region"
 msgstr "此地区"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is connected.
+msgctxt "tile_status_connected"
+msgid "Connected"
+msgstr "已连接"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is disconnected.
+msgctxt "tile_status_disconnected"
+msgid "Disconnected"
+msgstr "已断开连接"
 
 msgctxt "title_login"
 msgid "Login"
@@ -3961,6 +4581,11 @@ msgstr "尝试访客模式"
 msgctxt "try_guest_mode_2"
 msgid "Try guest mode"
 msgstr "试用访客模式"
+
+#. Generic fallback on the linux home screen when the urnetworkd system service accepted the request but starting the VPN tunnel failed and no more specific error text is available.
+msgctxt "tunnel_start_failed"
+msgid "Could not start the connection"
+msgstr "无法启动连接"
 
 #. A label displayed in the custom dns settings section.
 msgctxt "unencrypted_dns"
@@ -4209,10 +4834,20 @@ msgctxt "version_info"
 msgid "Version and build info"
 msgstr "版本和构建信息"
 
+#. Android app string: via exit.
+msgctxt "via_exit"
+msgid "via {}"
+msgstr "经由 {}"
+
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "waiting_for_approval"
 msgid "Waiting for approval"
 msgstr "等待批准"
+
+#. A message displayed when waiting for a wallet signature.
+msgctxt "waiting_for_wallet_signature"
+msgid "Waiting for wallet signature..."
+msgstr "正在等待钱包签名..."
 
 #. Account Screen
 msgctxt "wallet"
@@ -4262,6 +4897,11 @@ msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
 msgstr "钱包登录失败"
 
+#. Snackbar message displayed when a wallet sign-in method is successfully added.
+msgctxt "wallet_sign_in_method_added"
+msgid "Wallet sign-in method added"
+msgstr "已添加钱包登录方式"
+
 #. Wallets Screen
 msgctxt "wallets"
 msgid "Wallets"
@@ -4302,6 +4942,11 @@ msgctxt "with_urnetwork"
 msgid "with URnetwork"
 msgstr "使用 URnetwork"
 
+#. A warning message that instructs the user to write down their seedphrase and store it in a secure location.
+msgctxt "write_it_down_and_store_it_somewhere"
+msgid "Write it down and store it somewhere safe. If you lose it, you'll lose access to your account."
+msgstr "请抄写下来并存放在安全的地方。一旦丢失，你将无法再访问你的帐户。"
+
 #. Billing period name on the yearly subscription product card in the upgrade flow.
 msgctxt "yearly"
 msgid "Yearly"
@@ -4316,6 +4961,19 @@ msgstr "是"
 msgctxt "you_get_30_gib_month_for_life"
 msgid "You get 30 GiB/month for life"
 msgstr "你每月获得30 GiB，终身有效"
+
+#. Text displayed in a scrollable view within a VStack in the body of a view that is displayed when the user is viewing their referral code.
+msgctxt "you_get_3_gib_day_for_life"
+msgid "You get 3 GiB/day for life"
+msgstr "你终身获得 3 GiB/天"
+
+msgctxt "you_have_1_other_device_online"
+msgid "You have 1 other device online"
+msgstr "你还有 1 台其他设备在线"
+
+msgctxt "you_have_n_other_devices_online"
+msgid "You have {} other devices online"
+msgstr "你还有 {} 台其他设备在线"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "you_ll_unlock_even_faster_speeds_and_first_dibs"
@@ -4347,6 +5005,11 @@ msgctxt "your_friend_gets_30_gib_month_for_life"
 msgid "Your friend gets 30 GiB/month for life"
 msgstr "你的朋友每月获得30 GiB，终身有效"
 
+#. Text displayed in a scrollable view within a VStack in the body of a view that is displayed in a modal.
+msgctxt "your_friend_gets_3_gib_day_for"
+msgid "Your friend gets 3 GiB/day for life"
+msgstr "你的朋友终身获得 3 GiB/天"
+
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "your_purchase_needs_to_be_approved_before_it_can"
 msgid "Your purchase needs to be approved before it can complete. UR Pro will turn on by itself once it goes through — there's no need to buy again."
@@ -4356,3 +5019,8 @@ msgstr "你的购买需要获得批准才能完成。一旦通过，UR Pro 会�
 msgctxt "your_referral_link"
 msgid "Your referral link"
 msgstr "你的推荐链接"
+
+#. A title displayed above the user's seedphrase.
+msgctxt "your_seedphrase"
+msgid "Your Seedphrase"
+msgstr "你的助记词"

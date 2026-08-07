@@ -10,6 +10,19 @@ msgstr ""
 "Language: sv\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
+#. A description of the seedphrase generation process.
+msgctxt "a_new_seedphrase_will_be_generated_and"
+msgid "A new seedphrase will be generated and linked to your account."
+msgstr "En ny seedfras genereras och kopplas till ditt konto."
+
+msgctxt "a_seedphrase_lets_you_recover_your_account"
+msgid "A seedphrase lets you recover your account if you lose access."
+msgstr "Med en seedfras kan du återställa ditt konto om du förlorar åtkomsten."
+
+msgctxt "a_seedphrase_lets_you_recover_your_account_2"
+msgid "A seedphrase lets you recover your account if you lose access. Store it safely."
+msgstr "Med en seedfras kan du återställa ditt konto om du förlorar åtkomsten. Förvara den säkert."
+
 #. Instructions for accessing the authentication code.
 #. Use the {link}...{/link} markers to wrap the "ur.io" portion, which should be rendered as a clickable link.
 #. Example usage:
@@ -56,6 +69,11 @@ msgctxt "add"
 msgid "Add"
 msgstr "Lägg till"
 
+#. A title for the screen that lets the user add a new sign-in method.
+msgctxt "add_a_sign_in_method"
+msgid "Add a sign-in method"
+msgstr "Lägg till en inloggningsmetod"
+
 #. Call to action
 msgctxt "add_blocked_location"
 msgid "Add blocked location"
@@ -70,6 +88,15 @@ msgstr "Lägg till referenskod"
 msgctxt "add_referral_extra_rewards"
 msgid "Add referral code to earn extra rewards"
 msgstr "Lägg till en referenskod för att tjäna extra belöningar"
+
+msgctxt "add_sign_in_method"
+msgid "Add sign-in method"
+msgstr "Lägg till inloggningsmetod"
+
+#. Button text for adding a sign-in method.
+msgctxt "add_sign_in_method_2"
+msgid "Add Sign-In Method"
+msgstr "Lägg till inloggningsmetod"
 
 #. Wallets Screen
 msgctxt "add_wallet"
@@ -144,6 +171,11 @@ msgctxt "app_included_toast"
 msgid "{} will route through the VPN"
 msgstr "{} kommer att gå via VPN"
 
+#. Android app string: app pinned toast.
+msgctxt "app_pinned_toast"
+msgid "{} will use one provider"
+msgstr "{} kommer att använda en enda leverantör"
+
 #. transfer stats and split rules
 msgctxt "app_split_active_exclude"
 msgid "Exclude active — excluded apps bypass the VPN"
@@ -168,6 +200,21 @@ msgstr "Inkluderade appar har företräde: när någon app är inkluderad använ
 msgctxt "app_split_rules"
 msgid "App split rules"
 msgstr "Appdelningsregler"
+
+#. Generic starter label on the app-split panel when no apps are included or excluded yet (shown instead of "0 apps excluded").
+msgctxt "app_split_starter"
+msgid "0 split apps"
+msgstr "0 appar i appdelning"
+
+#. Shown on the linux home screen when the urnetworkd system service rejected this app for speaking an older control protocol than the service supports. The fix is updating the app, not the service.
+msgctxt "app_too_old_for_daemon"
+msgid "This app is older than the installed URnetwork system service. Update the app to connect."
+msgstr "Den här appen är äldre än den installerade systemtjänsten URnetwork. Uppdatera appen för att ansluta."
+
+#. Snackbar message displayed when an Apple sign-in method is added.
+msgctxt "apple_sign_in_method_added"
+msgid "Apple sign-in method added"
+msgstr "Apple-inloggningsmetod tillagd"
 
 #. Call to action
 msgctxt "apply_bonus"
@@ -203,6 +250,10 @@ msgctxt "are_you_sure_delete_account"
 msgid "Are you sure you want to delete your account?"
 msgstr "Är du säker på att du vill radera ditt konto?"
 
+msgctxt "are_you_sure_you_want_to_remove"
+msgid "Are you sure you want to remove {} as a sign-in method?"
+msgstr "Är du säker på att du vill ta bort {} som inloggningsmetod?"
+
 #. Used in Main/Account/AccountNavStackView.swift.
 msgctxt "are_you_sure_you_want_to_remove_this_wallet"
 msgid "Are you sure you want to remove this wallet?"
@@ -212,6 +263,11 @@ msgstr "Är du säker på att du vill ta bort denna plånbok?"
 msgctxt "auth_code"
 msgid "Auth code"
 msgstr "Autentiseringskod"
+
+#. A message that displays the first and last six characters of an auth code.
+msgctxt "auth_code_2"
+msgid "Auth Code \n\n{0}...{1}"
+msgstr "Autentiseringskod \n\n{0}...{1}"
 
 #. Used in Main/Account/Settings/AuthCodeCreate/AuthCodeCreate.swift.
 msgctxt "auth_code_create"
@@ -448,6 +504,11 @@ msgctxt "by_subscribing_you_agree_to_urnetwork_s_terms"
 msgid "By subscribing, you agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr "Genom att prenumerera godkänner du URnetworks [Användarvillkor](https://ur.io/terms) och [Integritetspolicy](https://ur.io/privacy)"
 
+#. App split rules: rule choice sending the app around the VPN (local route).
+msgctxt "bypass_vpn"
+msgid "Bypass VPN"
+msgstr "Kringgå VPN"
+
 #. Call to action
 msgctxt "cancel"
 msgid "Cancel"
@@ -623,6 +684,11 @@ msgctxt "connect"
 msgid "Connect"
 msgstr "Anslut"
 
+#. A description of how to connect a Solana wallet to add it as a sign-in method.
+msgctxt "connect_a_solana_wallet_phantom_or_solflare"
+msgid "Connect a Solana wallet (Phantom or Solflare) to add it as a sign-in method."
+msgstr "Anslut en Solana-plånbok (Phantom eller Solflare) för att lägga till den som inloggningsmetod."
+
 #. Used in Main/Account/Settings/SettingsForm-iOS.swift.
 msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
@@ -683,6 +749,11 @@ msgctxt "connected"
 msgid "Connected"
 msgstr "Ansluten"
 
+#. A label showing the public key of the connected wallet.
+msgctxt "connected_n"
+msgid "Connected: {}..."
+msgstr "Ansluten: {}..."
+
 #. A message indicating that the device is connected to a certain number of providers. The argument is the number of providers.
 msgctxt "connected_provider_count"
 msgid "Connected to {} provider"
@@ -694,6 +765,11 @@ msgstr[1] "Ansluten till {} leverantörer"
 msgctxt "connecting_status_indicator"
 msgid "Connecting to providers"
 msgstr "Ansluter till leverantörer"
+
+#. A message displayed when a user is connecting a wallet.
+msgctxt "connecting_to_wallet"
+msgid "Connecting to wallet..."
+msgstr "Ansluter till plånbok..."
 
 #. Used in Main/Connect/ConnectActions/ConnectActions.swift.
 msgctxt "connection_mode"
@@ -747,6 +823,11 @@ msgctxt "contribute_bandwidth"
 msgid "Contribute Bandwidth"
 msgstr "Bidra med bandbredd"
 
+#. Text for a button that copies the seedphrase to the clipboard.
+msgctxt "copied"
+msgid "Copied!"
+msgstr "Kopierat!"
+
 #. Call to action
 msgctxt "copy"
 msgid "Copy"
@@ -761,6 +842,11 @@ msgstr "Kopiera autentiseringskod"
 msgctxt "copy_client_id"
 msgid "Copy client ID"
 msgstr "Kopiera klient-ID"
+
+#. Button text to copy the seedphrase to the clipboard.
+msgctxt "copy_to_clipboard"
+msgid "Copy to Clipboard"
+msgstr "Kopiera till urklipp"
 
 #. Snackbar shown when the external wallet app could not be opened. Used in Shared/Views/SolanaSignMessageSheet.swift and Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
 msgctxt "couldnt_open_wallet"
@@ -812,6 +898,11 @@ msgctxt "create_an_account"
 msgid "Create an account"
 msgstr "Skapa ett konto"
 
+#. A title for the screen where a user can create an instant account.
+msgctxt "create_instant_account"
+msgid "Create Instant Account"
+msgstr "Skapa direktkonto"
+
 #. Call to action
 msgctxt "create_network_error"
 msgid "Something went wrong. Try again."
@@ -821,6 +912,16 @@ msgstr "Något gick fel. Försök igen."
 msgctxt "created_auth_codes_expire_after_5_minutes"
 msgid "Created auth codes expire after 5 minutes"
 msgstr "Skapade autentiseringskoder upphör efter 5 minuter"
+
+#. A label showing the current network API and connect URLs.
+msgctxt "current_api_n"
+msgid "Current API: {}"
+msgstr "Nuvarande API: {}"
+
+#. A label displaying the current connect URL.
+msgctxt "current_connect_n"
+msgid "Current connect: {}"
+msgstr "Nuvarande anslutning: {}"
 
 #. Call to action
 msgctxt "current_network_referral"
@@ -841,6 +942,21 @@ msgstr "Aktuellt referensnätverk"
 msgctxt "custom_dns"
 msgid "Custom DNS"
 msgstr "Anpassad DNS"
+
+#. Shown on the linux home screen when the app and the urnetworkd system service carry different URnetwork SDK builds (they update on independent schedules and must match exactly). The fix is updating both to the same release.
+msgctxt "daemon_sdk_mismatch"
+msgid "The app and the URnetwork system service are different builds. Update both to the same version."
+msgstr "Appen och systemtjänsten URnetwork är olika byggen. Uppdatera båda till samma version."
+
+#. Shown on the linux home screen when the installed urnetworkd system service speaks an older control protocol than this app supports. Distinct from daemon_unreachable by contract; the fix is updating the service, not the app.
+msgctxt "daemon_too_old"
+msgid "The URnetwork system service is out of date. Update it to connect."
+msgstr "Systemtjänsten URnetwork är inaktuell. Uppdatera den för att ansluta."
+
+#. Shown on the linux home screen when the privileged urnetworkd system service cannot be reached over its control socket (not installed, not running, or the user lacks access). Distinct from daemon_too_old by contract.
+msgctxt "daemon_unreachable"
+msgid "The URnetwork system service is not running. Install or start it, then try again."
+msgstr "Systemtjänsten URnetwork körs inte. Installera eller starta den och försök igen."
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "daily_data_balance_label"
@@ -876,6 +992,11 @@ msgstr "{} utbetalning"
 msgctxt "default_bandwidth_earn_more_by"
 msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
 msgstr "Som standard får du {} GiB/månad. Så här kan du tjäna extra bandbredd:"
+
+#. Generic default choice label, e.g. the app split rule combo state meaning no rule.
+msgctxt "default_option"
+msgid "Default"
+msgstr "Standard"
 
 #. Used in Shared/Views/PayoutWalletTag.swift.
 msgctxt "default_txt"
@@ -987,6 +1108,11 @@ msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS över HTTPS"
 
+#. dns settings
+msgctxt "dns_pill_default"
+msgid "The default safe settings are not applied"
+msgstr "De säkra standardinställningarna är inte tillämpade"
+
 #. DNS status pill shown when the default safe DNS settings are not applied.
 msgctxt "dns_pill_defaults"
 msgid "The default safe settings are not applied"
@@ -1013,6 +1139,11 @@ msgid "DNS settings unavailable"
 msgstr "DNS-inställningar är inte tillgängliga"
 
 #. dns settings
+msgctxt "dns_unapplied_recommended"
+msgid "There are unapplied recommended settings for {}"
+msgstr "Det finns otillämpade rekommenderade inställningar för {}"
+
+#. dns settings
 msgctxt "dns_using_recommended"
 msgid "Using recommended regional settings"
 msgstr "Använder rekommenderade regionala inställningar"
@@ -1021,6 +1152,11 @@ msgstr "Använder rekommenderade regionala inställningar"
 msgctxt "dns_using_secure"
 msgid "Using most secure default settings"
 msgstr "Använder de säkraste standardinställningarna"
+
+#. A button that dismisses a sheet.
+msgctxt "done"
+msgid "Done"
+msgstr "Klar"
 
 #. Prompt shown when user doesn't see the verification email or SMS.
 msgctxt "dont_see_it"
@@ -1097,6 +1233,11 @@ msgctxt "enter_a_name_for_your_network"
 msgid "Enter a name for your network"
 msgstr "Ange ett namn för ditt nätverk"
 
+#. Placeholder text for the password field in the add auth sheet.
+msgctxt "enter_a_password"
+msgid "Enter a password"
+msgstr "Ange ett lösenord"
+
 #. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
 msgctxt "enter_a_solana_or_bittensor_wallet_address"
 msgid "Enter a Solana or Bittensor wallet address"
@@ -1110,6 +1251,11 @@ msgstr "Ange en Solana USDC-plånboksadress"
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
 msgstr "Ange saldo-kod"
+
+#. A label for a text field where a user can enter a custom network name.
+msgctxt "enter_network_name"
+msgid "Enter network name"
+msgstr "Ange nätverksnamn"
 
 #. Call to action
 msgctxt "enter_network_referral_code"
@@ -1125,6 +1271,11 @@ msgstr "Gå in i URnetwork"
 msgctxt "enter_wallet_address"
 msgid "Enter wallet address"
 msgstr "Ange plånboksadress"
+
+#. Error message displayed in a snackbar when there was an error changing the network name.
+msgctxt "error_changing_network_name"
+msgid "Error changing network name"
+msgstr "Fel vid ändring av nätverksnamn"
 
 #. Snackbar shown when claiming the earnings multiplier fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_claiming_multiplier"
@@ -1301,6 +1452,18 @@ msgctxt "general"
 msgid "General"
 msgstr "Allmänt"
 
+msgctxt "generate"
+msgid "Generate"
+msgstr "Generera"
+
+msgctxt "generate_a_recovery_seedphrase"
+msgid "Generate a recovery seedphrase?"
+msgstr "Vill du generera en seedfras för återställning?"
+
+msgctxt "generate_seedphrase"
+msgid "Generate Seedphrase"
+msgstr "Generera seedfras"
+
 #. Call to action
 msgctxt "get_connected"
 msgid "Get connected"
@@ -1325,6 +1488,11 @@ msgstr "Få URnetwork gratis för alltid genom att delta"
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
 msgstr "Logga in med Google"
+
+#. Snackbar message displayed when a Google sign-in method is successfully added.
+msgctxt "google_sign_in_method_added"
+msgid "Google sign-in method added"
+msgstr "Google-inloggningsmetod tillagd"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "got_it"
@@ -1373,6 +1541,16 @@ msgctxt "i_agree_to_urnetwork_s_terms_and_services_https"
 msgid "I agree to URnetwork's [Terms and Services](https://ur.io/terms) and [Privacy Policy](https://ur.io/privacy)"
 msgstr "Jag godkänner URnetworks [Användarvillkor](https://ur.io/terms) och [Integritetspolicy](https://ur.io/privacy)"
 
+#. Button text for confirming that the user has saved their seedphrase.
+msgctxt "i_ve_saved_my_seedphrase"
+msgid "I've Saved My Seedphrase"
+msgstr "Jag har sparat min seedfras"
+
+#. Post quantum identity: toast after tapping an identity key hash to copy it.
+msgctxt "identity_key_hash_copied"
+msgid "Identity key hash copied"
+msgstr "Hash för identitetsnyckel kopierad"
+
 #. Used in Main/MainView.swift.
 msgctxt "if_the_problem_persists_contact_us_at_support_ur"
 msgid "If the problem persists, contact us at [support@ur.io](mailto:support@ur.io) or [join our Discord](https://discord.com/invite/RUNZXMwPRK) for direct support."
@@ -1397,6 +1575,11 @@ msgstr "Dirigera via VPN"
 msgctxt "include_app_description"
 msgid "Only included apps use the tunnel."
 msgstr "Endast inkluderade appar använder tunneln."
+
+#. App split rules: rule choice routing the app through the VPN.
+msgctxt "include_in_vpn"
+msgid "Include in VPN"
+msgstr "Inkludera i VPN"
 
 #. transfer stats and split rules
 msgctxt "included"
@@ -1448,6 +1631,13 @@ msgctxt "ip_address"
 msgid "IP address"
 msgstr "IP-adress"
 
+#. A label showing the number of IP addresses in a block action cluster, rendered as a single pill. The argument is the number of IPs.
+msgctxt "ip_count"
+msgid "{} IP"
+msgid_plural "{} IPs"
+msgstr[0] "{} IP"
+msgstr[1] "{} IP:er"
+
 #. Label for a list of IPv4 addresses.
 msgctxt "ipv4"
 msgid "IPv4"
@@ -1493,6 +1683,11 @@ msgctxt "join_urnetwork"
 msgid "Join URnetwork"
 msgstr "Gå med i URnetwork"
 
+#. Used in Main/Account/Wallets/NetworkReliability/NetworkReliabilityView.swift.
+msgctxt "key"
+msgid "key"
+msgstr "förklaring"
+
 #. Call to action
 msgctxt "kill_switch"
 msgid "Kill switch"
@@ -1528,10 +1723,19 @@ msgctxt "learn_more_protocol_page"
 msgid "Learn more at the protocol page"
 msgstr "Läs mer på protokollsidan"
 
+#. A description of the add auth sheet.
+msgctxt "link_another_way_to_sign_in_to"
+msgid "Link another way to sign in to your account."
+msgstr "Koppla ett annat sätt att logga in på ditt konto."
+
 #. Used in ContentView.swift.
 msgctxt "loading"
 msgid "Loading..."
 msgstr "Laddar..."
+
+msgctxt "loading_sign_in_methods"
+msgid "Loading sign-in methods..."
+msgstr "Laddar inloggningsmetoder..."
 
 #. Label for a chart showing local traffic statistics.
 msgctxt "local"
@@ -1578,6 +1782,41 @@ msgctxt "local_statistics"
 msgid "Local statistics"
 msgstr "Lokal statistik"
 
+#. Error state on linux: URnetwork wrote the system location file and can no longer remove it, so the machine may still be reporting a provider's location. Gives the user the recovery steps.
+msgctxt "location_override_cleanup_required"
+msgid "URnetwork could not remove the system location file, so this machine may still report a provider's location. Start the URnetwork system service and turn this off, or remove /etc/geolocation as an administrator."
+msgstr "URnetwork kunde inte ta bort systemets platsfil, så den här datorn kan fortfarande rapportera en leverantörs plats. Starta systemtjänsten URnetwork och stäng av detta, eller ta bort /etc/geolocation som administratör."
+
+#. Setup guide and info popup on linux: the honest limits of the device location override. Paired with location_override_coverage_geoclue.
+msgctxt "location_override_coverage_gaps"
+msgid "It does not cover everything. Chrome and KDE Plasma never ask GeoClue, and any app that works out your location from your IP address on its own is unaffected. Firefox falls back to its own lookup if the system does not answer quickly."
+msgstr "Det täcker inte allt. Chrome och KDE Plasma frågar aldrig GeoClue, och appar som själva räknar ut din plats utifrån din IP-adress påverkas inte. Firefox faller tillbaka på sin egen uppslagning om systemet inte svarar snabbt."
+
+#. Setup guide and info popup on linux: what the device location override actually covers. Shown alongside location_override_coverage_gaps, which states the limits.
+msgctxt "location_override_coverage_geoclue"
+msgid "Apps that ask the system for your location through GeoClue — including GNOME Settings and Maps, Firefox, and sandboxed Flatpak and Snap apps — report the provider's location instead of yours."
+msgstr "Appar som frågar systemet om din plats via GeoClue — bland annat GNOME Inställningar och Kartor, Firefox samt sandlådade Flatpak- och Snap-appar — rapporterar leverantörens plats i stället för din."
+
+#. Setup guide state on linux: every prerequisite for the device location override is met.
+msgctxt "location_override_ready"
+msgid "Ready. Turn on the toggle to report the connected provider's location as this machine's location."
+msgstr "Klart. Slå på reglaget för att rapportera den anslutna leverantörens plats som den här datorns plats."
+
+#. Setup guide step on linux: the GeoClue version requirement for the device location override.
+msgctxt "location_override_step_geoclue"
+msgid "Install GeoClue 2.7 or newer. It is not on every system, and Ubuntu 22.04 and Debian 12 ship an older version that cannot do this."
+msgstr "Installera GeoClue 2.7 eller senare. Det finns inte på alla system, och Ubuntu 22.04 och Debian 12 levererar en äldre version som inte klarar detta."
+
+#. Setup guide step on linux: the privileged helper needed to write the system location file. Reassures the user that the app itself never needs root.
+msgctxt "location_override_step_service"
+msgid "Install the URnetwork system service. The system location file lives under /etc, so a privileged helper has to write it — URnetwork never asks you to run the app itself as an administrator."
+msgstr "Installera systemtjänsten URnetwork. Systemets platsfil ligger under /etc, så en privilegierad hjälpprocess måste skriva den — URnetwork ber dig aldrig köra själva appen som administratör."
+
+#. Setup guide step on linux: keep GeoClue's static location source enabled so the override is read.
+msgctxt "location_override_step_static_source"
+msgid "Keep GeoClue's static location source enabled. It is on by default; check /etc/geoclue/geoclue.conf if you have changed it."
+msgstr "Låt GeoClues statiska platskälla vara aktiverad. Den är på som standard; kontrollera /etc/geoclue/geoclue.conf om du har ändrat den."
+
 #. Call to action
 msgctxt "login_client_error"
 msgid "Something went wrong authenticating the client. Try again."
@@ -1623,15 +1862,30 @@ msgctxt "make_default"
 msgid "Make default"
 msgstr "Gör till standard"
 
+#. Split tunnel settings: button opening the app split rules sheet.
+msgctxt "manage_apps"
+msgid "Manage apps"
+msgstr "Hantera appar"
+
 #. Call to action
 msgctxt "manage_subscription"
 msgid "Manage subscription"
 msgstr "Hantera prenumeration"
 
+#. A label at the bottom of the contract stack
+msgctxt "max_n"
+msgid "max {}"
+msgstr "max {}"
+
 #. Display name for the paid plan. The WIRE value stays "supporter" (subscription_type / current_subscription.plan) because already-shipped app versions parse that string; only what the user reads changes.
 msgctxt "member"
 msgid "Member"
 msgstr "Medlem"
+
+#. A label for the picker that lets the user select the sign-in method.
+msgctxt "method"
+msgid "Method"
+msgstr "Metod"
 
 #. Compact relative-time label with an abbreviated minutes unit ("7m ago"), shown by the windows and linux stats formatters for events 1-59 minutes old. The argument is the elapsed minutes. Not a plural: the abbreviated unit does not inflect, but the word order and the unit abbreviation localize.
 msgctxt "minutes_ago_abbrev"
@@ -1743,10 +1997,20 @@ msgctxt "most_popular"
 msgid "Most Popular"
 msgstr "Mest populär"
 
+#. Android app string: multiple ips.
+msgctxt "multiple_ips"
+msgid "Multiple IPs"
+msgstr "Flera IP-adresser"
+
 #. Call to action
 msgctxt "multiplier"
 msgid "Multiplier"
 msgstr "Multiplikator"
+
+#. A label that shows the daily data usage from referrals. The argument is the number of referrals.
+msgctxt "n_gib_day"
+msgid "+{} GiB/Day"
+msgstr "+{} GiB/dag"
 
 #. Create Network Form
 msgctxt "name_label"
@@ -1777,6 +2041,11 @@ msgstr "Nettopoäng intjänade"
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Nettotillhandahållen"
+
+#. Provide control mode option that provides bandwidth only to peers in the same network.
+msgctxt "network"
+msgid "Network"
+msgstr "Nätverk"
 
 #. Help text under the API URL field of the network API selector.
 msgctxt "network_api_api_url_help"
@@ -1868,6 +2137,11 @@ msgctxt "network_earnings"
 msgid "Network earnings"
 msgstr "Nätverksintäkter"
 
+#. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
+msgctxt "network_name_changed_to_n"
+msgid "Network name changed to {}"
+msgstr "Nätverksnamnet ändrades till {}"
+
 #. Call to action
 msgctxt "network_name_check_error"
 msgid "Not available. Must be at least 3 characters different than an existing network. Make it unique or longer."
@@ -1907,6 +2181,13 @@ msgstr "Detta nätverksnamn är redan taget"
 msgctxt "network_name_unavailable"
 msgid "Network name unavailable"
 msgstr "Nätverksnamnet är inte tillgängligt"
+
+#. A label showing the number of connected network peers that have provide enabled. Shown under the location in the connect drawer and as the pinned section title in the location chooser. The argument is the number of peers.
+msgctxt "network_peer_count"
+msgid "You have {} other device online"
+msgid_plural "You have {} other devices online"
+msgstr[0] "Du har {} annan enhet online"
+msgstr[1] "Du har {} andra enheter online"
 
 #. A label displayed above the list of connected peers.
 msgctxt "network_peers"
@@ -1964,6 +2245,16 @@ msgstr "Inga saldo-koder hittades"
 msgctxt "no_blocked_locations"
 msgid "No blocked locations"
 msgstr "Inga blockerade platser"
+
+#. A description of the benefits of creating an Instant Account.
+msgctxt "no_email_phone_or_password_needed_your"
+msgid "No email, phone, or password needed. Your account is secured by a seedphrase."
+msgstr "Ingen e-post, telefon eller lösenord behövs. Ditt konto skyddas av en seedfras."
+
+#. App split rules: empty state when no installed apps were enumerated.
+msgctxt "no_installed_apps_found"
+msgid "No installed apps found. (Store apps aren't listed.)"
+msgstr "Inga installerade appar hittades. (Store-appar visas inte.)"
 
 #. Call to action
 msgctxt "no_locations_found"
@@ -2120,6 +2411,11 @@ msgctxt "password_support_txt"
 msgid "Password must be at least 12 characters"
 msgstr "Lösenordet måste vara minst 12 tecken"
 
+#. A placeholder text for the seedphrase field.
+msgctxt "paste_your_24_word_seedphrase_here"
+msgid "Paste your 24-word seedphrase here"
+msgstr "Klistra in din seedfras på 24 ord här"
+
 #. Call to action
 msgctxt "pay_with_solana_wallet"
 msgid "Pay with Solana Wallet"
@@ -2165,6 +2461,21 @@ msgctxt "payouts_amount_threshold"
 msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
 msgstr "Utbetalningar sker varje söndag kl. 00:00 UTC och kräver att en minsta USDC-gräns uppnås."
 
+#. Post quantum identity panel: peer identity count indicator, singular.
+msgctxt "peer_count_one"
+msgid "1 peer"
+msgstr "1 nod"
+
+#. Post quantum identity panel: peer identity count indicator. The argument is the number of peers with an identity-verified e2e session.
+msgctxt "peer_count_other"
+msgid "%d peers"
+msgstr "%d noder"
+
+#. Replaces the network peer count/list while the app is not attached to its remote device (the network extension or service rpc is down — not connected): the peer state lives in the remote device, so the stat is unavailable rather than zero. Shown with a gray dot.
+msgctxt "peer_discovery_disabled"
+msgid "Peer discovery disabled until connected"
+msgstr "Nodidentifiering inaktiverad tills du är ansluten"
+
 #. Call to action
 msgctxt "pending_data_key"
 msgid "Pending"
@@ -2179,6 +2490,26 @@ msgstr "Väntar: {} MB tillhandahållna"
 msgctxt "pending_payout"
 msgid "Pending payout"
 msgstr "Väntande utbetalning"
+
+#. Android app string: pin app.
+msgctxt "pin_app"
+msgid "Pin to one provider"
+msgstr "Fäst vid en leverantör"
+
+#. Android app string: pin app description.
+msgctxt "pin_app_description"
+msgid "Keeps all of this app's connections on a single provider, so its API and images share one IP address. Use for apps whose content fails to load through the VPN"
+msgstr "Håller alla den här appens anslutningar hos en enda leverantör, så att dess API och bilder delar samma IP-adress. Använd för appar vars innehåll inte laddas via VPN"
+
+#. Android app string: pinned.
+msgctxt "pinned"
+msgid "Pinned"
+msgstr "Fäst"
+
+#. Placeholder text for an empty text field.
+msgctxt "placeholder"
+msgid "Placeholder"
+msgstr "Platshållare"
 
 #. Upgrade subscription overlay
 msgctxt "plan"
@@ -2221,6 +2552,26 @@ msgstr[1] "+ {} till"
 msgctxt "points_breakdown"
 msgid "Points breakdown"
 msgstr "Poängfördelning"
+
+#. Connect drawer: post quantum encryption toggle label.
+msgctxt "post_quantum_encryption"
+msgid "Post Quantum Encryption"
+msgstr "Postkvantkryptering"
+
+#. Connect drawer: note under the post quantum encryption toggle. Plaintext fallback applies when the provider does not support the e2e sessions.
+msgctxt "post_quantum_encryption_fallback_note"
+msgid "Fallback enabled (temporary)"
+msgstr "Reservläge aktiverat (tillfälligt)"
+
+#. Account tab: post quantum identity panel title.
+msgctxt "post_quantum_identity"
+msgid "Post Quantum Identity"
+msgstr "Postkvantidentitet"
+
+#. Account tab: explanation under the post quantum identity panel — what the identity key is and how verifying provider keys detects interception.
+msgctxt "post_quantum_identity_explanation"
+msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
+msgstr "Din identitetsnyckel lagras lokalt på den här enheten. Om någon nods nyckel skiljer sig från den lokalt lagrade nyckeln betyder det att nätverksoperatören inte går att lita på."
 
 #. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
 msgctxt "pricing_shown_at_checkout"
@@ -2298,6 +2649,11 @@ msgctxt "provider_count_int"
 msgid "{} providers"
 msgstr "{} leverantörer"
 
+#. Post quantum identity: title of the connected provider identity key details view.
+msgctxt "provider_identities"
+msgid "Provider Identities"
+msgstr "Leverantörsidentiteter"
+
 #. Row subtitle in the provider locations list when a provider's location is not known.
 msgctxt "provider_location_unknown"
 msgid "Location unknown"
@@ -2312,6 +2668,11 @@ msgstr "Inga leverantörer anslutna"
 msgctxt "provider_locations_title"
 msgid "Provider Locations"
 msgstr "Leverantörsplatser"
+
+#. Shown instead of the provider list when the device's window state cannot be read, because the network extension hosting it is not running. Never present an empty list as "no providers" in that case.
+msgctxt "provider_locations_unavailable"
+msgid "Provider details are unavailable until connected"
+msgstr "Leverantörsinformation är inte tillgänglig förrän du är ansluten"
 
 #. Title of a section that shows statistics about the provider.
 msgctxt "provider_statistics"
@@ -2415,6 +2776,11 @@ msgctxt "refer_a_friend_30_gib_month"
 msgid "Refer a friend = +30 GiB/Month"
 msgstr "Tipsa en vän = +30 GiB/månad"
 
+#. A bullet point in the introduction view that describes how much extra bandwidth you can earn by referring a friend.
+msgctxt "refer_a_friend_3_gib_day"
+msgid "Refer a friend = +3 GiB/Day"
+msgstr "Tipsa en vän = +3 GiB/dag"
+
 #. Account Screen
 msgctxt "refer_and_earn"
 msgid "Refer and earn"
@@ -2510,6 +2876,10 @@ msgctxt "referrals"
 msgid "Referrals"
 msgstr "Rekommendationer"
 
+msgctxt "regenerate_seedphrase"
+msgid "Regenerate Seedphrase"
+msgstr "Generera ny seedfras"
+
 #. Provider list group title for regions
 msgctxt "regions"
 msgid "Regions"
@@ -2574,6 +2944,10 @@ msgstr "Ta bort"
 msgctxt "remove_rule"
 msgid "Remove rule"
 msgstr "Ta bort regel"
+
+msgctxt "remove_this_sign_in_method"
+msgid "Remove this sign-in method?"
+msgstr "Ta bort den här inloggningsmetoden?"
 
 #. Used in Main/Account/AccountNavStackView.swift.
 msgctxt "remove_wallet"
@@ -2645,6 +3019,11 @@ msgctxt "rules"
 msgid "Rules"
 msgstr "Regler"
 
+#. A description of the benefits of using a Seeker Token.
+msgctxt "s_2x_your_free_and_referral_data"
+msgid "2x your free and referral data"
+msgstr "2x din gratis- och referensdata"
+
 #. Profile
 msgctxt "save"
 msgid "Save"
@@ -2680,6 +3059,11 @@ msgctxt "seconds_ago_abbrev"
 msgid "{}s ago"
 msgstr "för {} s sedan"
 
+#. The title of the screen.
+msgctxt "secure_your_account"
+msgid "Secure Your Account"
+msgstr "Säkra ditt konto"
+
 #. Onboarding Carousel
 msgctxt "see_world_content"
 msgid "See all the\nworld's content"
@@ -2690,6 +3074,11 @@ msgctxt "see_world_content_description"
 msgid "See all the world's content with URnetwork"
 msgstr "Se allt innehåll i världen med URnetwork"
 
+#. A label displayed above a field for entering a seedphrase.
+msgctxt "seedphrase"
+msgid "Seedphrase"
+msgstr "Seedfras"
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -2699,6 +3088,11 @@ msgstr "Seeker-token verifierat!"
 msgctxt "select_country_to_block"
 msgid "Select country to block"
 msgstr "Välj land att blockera"
+
+#. Connect drawer: accessibility label for the globe icon that opens the provider selection list.
+msgctxt "select_location_provider_content_description"
+msgid "Select location provider globe"
+msgstr "Jordglob: välj leverantörsplats"
 
 #. Fallback name for the connect location when the selected location has no name.
 msgctxt "selected_location"
@@ -2810,6 +3204,11 @@ msgctxt "sign_in"
 msgid "Sign in"
 msgstr "Logga in"
 
+#. Button text for signing in with a seedphrase.
+msgctxt "sign_in_2"
+msgid "Sign In"
+msgstr "Logga in"
+
 #. Call to action
 msgctxt "sign_in_dgen1"
 msgid "Sign in with dGEN1"
@@ -2819,6 +3218,15 @@ msgstr "Logga in med dGEN1"
 msgctxt "sign_in_failed"
 msgid "Sign in failed"
 msgstr "Inloggningen misslyckades"
+
+#. Snackbar message displayed when a sign-in method is successfully added.
+msgctxt "sign_in_method_added_successfully"
+msgid "Sign-in method added successfully"
+msgstr "Inloggningsmetoden har lagts till"
+
+msgctxt "sign_in_methods"
+msgid "Sign-In Methods"
+msgstr "Inloggningsmetoder"
 
 #. Button that signs in with a pasted auth code instead of a password.
 msgctxt "sign_in_with_code"
@@ -2830,15 +3238,214 @@ msgctxt "sign_in_with_google"
 msgid "Sign in with Google"
 msgstr "Logga in med Google"
 
+#. A description of how to sign in with Google.
+msgctxt "sign_in_with_google_to_add_it"
+msgid "Sign in with Google to add it as a sign-in method."
+msgstr "Logga in med Google för att lägga till det som inloggningsmetod."
+
+msgctxt "sign_in_with_seedphrase"
+msgid "Sign in with Seedphrase"
+msgstr "Logga in med seedfras"
+
+#. A description of the Apple Sign-In process.
+msgctxt "sign_in_with_your_apple_id_to"
+msgid "Sign in with your Apple ID to add it as a sign-in method."
+msgstr "Logga in med ditt Apple ID för att lägga till det som inloggningsmetod."
+
 #. Used in NetworkApp.swift.
 msgctxt "sign_out"
 msgid "Sign out"
 msgstr "Logga ut"
 
+#. Button text for signing in with a wallet.
+msgctxt "sign_with_wallet"
+msgid "Sign with Wallet"
+msgstr "Signera med plånbok"
+
 #. Tray notification shown when the account signs in.
 msgctxt "signed_in"
 msgid "Signed in"
 msgstr "Inloggad"
+
+#. Reliability: average label
+msgctxt "site_app_average_reliability"
+msgid "Average reliability"
+msgstr "Genomsnittlig tillförlitlighet"
+
+#. Reliability: clients series
+msgctxt "site_app_clients"
+msgid "Clients"
+msgstr "Klienter"
+
+#. Connect drawer: options section label
+msgctxt "site_app_connect_options"
+msgid "Connect options"
+msgstr "Anslutningsalternativ"
+
+#. Disabled stat cards: connect-to-view hint
+msgctxt "site_app_connect_to_view"
+msgid "Connect to view live activity"
+msgstr "Anslut för att se aktivitet i realtid"
+
+#. Reliability: country column
+msgctxt "site_app_country"
+msgid "Country"
+msgstr "Land"
+
+#. Reliability: country multipliers heading
+msgctxt "site_app_country_multipliers"
+msgid "Country multipliers"
+msgstr "Landsmultiplikatorer"
+
+#. Connect drawer: fixed-IP toggle
+msgctxt "site_app_fixed_ip"
+msgid "Fixed IP"
+msgstr "Fast IP"
+
+#. App sidebar: manage subscription button (opens the Stripe billing portal)
+msgctxt "site_app_manage_subscription"
+msgid "Manage Subscription"
+msgstr "Hantera prenumeration"
+
+#. Connect drawer: connection mode Auto
+msgctxt "site_app_mode_auto"
+msgid "Auto"
+msgstr "Auto"
+
+#. Connect drawer: connection mode Streaming
+msgctxt "site_app_mode_streaming"
+msgid "Streaming"
+msgstr "Streaming"
+
+#. Connect drawer: connection mode Web
+msgctxt "site_app_mode_web"
+msgid "Web"
+msgstr "Webb"
+
+#. Reliability: multiplier column
+msgctxt "site_app_multiplier"
+msgid "Multiplier"
+msgstr "Multiplikator"
+
+#. Connect drawer: throughput empty state
+msgctxt "site_app_no_traffic"
+msgid "No traffic yet"
+msgstr "Ingen trafik ännu"
+
+#. Connect drawer: plan section label
+msgctxt "site_app_plan"
+msgid "Plan"
+msgstr "Plan"
+
+#. App account: proxies row/screen title
+msgctxt "site_app_proxies"
+msgid "Proxies"
+msgstr "Proxyservrar"
+
+#. Reliability: weight series
+msgctxt "site_app_reliability_weight"
+msgid "Reliability weight"
+msgstr "Tillförlitlighetsvikt"
+
+#. Connect drawer: strong-anonymization toggle
+msgctxt "site_app_strong_anon"
+msgid "Strong Anonymization"
+msgstr "Stark anonymisering"
+
+#. Connect drawer: live transfer timeseries section
+msgctxt "site_app_throughput"
+msgid "Transfer"
+msgstr "Överföring"
+
+#. Connect: extension fix alert title
+msgctxt "site_connect_ext_fix_title"
+msgid "Set up the extension to connect"
+msgstr "Konfigurera tillägget för att ansluta"
+
+#. Connect: extension different-network alert body
+msgctxt "site_connect_ext_foreign_body"
+msgid "The extension is signed into a different network:"
+msgstr "Tillägget är inloggat på ett annat nätverk:"
+
+#. Connect: extension install alert body
+msgctxt "site_connect_ext_install_body"
+msgid "URnetwork routes this browser through the extension. Install it to start connecting."
+msgstr "URnetwork dirigerar den här webbläsaren via tillägget. Installera det för att börja ansluta."
+
+#. Connect: extension install alert title
+msgctxt "site_connect_ext_install_title"
+msgid "Install the extension to connect"
+msgstr "Installera tillägget för att ansluta"
+
+#. Connect: extension ready status
+msgctxt "site_connect_ext_ready"
+msgid "Extension detected and signed in"
+msgstr "Tillägg upptäckt och inloggat"
+
+#. Connect: extension logged-out alert body
+msgctxt "site_connect_ext_unlinked_body"
+msgid "The extension is installed but signed out. Set it up with your network to connect."
+msgstr "Tillägget är installerat men utloggat. Konfigurera det med ditt nätverk för att ansluta."
+
+#. Connect: disconnected status line
+msgctxt "site_connect_ready"
+msgid "Ready to connect"
+msgstr "Redo att ansluta"
+
+#. Mobile app panel: install-the-native-app CTA
+msgctxt "site_install_app"
+msgid "Install the app"
+msgstr "Installera appen"
+
+#. Subscription: free plan body
+msgctxt "site_sub_free_body"
+msgid "You're on the Free plan. Upgrade to Pro for more data and features."
+msgstr "Du har Free-planen. Uppgradera till Pro för mer data och fler funktioner."
+
+#. Subscription: free plan title
+msgctxt "site_sub_free_title"
+msgid "Free plan"
+msgstr "Free-plan"
+
+#. Subscription: manage-on-platform button ({platform})
+msgctxt "site_sub_manage_on"
+msgid "Manage in {platform}"
+msgstr "Hantera i {platform}"
+
+#. Subscription: manage-on-platform button, Apple. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_apple"
+msgid "Manage in the App Store"
+msgstr "Hantera i App Store"
+
+#. Subscription: manage-on-platform button, Google. A full sentence rather than interpolating the store name, because the article and case around it differ per language.
+msgctxt "site_sub_manage_on_google"
+msgid "Manage in Google Play"
+msgstr "Hantera i Google Play"
+
+#. Subscription: unknown platform fallback
+msgctxt "site_sub_other_platform"
+msgid "another platform"
+msgstr "en annan plattform"
+
+#. Subscription: other-platform body ({platform})
+msgctxt "site_sub_platform_body"
+msgid "Your Pro subscription is billed through {platform}. To change or cancel it, manage your subscriptions in {platform}."
+msgstr "Din Pro-prenumeration faktureras via {platform}. Ändra eller avsluta den genom att hantera dina prenumerationer via {platform}."
+
+#. Subscription: billing explanation, Apple. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_apple"
+msgid "Your Pro subscription is billed through the App Store. To change or cancel it, manage your subscriptions in the App Store."
+msgstr "Din Pro-prenumeration faktureras via App Store. Ändra eller avsluta den genom att hantera dina prenumerationer i App Store."
+
+#. Subscription: billing explanation, Google. Full sentence so each language can inflect around the store name naturally.
+msgctxt "site_sub_platform_body_google"
+msgid "Your Pro subscription is billed through Google Play. To change or cancel it, manage your subscriptions in Google Play."
+msgstr "Din Pro-prenumeration faktureras via Google Play. Ändra eller avsluta den genom att hantera dina prenumerationer i Google Play."
+
+#. Subscription: Stripe-billed body
+msgctxt "site_sub_stripe_body"
+msgid "Your Pro subscription is billed through Stripe. Update your payment details or cancel anytime below."
+msgstr "Din Pro-prenumeration faktureras via Stripe. Uppdatera dina betaluppgifter eller avsluta när som helst nedan."
 
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"
@@ -3087,10 +3694,25 @@ msgctxt "these_wallets_are_not_affiliated_or_controlled"
 msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
 msgstr "Dessa plånböcker är inte anslutna till eller kontrollerade av URnetwork. Vi kommer att skicka intäkter till den anslutna plånboken."
 
+#. A warning message displayed in the seedphrase display view.
+msgctxt "this_is_the_only_time_you_ll"
+msgid "⚠️ This is the ONLY time you'll see this."
+msgstr "⚠️ Det här är enda gången du ser den."
+
 #. dns settings
 msgctxt "this_region"
 msgid "this region"
 msgstr "denna region"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is connected.
+msgctxt "tile_status_connected"
+msgid "Connected"
+msgstr "Ansluten"
+
+#. Subtitle shown under the Quick Settings tile when the VPN is disconnected.
+msgctxt "tile_status_disconnected"
+msgid "Disconnected"
+msgstr "Frånkopplad"
 
 msgctxt "title_login"
 msgid "Login"
@@ -3187,6 +3809,11 @@ msgstr "Prova Gästläge"
 msgctxt "try_guest_mode_2"
 msgid "Try guest mode"
 msgstr "Prova gästläge"
+
+#. Generic fallback on the linux home screen when the urnetworkd system service accepted the request but starting the VPN tunnel failed and no more specific error text is available.
+msgctxt "tunnel_start_failed"
+msgid "Could not start the connection"
+msgstr "Kunde inte starta anslutningen"
 
 #. A label displayed in the custom dns settings section.
 msgctxt "unencrypted_dns"
@@ -3435,10 +4062,20 @@ msgctxt "version_info"
 msgid "Version and build info"
 msgstr "Versions- och bygginformation"
 
+#. Android app string: via exit.
+msgctxt "via_exit"
+msgid "via {}"
+msgstr "via {}"
+
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "waiting_for_approval"
 msgid "Waiting for approval"
 msgstr "Väntar på godkännande"
+
+#. A message displayed when waiting for a wallet signature.
+msgctxt "waiting_for_wallet_signature"
+msgid "Waiting for wallet signature..."
+msgstr "Väntar på plånbokssignatur..."
 
 #. Account Screen
 msgctxt "wallet"
@@ -3488,6 +4125,11 @@ msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
 msgstr "Inloggning med plånbok misslyckades"
 
+#. Snackbar message displayed when a wallet sign-in method is successfully added.
+msgctxt "wallet_sign_in_method_added"
+msgid "Wallet sign-in method added"
+msgstr "Inloggningsmetod med plånbok tillagd"
+
 #. Wallets Screen
 msgctxt "wallets"
 msgid "Wallets"
@@ -3528,6 +4170,11 @@ msgctxt "with_urnetwork"
 msgid "with URnetwork"
 msgstr "med URnetwork"
 
+#. A warning message that instructs the user to write down their seedphrase and store it in a secure location.
+msgctxt "write_it_down_and_store_it_somewhere"
+msgid "Write it down and store it somewhere safe. If you lose it, you'll lose access to your account."
+msgstr "Skriv ner den och förvara den på ett säkert ställe. Om du tappar bort den förlorar du åtkomsten till ditt konto."
+
 #. Billing period name on the yearly subscription product card in the upgrade flow.
 msgctxt "yearly"
 msgid "Yearly"
@@ -3542,6 +4189,19 @@ msgstr "Ja"
 msgctxt "you_get_30_gib_month_for_life"
 msgid "You get 30 GiB/month for life"
 msgstr "Du får 30 GiB/månad för alltid"
+
+#. Text displayed in a scrollable view within a VStack in the body of a view that is displayed when the user is viewing their referral code.
+msgctxt "you_get_3_gib_day_for_life"
+msgid "You get 3 GiB/day for life"
+msgstr "Du får 3 GiB/dag på livstid"
+
+msgctxt "you_have_1_other_device_online"
+msgid "You have 1 other device online"
+msgstr "Du har 1 annan enhet online"
+
+msgctxt "you_have_n_other_devices_online"
+msgid "You have {} other devices online"
+msgstr "Du har {} andra enheter online"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "you_ll_unlock_even_faster_speeds_and_first_dibs"
@@ -3573,6 +4233,11 @@ msgctxt "your_friend_gets_30_gib_month_for_life"
 msgid "Your friend gets 30 GiB/month for life"
 msgstr "Din vän får 30 GiB/månad för alltid"
 
+#. Text displayed in a scrollable view within a VStack in the body of a view that is displayed in a modal.
+msgctxt "your_friend_gets_3_gib_day_for"
+msgid "Your friend gets 3 GiB/day for life"
+msgstr "Din vän får 3 GiB/dag på livstid"
+
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "your_purchase_needs_to_be_approved_before_it_can"
 msgid "Your purchase needs to be approved before it can complete. UR Pro will turn on by itself once it goes through — there's no need to buy again."
@@ -3582,3 +4247,8 @@ msgstr "Ditt köp måste godkännas innan det kan slutföras. UR Pro aktiveras a
 msgctxt "your_referral_link"
 msgid "Your referral link"
 msgstr "Din rekommendationslänk"
+
+#. A title displayed above the user's seedphrase.
+msgctxt "your_seedphrase"
+msgid "Your Seedphrase"
+msgstr "Din seedfras"
