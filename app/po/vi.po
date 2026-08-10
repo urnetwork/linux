@@ -2690,7 +2690,7 @@ msgctxt "providing_paused"
 msgid "Providing (paused)"
 msgstr "Đang cung cấp (tạm dừng)"
 
-#. Shown when the post-checkout confirmation poll gives up (2 minutes) without the server confirming the subscription. The purchase is still likely to land later; the background poll and the next launch pick it up.
+#. Shown when the post-checkout confirmation poll gives up (2 minutes) without the server confirming the subscription. The purchase is still likely to land later; the background poll and the next launch pick it up. On apple: the delayed phase of PurchaseSuccessView and the MainView snackbar.
 msgctxt "purchase_confirmation_timeout"
 msgid "We couldn't confirm your purchase yet. If you completed checkout, your plan will update automatically in a few minutes — there's no need to buy again."
 msgstr "Chúng tôi chưa thể xác nhận giao dịch mua của bạn. Nếu bạn đã hoàn tất thanh toán, kế hoạch của bạn sẽ tự động cập nhật sau vài phút — không cần mua lại."

@@ -161,26 +161,42 @@ void RedeemCodeSheet::BuildUi() {
   codesEmpty_->set_margin_top(8);
   codesEmpty_->set_visible(false);
   root->append(*codesEmpty_);
+
+  // a fetch FAILURE is not an empty history: it gets its own state so the
+  // user is never told "No balance codes found" over a transport error
+  codesError_ = Gtk::make_managed<Gtk::Label>(
+      T_("balance_codes_load_error",
+         "Couldn't load your balance codes. Check your connection and try again."));
+  codesError_->add_css_class("ur-error-text");
+  codesError_->add_css_class("caption");
+  codesError_->set_wrap(true);
+  codesError_->set_xalign(0);
+  codesError_->set_margin_top(8);
+  codesError_->set_visible(false);
+  root->append(*codesError_);
 }
 
 // The redeemed-codes history: one row per code — masked secret, +data,
 // redeemed date, expiry — the Windows Account panel columns and the mac
-// Balance Codes screen rows. Errors leave the list empty (the empty state).
+// Balance Codes screen rows. A failed fetch renders the error state; only a
+// SUCCESSFUL fetch with no codes renders the empty state.
 void RedeemCodeSheet::RefreshCodes() {
   auto epoch = epoch_;
   const uint64_t issued = *epoch;
   host_.api().getNetworkRedeemedBalanceCodes(
       [this, epoch, issued](std::optional<urnet::GetNetworkRedeemedBalanceCodesResult> result,
                             std::optional<std::string> err) {
+        const bool failed = err.has_value() || !result || result->error.has_value();
         urnet::RedeemedBalanceCodeList codes;
-        if (!err && result && result->balance_codes) codes = *result->balance_codes;
-        PostToMain([this, epoch, issued, codes = std::move(codes)] {
+        if (!failed && result->balance_codes) codes = *result->balance_codes;
+        PostToMain([this, epoch, issued, failed, codes = std::move(codes)] {
           if (*epoch != issued) return;  // sheet was reset since
           while (Gtk::Widget* child = codesGrid_->get_first_child()) {
             codesGrid_->remove(*child);
           }
           codesScroller_->set_visible(!codes.empty());
-          codesEmpty_->set_visible(codes.empty());
+          codesEmpty_->set_visible(!failed && codes.empty());
+          codesError_->set_visible(failed);
           if (codes.empty()) return;
 
           auto cell = [](const std::string& text, bool header) {
@@ -257,7 +273,24 @@ void RedeemCodeSheet::Redeem() {
         PostToMain([this, epoch, issued, result = std::move(result), err = std::move(err)] {
           if (*epoch != issued) return;  // sheet was reset since
           SetRedeeming(false);
-          if (err || !result || result->error) {
+          if (err || !result) {
+            // Transport failure / no response: the server may have COMMITTED
+            // the redemption before the response was lost — never call the
+            // code invalid (and don't mark the entry as wrong), point at the
+            // balance instead.
+            errorLabel_->set_text(
+                T_("balance_code_transport_error",
+                   "We couldn't reach the server — check your connection. If you were charged, "
+                   "the code may already be applied; check your balance before trying again."));
+            errorLabel_->set_visible(true);
+            return;
+          }
+          if (result->error) {
+            // the server rejected the code: surface its reason when it gives
+            // one, falling back to the generic invalid-code copy
+            errorLabel_->set_text(result->error->message.empty()
+                                      ? T_("invalid_balance_code", "Invalid balance code")
+                                      : result->error->message.c_str());
             errorLabel_->set_visible(true);
             codeEntry_->add_css_class("error");
             return;

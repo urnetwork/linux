@@ -72,6 +72,7 @@ enum class DrawerEvent {
   Overrides,        // block action overrides ("split rules") changed
   DnsSettings,      // dns resolver settings changed
   Blocker,          // block-ads-and-trackers toggle changed
+  RouteLocal,       // routeLocal changed (the kill switch, inverted)
   Contracts,        // egress/ingress contract details changed
   Location,         // connect location changed
   Profile,          // performance profile changed
@@ -200,6 +201,13 @@ class SdkHost {
 
   void Logout();
 
+  // Quit-path teardown: bring the device and the daemon tunnel down WITHOUT
+  // touching stored auth. Quitting the app is not signing out — Logout()'s
+  // localState wipe deletes the jwt, and for a guest network the jwt is the
+  // only credential, so quit-as-logout permanently destroys the account and
+  // any balance it purchased.
+  void Shutdown();
+
   // Daemon session: connect → hello (protocol enforced both ways) →
   // start_tunnel → bind the DeviceRemote to the daemon's device RPC. The
   // tunnel itself (DeviceLocal, tun fd, IoLoop) lives in urnetworkd.
@@ -255,6 +263,13 @@ class SdkHost {
   void SetPerformanceProfile(const std::optional<urnet::PerformanceProfile>& profile);
   bool GetBlockerEnabled();
   void SetBlockerEnabled(bool enabled);
+  // Kill switch = !routeLocal (apple SettingsForm parity): with routeLocal
+  // off the device DROPS tun-captured packets whenever no provider connection
+  // is up, instead of falling back to local egress. Persisted in the GUI's
+  // LocalState (the daemon's DeviceLocal neither persists nor restores it)
+  // and re-applied over the device rpc at StartTunnel.
+  bool GetRouteLocal();
+  void SetRouteLocal(bool routeLocal);
   std::optional<urnet::DnsResolverSettings> GetDnsResolverSettings();
   void SetDnsResolverSettings(const urnet::DnsResolverSettings& settings);
   std::optional<urnet::ThroughputPointList> ThroughputPoints();
@@ -382,6 +397,9 @@ class SdkHost {
   std::vector<urnet::Sub> presentationSubs_;
 
   WalletConnect wallet_;
+  // Guarded by mutex_: set on the UI thread (SignInWithSolana/Bittensor),
+  // consumed on wallet deep-link and SDK callback threads (on_error /
+  // AuthLoginWithWallet) — always taken under the lock, invoked outside it.
   std::function<void(AuthResult)> walletAuthDone_;
   // The signed wallet_auth of a wallet sign-in with no network, carried into
   // CreateNetworkWithPendingWallet (android/apple route the same way).

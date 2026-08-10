@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "SubscriptionBalance.hpp"
 
+#include <algorithm>
 #include <cstdio>
 
 #include <glib.h>
@@ -11,7 +12,9 @@ namespace urnw {
 namespace {
 constexpr unsigned kBackgroundPollingSeconds = 30;   // mac backgroundPollingInterval
 constexpr unsigned kConfirmationPollingSeconds = 5;  // mac pollingInterval
-constexpr gint64 kMaxPollingDurationUs = 120ll * G_USEC_PER_SEC;  // mac maxPollingDuration
+// mac maxPollingDuration — but spent as a budget of ACTIVE polling time, not
+// wall clock: it pauses with the timers (see SetWindowVisible)
+constexpr gint64 kMaxPollingDurationUs = 120ll * G_USEC_PER_SEC;
 }  // namespace
 
 SubscriptionBalanceStore::SubscriptionBalanceStore(SdkHost& host) : host_(host) {}
@@ -78,20 +81,30 @@ void SubscriptionBalanceStore::SetWindowVisible(bool visible) {
   windowVisible_ = visible;
   if (!visible) {
     // Do not keep periodic main-loop wakeups merely to discover that the
-    // window is still hidden. Preserve confirmation state/deadline, but pause
-    // its timer as well.
+    // window is still hidden. The confirmation deadline is a budget of ACTIVE
+    // polling time: bank whatever is left so time spent in the browser's
+    // checkout — losing focus is exactly what paying looks like — never
+    // counts against the 2 minutes. It resumes ticking with the timers.
+    if (isPolling_ && hasPollingDeadline_) {
+      pollingBudgetUs_ = std::max<gint64>(0, pollingDeadlineUs_ - g_get_monotonic_time());
+      hasPollingDeadline_ = false;
+    }
     backgroundTimer_.disconnect();
     pollingTimer_.disconnect();
     return;
   }
   if (!started_ || wasVisible) return;
   if (isPolling_) {
-    ResumeConfirmationPolling();
+    ResumeConfirmationPolling();  // immediate poll; the banked budget re-arms
     return;
   }
-  if (!isPro_ && !isPolling_ && !IsSupporterWithBalance()) {
-    StartBackgroundPolling();
+  if (!isPro_) {
+    StartBackgroundPolling();  // fetches immediately, then every 30s
   } else {
+    // A Pro network — including supporter-with-balance, whose periodic polls
+    // the stop rule below silences — still refreshes ONCE per window
+    // show/focus, so an upgrade or a lapse is picked up when the user comes
+    // back to a tray-resident app.
     FetchNow();
   }
 }
@@ -153,6 +166,12 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
             // and a lapse — refresh the jwt whenever the two disagree, in
             // either direction (the mac view model learned this the hard way).
             const bool serverIsPro = result->current_subscription.has_value();
+            if (serverIsPro) {
+              // A Pro confirmation resolves an earlier confirmation give-up,
+              // even when it lands late (background poll, next window focus):
+              // the upgrade sheet recovers TimedOut -> Success off this flip.
+              purchaseConfirmationTimedOut_ = false;
+            }
             if (serverIsPro && !isPro_) {
               // free -> paid: signal the upgrade so provide mode resets to
               // never once (mac didDetectUpgradeToPro; MainWindow applies it)
@@ -171,10 +190,10 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
             if (IsSupporterWithBalance()) {
               StopPolling();
             } else if (hasPollingDeadline_ && g_get_monotonic_time() >= pollingDeadlineUs_) {
-              // the server never confirmed within the window — stop hammering
-              // the api and tell the user, rather than spinning for the session
-              StopPolling();
-              purchaseConfirmationTimedOut_ = true;
+              // the server never confirmed within the (active-time) window —
+              // stop hammering the api and tell the user, rather than
+              // spinning for the session
+              GiveUpConfirmationPolling();
             }
           } else if (IsSupporterWithBalance()) {
             StopPolling();  // background poll stops once supporter-with-balance
@@ -222,10 +241,14 @@ void SubscriptionBalanceStore::StartConfirmationPolling() {
   if (isPolling_) return;
   backgroundTimer_.disconnect();
 
-  // a fresh confirmation attempt: clear any previous give-up, arm the deadline
+  // A fresh confirmation attempt: clear any previous give-up and grant the
+  // full budget. The budget is accumulated ACTIVE polling time — the deadline
+  // is armed from it in ResumeConfirmationPolling and banked back on pause —
+  // so hidden/unfocused stretches (the user paying in the browser) never
+  // count toward the 2 minutes.
   purchaseConfirmationTimedOut_ = false;
-  hasPollingDeadline_ = true;
-  pollingDeadlineUs_ = g_get_monotonic_time() + kMaxPollingDurationUs;
+  hasPollingDeadline_ = false;
+  pollingBudgetUs_ = kMaxPollingDurationUs;
   isPolling_ = true;
 
   Emit();
@@ -234,14 +257,19 @@ void SubscriptionBalanceStore::StartConfirmationPolling() {
 
 void SubscriptionBalanceStore::ResumeConfirmationPolling() {
   if (!started_ || !windowVisible_ || !isPolling_) return;
-  if (hasPollingDeadline_ && g_get_monotonic_time() >= pollingDeadlineUs_) {
-    StopPolling();
-    purchaseConfirmationTimedOut_ = true;
-    if (!isPro_ && !IsSupporterWithBalance()) StartBackgroundPolling();
-    Emit();
-    return;
+  if (!hasPollingDeadline_) {
+    if (pollingBudgetUs_ <= 0) {
+      // resumed with nothing left (the deadline hit exactly at pause time)
+      GiveUpConfirmationPolling();
+      Emit();
+      return;
+    }
+    // the budget resumes ticking only now that the timer actually runs
+    pollingDeadlineUs_ = g_get_monotonic_time() + pollingBudgetUs_;
+    hasPollingDeadline_ = true;
   }
 
+  // immediate poll on resume: a webhook that landed while hidden confirms now
   FetchNow();
   pollingTimer_.disconnect();
   pollingTimer_ = Glib::signal_timeout().connect_seconds(
@@ -249,9 +277,7 @@ void SubscriptionBalanceStore::ResumeConfirmationPolling() {
         // Check independently of the API callback. A callback that is delayed
         // or never arrives must not keep the confirmation timer alive forever.
         if (hasPollingDeadline_ && g_get_monotonic_time() >= pollingDeadlineUs_) {
-          StopPolling();
-          purchaseConfirmationTimedOut_ = true;
-          if (!isPro_ && !IsSupporterWithBalance()) StartBackgroundPolling();
+          GiveUpConfirmationPolling();
           Emit();
           return false;
         }
@@ -261,10 +287,20 @@ void SubscriptionBalanceStore::ResumeConfirmationPolling() {
       kConfirmationPollingSeconds);
 }
 
+// The confirmation window is spent: stop hammering the api, raise the
+// timed-out flag for the sheet, and fall back to the background cadence so a
+// late webhook is still picked up (and can clear the flag again).
+void SubscriptionBalanceStore::GiveUpConfirmationPolling() {
+  StopPolling();
+  purchaseConfirmationTimedOut_ = true;
+  if (!isPro_ && !IsSupporterWithBalance()) StartBackgroundPolling();
+}
+
 void SubscriptionBalanceStore::StopPolling() {
   backgroundTimer_.disconnect();
   pollingTimer_.disconnect();
   hasPollingDeadline_ = false;
+  pollingBudgetUs_ = 0;
   if (isPolling_) {
     isPolling_ = false;
     Emit();

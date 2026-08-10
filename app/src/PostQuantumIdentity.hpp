@@ -89,6 +89,20 @@ struct IdentityRow {
   std::vector<uint8_t> key;
 };
 
+// the provider-locations trailing badge next to the client id (android
+// BADGE_IDENTICON_SIZE); rasters render at 2x like every other size
+constexpr int kBadgeIdenticonSize = 16;
+
+// The providers with an established, identity-verified e2e session, read
+// through the SdkHost PQI accessor and decoded (PublicKey crosses as base64,
+// the hash computed through the canonical SDK rule). Shared by the PQI panel /
+// list and the provider-locations badge join.
+std::vector<IdentityRow> ReadProviderIdentityRows(SdkHost& host);
+
+// value equality on (client id, hash) — the identicons derive from the key,
+// which the hash captures (apple ProviderIdentityRow ==)
+bool SameIdentityRows(const std::vector<IdentityRow>& a, const std::vector<IdentityRow>& b);
+
 class ProviderIdentitiesSheet;
 class PostQuantumIdentityShareSheet;
 

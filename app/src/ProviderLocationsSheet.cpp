@@ -330,10 +330,24 @@ std::vector<ProviderLocationRow> ProviderLocationsSheet::ReadRows() {
 
 void ProviderLocationsSheet::Refresh() {
   std::vector<ProviderLocationRow> rows = ReadRows();
+  // Snapshot the verified-e2e identity set alongside the locations. The badge
+  // depends on it, but it changes independently of the location rows (a
+  // session verifying does not change a row's value), so it must be compared
+  // separately or a newly sealed provider would never gain its badge until
+  // some unrelated location change forced a rebuild.
+  std::vector<IdentityRow> identityRows = ReadProviderIdentityRows(host_);
+  const bool identitiesChanged = !SameIdentityRows(identityRows, identityRows_);
   // Dedupe by value. The SDK re-emits on every window turnover and returns
   // fresh objects each time, so without this the list would be torn down and
   // rebuilt constantly -- the same discipline the connect grid uses.
-  const bool changed = rows != rows_;
+  const bool changed = rows != rows_ || identitiesChanged;
+  if (identitiesChanged) {
+    identityRows_ = std::move(identityRows);
+    identityByClientId_.clear();
+    for (const IdentityRow& identity : identityRows_) {
+      identityByClientId_[identity.clientId] = &identity;
+    }
+  }
   if (changed) {
     rows_ = std::move(rows);
     // a selection whose provider left the window is dropped
@@ -397,9 +411,16 @@ Gtk::Widget* ProviderLocationsSheet::BuildRow(size_t index, RowWidgets& out) {
   auto* column = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
   column->set_hexpand(true);
 
+  // the client id and, when the provider has a verified e2e session, its
+  // identity identicon as a trailing badge. hexpand + ellipsize on the label
+  // keeps a long id truncating instead of shoving the badge out; the badge is
+  // created only on a join hit, so absence is the "not e2e" state (no
+  // placeholder square). 6px gap mirrors android's badge spacer.
+  auto* idRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
   out.clientId = Gtk::make_managed<Gtk::Label>(row.clientId);
   out.clientId->add_css_class("ur-mono-11");
   out.clientId->set_xalign(0);
+  out.clientId->set_hexpand(true);
   out.clientId->set_ellipsize(Pango::EllipsizeMode::END);
   out.clientId->set_tooltip_text(T_("copy_to_clipboard", "Copy to Clipboard"));
   SetPointerCursor(*out.clientId);
@@ -410,7 +431,17 @@ Gtk::Widget* ProviderLocationsSheet::BuildRow(size_t index, RowWidgets& out) {
         [this, clientId](int, double, double) { CopyClientId(clientId); });
     out.clientId->add_controller(gesture);
   }
-  column->append(*out.clientId);
+  idRow->append(*out.clientId);
+  if (auto it = identityByClientId_.find(row.clientId); it != identityByClientId_.end()) {
+    const IdentityRow* identity = it->second;
+    auto* badge = Gtk::make_managed<IdenticonWidget>(kBadgeIdenticonSize);
+    badge->SetPixbuf(cache_.Get(identity->key, identity->hash, kBadgeIdenticonSize));
+    badge->set_valign(Gtk::Align::CENTER);
+    badge->set_tooltip_text(T_("post_quantum_encryption", "Post Quantum Encryption"));
+    out.pqBadge = badge;
+    idRow->append(*badge);
+  }
+  column->append(*idRow);
 
   out.place = Gtk::make_managed<Gtk::Label>();
   out.place->set_xalign(0);

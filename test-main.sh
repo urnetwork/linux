@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
+#
+# Product acceptance test for the LOCAL Linux app and urnetworkd against the
+# production (main) environment. It builds the AppImage and Ubuntu 22.04 daemon
+# package, installs the package into an isolated privileged container, performs
+# instant-account login/logout/secret-key login, password login, a real provider
+# connection with changed public egress, disconnect, and package removal.
+#
+# Usage:
+#   ./test-main.sh                 build and run once
+#   ./test-main.sh --repeat=5      repeat the full account+tunnel case five times
+#   ./test-main.sh --skip-build    reuse UR_ACCEPT_LINUX_OUT artifacts
+#   ./test-main.sh --headless      accepted for cross-platform runner parity
+#   ./test-main.sh --keep-fixture  retain the recoverable account for another app
+#
+# Environment:
+#   UR_ACCEPT_VAULT=<path>         alternate main acceptance credentials
+#   UR_ACCEPT_FIXTURE=<path>       persistent private instant-account fixture
+#   UR_ACCEPT_REPEAT=<n>           repetition count
+#   UR_ACCEPT_KEEP_FIXTURE=1       retain the account after a successful run
+#   UR_ACCEPT_LINUX_OUT=<path>     build output cache
+#   EXTERNAL_WARP_VERSION=<v>      local artifact version (default 0.0.0-0)
+set -euo pipefail
+umask 077
+
+here="$(cd "$(dirname "$0")" && pwd)"
+root="${URNETWORK_ROOT:-$(dirname "$here")}"
+vault="${UR_ACCEPT_VAULT:-$root/vault/main/test-acceptance.yml}"
+fixture="${UR_ACCEPT_FIXTURE:-$here/tests/__acceptance__/fixtures/linux-main.secret}"
+repeat_count="${UR_ACCEPT_REPEAT:-1}"
+skip_build="${SKIP_BUILD:-0}"
+keep_fixture="${UR_ACCEPT_KEEP_FIXTURE:-0}"
+version="${EXTERNAL_WARP_VERSION:-0.0.0-0}"
+out_dir="${UR_ACCEPT_LINUX_OUT:-$here/out/acceptance}"
+
+case "$version" in
+  ''|*[!A-Za-z0-9.+-]*) echo "EXTERNAL_WARP_VERSION contains unsupported characters" >&2; exit 2 ;;
+esac
+
+for arg in "$@"; do
+  case "$arg" in
+    --repeat=*) repeat_count="${arg#*=}" ;;
+    --skip-build) skip_build=1 ;;
+    --headless) ;;
+    --keep-fixture) keep_fixture=1 ;;
+    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown argument: $arg" >&2; exit 2 ;;
+  esac
+done
+case "$repeat_count" in
+  ''|*[!0-9]*) echo "--repeat must be a positive integer" >&2; exit 2 ;;
+  0) echo "--repeat must be at least 1" >&2; exit 2 ;;
+esac
+
+die() { echo "[linux acceptance] ERROR: $*" >&2; exit 1; }
+command -v docker >/dev/null 2>&1 || die "docker is required"
+command -v timeout >/dev/null 2>&1 || die "GNU timeout is required"
+timeout 15 docker info >/dev/null 2>&1 || die "docker is not running"
+node "$root/build/all/acceptance/preflight-main.mjs" || exit 1
+[ -f "$vault" ] || die "no acceptance vault at $vault"
+acc_user="$(awk -F': *' '$1=="user"{print $2; exit}' "$vault")"
+acc_pass="$(awk -F': *' '$1=="pass"{print $2; exit}' "$vault")"
+[ -n "$acc_user" ] && [ -n "$acc_pass" ] || die "$vault must contain user: and pass:"
+
+timestamp="$(date +%Y%m%d-%H%M%S)"
+artifacts="$here/tests/__acceptance__/$timestamp"
+run_dir="$(mktemp -d "${TMPDIR:-/tmp}/urnetwork-linux-acceptance.XXXXXX")"
+container_name="urnetwork-acceptance-${timestamp}-$$"
+mkdir -p "$artifacts" "$(dirname "$fixture")" "$out_dir"
+chmod 700 "$run_dir" "$(dirname "$fixture")"
+credentials="$run_dir/credentials"
+printf '%s\n%s\n' "$acc_user" "$acc_pass" >"$credentials"
+chmod 600 "$credentials"
+unset acc_pass
+
+release_retained_client() {
+  local active_client="$artifacts/active-client-id"
+  [ -f "$active_client" ] || return 0
+  echo "[linux acceptance] releasing retained network client"
+  UR_ACCEPT_CREDENTIALS_FILE="$credentials" \
+    timeout 90 node "$root/build/all/acceptance/client-cleanup.mjs" "$active_client"
+}
+
+cleanup() {
+  exit_status=$?
+  remaining_container=""
+  if ! remaining_container="$(timeout 15 docker ps -aq --filter "name=^/${container_name}$")"; then
+    echo "[linux acceptance] could not inspect the acceptance container" >&2
+    exit_status=1
+  elif [ -n "$remaining_container" ]; then
+    if ! timeout 30 docker rm -f "$container_name" >/dev/null; then
+      echo "[linux acceptance] could not remove container $container_name" >&2
+      exit_status=1
+    fi
+    if timeout 15 docker container inspect "$container_name" >/dev/null 2>&1; then
+      echo "[linux acceptance] container $container_name remained after cleanup" >&2
+      exit_status=1
+    fi
+  fi
+  if ! release_retained_client; then
+    echo "[linux acceptance] could not release the retained network client" >&2
+    exit_status=1
+  fi
+  if ! rm -rf "$run_dir"; then
+    echo "[linux acceptance] could not remove $run_dir" >&2
+    exit_status=1
+  fi
+  echo
+  if [ "$exit_status" -eq 0 ]; then
+    echo "[linux acceptance] ✓ ACCEPTANCE PASSED (artifacts: $artifacts)"
+  else
+    echo "[linux acceptance] ✗ ACCEPTANCE FAILED (artifacts: $artifacts)"
+  fi
+  exit "$exit_status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+if [ "$skip_build" -ne 1 ]; then
+  echo "[linux acceptance] building local Linux artifacts"
+  SRC_HOME="$root" \
+  EXTERNAL_WARP_VERSION="$version" \
+  ARCHES=arm64 \
+  OUT_DIR="$out_dir" \
+    timeout 3600 "$root/build/all/build-linux.sh" 2>&1 | tee "$artifacts/build.log"
+else
+  echo "[linux acceptance] reusing $out_dir"
+fi
+
+deb="$out_dir/urnetwork-daemon_${version}_arm64.deb"
+appimage="$out_dir/URnetwork-${version}-arm64.AppImage"
+[ -f "$deb" ] || die "missing locally built daemon package $deb"
+[ -x "$appimage" ] || die "missing locally built AppImage $appimage"
+
+echo "[linux acceptance] building the local SDK control agent"
+(cd "$root/build/all/acceptance" && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+  timeout 600 go build -trimpath -o "$run_dir/agent" .)
+
+echo "[linux acceptance] running $repeat_count complete repetition(s)"
+set +e
+timeout --signal=TERM --kill-after=60s "$((600 + repeat_count * 600))" \
+  docker run --name "$container_name" --rm --platform linux/arm64 \
+  --cap-add NET_ADMIN --device /dev/net/tun \
+  -v "$out_dir:/out:ro" \
+  -v "$artifacts:/artifacts" \
+  -v "$run_dir/agent:/opt/urnetwork-acceptance/agent:ro" \
+  -v "$credentials:/opt/urnetwork-acceptance/credentials:ro" \
+  -v "$root/build/all/acceptance/run-linux.sh:/opt/urnetwork-acceptance/run.sh:ro" \
+  -v "$(dirname "$fixture"):/fixtures" \
+  -e UR_ACCEPT_DEB="/out/$(basename "$deb")" \
+  -e UR_ACCEPT_VERSION="$version" \
+  -e UR_ACCEPT_REPEAT="$repeat_count" \
+  -e UR_ACCEPT_FIXTURE="/fixtures/$(basename "$fixture")" \
+  -e UR_ACCEPT_ARTIFACTS=/artifacts \
+  urnetwork-linux-builder-daemon:arm64 \
+  bash /opt/urnetwork-acceptance/run.sh \
+  2>&1 | tee "$artifacts/run.log"
+acceptance_status=${PIPESTATUS[0]}
+set -e
+
+if ! release_retained_client; then
+  acceptance_status=1
+fi
+
+if [ "$acceptance_status" -eq 0 ] && [ -f "$fixture" ] && [ "$keep_fixture" -ne 1 ]; then
+  if timeout 90 node "$root/build/all/acceptance/fixture.mjs" delete "$fixture"; then
+    rm -f "$fixture"
+  else
+    echo "could not delete instant-account fixture; retained at $fixture" >&2
+    acceptance_status=1
+  fi
+fi
+
+exit "$acceptance_status"

@@ -6,7 +6,8 @@
 //      Mode Auto|Web|Streaming, Fixed IP, Strong Anonymization, Post Quantum
 //      Encryption — all wired to the device performance profile; always a
 //      profile, window type "auto" for Auto, so the orthogonal toggles persist
-//      in every mode),
+//      in every mode — plus the Kill switch, the inverted device routeLocal,
+//      which is not part of the profile),
 //   3. the three stats cards (Client statistics with the remote + blocked
 //      charts, Local statistics with the local chart + split-rule count,
 //      Custom DNS status), each opening its detail sheet,
@@ -89,6 +90,7 @@ class ConnectDrawer : public Gtk::Box {
   // defaults; hidden when they already match (apple DnsRecommendationPill).
   void RefreshDnsPill(const std::optional<urnet::DnsResolverSettings>& current);
   void RefreshBlocker();
+  void RefreshKillSwitch();    // kill switch = !routeLocal
   void RefreshPlanCard();      // plan label + usage bar + banner visibility
 
   SdkHost& host_;
@@ -106,6 +108,9 @@ class ConnectDrawer : public Gtk::Box {
   Gtk::Switch* anonSwitch_ = nullptr;
   Gtk::Switch* pqeSwitch_ = nullptr;
   bool updatingControls_ = false;
+  // kill switch (inverted routeLocal; own handler — not a profile control)
+  Gtk::Switch* killSwitch_ = nullptr;
+  bool updatingKillSwitch_ = false;
 
   // stats cards
   TransferChart* remoteChart_ = nullptr;

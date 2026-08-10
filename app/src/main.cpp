@@ -95,7 +95,12 @@ int main(int argc, char** argv) {
     tray->on_show = [&] { window->present(); };
     tray->on_toggle_connect = [&] { window->ToggleConnect(); };
     tray->on_quit = [&] {
-      host->Logout();  // tears down tunnel + IoLoop cleanly
+      // teardown WITHOUT Logout(): Logout wipes the stored jwt, and for a
+      // guest network that jwt is the only credential — quitting from the
+      // tray was permanently destroying guest accounts (and any balance or
+      // subscription they had paid for). Shutdown tears down the tunnel +
+      // IoLoop cleanly and leaves auth alone.
+      host->Shutdown();
       app->release();
       app->quit();
     };

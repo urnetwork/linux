@@ -70,38 +70,6 @@ std::string PeerCountText(int count) {
   return out;
 }
 
-// The providers with an established, identity-verified e2e session, decoded
-// from the JSON-crossing ProviderIdentityList (PublicKey crosses as base64).
-// The hash is computed through the canonical SDK rule, like apple's
-// identity.getPublicKeyHash().
-std::vector<IdentityRow> ReadProviderIdentityRows(SdkHost& host) {
-  std::vector<IdentityRow> rows;
-  if (auto list = host.ProviderIdentities()) {
-    rows.reserve(list->size());
-    for (const auto& identity : *list) {
-      if (!identity.ClientId || identity.ClientId->empty()) continue;
-      std::vector<uint8_t> key = DecodeBase64(identity.PublicKey);
-      if (key.empty()) continue;
-      IdentityRow row;
-      row.clientId = *identity.ClientId;
-      row.hash = urnet::publicIdentityKeyHash(key.data(), static_cast<int32_t>(key.size()));
-      row.key = std::move(key);
-      rows.push_back(std::move(row));
-    }
-  }
-  return rows;
-}
-
-// the identicons derive from the key, which the hash captures — value
-// equality is the ids and the hash (apple ProviderIdentityRow ==)
-bool SameIdentityRows(const std::vector<IdentityRow>& a, const std::vector<IdentityRow>& b) {
-  if (a.size() != b.size()) return false;
-  for (size_t i = 0; i < a.size(); ++i) {
-    if (a[i].clientId != b[i].clientId || a[i].hash != b[i].hash) return false;
-  }
-  return true;
-}
-
 // the standard identicon rounding: radius = size / 6, everywhere
 void RoundedRectPath(const Cairo::RefPtr<Cairo::Context>& cr, double inset, double size,
                      double radius) {
@@ -126,6 +94,37 @@ void MakeClickable(Gtk::Widget& widget, std::function<void()> action) {
 }
 
 }  // namespace
+
+// The providers with an established, identity-verified e2e session, decoded
+// from the JSON-crossing ProviderIdentityList (PublicKey crosses as base64).
+// The hash is computed through the canonical SDK rule, like apple's
+// identity.getPublicKeyHash(). Exposed (see the header) so the
+// provider-locations badge joins against the same set.
+std::vector<IdentityRow> ReadProviderIdentityRows(SdkHost& host) {
+  std::vector<IdentityRow> rows;
+  if (auto list = host.ProviderIdentities()) {
+    rows.reserve(list->size());
+    for (const auto& identity : *list) {
+      if (!identity.ClientId || identity.ClientId->empty()) continue;
+      std::vector<uint8_t> key = DecodeBase64(identity.PublicKey);
+      if (key.empty()) continue;
+      IdentityRow row;
+      row.clientId = *identity.ClientId;
+      row.hash = urnet::publicIdentityKeyHash(key.data(), static_cast<int32_t>(key.size()));
+      row.key = std::move(key);
+      rows.push_back(std::move(row));
+    }
+  }
+  return rows;
+}
+
+bool SameIdentityRows(const std::vector<IdentityRow>& a, const std::vector<IdentityRow>& b) {
+  if (a.size() != b.size()) return false;
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (a[i].clientId != b[i].clientId || a[i].hash != b[i].hash) return false;
+  }
+  return true;
+}
 
 // ---- hash display rules (apple PostQuantumIdentityStore) --------------------
 

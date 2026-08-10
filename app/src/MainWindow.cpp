@@ -133,6 +133,15 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
           providerLocationsSheet_->Refresh();
         }
       }
+      if (event == DrawerEvent::ProviderIdentities) {
+        // A provider's e2e session verifying (or dropping) changes only the
+        // identicon badge, not the location rows, so the locations sheet must
+        // refresh on this event too or a newly sealed provider would show no
+        // badge until an unrelated location change forced a rebuild.
+        if (windowVisible_ && providerLocationsSheet_ && providerLocationsSheet_->get_visible()) {
+          providerLocationsSheet_->Refresh();
+        }
+      }
     });
   });
 

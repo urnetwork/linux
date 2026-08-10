@@ -24,8 +24,11 @@
 #include <adwaita.h>
 #include <gtkmm.h>
 
+#include <map>
+
 #include "LocationOverride.hpp"
 #include "LocationOverrideGuide.hpp"
+#include "PostQuantumIdentity.hpp"
 #include "ProviderGlobe.hpp"
 #include "ProviderLocationRow.hpp"
 #include "SdkHost.hpp"
@@ -58,6 +61,9 @@ class ProviderLocationsSheet : public Gtk::Window {
     Gtk::Box* container = nullptr;
     Gtk::DrawingArea* dot = nullptr;
     Gtk::Label* clientId = nullptr;
+    // the provider's e2e identity identicon, shown to the right of the client
+    // id only when the provider has a verified session (nullptr otherwise)
+    IdenticonWidget* pqBadge = nullptr;
     Gtk::Label* place = nullptr;
     Gtk::Label* coordinates = nullptr;
     Gtk::Label* duration = nullptr;
@@ -94,6 +100,14 @@ class ProviderLocationsSheet : public Gtk::Window {
 
   std::vector<ProviderLocationRow> rows_;
   std::vector<RowWidgets> rowWidgets_;
+  // providers with a verified e2e session, keyed by egress client id (the same
+  // id the rows carry). Membership drives the identicon badge; the badge raster
+  // comes from the entry's key via cache_. Snapshotted each Refresh and value-
+  // compared so an identity change forces a rebuild even when the location rows
+  // are unchanged.
+  std::vector<IdentityRow> identityRows_;
+  std::map<std::string, const IdentityRow*> identityByClientId_;
+  IdenticonCache cache_;
   std::string selectedClientId_;
   // Providers the user removed, filtered out of every read until the SDK stops
   // reporting them -- otherwise the row would flicker back for the round trip.

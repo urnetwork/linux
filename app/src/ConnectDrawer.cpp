@@ -117,7 +117,17 @@ void ConnectDrawer::BuildInsufficientBanner() {
   body->set_xalign(0);
   body->set_wrap(true);
   insufficientBanner_->append(*body);
-  MakeCardTappable(*insufficientBanner_, [this] { OpenUpgrade(); });
+  // Guests divert to account creation first, exactly like the plan card's
+  // Create account button (CreateNetworkPage::Mode::UpgradeGuest via
+  // on_create_account): a Pro subscription must never bind to a throwaway
+  // guest network. Full accounts go straight into checkout.
+  MakeCardTappable(*insufficientBanner_, [this] {
+    if (balance_.IsGuest()) {
+      if (on_create_account) on_create_account();
+    } else {
+      OpenUpgrade();
+    }
+  });
   insufficientBanner_->set_visible(false);
   append(*insufficientBanner_);
 }
@@ -230,6 +240,26 @@ void ConnectDrawer::BuildControlsCard() {
   pqeSwitch_->property_active().signal_changed().connect([this] { ApplyControls(); });
   pqeRow->append(*pqeSwitch_);
   card->append(*pqeRow);
+
+  // kill switch = the inverted device routeLocal (apple SettingsForm parity):
+  // ON means the device DROPS tunnel-captured traffic whenever no provider
+  // connection is up, instead of falling back to local egress. Not part of the
+  // performance profile, so it has its own handler + refresh, like the blocker.
+  auto* killRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  auto* killLabel = Gtk::make_managed<Gtk::Label>(T_("kill_switch", "Kill switch"));
+  killLabel->set_xalign(0);
+  killLabel->set_hexpand(true);
+  killRow->append(*killLabel);
+  killSwitch_ = Gtk::make_managed<Gtk::Switch>();
+  killSwitch_->set_valign(Gtk::Align::CENTER);
+  killSwitch_->property_active().signal_changed().connect([this] {
+    if (updatingKillSwitch_) return;
+    // the GUI persists the preference (local state) and applies it live over
+    // the device rpc; with the tunnel down it restores at the next start
+    host_.SetRouteLocal(!killSwitch_->get_active());
+  });
+  killRow->append(*killSwitch_);
+  card->append(*killRow);
 
   append(*card);
 }
@@ -426,6 +456,9 @@ void ConnectDrawer::OnHostEvent(DrawerEvent event) {
     case DrawerEvent::Blocker:
       RefreshBlocker();
       break;
+    case DrawerEvent::RouteLocal:
+      RefreshKillSwitch();
+      break;
     case DrawerEvent::Contracts:
       // the SDK ContractDetailsViewController already coalesced the egress+ingress
       // streams and settled the aggregate, so this fires once per real change
@@ -466,6 +499,7 @@ void ConnectDrawer::RefreshAll() {
   RefreshSplitRuleCount();
   RefreshDnsCard();
   RefreshBlocker();
+  RefreshKillSwitch();
   RefreshPlanCard();
   if (pqiPanel_) pqiPanel_->Refresh();
   if (contractsSheet_->is_visible()) contractsSheet_->Refresh();
@@ -701,6 +735,12 @@ void ConnectDrawer::RefreshBlocker() {
   updatingBlocker_ = true;
   blockerSwitch_->set_active(host_.GetBlockerEnabled());
   updatingBlocker_ = false;
+}
+
+void ConnectDrawer::RefreshKillSwitch() {
+  updatingKillSwitch_ = true;
+  killSwitch_->set_active(!host_.GetRouteLocal());  // kill switch ON = routeLocal off
+  updatingKillSwitch_ = false;
 }
 
 }  // namespace urnw

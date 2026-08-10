@@ -45,7 +45,8 @@ class RedeemCodeSheet : public Gtk::Window {
   Gtk::Spinner* spinner_ = nullptr;
   Gtk::ScrolledWindow* codesScroller_ = nullptr;  // caps a long history's height
   Gtk::Grid* codesGrid_ = nullptr;                // code / data / redeemed / expires rows
-  Gtk::Label* codesEmpty_ = nullptr;              // "No balance codes found"
+  Gtk::Label* codesEmpty_ = nullptr;              // successful fetch, no codes
+  Gtk::Label* codesError_ = nullptr;              // fetch FAILED (distinct from empty)
 };
 
 }  // namespace urnw

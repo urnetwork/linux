@@ -368,20 +368,32 @@ void SdkHost::SetupWalletCallbacks() {
                         bittensor ? urnet::TAO : kSolanaBlockchain);
   };
   wallet_.on_error = [this](std::string err) {
-    auto done = walletAuthDone_;
-    walletAuthDone_ = nullptr;
+    // walletAuthDone_ is set on the UI thread and consumed on wallet/SDK
+    // callback threads: take it under the lock, invoke it outside
+    std::function<void(AuthResult)> done;
+    {
+      std::scoped_lock lock(mutex_);
+      done = std::move(walletAuthDone_);
+      walletAuthDone_ = nullptr;
+    }
     if (done) done({false, false, err});
   };
 }
 
 void SdkHost::SignInWithSolana(WalletConnect::Provider provider,
                                std::function<void(AuthResult)> done) {
-  walletAuthDone_ = std::move(done);
+  {
+    std::scoped_lock lock(mutex_);
+    walletAuthDone_ = std::move(done);
+  }
   wallet_.Connect(provider);  // opens the browser; the rest continues on the deep-link callback
 }
 
 void SdkHost::SignInWithBittensor(std::function<void(AuthResult)> done) {
-  walletAuthDone_ = std::move(done);
+  {
+    std::scoped_lock lock(mutex_);
+    walletAuthDone_ = std::move(done);
+  }
   // one hop: the bridge connects the substrate wallet and signs; the rest
   // continues on the urnetwork://bittensor-sign-message callback
   wallet_.SignInWithBittensor(kWalletSignInMessage);
@@ -402,8 +414,14 @@ void SdkHost::AuthLoginWithWallet(const std::string& address, const std::string&
   args.wallet_auth = w;
   api_->authLogin(args, [this, w](std::optional<urnet::AuthLoginResult> result,
                                   std::optional<std::string> err) {
-    auto done = walletAuthDone_;
-    walletAuthDone_ = nullptr;
+    // SDK callback thread: consume walletAuthDone_ under the lock (it is set
+    // on the UI thread; the wallet on_error path races this same slot)
+    std::function<void(AuthResult)> done;
+    {
+      std::scoped_lock lock(mutex_);
+      done = std::move(walletAuthDone_);
+      walletAuthDone_ = nullptr;
+    }
     if (err) { if (done) done({false, false, *err}); return; }
     if (!result) { if (done) done({false, false, "no result"}); return; }
     if (result->error && !result->error->message.empty()) {
@@ -443,19 +461,38 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
     }
   }
   api_->setByJwt(byJwt);
-  asyncLocalState_->setByJwt(byJwt, [](bool) {});
-  urnet::AuthNetworkClientArgs args;
-  args.description = UrDeviceDescription();
-  args.device_spec = UrDeviceSpec();
-  api_->authNetworkClient(args, [this, done](std::optional<urnet::AuthNetworkClientResult> result,
-                                             std::optional<std::string> err) {
-    if (err) { done({false, false, *err}); return; }
-    if (!result) { done({false, false, "no result"}); return; }
-    if (result->error && !result->error->message.empty()) { done({false, false, result->error->message}); return; }
-    if (!result->by_client_jwt) { done({false, false, "no client jwt"}); return; }
-    asyncLocalState_->setByClientJwt(*result->by_client_jwt, [](bool) {});
-    if (onAuth_) onAuth_(true);
-    done({true, false, ""});
+  // The jwt persists asynchronously — and a failed persist means a signed-out
+  // NEXT LAUNCH even though this session would appear to work, so a failure
+  // is surfaced as an auth error instead of being ignored: the user retries
+  // the sign-in rather than silently losing the session (for a guest network
+  // the jwt is the only credential there is).
+  asyncLocalState_->setByJwt(byJwt, [this, done](bool ok) {
+    if (!ok) {
+      std::fprintf(stderr, "[sdk] persist by_jwt failed (localState commit)\n");
+      done({false, false, "could not save session"});
+      return;
+    }
+    urnet::AuthNetworkClientArgs args;
+    args.description = UrDeviceDescription();
+    args.device_spec = UrDeviceSpec();
+    api_->authNetworkClient(args, [this, done](std::optional<urnet::AuthNetworkClientResult> result,
+                                               std::optional<std::string> err) {
+      if (err) { done({false, false, *err}); return; }
+      if (!result) { done({false, false, "no result"}); return; }
+      if (result->error && !result->error->message.empty()) { done({false, false, result->error->message}); return; }
+      if (!result->by_client_jwt) { done({false, false, "no client jwt"}); return; }
+      // same contract as the by_jwt persist above: an unsaved client jwt is a
+      // broken next launch (no tunnel credential), never a silent success
+      asyncLocalState_->setByClientJwt(*result->by_client_jwt, [this, done](bool ok) {
+        if (!ok) {
+          std::fprintf(stderr, "[sdk] persist by_client_jwt failed (localState commit)\n");
+          done({false, false, "could not save session"});
+          return;
+        }
+        if (onAuth_) onAuth_(true);
+        done({true, false, ""});
+      });
+    });
   });
 }
 
@@ -561,6 +598,12 @@ TunnelStartResult SdkHost::StartTunnel() {
     // macOS DeviceManager seeds exactly this at device creation). LocalState
     // defaults to "never" when nothing is stored — providing is opt-in.
     device_->setProvideControlMode(localState_->getProvideControlMode());
+
+    // Restore the persisted routeLocal (the kill switch, inverted) the same
+    // way: DeviceLocal starts at its default (true) and does not read local
+    // state (the macOS DeviceManager applies exactly this at device
+    // creation). LocalState defaults to true — kill switch off.
+    device_->setRouteLocal(localState_->getRouteLocal());
 
     // Connection choice is data-plane state, so keep this lightweight listener
     // alive for the tray even when every presentation controller is closed.
@@ -709,6 +752,8 @@ void SdkHost::SubscribeDrawer() {
       }));
   presentationSubs_.push_back(device_->addBlockerEnabledChangeListener(
       [this](bool) { EmitDrawerEvent(DrawerEvent::Blocker); }));
+  presentationSubs_.push_back(device_->addRouteLocalChangeListener(
+      [this](bool) { EmitDrawerEvent(DrawerEvent::RouteLocal); }));
   // contract details: a single-feed ContractDetailsViewController for this device's
   // own (client) traffic. The VC groups the egress + ingress contracts per peer
   // (direction-resolved), keeps each direction's contracts un-aggregated and
@@ -844,6 +889,22 @@ void SdkHost::SetBlockerEnabled(bool enabled) {
   // no device (tunnel down): persist the preference; restored at the next
   // device creation by the SDK
   if (localState_) localState_->setBlockerEnabled(enabled);
+}
+
+bool SdkHost::GetRouteLocal() {
+  std::scoped_lock lock(mutex_);
+  if (device_) return device_->getRouteLocal();
+  return !localState_ || localState_->getRouteLocal();  // default true (kill switch off)
+}
+
+void SdkHost::SetRouteLocal(bool routeLocal) {
+  std::scoped_lock lock(mutex_);
+  // Persist to the GUI's local state first (unlike the blocker, the daemon's
+  // DeviceLocal neither persists nor restores routeLocal), then apply live
+  // over the device rpc; StartTunnel re-applies the persisted value at the
+  // next device creation (macOS DeviceManager.setRouteLocalInternal parity).
+  if (localState_) localState_->setRouteLocal(routeLocal);
+  if (device_) device_->setRouteLocal(routeLocal);
 }
 
 std::optional<urnet::DnsResolverSettings> SdkHost::GetDnsResolverSettings() {
@@ -1124,6 +1185,15 @@ void SdkHost::TeardownDeviceLocked() {
   // the control channel, decided by the caller.
   if (device_) { device_->close(); device_.reset(); }
   provideHasNetworkKey_.store(false);
+}
+
+void SdkHost::Shutdown() {
+  std::scoped_lock lock(mutex_);
+  TeardownDeviceLocked();
+  // quit brings the daemon's tunnel down like Logout does, but leaves the
+  // stored auth untouched: next launch signs straight back in. see the
+  // header comment — quit-as-logout destroyed guest accounts.
+  control_.StopTunnel();
 }
 
 void SdkHost::Logout() {

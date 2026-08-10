@@ -1,1 +1,3 @@
 out
+tests/__acceptance__/
+app/.cache

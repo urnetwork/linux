@@ -12,9 +12,12 @@
 //   * a 5s confirmation poll with a 2-MINUTE DEADLINE for right after a
 //     checkout or a redeemed balance code: the purchase reaches the server
 //     asynchronously (Stripe webhook), so we poll to bridge the gap — and give
-//     up loudly instead of spinning forever when a webhook is lost. The timer
-//     pauses while hidden but preserves its deadline, then resumes or times out
-//     immediately when the window is shown.
+//     up loudly instead of spinning forever when a webhook is lost. The
+//     deadline is a budget of ACTIVE polling time, not wall clock: it pauses
+//     with the timers while the window is hidden/unfocused (paying in the
+//     browser steals focus for well over 2 minutes) and resumes — with an
+//     immediate poll — when the window is shown again. A Pro confirmation
+//     that lands after a give-up still clears the timed-out state.
 //   * offline Pro: the jwt's Pro claim (LocalState::parseByJwt) seeds the
 //     state before the first fetch; the server is the source of truth, and
 //     the jwt is refreshed (Device::refreshToken) whenever the two disagree
@@ -95,6 +98,8 @@ class SubscriptionBalanceStore {
   void UpdateIsPro(bool isPro);  // mac updateIsPro: flips the polling mode
   void StartBackgroundPolling();
   void ResumeConfirmationPolling();
+  // deadline spent: stop, flag timed-out, fall back to the background poll
+  void GiveUpConfirmationPolling();
   void StopPolling();  // both timers + deadline (mac stopPolling)
   bool IsSupporterWithBalance() const { return isPro_ && availableByteCount_ > 0; }
   void Emit();
@@ -125,12 +130,17 @@ class SubscriptionBalanceStore {
   int64_t totalReferrals_ = 0;
   std::string referralCode_;
 
-  // polling (mac: backgroundPollingTimer / pollingTimer / pollingDeadline)
+  // polling (mac: backgroundPollingTimer / pollingTimer / pollingDeadline).
+  // The confirmation deadline only elapses while the poll timer runs:
+  // hasPollingDeadline_ is armed (deadline = now + budget) on resume and
+  // disarmed on pause, banking the remainder into pollingBudgetUs_ — so a
+  // hidden/unfocused window never burns confirmation time.
   sigc::connection backgroundTimer_;
   sigc::connection pollingTimer_;
   bool isPolling_ = false;
-  bool hasPollingDeadline_ = false;
-  gint64 pollingDeadlineUs_ = 0;  // g_get_monotonic_time deadline
+  bool hasPollingDeadline_ = false;  // armed only while actively polling
+  gint64 pollingDeadlineUs_ = 0;     // g_get_monotonic_time deadline (active)
+  gint64 pollingBudgetUs_ = 0;       // remaining active-time budget (paused)
   bool purchaseConfirmationTimedOut_ = false;
 };
 

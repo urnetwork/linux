@@ -48,6 +48,9 @@ depends:
   # statically into the binaries per the same section; if `readelf -d
   # urnetworkd` ever shows libstdc++.so.6 NEEDED, add "libstdc++6 (>= 12)".
   - "libc6 (>= 2.35)"
+  # Tunnel.cpp configures the TUN link and its capture routes with /sbin/ip.
+  # Minimal Ubuntu/Debian installations do not necessarily include it.
+  - "iproute2"
   # The one genuine win of the deb shape (APPIMAGE.md 11d): the GUI AppImage
   # needs libfuse2 at runtime and Ubuntu 22.04+ does not ship it by default,
   # so every AppImage-only vendor walks users through installing it by hand.

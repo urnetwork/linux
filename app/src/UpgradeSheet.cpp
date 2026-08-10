@@ -585,6 +585,14 @@ void UpgradeSheet::TeardownWebView() {
 #endif  // UR_HAVE_WEBKIT
 
 void UpgradeSheet::OnBalanceChanged() {
+  // TimedOut is NOT terminal: a Pro-confirming snapshot can land after the
+  // confirmation deadline gave up (the store falls back to the background
+  // poll, and every window re-show fetches) — the purchase did go through,
+  // so recover straight to the success state.
+  if (state_ == State::TimedOut && balance_.IsPro()) {
+    SetState(State::Success);
+    return;
+  }
   if (state_ != State::Waiting) return;
   if (balance_.IsPro()) {
     SetState(State::Success);
