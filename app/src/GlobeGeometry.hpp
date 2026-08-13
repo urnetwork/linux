@@ -106,13 +106,11 @@ const std::vector<std::vector<float>>& Graticule();
 // The leftover travel is what makes it hysteretic: after a step the user must
 // drag another full threshold to step again, so a pointer resting near the
 // boundary cannot flicker between two providers.
+//
+// Only the travel-to-steps conversion lives here: the wheel itself -- the
+// centroid-relative provider order and the clamping at its ends -- is the SDK's
+// ProviderLocationsViewController, shared by every platform.
 WheelStep ResolveWheelStep(float travel, float threshold);
-
-// Advances an index by `steps`, wrapping at both ends. Wrapping is the right
-// model here because the wheel is ordered by longitude, which is cyclic:
-// stepping east past the last provider lands on the westernmost, which is also
-// the shortest way round the globe. Returns -1 for an empty wheel.
-int WrapIndex(int index, int steps, int count);
 
 // Fit-center layout: the virtual space is scaled to the SMALLER canvas
 // dimension and centered in both, so the globe fits whole and stays centered

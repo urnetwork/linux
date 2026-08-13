@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "ProviderLocationRow.hpp"
 
-#include <algorithm>
 #include <cstdio>
 
 namespace urnw {
@@ -25,23 +24,24 @@ std::string CoordinatesLabel(const ProviderLocationRow& row) {
 }
 
 int OldestPlottableIndex(const std::vector<ProviderLocationRow>& rows) {
+  // Searched by STAMP, not by position: the rows arrive in the view
+  // controller's display order (west to east), which says nothing about how
+  // long anything has been connected. A zero stamp is "unknown" -- the sdk
+  // sorts those last, so one only wins when nothing else is plottable.
+  int best = -1;
+  int64_t bestSince = 0;
   for (size_t i = 0; i < rows.size(); ++i) {
-    if (rows[i].plottable()) return static_cast<int>(i);
+    if (!rows[i].plottable()) continue;
+    const int64_t since = rows[i].connectedSinceMillis;
+    const bool better = best < 0 ||                        // nothing yet
+                        (bestSince == 0 && since != 0) ||  // any stamp beats none
+                        (bestSince != 0 && since != 0 && since < bestSince);
+    if (better) {
+      best = static_cast<int>(i);
+      bestSince = since;
+    }
   }
-  return -1;
-}
-
-std::vector<int> WheelOrderByLongitude(const std::vector<ProviderLocationRow>& rows) {
-  std::vector<int> order;
-  order.reserve(rows.size());
-  for (size_t i = 0; i < rows.size(); ++i) {
-    if (rows[i].plottable()) order.push_back(static_cast<int>(i));
-  }
-  // stable so providers sharing a longitude keep their duration order
-  std::stable_sort(order.begin(), order.end(), [&rows](int a, int b) {
-    return rows[static_cast<size_t>(a)].lon < rows[static_cast<size_t>(b)].lon;
-  });
-  return order;
+  return best;
 }
 
 }  // namespace urnw

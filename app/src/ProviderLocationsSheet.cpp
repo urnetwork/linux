@@ -143,6 +143,7 @@ ProviderLocationsSheet::ProviderLocationsSheet(Gtk::Window& parent, SdkHost& hos
   globe_ = Gtk::make_managed<ProviderGlobe>();
   globe_->SetColorResolver(&ProviderColor);
   globe_->on_select = [this](const std::string& clientId) { Select(clientId); };
+  globe_->on_step = [this](int steps) { host_.StepProviderSelection(steps); };
   globe_->set_margin_top(8);
   globe_->set_margin_bottom(8);
   root->append(*globe_);
@@ -350,17 +351,13 @@ void ProviderLocationsSheet::Refresh() {
   }
   if (changed) {
     rows_ = std::move(rows);
-    // a selection whose provider left the window is dropped
-    if (!selectedClientId_.empty() &&
-        std::none_of(rows_.begin(), rows_.end(), [this](const ProviderLocationRow& row) {
-          return row.clientId == selectedClientId_;
-        })) {
-      selectedClientId_.clear();
-    }
     RebuildList();
     globe_->SetRows(rows_);
-    globe_->SetSelected(selectedClientId_);
   }
+  // The SDK view controller owns the selection and drops one whose provider
+  // left the window, so this mirrors it rather than deciding it. Refresh runs
+  // on the ProviderSelection event too, which is how a wheel step lands.
+  RefreshSelection();
 
   // The empty list means two very different things, and saying "no providers"
   // for both would be a lie: with the tunnel down there is no window to report
@@ -518,10 +515,56 @@ void ProviderLocationsSheet::UpdateDurations() {
 }
 
 void ProviderLocationsSheet::Select(const std::string& clientId) {
-  if (selectedClientId_ == clientId) return;
-  selectedClientId_ = clientId;
+  // the SDK view controller is the source of truth; it reports back through
+  // DrawerEvent::ProviderSelection, which lands in RefreshSelection
+  host_.SetSelectedProviderClientId(clientId);
+  RefreshSelection();
+}
+
+void ProviderLocationsSheet::RefreshSelection() {
+  const std::string selected = host_.SelectedProviderClientId();
+  if (selected == selectedClientId_) return;
+  selectedClientId_ = selected;
   UpdateSelection();
-  globe_->SetSelected(clientId);
+  globe_->SetSelected(selectedClientId_);
+  ScrollSelectedIntoView();
+}
+
+// The selection moves without the list being touched -- a wheel step on the
+// globe, the default landing on the longest connected provider, a removal
+// handing it to the nearest -- and a selection the user cannot see is not a
+// selection. Only a row that is actually off screen is worth scrolling for,
+// and the scroll is the minimum that brings it back.
+//
+// Deferred to an idle: a selection that arrives with a rebuilt list runs
+// before GTK has allocated the new rows, and an unallocated row has no
+// position to scroll to.
+void ProviderLocationsSheet::ScrollSelectedIntoView() {
+  if (scroller_ == nullptr || selectedClientId_.empty()) return;
+  Glib::signal_idle().connect_once([this, clientId = selectedClientId_] {
+    if (scroller_ == nullptr || clientId != selectedClientId_) return;
+    Gtk::Widget* row = nullptr;
+    for (size_t i = 0; i < rows_.size() && i < rowWidgets_.size(); ++i) {
+      if (rows_[i].clientId == clientId) {
+        row = rowWidgets_[i].container;
+        break;
+      }
+    }
+    if (row == nullptr) return;
+    auto adjustment = scroller_->get_vadjustment();
+    if (!adjustment) return;
+    const Gtk::Allocation allocation = row->get_allocation();
+    if (allocation.get_height() <= 0) return;  // not laid out yet
+    const double top = allocation.get_y();
+    const double bottom = top + allocation.get_height();
+    const double viewTop = adjustment->get_value();
+    const double viewBottom = viewTop + adjustment->get_page_size();
+    if (top < viewTop) {
+      adjustment->set_value(top);
+    } else if (viewBottom < bottom) {
+      adjustment->set_value(bottom - adjustment->get_page_size());
+    }
+  });
 }
 
 void ProviderLocationsSheet::CopyClientId(const std::string& clientId) {
@@ -541,11 +584,13 @@ void ProviderLocationsSheet::RemoveProvider(const std::string& clientId) {
                                return row.clientId == clientId;
                              }),
               rows_.end());
-  if (selectedClientId_ == clientId) selectedClientId_.clear();
   RebuildList();
   globe_->SetRows(rows_);
-  globe_->SetSelected(selectedClientId_);
+  // the view controller moves the selection to the nearest remaining provider
+  // when the removed one is selected, so RemoveConnectedProvider comes first
+  // and RefreshSelection picks the result up
   host_.RemoveConnectedProvider(clientId);
+  RefreshSelection();
   RefreshOverrideSection();
 }
 

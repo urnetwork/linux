@@ -183,14 +183,6 @@ WheelStep ResolveWheelStep(float travel, float threshold) {
   return WheelStep{steps, travel + steps * threshold};
 }
 
-int WrapIndex(int index, int steps, int count) {
-  if (count <= 0) {
-    return -1;
-  }
-  const int next = (index + steps) % count;
-  return next < 0 ? next + count : next;
-}
-
 float UnitFor(float canvasWidth, float canvasHeight) {
   return std::min(canvasWidth, canvasHeight) / kVirtualSize;
 }

@@ -797,9 +797,22 @@ void SdkHost::SubscribeDrawer() {
       [this] { EmitDrawerEvent(DrawerEvent::ProviderIdentities); }));
   pqiVc_->start();
 
-  // connected provider locations: a pure derivation over the window monitor, so
-  // there is no view controller to open or start -- just the signal-only change
-  // listener. It carries no payload by design; every consumer re-reads
+  // The provider-locations view controller: the SDK's, so the display order
+  // (west to east about the providers' centroid), the selection and the wheel's
+  // clamped ends are identical in every app.
+  //
+  // OPENED BEFORE the connected-provider listener below, and that order is
+  // load-bearing: the controller subscribes to the same device listener when it
+  // is opened, callbacks fire in subscription order, and ConnectedProviderLocations()
+  // reads the controller's ordered window. Registering first would read a window
+  // one notify behind.
+  providerLocationsVc_ = device_->openProviderLocationsViewController();
+  presentationSubs_.push_back(providerLocationsVc_->addSelectedProviderLocationChangeListener(
+      [this] { EmitDrawerEvent(DrawerEvent::ProviderSelection); }));
+  providerLocationsVc_->start();
+
+  // connected provider locations: the change listener is signal-only and
+  // carries no payload by design; every consumer re-reads
   // ConnectedProviderLocations(). It fires on window turnover, which is frequent,
   // so the sheet dedupes by value before touching widgets.
   presentationSubs_.push_back(device_->addConnectedProviderLocationChangeListener(
@@ -816,8 +829,13 @@ void SdkHost::ClosePresentationLocked() {
     locationsVc_.reset();
     peerVc_.reset();
     pqiVc_.reset();
+    providerLocationsVc_.reset();
     return;
   }
+  if (providerLocationsVc_) {
+    device_->closeProviderLocationsViewController(*providerLocationsVc_);
+  }
+  providerLocationsVc_.reset();
   if (pqiVc_) device_->closePostQuantumIdentityViewController(*pqiVc_);
   pqiVc_.reset();
   if (peerVc_) device_->closePeerViewController(*peerVc_);
@@ -1080,14 +1098,43 @@ std::optional<urnet::ProviderIdentityList> SdkHost::ProviderIdentities() {
 
 std::optional<urnet::ConnectedProviderLocationList> SdkHost::ConnectedProviderLocations() {
   std::scoped_lock lock(mutex_);
-  if (!device_) return std::nullopt;  // tunnel down: the sheet shows the unavailable state
-  return device_->getConnectedProviderLocations();
+  if (!device_ || !providerLocationsVc_) {
+    return std::nullopt;  // tunnel down: the sheet shows the unavailable state
+  }
+  // The view controller's window, not the device's: same providers, in the
+  // shared display order, and read from the controller so the rows and the
+  // selection always come from one snapshot.
+  return providerLocationsVc_->getProviderLocations();
 }
 
 void SdkHost::RemoveConnectedProvider(const std::string& clientId) {
   std::scoped_lock lock(mutex_);
   if (!device_ || clientId.empty()) return;
+  if (providerLocationsVc_) {
+    // through the view controller: it hands the selection to the nearest
+    // remaining provider when the removed one is selected, as every other app does
+    providerLocationsVc_->removeProvider(clientId);
+    return;
+  }
   device_->removeConnectedProvider(clientId);
+}
+
+std::string SdkHost::SelectedProviderClientId() {
+  std::scoped_lock lock(mutex_);
+  if (!providerLocationsVc_) return std::string();
+  return providerLocationsVc_->getSelectedClientId();
+}
+
+void SdkHost::SetSelectedProviderClientId(const std::string& clientId) {
+  std::scoped_lock lock(mutex_);
+  if (!providerLocationsVc_) return;
+  providerLocationsVc_->setSelectedClientId(clientId);
+}
+
+void SdkHost::StepProviderSelection(int steps) {
+  std::scoped_lock lock(mutex_);
+  if (!providerLocationsVc_ || steps == 0) return;
+  providerLocationsVc_->stepSelection(steps);
 }
 
 std::string SdkHost::PublicIdentityKeyHash() {

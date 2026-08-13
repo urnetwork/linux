@@ -282,20 +282,9 @@ UR_TEST(aNonPositiveThresholdNeverSteps) {
   UR_EXPECT_EQ(0, globe::ResolveWheelStep(-1000.f, 0.f).steps);
 }
 
-// longitude is cyclic, so the wheel wraps at both ends -- stepping east past
-// the last provider lands on the westernmost, the shortest way round
-UR_TEST(theWheelWrapsAtBothEnds) {
-  UR_EXPECT_EQ(0, globe::WrapIndex(2, 1, 3));
-  UR_EXPECT_EQ(2, globe::WrapIndex(0, -1, 3));
-  UR_EXPECT_EQ(1, globe::WrapIndex(0, 1, 3));
-  // a multi-step drag wraps more than once
-  UR_EXPECT_EQ(1, globe::WrapIndex(0, 7, 3));
-  UR_EXPECT_EQ(2, globe::WrapIndex(0, -7, 3));
-}
-
-UR_TEST(wrapIndexReportsNoIndexForAnEmptyWheel) {
-  UR_EXPECT_EQ(-1, globe::WrapIndex(0, 1, 0));
-}
+// The wheel order and the step clamping are the SDK's
+// ProviderLocationsViewController (provider_locations_view_controller.go,
+// tested there); this module only converts drag travel to step counts.
 
 // fit center: the globe scales to the smaller canvas dimension and centers in
 // both, so a wide (non-square) box neither crops nor offsets it

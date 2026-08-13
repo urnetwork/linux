@@ -51,14 +51,18 @@ std::string PlaceLabel(const ProviderLocationRow& row);
 std::string CoordinatesLabel(const ProviderLocationRow& row);
 
 // The oldest connected provider that has coordinates -- the location-override
-// target. The SDK returns the list already sorted oldest-connected first, so
-// this is the first plottable entry; providers with neither city nor region
-// coordinates are skipped rather than ending the search. Returns -1 when there
-// is none.
+// target. Found by the smallest non-zero connectedSinceMillis, NOT by position:
+// these rows come in the view controller's display order (west to east), which
+// says nothing about connected duration. Providers with neither city nor region
+// coordinates are skipped rather than ending the search, and a provider with an
+// unknown stamp (0) only wins when nothing else is plottable. Returns -1 when
+// there is none.
 int OldestPlottableIndex(const std::vector<ProviderLocationRow>& rows);
 
-// The wheel order: by longitude, west to east, independent of the list's
-// duration order. Returns indexes into `rows`, plottable entries only.
-std::vector<int> WheelOrderByLongitude(const std::vector<ProviderLocationRow>& rows);
+// The list's order (the plottable providers west to east about their centroid,
+// then the ones with no coordinates) and the globe's clamped stepping over it
+// are NOT here: they live in the SDK's shared ProviderLocationsViewController,
+// which every URnetwork app binds -- see SdkHost::ConnectedProviderLocations
+// and SdkHost::StepProviderSelection.
 
 }  // namespace urnw

@@ -124,6 +124,13 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       if (event == DrawerEvent::Peers || event == DrawerEvent::DeviceLifecycle) {
         RefreshPeersStatus();
       }
+      if (event == DrawerEvent::ProviderSelection) {
+        // a wheel step (or any other app-side selection) landing back from the
+        // SDK view controller
+        if (windowVisible_ && providerLocationsSheet_ && providerLocationsSheet_->get_visible()) {
+          providerLocationsSheet_->Refresh();
+        }
+      }
       if (event == DrawerEvent::ProviderLocations || event == DrawerEvent::DeviceLifecycle) {
         // Deliberately NOT gated on window visibility: the location override
         // must keep following the connect window while the app sits in the

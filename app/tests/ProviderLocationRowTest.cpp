@@ -1,5 +1,5 @@
-// Label composition, override-target selection and wheel ordering -- the pure
-// logic behind the provider-locations list and the location override.
+// Label composition and override-target selection -- the pure logic behind the
+// provider-locations list and the location override.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -14,7 +14,8 @@ namespace {
 
 ProviderLocationRow Row(const std::string& clientId, const std::string& city,
                         const std::string& region, const std::string& country,
-                        bool hasCoordinates = true, double lat = 0, double lon = 0) {
+                        bool hasCoordinates = true, double lat = 0, double lon = 0,
+                        int64_t connectedSinceMillis = 0) {
   ProviderLocationRow row;
   row.clientId = clientId;
   row.city = city;
@@ -24,6 +25,7 @@ ProviderLocationRow Row(const std::string& clientId, const std::string& city,
   row.hasCoordinates = hasCoordinates;
   row.lat = lat;
   row.lon = lon;
+  row.connectedSinceMillis = connectedSinceMillis;
   return row;
 }
 
@@ -55,17 +57,47 @@ UR_TEST(coordinatesLabelIsAnEmDashWithoutCoordinates) {
 }
 
 UR_TEST(oldestPlottableSkipsProvidersWithNoCoordinates) {
-  // the sdk returns the list oldest-connected first, so the target is the first
-  // entry that has coordinates -- entries with none are skipped, not fatal
   const std::vector<ProviderLocationRow> rows{
-      Row("no-coords", "", "", "", false),
-      Row("also-none", "Nowhere", "", "", false),
-      Row("target", "Tokyo", "", "Japan", true, 35.6762, 139.6503),
-      Row("younger", "Paris", "", "France", true, 48.8566, 2.3522),
+      Row("no-coords", "", "", "", false, 0, 0, 1000),
+      Row("also-none", "Nowhere", "", "", false, 0, 0, 2000),
+      Row("target", "Tokyo", "", "Japan", true, 35.6762, 139.6503, 3000),
+      Row("younger", "Paris", "", "France", true, 48.8566, 2.3522, 4000),
   };
   const int index = urnw::OldestPlottableIndex(rows);
   UR_EXPECT_EQ(2, index);
   UR_EXPECT_TRUE(rows[static_cast<size_t>(index)].clientId == "target");
+}
+
+// The rows arrive in DISPLAY order (west to east), which says nothing about how
+// long anything has been connected, so the target is found by stamp rather than
+// by position -- the oldest provider can be anywhere in the list.
+UR_TEST(oldestPlottableIsFoundByStampNotByPosition) {
+  const std::vector<ProviderLocationRow> rows{
+      Row("west-but-newest", "Los Angeles", "", "United States", true, 34.05, -118.24, 9000),
+      Row("target", "Tokyo", "", "Japan", true, 35.6762, 139.6503, 1000),
+      Row("east-and-middling", "Sydney", "", "Australia", true, -33.87, 151.21, 5000),
+  };
+  const int index = urnw::OldestPlottableIndex(rows);
+  UR_EXPECT_EQ(1, index);
+  UR_EXPECT_TRUE(rows[static_cast<size_t>(index)].clientId == "target");
+}
+
+// An unknown stamp (0, an older device peer) sorts LAST in the sdk, so it only
+// wins when nothing else can be plotted.
+UR_TEST(oldestPlottablePrefersAKnownStampOverAnUnknownOne) {
+  const std::vector<ProviderLocationRow> mixed{
+      Row("unknown-stamp", "Tokyo", "", "Japan", true, 35.6762, 139.6503, 0),
+      Row("target", "Paris", "", "France", true, 48.8566, 2.3522, 7000),
+  };
+  UR_EXPECT_EQ(1, urnw::OldestPlottableIndex(mixed));
+
+  // with only unknown stamps the first plottable row is as good as any
+  const std::vector<ProviderLocationRow> allUnknown{
+      Row("no-coords", "", "", "", false, 0, 0, 0),
+      Row("first", "Tokyo", "", "Japan", true, 35.6762, 139.6503, 0),
+      Row("second", "Paris", "", "France", true, 48.8566, 2.3522, 0),
+  };
+  UR_EXPECT_EQ(1, urnw::OldestPlottableIndex(allUnknown));
 }
 
 UR_TEST(oldestPlottableReportsNoneWhenNothingIsLocated) {
@@ -74,17 +106,6 @@ UR_TEST(oldestPlottableReportsNoneWhenNothingIsLocated) {
   UR_EXPECT_EQ(-1, urnw::OldestPlottableIndex(unlocated));
 }
 
-UR_TEST(wheelOrderIsByLongitudeWestToEastAndPlottableOnly) {
-  const std::vector<ProviderLocationRow> rows{
-      Row("tokyo", "Tokyo", "", "Japan", true, 35.6762, 139.6503),
-      Row("unlocated", "", "", "", false),
-      Row("sf", "San Francisco", "", "United States", true, 37.7749, -122.4194),
-      Row("paris", "Paris", "", "France", true, 48.8566, 2.3522),
-  };
-  const std::vector<int> order = urnw::WheelOrderByLongitude(rows);
-  UR_EXPECT_EQ(3u, order.size());
-  // -122.4194 (sf) < 2.3522 (paris) < 139.6503 (tokyo); the unlocated row is absent
-  UR_EXPECT_TRUE(rows[static_cast<size_t>(order[0])].clientId == "sf");
-  UR_EXPECT_TRUE(rows[static_cast<size_t>(order[1])].clientId == "paris");
-  UR_EXPECT_TRUE(rows[static_cast<size_t>(order[2])].clientId == "tokyo");
-}
+// The list's display order and the globe's clamped stepping over it are the
+// SDK's ProviderLocationsViewController (provider_locations_view_controller.go,
+// tested there), so there is nothing to order here.

@@ -80,6 +80,7 @@ enum class DrawerEvent {
   Peers,            // connected network peers changed (chooser + drawer label)
   ProviderIdentities,  // post-quantum identity set changed (PQI panel + list)
   ProviderLocations,   // connected provider set/locations changed (locations sheet)
+  ProviderSelection,   // the globe's selected provider changed (locations sheet)
 };
 
 // Outcome of StartTunnel. Everything except Started is a degraded state the
@@ -322,16 +323,30 @@ class SdkHost {
   std::vector<uint8_t> PublicIdentityKey();
 
   // ---- connected provider locations ------------------------------------------
-  // Where each provider in the current connect window is, sorted by the SDK
-  // OLDEST-CONNECTED FIRST (so the first entry with coordinates is the location
-  // override's target). This is a pure derivation over the window monitor, not a
-  // view controller, so it needs no start/stop and reads straight off the device;
+  // Where each provider in the current connect window is, in the SDK's shared
+  // DISPLAY ORDER: west to east about the providers' centroid, then the ones
+  // with no coordinates. That is the order the list renders and the order the
+  // globe's wheel steps through. It is NOT sorted by connected duration, so the
+  // location override finds its target by stamp (OldestPlottableIndex) rather
+  // than by taking the first row. Read from the provider-locations view
+  // controller, so the rows and the selection always come from one snapshot;
   // nullopt with the tunnel down. Changes arrive as DrawerEvent::ProviderLocations
   // -- the listener is signal-only, so re-read the getter on every notification.
   std::optional<urnet::ConnectedProviderLocationList> ConnectedProviderLocations();
   // Drops a provider from the connection by its EGRESS client id and excludes it
   // from re-discovery for the rest of this connection. No-op with no device.
   void RemoveConnectedProvider(const std::string& clientId);
+
+  // ---- the globe's selection and scroll wheel --------------------------------
+  // The SDK's shared ProviderLocationsViewController, which every URnetwork app
+  // binds so they all traverse the globe identically. StepProviderSelection
+  // moves along the plottable providers ordered west to east relative to their
+  // centroid and CLAMPS at the ends: stepping past the extreme west or east
+  // sticks there instead of cycling round the globe. Changes arrive as
+  // DrawerEvent::ProviderSelection; "" means nothing is selected.
+  std::string SelectedProviderClientId();
+  void SetSelectedProviderClientId(const std::string& clientId);
+  void StepProviderSelection(int steps);
 
   // Exposed so the (full-parity) UI/view models can drive the SDK directly.
   urnet::Api& api() { return *api_; }
@@ -384,6 +399,8 @@ class SdkHost {
   std::optional<urnet::PeerViewController> peerVc_;  // connected provide-enabled peers
   // post quantum identity feed: own identity key hash + verified provider identities
   std::optional<urnet::PostQuantumIdentityViewController> pqiVc_;
+  // the provider globe's selection + scroll wheel, shared across every app
+  std::optional<urnet::ProviderLocationsViewController> providerLocationsVc_;
   // control channel to urnetworkd (tunnel lifecycle + location override)
   ControlClient control_;
   std::string lastTunnelError_;

@@ -26,6 +26,22 @@
 
 namespace urnw {
 
+// The rotation the globe is animating toward, identified by the provider it
+// belongs to. Comparing the coordinates as well as the id is what makes a
+// provider whose position changes under the selection recenter the globe.
+struct GlobeCenterTarget {
+  std::string clientId;
+  double lat = 0;
+  double lon = 0;
+
+  // spelled out rather than `= default`: this app builds as C++17, where
+  // defaulted comparison operators do not exist yet
+  bool operator==(const GlobeCenterTarget& other) const {
+    return clientId == other.clientId && lat == other.lat && lon == other.lon;
+  }
+  bool operator!=(const GlobeCenterTarget& other) const { return !(*this == other); }
+};
+
 class ProviderGlobe : public Gtk::DrawingArea {
  public:
   ProviderGlobe();
@@ -38,15 +54,19 @@ class ProviderGlobe : public Gtk::DrawingArea {
 
   // Replaces the rendered set. Rows without coordinates are ignored here (they
   // still appear in the list). The globe centers itself once on the first
-  // provider that appears and thereafter only on an explicit selection --
-  // recentering on every window turnover would fight the user.
+  // provider that appears and thereafter follows the selection -- recentering
+  // on every window turnover would fight the user.
   void SetRows(std::vector<ProviderLocationRow> rows);
 
   // Selection, shared with the list. An empty id clears it.
   void SetSelected(const std::string& clientId);
 
-  // Fired when a dot is clicked or the wheel steps.
+  // Fired when a dot is clicked.
   std::function<void(const std::string& clientId)> on_select;
+  // Fired when a drag or scroll crosses the wheel's hysteresis threshold,
+  // positive east. Where that lands is the SDK view controller's business (the
+  // centroid-relative order, clamped at the ends), not the widget's.
+  std::function<void(int steps)> on_step;
 
  private:
   void OnDraw(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height);
@@ -56,24 +76,31 @@ class ProviderGlobe : public Gtk::DrawingArea {
   bool OnScroll(double dx, double dy);
   void OnPressed(int pressCount, double x, double y);
 
-  // Advances the wheel selection by `steps` and emits on_select.
-  void StepWheel(int steps);
-  // Starts the ~450ms spin to the selection (or to the first provider, once).
-  void AnimateToSelection();
+  // Retargets the recenter spring at the selected provider (or, until the globe
+  // has been placed once, at the first plottable one) when that provider or its
+  // position has actually changed. A no-op otherwise, so an unchanged window
+  // never restarts the spin.
+  void RecenterIfTargetChanged();
   bool OnTick();
-  // The wheel order (plottable rows by longitude, west to east).
-  const std::vector<int>& wheel() const { return wheel_; }
+  // Whether any row can be plotted: with none there is nothing to traverse, so
+  // the drag rotates the globe freely instead of driving the wheel.
+  bool HasPlottable() const;
 
   std::function<Rgba(const std::string&)> colorResolver_;
   std::vector<ProviderLocationRow> rows_;
-  std::vector<int> wheel_;  // indexes into rows_, ordered by longitude
   std::string selectedClientId_;
+  // The provider the globe is centered on. Empty until the globe has been
+  // placed once.
+  GlobeCenterTarget centerTarget_;
   bool centeredOnce_ = false;
 
-  GlobeRotation rotation_;      // the live rotation
-  GlobeRotation animFrom_;
+  GlobeRotation rotation_;  // the live rotation
+  // recenter spring: the target rotation, the current angular velocity per axis
+  // (degrees per second, carried ACROSS retargets so overlapping recenters stay
+  // continuous), and the frame it was last advanced at
   GlobeRotation animTo_;
-  gint64 animStart_ = 0;
+  GlobeRotation animVelocity_;
+  gint64 animLastUs_ = 0;
   bool animating_ = false;
   bool ticking_ = false;
 

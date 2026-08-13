@@ -6,10 +6,12 @@
 // android version could not have (an explicit dismiss in the header, an inline
 // remove button rather than a swipe, and a mouse wheel driving the globe).
 //
-// The SDK returns the providers sorted OLDEST-CONNECTED FIRST, and that order
-// is preserved verbatim: it is what makes "the oldest provider with
-// coordinates" -- the location override's target -- simply the first plottable
-// row.
+// The SDK returns the providers in DISPLAY ORDER -- west to east about their
+// centroid, then the ones with no coordinates -- and that order is preserved
+// verbatim, so the list reads left to right in the order the globe's wheel
+// steps through. It is not a duration order, so the location override's target
+// ("the oldest provider with coordinates") is found by stamp, not by taking the
+// first plottable row: see OldestPlottableIndex.
 //
 // Above the globe sits the device-location override toggle (see
 // LocationOverride.hpp), which is a real, supported feature on linux.
@@ -36,7 +38,7 @@
 namespace urnw {
 
 // Maps the SDK list onto the render rows, preserving the SDK's ordering
-// (oldest-connected first) verbatim. Coordinates come from the city centroid
+// (the view controller's display order) verbatim. Coordinates come from the city centroid
 // when the server knows it, else the region centroid; a provider with neither
 // is listed but not plotted. Shared by the sheet and by MainWindow, which keeps
 // the location override following the oldest provider even while the sheet is
@@ -78,6 +80,11 @@ class ProviderLocationsSheet : public Gtk::Window {
   void UpdateSelection();
   void UpdateDurations();
   void Select(const std::string& clientId);
+  // Mirrors the SDK view controller's selection (the source of truth) into the
+  // list and the globe.
+  void RefreshSelection();
+  // Brings the selected row back on screen when it has scrolled out of sight.
+  void ScrollSelectedIntoView();
   void CopyClientId(const std::string& clientId);
   void RemoveProvider(const std::string& clientId);
   void RefreshOverrideSection();
