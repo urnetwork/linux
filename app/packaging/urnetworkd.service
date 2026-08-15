@@ -14,6 +14,32 @@
 # Enabling on install is correct (Debian Policy 9.3.3.1) but the daemon
 # STARTS IDLE: it never brings a tunnel up until a client authenticates on the
 # control socket and issues start_tunnel.
+#
+# ===========================================================================
+# IF THIS MACHINE IS BLOCKED AND YOU CANNOT REACH ANYTHING, READ THIS.
+#
+# The kill switch is an nftables table (`table inet urnetwork`), and nftables
+# rules are NOT tied to process lifetime the way the Windows dynamic WFP
+# session is: a daemon that is SIGKILLed while armed leaves the machine
+# blocked on purpose, and coming back up re-arms it (see
+# RuntimeDirectoryPreserve= below). To get back on the network:
+#
+#     sudo systemctl stop urnetworkd
+#     sudo /usr/lib/urnetwork/urnetworkd --revert
+#
+# --revert removes the table, the policy rules, the capture routes and the
+# armed marker, so the next start comes up open. If the binary itself is
+# broken, the firewall half alone is:
+#
+#     sudo nft delete table inet urnetwork
+#
+# Stop the service FIRST: while it runs, its reaper re-installs the ruleset
+# within seconds of anything deleting it (that is the tamper protection
+# against `systemctl restart nftables`, whose shipped Fedora/Bazzite config
+# begins with `flush ruleset`). With the daemon running, disconnecting in the
+# app is the normal way out and always works -- the app reaches the daemon
+# over a unix socket, which no rule this daemon installs can block.
+# ===========================================================================
 
 [Unit]
 Description=URnetwork VPN daemon
@@ -24,6 +50,18 @@ Documentation=https://ur.io
 After=network-pre.target
 Wants=network-pre.target
 Before=network-online.target
+
+# NO START RATE LIMIT, and this is a safety decision, not an oversight.
+# systemd's default is 5 starts in 10s; at RestartSec=2 a crash loop hits it in
+# about 8 seconds and the unit lands in `failed` -- while the kernel is still
+# holding this daemon's fail-closed table. That state has NO control socket, so
+# the app cannot toggle the kill switch off, and it does not come back by
+# itself: the machine is off the network until a human types the recovery
+# command above. A daemon that keeps restarting is strictly better: it is
+# blocked, but it is answerable, and one click in the app lifts it. Journald
+# rate-limits the log spam of a genuine crash loop.
+# (StartLimit* belong to [Unit], not [Service], since systemd 229.)
+StartLimitIntervalSec=0
 
 [Service]
 # Type=notify, NOT Type=exec: src/daemon/main.cpp speaks READY=1 directly over
@@ -44,6 +82,17 @@ ExecStart=/usr/lib/urnetwork/urnetworkd
 # radius than the one directory we actually want grouped.
 RuntimeDirectory=urnetwork
 RuntimeDirectoryMode=0750
+# LOAD-BEARING for the kill switch. /run/urnetwork/kill-switch-armed is the
+# marker that says "this machine was armed when the daemon died", and it is
+# what makes a crash-restart come back ARMED (one atomic nft -f, no open
+# window) instead of OPEN. Without this line systemd deletes RuntimeDirectory=
+# on every stop -- including the stop half of a restart -- so the marker would
+# never survive the very event it exists for. `restart` keeps it across
+# automatic and manual restarts and still removes it on a real stop; a REBOOT
+# clears it with the rest of /run, which is deliberate (nothing comes up
+# blocked before a user has asked for anything). The control socket surviving
+# a restart is harmless: ControlServer unlinks a stale socket before bind.
+RuntimeDirectoryPreserve=restart
 
 # /var/lib/urnetwork: device identity (key material) + SDK storage. Root-only.
 StateDirectory=urnetwork
@@ -64,11 +113,36 @@ LimitNOFILE=65536
 
 Restart=on-failure
 RestartSec=2
+# A wedged SIGTERM teardown must not hold the machine hostage for the 90s
+# default: after this, systemd SIGKILLs the daemon and ExecStopPost below runs
+# anyway, which is what actually guarantees the table does not outlive the
+# service.
+TimeoutStopSec=45s
 # Upgrade discipline lives in packaging: stop (old binary) -> replace files ->
 # start (new binary); never an in-flight restart while a live tun fd is held.
 # If the daemon grows a lockdown-before-stop path, consider Mullvad's
 # RestartKillSignal=SIGUSR1 here -- do NOT add it before the daemon actually
 # handles SIGUSR1, or stops-for-restart lose the graceful SIGTERM teardown.
+
+# THE TEARDOWN THAT ALWAYS RUNS. The daemon removes its own table on a clean
+# SIGTERM, but "clean" is exactly the case that was never the problem: a
+# SIGKILL, an OOM kill, a stop that timed out, or an ExecStart that died before
+# it could install its signal handler all left `table inet urnetwork` in the
+# kernel with nothing left to remove it. systemd runs ExecStopPost on EVERY
+# stop path including all of those, so this is the unconditional half.
+#
+# It is idempotent: --revert-unless-armed is the same add-then-delete sweep the
+# daemon uses (a table that is not there is a successful no-op), plus the stale
+# policy rules and the capture route table, and it never fails the unit ('-').
+#
+# It is NOT unconditional about the block floor itself, and that asymmetry is
+# the design: if /run/urnetwork/kill-switch-armed says the user asked to be
+# blocked and we died unexpectedly, the floor is REPLACED with a fresh armed
+# one in a single atomic nft -f rather than lifted, so the crash does not open
+# a window. A clean stop clears that marker before exiting, so a clean stop
+# always ends with the machine open. To lift an armed floor by hand, see the
+# recovery block at the top of this file.
+ExecStopPost=-/usr/lib/urnetwork/urnetworkd --revert-unless-armed
 
 [Install]
 WantedBy=multi-user.target

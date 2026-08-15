@@ -1,4 +1,5 @@
-// The daemon's tunnel core: DeviceLocal(enable_rpc=true) + /dev/net/tun +
+// The daemon's tunnel core: DeviceLocal(enable_rpc=false, then setRpcServer
+// with the client's pinned mTLS material — see RunStart) + /dev/net/tun +
 // urnet::newIoLoop + the nftables leak floor, lifted from the GUI
 // SdkHost::StartTunnel at the daemon split (linux/MIGRATION.md). The Linux
 // analogue of the Windows Service/TunnelController: the GUI's DeviceRemote
@@ -60,13 +61,37 @@ class TunnelHost {
   explicit TunnelHost(std::string storageRoot);
   ~TunnelHost();
 
+  // Take ownership of a kill-switch floor installed by NetFilter's static
+  // startup sweep after a crash. Without this the machine is blocked by a floor
+  // no object owns: status reports "not blocked", the reaper does not re-install
+  // it if something flushes it, and nothing tears it down.
+  void AdoptArmedFloor();
+
   TunnelHost(const TunnelHost&) = delete;
   TunnelHost& operator=(const TunnelHost&) = delete;
 
-  // Builds the DeviceLocal (rpc enabled), opens the tun, installs the capture
-  // routes into their own table behind the fwmark rule, verifies the daemon's
-  // own traffic still escapes, applies DNS and swaps the nftables floor to
+  // Builds the DeviceLocal with NO rpc listener of its own and then PINS its
+  // loopback device RPC to the client-supplied mTLS material (the SDK's
+  // enable_rpc=true constructor would bind an unpinned PLAINTEXT ws on
+  // 127.0.0.1:12025 first, which any local process could drive), opens the tun,
+  // installs the capture routes
+  // into their own table behind the fwmark rule, verifies the daemon's own
+  // traffic still escapes, applies DNS and swaps the nftables floor to
   // Connected.
+  //
+  // The pinning triple is REQUIRED and re-validated here with
+  // ctl::ValidateStartTunnelRequest even though ControlServer already checked
+  // it — this is root, and rpc_listen_hostport decides where root binds. There
+  // is no unpinned fallback: a start without usable material fails with
+  // kCodeRpcPinRequired / kCodeRpcPinInvalid, and a setRpcServer that throws
+  // fails with kCodeRpcListenFailed. Success is published as
+  // StatusReply::rpc_pinned, which is the only signal the async path has.
+  //
+  // The listener is dropped by destroying the DeviceLocal and by nothing else:
+  // the SDK binding exposes no clearRpcServer/stopRpcServer, and setRpcServer
+  // has no documented re-entrancy contract, so it is called exactly ONCE per
+  // DeviceLocal, before any listener or getter. Every RunStart begins with
+  // StopInternalLocked, so each session gets a fresh device and a fresh call.
   //
   // config.async=false: runs inline and returns the FINAL status (the old
   // contract). config.async=true: returns immediately with
@@ -84,6 +109,15 @@ class TunnelHost {
   // instance id (the device pairing key), the jwt, the network space and the
   // rpc pinning material must all match, because anything else would hand the
   // client a DeviceRemote that attaches to a device it did not describe.
+  //
+  // The rpc comparison is a CORRECTNESS gate, not a security boundary: the
+  // control socket's SO_PEERCRED check is the boundary, and every peer past it
+  // could stop and restart the tunnel anyway. What it buys is that adoption
+  // can only ever hand back a listener the client can actually dial — and it
+  // is why the client must re-present the SAME material across its own
+  // restarts (a per-launch regenerate would fail this and tear down a working
+  // tunnel on every GUI launch, which is precisely what CanAdopt was added to
+  // stop).
   bool CanAdopt(const ctl::StartTunnelRequest& config) const;
 
   // Tears the session down and records why. "user" for an explicit
@@ -131,11 +165,36 @@ class TunnelHost {
   void RunStart(ctl::StartTunnelRequest config);
   // Requires opMutex_.
   void StopInternalLocked(const std::string& reason);
-  // Requires opMutex_. Swaps the nftables table to match the current session.
-  // `killSwitch` is passed explicitly rather than read from
-  // killSwitchRequested_ because the block floor is deliberately NOT installed
-  // during a bring-up — see RunStart.
-  bool ApplyFilterLocked(FilterState state, bool killSwitch, std::string* error);
+
+  // ---- the nftables floor: ONE decision site --------------------------------
+  //
+  // Every state change goes through ApplyFilterLocked, which asks
+  // FloorForTransition (Tunnel.hpp) whether the block floor rides along. It
+  // used to take the floor as a parameter, and every caller answered it
+  // separately: the bring-up hardcoded `false`, so a reconnect after an
+  // UNEXPECTED DROP lifted the kill switch for the whole attempt — the exact
+  // window the kill switch exists to close. The parameter is gone; the toggle
+  // (killSwitchRequested_) is the only INPUT and the floor is the OUTPUT.
+  //
+  // All three require opMutex_.
+  bool ApplyFilterLocked(FilterState next, std::string* error);
+  // Re-install what is ALREADY in force, byte-for-byte the same decision. NOT
+  // a transition — the floor is preserved, never re-derived — because this is
+  // the tamper path: something outside URnetwork (a root `nft flush ruleset`,
+  // which is the first line of Fedora/Bazzite's shipped nftables.conf) removed
+  // our table and re-deriving would ask "should a Connecting->Connecting
+  // transition carry the floor", which is not the question.
+  bool ReinstallFilterLocked(std::string* error);
+  // The shared core. `floor` is an OUTPUT of one of the two above and of
+  // nothing else.
+  bool InstallFilterLocked(FilterState state, bool floor, std::string* error);
+  // The FilterConfig for `state`, built from the LIVE session (tun name, the
+  // resolvers actually handed to resolved, the DNS-helper cgroups).
+  FilterConfig FilterConfigForLocked(FilterState state, bool floor) const;
+  // Reaper duty: verify the table is still ours and re-install it when it is
+  // not, and retry a teardown that failed. Requires opMutex_.
+  void MaintainFilterLocked();
+
   void JoinWorker();
   void Reap();
 
@@ -188,6 +247,18 @@ class TunnelHost {
   std::atomic<bool> ownerConnected_{false};
   std::atomic<int> orphanTimeoutSeconds_{0};
   int64_t ownerLostMonotonicSeconds_ = 0;
+
+  // A teardown that FAILED, remembered so the reaper can retry it.
+  // NetFilter::Remove() sets state_=Off *before* it checks whether nft
+  // succeeded, so the filter itself keeps no memory of the failure and
+  // ~NetFilter (guarded on state_ != Off) will not retry either: without this
+  // flag one failed `nft -f` leaves the table — and, if it was armed, the block
+  // — in the kernel until the machine reboots. Written on the worker and on the
+  // main loop, so atomic.
+  std::atomic<bool> filterRemovalPending_{false};
+  // Reaper-tick bookkeeping for the tamper poll (main loop only).
+  int filterVerifyTicks_ = 0;
+  int filterVerifyFailures_ = 0;
 
   guint reaperId_ = 0;
   guint resolvedWatchId_ = 0;

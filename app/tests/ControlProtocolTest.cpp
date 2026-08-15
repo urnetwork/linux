@@ -181,6 +181,12 @@ UR_TEST(controlStartTunnelInstanceIdIsThePairingContract) {
   sent.by_jwt = "jwt";
   sent.instance_id = "3f2a8c1e-instance";
   sent.app_version = "1.0.0";
+  // The device-RPC pin is MANDATORY since the mTLS change: without all three
+  // parts the daemon would fall back to an unpinned plaintext listener on
+  // loopback, which is the whole thing that change exists to prevent.
+  sent.rpc_server_pem = "-----BEGIN CERTIFICATE-----\nserver\n-----END CERTIFICATE-----\n";
+  sent.rpc_client_cert_pem = "-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n";
+  sent.rpc_listen_hostport = "127.0.0.1:12042";
   // what the daemon's ControlServer parses and TunnelHost constructs with
   const auto received = ctl::DecodeFrame(ctl::EncodeFrame(
       ctl::MakeRequest(ctl::Verb::StartTunnel, 1, nlohmann::json(sent))))
@@ -194,13 +200,35 @@ UR_TEST(controlStartTunnelInstanceIdIsThePairingContract) {
   noId.instance_id.clear();
   const auto idError = ctl::ValidateStartTunnelRequest(noId);
   UR_EXPECT_TRUE(idError.has_value());
-  UR_EXPECT_TRUE(idError->find("instance_id") != std::string::npos);
+  UR_EXPECT_TRUE(idError->message.find("instance_id") != std::string::npos);
 
   ctl::StartTunnelRequest noJwt = sent;
   noJwt.by_jwt.clear();
   const auto jwtError = ctl::ValidateStartTunnelRequest(noJwt);
   UR_EXPECT_TRUE(jwtError.has_value());
-  UR_EXPECT_TRUE(jwtError->find("by_jwt") != std::string::npos);
+  UR_EXPECT_TRUE(jwtError->message.find("by_jwt") != std::string::npos);
+
+  // FAIL CLOSED ON THE PIN. Each part is individually required: a request that
+  // drops any one of them must be REFUSED, never quietly served over an
+  // unpinned plaintext listener. This is the assertion whose absence let the
+  // stale version of this test pass while the pin was not enforced at all.
+  for (int part = 0; part < 3; ++part) {
+    ctl::StartTunnelRequest noPin = sent;
+    if (part == 0) noPin.rpc_server_pem.clear();
+    if (part == 1) noPin.rpc_client_cert_pem.clear();
+    if (part == 2) noPin.rpc_listen_hostport.clear();
+    UR_EXPECT_TRUE(ctl::ValidateStartTunnelRequest(noPin).has_value());
+  }
+  // A non-loopback listener must be refused outright — the pin is worthless if
+  // the daemon can be told to listen on a routable address.
+  ctl::StartTunnelRequest offBox = sent;
+  offBox.rpc_listen_hostport = "0.0.0.0:12042";
+  UR_EXPECT_TRUE(ctl::ValidateStartTunnelRequest(offBox).has_value());
+  // ...and so must a malformed PEM, which is how a handle-0 key generation
+  // arrives: four empty getters that still look like "something was returned".
+  ctl::StartTunnelRequest badPem = sent;
+  badPem.rpc_server_pem = "not a pem";
+  UR_EXPECT_TRUE(ctl::ValidateStartTunnelRequest(badPem).has_value());
 }
 
 UR_TEST(controlStatusReplyRoundTrip) {

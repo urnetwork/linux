@@ -11,6 +11,7 @@
 
 #include "Formatters.hpp"
 #include "I18n.hpp"
+#include "KillSwitchCopy.hpp"
 #include "LocationsSheet.hpp"  // PeerDisplayName — shared with the chooser
 #include "Ui.hpp"
 
@@ -612,9 +613,41 @@ void ConnectPage::BuildPaneA() {
   blockerToggle_ = addToggleRow(T_("block_ads_and_trackers", "Block ads and trackers"),
                                 host_.GetBlockerEnabled(),
                                 [this](bool on) { host_.SetBlockerEnabled(on); });
-  // the kill switch is !routeLocal (apple SettingsForm parity)
-  killSwitchToggle_ = addToggleRow(T_("kill_switch", "Kill switch"), !host_.GetRouteLocal(),
-                                   [this](bool on) { host_.SetRouteLocal(!on); });
+  // The kill switch. THREE legs behind this one control
+  // (SdkHost::SetKillSwitch): the persisted preference, the device's
+  // routeLocal, and — the leg that makes it a kill switch rather than a
+  // preference — urnetworkd's nftables ruleset. The enforcement leg is a
+  // control-socket round trip, so the completion lands later and carries what
+  // the daemon says it REALLY installed.
+  killSwitchToggle_ = addToggleRow(
+      T_("kill_switch", "Kill switch"), host_.CurrentKillSwitch(), [this](bool on) {
+        auto epoch = epoch_;
+        const uint64_t seen = *epoch_;
+        host_.SetKillSwitch(on, [this, epoch, seen, on](KillSwitchStatus) {
+          if (*epoch != seen) return;  // a newer session owns the page
+          // Read back rather than trust the write. Only a preference that did
+          // not take moves the control; a FAILED enforcement leg is disclosed
+          // in the line below, never hidden by reverting the switch.
+          if (host_.CurrentKillSwitch() != on) {
+            g_warning("connect: kill switch preference did not take (wanted %d)",
+                      static_cast<int>(on));
+          }
+          ApplyKillSwitchUi();
+        });
+        ApplyKillSwitchUi();  // "Applying…" now; the control is never inert
+      });
+  // What is REALLY in force, under the switch. A DEDICATED wrapped line rather
+  // than the row's own note: the note is trimmed to one ellipsized line, and a
+  // truncated "your traffic is NOT being blocked" is the same defect as
+  // showing nothing at all.
+  killSwitchNote_ = Gtk::make_managed<Gtk::Label>();
+  killSwitchNote_->set_xalign(0);
+  killSwitchNote_->set_wrap(true);
+  killSwitchNote_->set_margin_start(8);
+  killSwitchNote_->set_margin_end(8);
+  killSwitchNote_->set_margin_bottom(4);
+  killSwitchNote_->set_visible(false);
+  moreOptionsHost_->append(*killSwitchNote_);
 
   // §2.8 network peers: the count line over the peer rows. A group header with
   // nothing under it is exactly the HOLE §8 forbids — the group is either a
@@ -1741,13 +1774,26 @@ void ConnectPage::ApplyBlockerUi() {
   updatingControls_ = false;
 }
 
+// ONE writer for both halves: the switch shows the REQUEST (local, instant),
+// the line under it shows what urnetworkd says is actually installed (a round
+// trip, and possibly a refusal). They can legitimately disagree, and the whole
+// point of splitting them is that the surface can say so instead of claiming a
+// protection that is not in force.
 void ConnectPage::ApplyKillSwitchUi() {
   if (!killSwitchToggle_) return;
-  const bool on = !host_.GetRouteLocal();  // kill switch ON = routeLocal off
-  if (killSwitchToggle_->get_active() == on) return;
-  updatingControls_ = true;
-  killSwitchToggle_->set_active(on);
-  updatingControls_ = false;
+  const KillSwitchStatus status = host_.CurrentKillSwitchStatus();
+  if (killSwitchToggle_->get_active() != status.requested) {
+    updatingControls_ = true;
+    killSwitchToggle_->set_active(status.requested);
+    updatingControls_ = false;
+  }
+  if (killSwitchNote_ == nullptr) return;
+  const KillSwitchCopy copy = KillSwitchStateLine(status);
+  killSwitchNote_->set_visible(!copy.line.empty());
+  if (copy.line.empty()) return;
+  killSwitchNote_->set_markup("<span size='small' foreground='" +
+                              HexForMarkup(copy.attention ? kUrDanger : kUrTextMuted) + "'>" +
+                              Glib::Markup::escape_text(copy.line) + "</span>");
 }
 
 // ---- connect options: the performance profile (§2.8) ---------------------------
@@ -2033,6 +2079,17 @@ void ConnectPage::RefreshFeeds(bool force) {
     PullThroughput();
     ApplyInspectorVisibility();
     ApplyInspector();
+    // Ask urnetworkd what floor is REALLY installed. There is no push for
+    // this: the daemon's reaper arms the switch on its own when a tunnel drops
+    // unexpectedly, and nothing in the SDK feed knows that happened. A forced
+    // refresh is device lifecycle / tab entry / window re-show, i.e. exactly
+    // the moments this surface has to be right.
+    auto epoch = epoch_;
+    const uint64_t seen = *epoch_;
+    host_.RefreshKillSwitchStatus([this, epoch, seen](KillSwitchStatus) {
+      if (*epoch != seen) return;
+      ApplyKillSwitchUi();
+    });
   }
 }
 

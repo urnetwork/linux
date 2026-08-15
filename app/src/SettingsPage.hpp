@@ -132,6 +132,9 @@ class SettingsPage : public Gtk::Box {
   // ---- handlers ------------------------------------------------------------
   void OnProductUpdatesToggled();
   void OnKillSwitchToggled();
+  // The one writer for the "what is actually in force" line under the switch.
+  // Deliberately never touches the switch: the switch is the request.
+  void ApplyKillSwitchState();
   void OnAdvancedModeToggled();
   void SaveLogsToFile();
   void ConfirmUninstallService();
@@ -172,6 +175,10 @@ class SettingsPage : public Gtk::Box {
   // ---- Pane A: Connections -------------------------------------------------
   Gtk::Switch* killSwitch_ = nullptr;
   bool applyingKillSwitch_ = false;  // echo guard
+  // What is REALLY in force (SdkHost::KillSwitchStatus), rendered under the
+  // switch. Hidden while the switch is off — there is nothing to disclose.
+  Gtk::Label* killSwitchState_ = nullptr;
+  Gtk::Widget* killSwitchStateRow_ = nullptr;
   // the WHOLE row hides together (a caption pointing at a hidden button is
   // worse than no row at all)
   Gtk::Box* serviceRowHost_ = nullptr;

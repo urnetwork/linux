@@ -288,6 +288,10 @@ class ConnectPage : public Gtk::Box {
   Gtk::Box* peersHost_ = nullptr;
   Gtk::Switch* blockerToggle_ = nullptr;
   Gtk::Switch* killSwitchToggle_ = nullptr;
+  // What urnetworkd says is REALLY in force, under the switch. A dedicated
+  // wrapped line: the row's own note is trimmed to one ellipsized line, and a
+  // truncated failure disclosure is the same defect as no disclosure.
+  Gtk::Label* killSwitchNote_ = nullptr;
   // ONE echo guard around every programmatic control write (§2.8): each
   // handler returns while it is set, so a feed-driven write cannot loop back
   // into the SDK.

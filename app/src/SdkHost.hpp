@@ -16,6 +16,9 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -27,6 +30,7 @@
 #include <urnetwork_sdk.hpp>
 
 #include "ControlClient.hpp"
+#include "RpcSession.hpp"
 #include "WalletConnect.hpp"
 
 namespace urnw {
@@ -159,6 +163,121 @@ enum class ReliabilityRead {
   ExitsOnly,  // remoteConnected + the two exit tables (Home's Advanced inspector)
   Full,       // + settings/metrics/probe suite (the Developer destination)
 };
+
+// ---- the kill switch -------------------------------------------------------
+// What the three toggles now drive. THREE legs, in this order
+// (docs/parity/settings.md §113, windows SdkHost::SetKillSwitch):
+//
+//   1. LocalState  routeLocal = !on   — the persistent truth; survives a crash
+//                                       and is what the next start_tunnel and
+//                                       the next device creation replay.
+//   2. DeviceRemote routeLocal = !on  — the SDK's SOFT leg, over the device
+//                                       rpc: a branch inside sendPacket, so it
+//                                       never sees IPv6, the deliberately
+//                                       route-excluded LAN, another adapter's
+//                                       resolver, or a dead daemon.
+//   3. urnetworkd  set_kill_switch(on) — the ENFORCEMENT leg: the nftables
+//                                       ruleset (`table inet urnetwork`). This
+//                                       is the leg the toggles never had, and
+//                                       without it the UI claimed a protection
+//                                       that was not in force.
+//
+// Leg 3 is a blocking control-socket round trip (up to 30 s against a wedged
+// daemon), so it runs on a worker thread; legs 1 and 2 stay on the caller's
+// thread so a re-read right after the call already reflects them.
+//
+// The daemon reports what it ACTUALLY installed. Never assume the request
+// took, and never render Failed as Off.
+struct KillSwitchStatus {
+  // The standing preference (== !routeLocal). This is what the toggle shows.
+  bool requested = false;
+  // What the daemon says is installed. Meaningful ONLY when installed_known.
+  ctl::KillSwitchState installed = ctl::KillSwitchState::Off;
+  // false => the daemon did not answer, so `installed` is a default and NOT a
+  // fact. "Unknown" and "off" are different states and must render differently.
+  bool installed_known = false;
+  // A floor is really up (Armed or Connected).
+  bool in_force = false;
+  // The daemon's own tunnel state, so the UI can tell the daemon's DELIBERATE
+  // "requested, nothing connected, so nothing is blocked yet" (TunnelHost::
+  // SetKillSwitch refuses to cut a machine off that never connected) apart
+  // from a real "the tunnel is up and the floor is missing".
+  ctl::TunnelState tunnel_state = ctl::TunnelState::Stopped;
+  // How the control channel stands — the UI maps this to remediation copy
+  // (not installed / not running / not authorized / version skew).
+  DaemonSessionState session = DaemonSessionState::Unreachable;
+  // WHY the channel is Unreachable. Meaningful only while
+  // session == Unreachable, and the reason the UI can stop saying "the service
+  // is not running" at a socket that is right there and merely refuses this
+  // user (EACCES — the installers create the `urnetwork` group empty, so this
+  // is the state a FRESH INSTALL lands in). See DaemonUnreachableReason.
+  DaemonUnreachableReason unreachable_reason = DaemonUnreachableReason::None;
+  // The daemon's kill_switch_detail, or the transport error. "" when there is
+  // nothing to explain. NOT localized: it is a daemon string, and the UI pairs
+  // it with its own localized lead sentence.
+  std::string detail;
+  // A leg-3 write is still in flight. The toggle stays where the user put it
+  // and the state line says so — it must never flap.
+  bool pending = false;
+};
+
+// The ONE classification the three surfaces share, so they cannot disagree
+// about what the same status means. Pure.
+//
+// THREE STATES THAT USED TO BE ONE. `installed_known == false` used to fall
+// into NotInForce, whose copy asserts "your traffic is not being blocked" and
+// whose remediation says the service is not running. Both are claims, and in
+// the state that matters most they are the OPPOSITE of the truth: the nftables
+// table is not process-bound, so a floor installed by an earlier session is
+// still blocking this machine when the daemon is gone, and a daemon that is
+// running but merely refuses THIS user (EACCES) is not a daemon that is
+// stopped. "Cannot tell" is now its own state and says so.
+enum class KillSwitchDisplay {
+  Off,       // not requested, and nothing is installed: nothing to say
+  Applying,  // a leg-3 write is in flight, in EITHER direction
+  InForce,   // requested AND a floor is installed
+  // NOT requested and a floor is installed anyway — a removal that failed, or
+  // a floor re-armed from the crash marker under a switch the user turned off.
+  // The user is CUT OFF while the control reads "off"; this is the state the
+  // UI said nothing at all about.
+  InForceUnrequested,
+  ArmedAtNextStart,  // requested, no tunnel: the daemon deliberately holds off
+  // requested, the daemon ANSWERED, and it installed nothing while the tunnel
+  // is up. A real defect, and the only state entitled to claim "not blocked".
+  NotInForce,
+  // requested, and the daemon could not be asked at all. NOT "off": what is
+  // installed is genuinely unknown, and the user may be cut off by our own
+  // floor right now. Carries the recovery command, because the app cannot lift
+  // a floor it cannot reach the daemon to lift.
+  Unknown,
+  Failed,  // requested, the daemon TRIED and could not — never render as Off
+};
+
+inline KillSwitchDisplay ClassifyKillSwitch(const KillSwitchStatus& s) {
+  // A write in flight outranks everything, in either direction: the last
+  // reading describes a state the daemon is in the middle of leaving. (This
+  // deliberately also covers !requested — turning the switch OFF is a write
+  // that can fail, and it used to render as silence.)
+  if (s.pending) return KillSwitchDisplay::Applying;
+  if (!s.requested) {
+    // Silence is correct ONLY when the daemon has told us nothing is up.
+    // A floor still standing under an off switch is not a nuance, it is the
+    // user's network being blocked with no explanation on screen.
+    if (s.installed_known && s.in_force) return KillSwitchDisplay::InForceUnrequested;
+    return KillSwitchDisplay::Off;
+  }
+  if (s.installed_known && s.installed == ctl::KillSwitchState::Failed) {
+    return KillSwitchDisplay::Failed;
+  }
+  if (s.in_force) return KillSwitchDisplay::InForce;
+  // The daemon could not be asked. Unknown, never "not in force".
+  if (!s.installed_known) return KillSwitchDisplay::Unknown;
+  // The daemon answered "off" with the switch on. That is EXPECTED while
+  // nothing is connected — switching it on with no tunnel must not cut the
+  // machine off the network — and a defect once the tunnel is up.
+  if (s.tunnel_state != ctl::TunnelState::Up) return KillSwitchDisplay::ArmedAtNextStart;
+  return KillSwitchDisplay::NotInForce;
+}
 
 class SdkHost {
  public:
@@ -371,8 +490,40 @@ class SdkHost {
   // is up, instead of falling back to local egress. Persisted in the GUI's
   // LocalState (the daemon's DeviceLocal neither persists nor restores it)
   // and re-applied over the device rpc at StartTunnel.
+  //
+  // READ ONLY, and only the SOFT leg. Every UI writer must go through
+  // SetKillSwitch below instead — a bare setRouteLocal leaves the daemon's
+  // nftables floor untouched, which is precisely the bug this replaces.
   bool GetRouteLocal();
-  void SetRouteLocal(bool routeLocal);
+
+  // ---- kill switch (the three legs; see KillSwitchStatus above) ------------
+  using KillSwitchDone = std::function<void(KillSwitchStatus)>;
+
+  // The standing preference, no daemon I/O: !routeLocal, device-preferred and
+  // falling back to LocalState (parity rule: with neither, claim the
+  // PERMISSIVE default, never the strict one). Readable signed out, with no
+  // tunnel and with no daemon — this is the toggle's position.
+  bool CurrentKillSwitch();
+  // The last snapshot published by a write or a read-back. No I/O: safe on the
+  // GTK main loop and safe to call from a build path before any daemon
+  // round trip has happened (installed_known is then false).
+  KillSwitchStatus CurrentKillSwitchStatus();
+
+  // Legs 1+2 SYNCHRONOUSLY (so an immediate CurrentKillSwitch() read-back
+  // already reflects them), then leg 3 on a worker thread. `done` runs ON THE
+  // GTK MAIN LOOP exactly once with the state READ BACK from the daemon after
+  // the write — not with the value that was asked for. It may land after the
+  // caller was destroyed, so `done` must carry its own epoch/liveness guard,
+  // the same contract as RequestReliability.
+  //
+  // Requests are queued and served in order: a rapid double-toggle costs two
+  // round trips and the LAST one wins. Nothing is ever dropped — a dropped
+  // kill-switch write is a machine left in a state nobody asked for.
+  void SetKillSwitch(bool on, KillSwitchDone done = {});
+  // Read-back only: no write, same completion contract. Call it after a
+  // tunnel state change (the floor moves between Armed and Connected on its
+  // own) and when a surface comes back on screen.
+  void RefreshKillSwitchStatus(KillSwitchDone done = {});
   std::optional<urnet::DnsResolverSettings> GetDnsResolverSettings();
   void SetDnsResolverSettings(const urnet::DnsResolverSettings& settings);
   std::optional<urnet::ThroughputPointList> ThroughputPoints();
@@ -511,6 +662,63 @@ class SdkHost {
   LiveStats ReadStats();  // read the current snapshot from the SDK getters
   void PublishStats();    // ReadStats() -> onStats_
 
+  // ---- kill switch internals ------------------------------------------------
+  // Requires mutex_. The soft legs, in the parity order: LocalState FIRST
+  // (persistent truth), then the device.
+  void ApplyRouteLocalLocked(bool routeLocal);
+  // Requires mutex_. !routeLocal, device-preferred, LocalState fallback.
+  bool KillSwitchRequestedLocked();
+  struct KillSwitchRequest {
+    bool apply = false;  // false = read-back only
+    bool wanted = false;
+    KillSwitchDone done;
+  };
+  void EnqueueKillSwitch(KillSwitchRequest request);
+  void RunKillSwitchRequest(KillSwitchRequest request);  // ON THE WORKER
+  void KillSwitchWorkerMain();
+  void StopKillSwitchWorker();  // destructor: drain + join
+
+  // ---- device rpc mTLS ------------------------------------------------------
+  // The construction + setRpcServer pair lives INSIDE StartTunnel's existing
+  // try on purpose (a throw from malformed material must land in the catch
+  // that already tears down and stops the daemon-side tunnel), so there is no
+  // separate Pin* helper. These three bound the case nothing throws for.
+  void ArmRpcBindWatchdogLocked();     // requires mutex_
+  void CancelRpcBindWatchdogLocked();  // requires mutex_; also bumps the epoch
+  void OnRpcBindDeadline();            // MAIN LOOP; epoch-guarded
+
+  // THE UNPINNED DIAL WINDOW, AND WHY THERE IS A SOCKET IN THIS CLASS.
+  //
+  // urnet::newDeviceRemoteWithDefaults is the ONLY DeviceRemote constructor
+  // the shipped binding exposes (urnetwork_sdk.hpp:19882 — and the .so exports
+  // exactly one such symbol, urnet_new_device_remote_with_defaults). It builds
+  // its dialer with EMPTY clientPem/serverCertPem against the SDK's built-in
+  // ctl::kDeviceRpcPort address (sdk/device_rpc.go:290 over
+  // deviceRpcDefaultAddress, :117) and starts the dial goroutine before it
+  // returns (:487). setRpcServer cannot run first — there is no object yet —
+  // and when it does run it blocks on the state lock the constructor left held
+  // for InitialLockTimeout (1 s, :134). So the plain-ws dial is not a race: it
+  // ALWAYS happens, two or three times, on every DeviceRemote we build.
+  //
+  // We cannot make the first dial pinned. We CAN make sure it has nowhere to
+  // land: bind 127.0.0.1:<kDeviceRpcPort> ourselves and never listen() on it,
+  // which reserves the address against every other process and makes each
+  // connect() to it fail immediately with ECONNREFUSED. Holding it FAILS the
+  // start when it cannot be taken, because the alternative is handing the
+  // occupant this device's rpc session — and, once synced, the account bearer
+  // token, since the DeviceRemote proxies the Api's authenticated HTTP over
+  // that same connection (sdk/device_rpc.go:437-438).
+  //
+  // NOT listen()ing is deliberate: a listening socket we never accept() from
+  // parks the dial in the accept queue until RpcConnectTimeout (30 s), and
+  // that dial holds the lock setRpcServer needs — a 30-second freeze of the
+  // GTK main loop instead of an instant refusal.
+  //
+  // Requires mutex_. Idempotent; once taken the reservation is held for the
+  // life of the process (each new DeviceRemote reopens the same window).
+  bool HoldDeviceRpcDefaultPortLocked(std::string* error);
+  void ReleaseDeviceRpcDefaultPort();
+
   std::mutex mutex_;
   std::optional<urnet::NetworkSpaceManager> spaceManager_;
   std::optional<urnet::NetworkSpace> networkSpace_;
@@ -555,6 +763,41 @@ class SdkHost {
   std::atomic<bool> reliabilityBusy_{false};
   std::mutex reliabilityWorkerMutex_;
   std::thread reliabilityWorker_;
+
+  // ---- kill switch ----------------------------------------------------------
+  // The last published snapshot (guarded by mutex_). Seeded requested-only at
+  // construction, so a surface built before any daemon round trip reads
+  // installed_known=false — UNKNOWN, which is the honest answer, rather than a
+  // fabricated "off".
+  KillSwitchStatus killSwitchStatus_;
+  // Leg 3 lives on ONE serial worker with a FIFO queue, deliberately not the
+  // single-flight gate the reliability read uses: a skipped reliability read
+  // costs a stale pane, a skipped kill-switch write costs a machine in a state
+  // nobody asked for. The worker is started lazily and joined in ~SdkHost.
+  std::mutex killSwitchMutex_;
+  std::condition_variable killSwitchCv_;
+  std::deque<KillSwitchRequest> killSwitchQueue_;
+  std::thread killSwitchWorker_;
+  bool killSwitchQuit_ = false;
+  // Writes accepted but not yet answered. A read-back that was already in
+  // flight when a write was issued must not publish pending=false and let the
+  // line claim the PREVIOUS request's floor for a round trip — on this control
+  // a momentary "in force" over a pending "turn it off" is exactly the lie
+  // being removed.
+  std::atomic<int> killSwitchWritesPending_{0};
+
+  // ---- device rpc mTLS ------------------------------------------------------
+  // Bumped on every DeviceRemote construction and on every teardown; the bind
+  // watchdog carries the value it was armed with and does nothing when it no
+  // longer matches, so a completed-then-restarted session cannot tear down its
+  // successor.
+  std::atomic<uint64_t> rpcSessionGeneration_{0};
+  unsigned int rpcBindWatchId_ = 0;        // g_timeout source id; 0 = unarmed
+  uint64_t rpcBindWatchGeneration_ = 0;    // the session the armed watchdog belongs to
+  std::string rpcHostPort_;                // what THIS session dialed ("" when none)
+  // The reservation described by HoldDeviceRpcDefaultPortLocked: a bound,
+  // NEVER-listening socket on 127.0.0.1:<ctl::kDeviceRpcPort>. -1 = not held.
+  int deviceRpcDefaultPortFd_ = -1;
   bool presentationActive_ = false;
   std::vector<urnet::Sub> subs_;
   std::vector<urnet::Sub> presentationSubs_;

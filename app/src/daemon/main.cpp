@@ -89,6 +89,51 @@ void NotifySystemdReady() {
   ::close(fd);
 }
 
+// Where this binary is installed (the unit's ExecStart). Printed in the
+// recovery lines, so what the user is told to run is a path that exists on
+// their machine; a dev run from a build tree prints its own argv[0] instead.
+constexpr const char* kInstalledPath = "/usr/lib/urnetwork/urnetworkd";
+
+std::string SelfPath(const char* argv0) {
+  if (argv0 != nullptr && argv0[0] == '/') return argv0;
+  return kInstalledPath;
+}
+
+// THE WAY BACK ONTO THE NETWORK, and the only thing on this machine that
+// prints it. The kill switch is an nftables table, and nftables is not tied to
+// process lifetime: a daemon that is SIGKILLed while armed leaves a machine
+// that cannot reach anything — including any page explaining how to fix it. So
+// the fix has to be reachable OFFLINE, from a surface a blocked user still has:
+// `urnetworkd --help`, `urnetworkd --diagnose`, the journal (the floor logs it
+// the moment it goes in), the log tail the GUI shows, and the comment block in
+// the shipped unit (`systemctl cat urnetworkd`).
+//
+// The ORDER matters and is why this is prose and not one line: while the daemon
+// is alive its reaper re-installs the table within seconds of anything deleting
+// it (that is the tamper protection), so the daemon has to be stopped first.
+void PrintRecovery(const char* argv0) {
+  const std::string self = SelfPath(argv0);
+  std::printf(
+      "\n"
+      "If this machine is cut off (the kill switch is armed, or urnetworkd died while a\n"
+      "tunnel was up), this is the way back — no network access required:\n"
+      "\n"
+      "    sudo systemctl stop urnetworkd\n"
+      "    sudo %s --revert\n"
+      "\n"
+      "  --revert removes the firewall table, the policy rules, the capture routes and the\n"
+      "  armed marker, so the next start comes up open. With no systemd and no working\n"
+      "  daemon binary, the firewall half alone is:\n"
+      "\n"
+      "    %s\n"
+      "\n"
+      "  Stop the daemon FIRST: while it is running it re-installs its own ruleset within\n"
+      "  seconds of anything removing it. With the daemon running, disconnecting in the\n"
+      "  app is the normal way to lift the kill switch, and it always works — the app talks\n"
+      "  to the daemon over a unix socket, which no firewall rule here can block.\n",
+      self.c_str(), urnw::NetFilter::RecoveryCommand());
+}
+
 struct Daemon {
   GMainLoop* loop = nullptr;
   urnw::TunnelHost* tunnel = nullptr;
@@ -181,16 +226,86 @@ int main(int argc, char** argv) {
       std::printf("control socket: %s\n", urnw::ControlServer::SocketPath().c_str());
       std::printf("state dir:      %s\n", StateDir().c_str());
       std::printf("log dir:        %s\n", LogDir().c_str());
+      // Read-only, no subprocess: the marker is a tmpfs file. A user reading
+      // this while blocked needs to know WHICH of the two situations they are
+      // in before they are told what to type.
+      const bool armed = ::access(urnw::NetFilter::ArmedMarkerPath(), F_OK) == 0;
+      std::printf("kill switch:    %s (marker %s)\n",
+                  armed ? "ARMED — this machine is deliberately blocked" : "not armed",
+                  urnw::NetFilter::ArmedMarkerPath());
+      const int missing = ReportPreflight();
+      PrintRecovery(argv[0]);
       std::fflush(stdout);
-      return ReportPreflight() == 0 ? 0 : 1;
+      return missing == 0 ? 0 : 1;
+    }
+    if (arg == "--revert" || arg == "--revert-unless-armed") {
+      // The documented escape hatch, and the unit's ExecStopPost.
+      //
+      //   --revert                unconditional: lift everything, clear the
+      //                           armed marker. This is what a stuck human
+      //                           runs.
+      //   --revert-unless-armed   the same sweep, except that a machine which
+      //                           was ARMED when the daemon died has its floor
+      //                           REPLACED with a fresh armed one in a single
+      //                           atomic `nft -f` — no open window across the
+      //                           crash, which is the entire point of the kill
+      //                           switch. Only the unit uses this.
+      const bool preserveArmed = (arg == "--revert-unless-armed");
+      if (::geteuid() != 0) {
+        std::fprintf(stderr,
+                     "urnetworkd %s: this changes the kernel firewall and must run as root.\n"
+                     "  try: sudo %s %s\n",
+                     arg.c_str(), SelfPath(argv[0]).c_str(), arg.c_str());
+        return 1;
+      }
+      if (!preserveArmed && ::access(urnw::ControlServer::SocketPath().c_str(), F_OK) == 0) {
+        std::fprintf(stderr,
+                     "urnetworkd --revert: WARNING — %s still exists, so urnetworkd may still be "
+                     "running. It re-installs its own ruleset within seconds of anything removing "
+                     "it; stop it first (systemctl stop urnetworkd) or this will not stick.\n",
+                     urnw::ControlServer::SocketPath().c_str());
+      }
+      // Whether the sweep is SUPPOSED to leave a table behind, decided before
+      // it runs (it clears the marker on the paths where it does not).
+      const bool keepsArmedFloor =
+          preserveArmed && ::access(urnw::NetFilter::ArmedMarkerPath(), F_OK) == 0;
+      // Idempotent by construction (add-then-delete), so running it on a
+      // machine with nothing installed is a successful no-op.
+      urnw::NetFilter::SweepStaleState(preserveArmed);
+      // CONFIRM IT. SweepStaleState() returns void and only logs, and this is
+      // the command a cut-off user is told to trust: reporting a failed sweep
+      // as a completed one would send them away from the one thing that was
+      // going to fix it. `nft list table` is read-only.
+      if (const std::string nft = urnw::FindTool("nft"); !nft.empty() && !keepsArmedFloor) {
+        if (urnw::RunCommand({nft, "list", "table", "inet", urnw::kNftTableName}).ok()) {
+          std::fprintf(stderr,
+                       "urnetworkd %s: FAILED — `table inet %s` is still in the kernel. This "
+                       "machine may still be filtered. Try: %s\n",
+                       arg.c_str(), urnw::kNftTableName, urnw::NetFilter::RecoveryCommand());
+          return 1;
+        }
+      }
+      std::fprintf(stderr, "urnetworkd %s: done%s\n", arg.c_str(),
+                   keepsArmedFloor ? " (the kill switch was armed, so the block floor was kept "
+                                     "and re-installed)"
+                                   : "");
+      return 0;
     }
     if (arg == "--help" || arg == "-h") {
       std::printf(
-          "usage: urnetworkd [--foreground] [--diagnose] [--version]\n"
+          "usage: urnetworkd [--foreground] [--diagnose] [--revert] [--version]\n"
           "URnetwork privileged daemon: control socket at %s,\n"
           "device RPC on 127.0.0.1:%d while the tunnel is up.\n"
-          "  --diagnose  print the host preflight (ip/nft/resolvectl, cgroup, tun) and exit\n",
+          "  --diagnose             print the host preflight (ip/nft/resolvectl, cgroup, tun),\n"
+          "                         the kill-switch state and the recovery steps, then exit\n"
+          "  --revert               lift the URnetwork firewall table, policy rules and capture\n"
+          "                         routes, and clear the armed marker; then exit. Run this when\n"
+          "                         a machine is stuck blocked. Requires root.\n"
+          "  --revert-unless-armed  the same sweep, but a machine that was armed when the daemon\n"
+          "                         died stays armed (used by the unit's ExecStopPost)\n"
+          "  --foreground           do not send the systemd readiness notification\n",
           urnw::ControlServer::SocketPath().c_str(), urnw::ctl::kDeviceRpcPort);
+      PrintRecovery(argv[0]);
       return 0;
     }
     std::fprintf(stderr, "urnetworkd: unknown argument '%s'\n", arg.c_str());
@@ -236,7 +351,23 @@ int main(int argc, char** argv) {
   // that installed them. Sweep our own leftovers (by table name, by our fwmark
   // and by our route-table id — never by priority alone, which would let us
   // delete a co-installed WireGuard's rules) before serving anyone.
-  urnw::NetFilter::SweepStaleState();
+  //
+  // preserveArmed=true is the whole crash story and it is NOT the default of
+  // the parameter: calling SweepStaleState() bare (which is what this line used
+  // to do) deletes the table unconditionally, so a daemon that was SIGKILLed
+  // with the kill switch ARMED came back up and OPENED the machine — the one
+  // moment the floor must be continuous. With the intent passed explicitly, the
+  // stale table is REPLACED by a fresh armed one in a single atomic `nft -f`
+  // when (and only when) the /run marker says this machine was armed when we
+  // died. A reboot clears the marker with the rest of /run, so nothing comes up
+  // blocked before a user has asked for anything.
+  const bool sweptArmedFloor = urnw::NetFilter::SweepStaleState(/*preserveArmed=*/true);
+  if (sweptArmedFloor) {
+    std::fprintf(stderr,
+                 "[daemon] this machine is BLOCKED by a kill-switch floor carried over from a "
+                 "daemon that died while armed. Turn the kill switch off in the app, or:\n%s\n",
+                 urnw::NetFilter::RecoveryHelpText().c_str());
+  }
   if (const int missing = ReportPreflight(); missing > 0) {
     // Do not refuse to start: the control socket must still come up so the GUI
     // gets a real answer instead of "the service is not running". The first
@@ -248,6 +379,11 @@ int main(int argc, char** argv) {
   }
 
   urnw::TunnelHost tunnel(stateDir);
+  // A floor carried over from a crash has an OWNER from here on: status tells
+  // the truth, the reaper re-installs it if it is flushed, and shutdown tears
+  // it down. Adopting after construction (not inside it) keeps the sweep and
+  // the host independent of each other's ordering.
+  if (sweptArmedFloor) tunnel.AdoptArmedFloor();
   // Off by default: a tunnel survives a GUI crash or restart and is adoptable.
   // Set $URNETWORK_ORPHAN_TIMEOUT_SECONDS to have the daemon stop a tunnel
   // nobody has owned for that long — the "captured machine with no UI"
@@ -276,8 +412,16 @@ int main(int argc, char** argv) {
   g_unix_signal_add(SIGINT, &OnTerminate, &daemon);
 
   if (!foreground) NotifySystemdReady();
-  std::fprintf(stderr, "[daemon] urnetworkd %s ready (state=%s)\n", UR_APP_VERSION,
-               stateDir.c_str());
+  // Into the log ring as well as the journal, once per start: the ring is what
+  // the GUI's log tail shows, and this is the line that has to be in front of a
+  // user whose machine is blocked. Cheap insurance against the one failure mode
+  // that has no other way out.
+  urnw::DaemonLogf(
+      "[daemon] urnetworkd %s ready (state=%s). If this machine ends up blocked with no way "
+      "to reach the daemon: stop the service, then run `%s --revert` (firewall half alone: "
+      "%s)\n",
+      UR_APP_VERSION, stateDir.c_str(), SelfPath(argv[0]).c_str(),
+      urnw::NetFilter::RecoveryCommand());
   g_main_loop_run(loop);
   g_main_loop_unref(loop);
   return 0;

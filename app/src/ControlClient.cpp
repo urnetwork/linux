@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -300,6 +301,24 @@ ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
   req.rpc_client_cert_pem = options.rpc_client_cert_pem;
   req.rpc_listen_hostport = options.rpc_listen_hostport;
 
+  // ---- gate 1: refuse before the frame is built -----------------------------
+  // The SAME pure validator the daemon runs, so the two halves can never
+  // disagree about what a valid request is, and so a caller that forgot to
+  // generate key material (or generated a handle-0 one, whose four PEM getters
+  // return empty strings with NO exception) finds out here instead of getting
+  // a root device RPC with no client pinning on it.
+  if (const auto invalid = ctl::ValidateStartTunnelRequest(req)) {
+    outcome.error = invalid->message;
+    outcome.code = invalid->code == nullptr ? std::string() : std::string(invalid->code);
+    // Not a transport problem, but the caller branches on LastSessionState()
+    // as well as on the outcome, and leaving it at Unreachable would make the
+    // UI offer "install or start the service" for what is a local refusal.
+    lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+  const int expectedRpcPort = ctl::RpcPortFromHostPort(options.rpc_listen_hostport);
+
   // NO retry (a re-sent start_tunnel used to restart the bring-up), and an
   // async request needs only the ordinary bound because the daemon answers as
   // soon as it has accepted the request.
@@ -319,9 +338,49 @@ ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
     return outcome;
   }
   const auto payload = reply->get<ctl::StartTunnelReply>();
-  outcome.ok = true;
   outcome.rpc_port = payload.rpc_port;
   outcome.tunnel_state = payload.tunnel_state;
+  outcome.rpc_pinned = payload.rpc_pinned;
+
+  // ---- gate 2: a synchronous start must come back PINNED --------------------
+  // A daemon that predates this contract drops the three fields on parse,
+  // never calls setRpcServer, and answers rpc_port=12025 with rpc_pinned
+  // absent — which parses false. Refuse: do not hand the caller an outcome it
+  // could build a plaintext DeviceRemote from. The port cross-check catches
+  // the same peer a second way, because the GUI's draw range deliberately
+  // excludes 12025.
+  //
+  // Only the synchronous path can be decided here. On async the reply is
+  // `starting` with rpc_port=0 and pinning has not happened yet, so the caller
+  // MUST make the identical check against StatusReply::rpc_pinned when the
+  // tunnel reaches Up, before it constructs a DeviceRemote.
+  if (payload.tunnel_state == ctl::TunnelState::Up &&
+      (!payload.rpc_pinned || payload.rpc_port != expectedRpcPort)) {
+    // Rendered VERBATIM by the UI (MainWindow shows LastTunnelError() when it
+    // is non-empty), so these are complete sentences with a next step, not
+    // codes — and never a blank.
+    outcome.error =
+        payload.rpc_pinned
+            ? "The URnetwork system service secured the local control connection on an "
+              "unexpected port. Update the service, then try again."
+            : "The URnetwork system service did not secure the local control connection. "
+              "Update the service, then try again.";
+    outcome.code = ctl::kCodeRpcPinRequired;
+    outcome.ok = false;
+    // Leaving a running tunnel whose ROOT rpc listener is unauthenticated is
+    // worse than no tunnel: any local process that can open a TCP socket to it
+    // could drive the daemon's DeviceLocal. Tear it down on the way out.
+    std::string stopError;
+    if (!StopTunnelLocked(&stopError)) {
+      std::fprintf(stderr,
+                   "[control] could not stop the unpinned tunnel after refusing it: %s\n",
+                   stopError.c_str());
+    }
+    lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+  outcome.ok = true;
   return outcome;
 }
 
@@ -329,6 +388,9 @@ bool ControlClient::StartTunnel(const std::string& byJwt, const std::string& ins
                                 const std::string& appVersion,
                                 const std::string& networkSpaceJson, int* rpcPort,
                                 std::string* error) {
+  // Deliberately sends NO pinning material, so ValidateStartTunnelRequest
+  // inside StartTunnelEx refuses it locally with kCodeRpcPinRequired. See the
+  // header: this overload exists only to keep its last caller compiling.
   StartTunnelOptions options;
   options.by_jwt = byJwt;
   options.instance_id = instanceId;
@@ -357,8 +419,7 @@ bool ControlClient::SetKillSwitch(bool enabled, ctl::StatusReply* out, std::stri
   return true;
 }
 
-bool ControlClient::StopTunnel(std::string* error) {
-  std::scoped_lock lock(mutex_);
+bool ControlClient::StopTunnelLocked(std::string* error) {
   const auto reply = CallLocked(ctl::Verb::StopTunnel, nlohmann::json::object(), error);
   if (!reply) return false;
   if (!ctl::ReplyOk(*reply)) {
@@ -366,6 +427,11 @@ bool ControlClient::StopTunnel(std::string* error) {
     return false;
   }
   return true;
+}
+
+bool ControlClient::StopTunnel(std::string* error) {
+  std::scoped_lock lock(mutex_);
+  return StopTunnelLocked(error);
 }
 
 bool ControlClient::SetProvide(const std::string& mode, std::string* error) {

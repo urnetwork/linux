@@ -24,6 +24,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -48,12 +49,29 @@ inline constexpr const char* kControlSocketPath = "/run/urnetwork/control.sock";
 // The unix group whose members (plus uid 0) may use the control socket.
 inline constexpr const char* kControlGroupName = "urnetwork";
 
-// The device RPC the GUI's DeviceRemote dials once start_tunnel succeeds.
-// Loopback TCP + mTLS, the SDK's built-in default (sdk/device_rpc.go:109,
-// deviceRpcDefaultAddress = "127.0.0.1:12025") — deliberately NOT a unix
-// socket yet; the control socket is the authorization boundary (MIGRATION.md
-// "Decision"). Surfaced in status/start_tunnel replies as rpc_port.
+// The SDK's built-in default device-RPC address (sdk/device_rpc.go:109,
+// deviceRpcDefaultAddress = "127.0.0.1:12025"). Kept as a NAMED CONSTANT ONLY,
+// deliberately no longer a fallback: since the mTLS pinning triple became
+// mandatory (see ValidateStartTunnelRequest) the daemon never listens here,
+// because an unpinned listener on this port is reachable by any local process
+// that can open a TCP socket — including one the control socket's SO_PEERCRED
+// + `urnetwork` group check would refuse. Its remaining job is to be the port
+// the GUI's random draw EXCLUDES, so an echoed rpc_port can never match by
+// accident against a peer that ignored the pin.
 inline constexpr int kDeviceRpcPort = 12025;
+
+// The GUI draws a fresh loopback port per session from this closed range. It
+// starts one ABOVE kDeviceRpcPort on purpose (Windows draws 12000..12100 and
+// so has a ~1% chance of a vacuously-passing port cross-check). A random port
+// does not defeat squatting — it stops an unrelated service already holding
+// 12025 from presenting as a pinning failure.
+inline constexpr int kRpcPortMin = 12026;
+inline constexpr int kRpcPortMax = 12125;
+
+// Per-PEM cap. The 1 MiB frame bound in ControlServer/ControlClient limits the
+// LINE, not the individual field, so without this a single start_tunnel could
+// hand the root daemon two ~500 KiB "PEMs" to parse.
+inline constexpr size_t kMaxRpcPemBytes = 64 * 1024;
 
 // ---- version negotiation (pure, unit-tested) -------------------------------
 // One direction each; together they cover both rejection directions. A peer
@@ -110,6 +128,92 @@ inline bool AuthorizeControlPeer(int64_t peer_uid, int64_t peer_gid,
     if (gid == control_group_id) return true;
   }
   return false;
+}
+
+// ---- device-RPC mTLS pinning (pure, unit-tested) ---------------------------
+// The SDK's loopback device RPC pins with EXACT raw-certificate equality, and
+// the two halves keep SEPARATE SDK storage roots (~/.local/share/urnetwork vs
+// /var/lib/urnetwork/sdk), so no "defaults" path can ever produce a matching
+// pinned pair. That is what makes ABSENT unambiguous, and therefore what lets
+// this contract be fail-closed in both directions:
+//
+//   * the GUI generates ONE urnet::DeviceRpcKeyMaterial and splits it —
+//     (server_pem, client_cert_pem) travel UP to the daemon on start_tunnel,
+//     (client_pem, server_cert_pem) never leave the GUI;
+//   * an old GUI that sends nothing is REFUSED here (kCodeRpcPinRequired)
+//     rather than quietly getting root's DeviceLocal on an unpinned
+//     127.0.0.1:12025, which any local process could drive;
+//   * an old daemon that ignores the fields is refused by the GUI, which
+//     branches on StartTunnelReply/StatusReply::rpc_pinned.
+//
+// THREAT MODEL, stated precisely so it is not oversold: this defends against
+// local processes NOT authorized on /run/urnetwork/control.sock. It does not
+// defend against a member of the `urnetwork` group — that peer can already
+// stop and start the tunnel over the control socket.
+
+// Rejection codes for the pinning contract. They live HERE, above
+// ValidateStartTunnelRequest, because that validator returns them; the main
+// kCode* table further down cross-references them.
+//
+// The request carried no pinning triple at all (a GUI predating mTLS), or only
+// part of one. Never a reason to fall back to the SDK default listener.
+inline constexpr const char* kCodeRpcPinRequired = "rpc_pin_required";
+// The triple is present but does not pass the shape gate: not a PEM, oversize,
+// contains a NUL, or a host:port that is not literal loopback.
+inline constexpr const char* kCodeRpcPinInvalid = "rpc_pin_invalid";
+// The shape gate passed and DeviceLocal::setRpcServer still refused (bad key
+// material, or the port is taken). Distinct from kCodeTunOpenFailed on
+// purpose: an mTLS bind failure must never render as "could not open the tun
+// device".
+inline constexpr const char* kCodeRpcListenFailed = "rpc_listen_failed";
+
+// "127.0.0.1:<port>" -> port, or 0 when the string is not a usable loopback
+// device-RPC address. THE ESCALATION GATE: the hostport arrives off the wire
+// and is handed to root's DeviceLocal::setRpcServer, so an unvalidated value
+// lets a control-socket peer make root bind the device RPC on "0.0.0.0:12025"
+// (the whole LAN) or on a privileged port.
+//
+// Deliberately strict, and deliberately shared by both halves so they parse
+// identically — the daemon's own std::atoi helper used to turn
+// "127.0.0.1:notaport" into 0 and then silently report 12025 while the
+// listener was elsewhere, a mismatch the GUI had no way to detect:
+//   * literal "127.0.0.1" only — NOT "localhost" (resolver-dependent) and NOT
+//     "::1" (a v6 listener sits outside the IPv6 fail-closed story);
+//   * digits only, so a second ':', whitespace or a leading '+' all fail;
+//   * 1024 <= port <= 65535. Port 0 is refused: the SDK would bind an
+//     ephemeral port the GUI could never dial, and the echoed rpc_port would
+//     then be a fiction.
+inline int RpcPortFromHostPort(const std::string& host_port) {
+  constexpr size_t kPrefixLen = 10;  // strlen("127.0.0.1:")
+  if (host_port.size() <= kPrefixLen) return 0;
+  if (host_port.compare(0, kPrefixLen, "127.0.0.1:") != 0) return 0;
+  const size_t digits = host_port.size() - kPrefixLen;
+  if (digits > 5) return 0;  // 65535 is five digits; anything longer overflows
+  int value = 0;
+  for (size_t i = kPrefixLen; i < host_port.size(); ++i) {
+    const char c = host_port[i];
+    if (c < '0' || c > '9') return 0;
+    value = value * 10 + (c - '0');
+  }
+  if (value < 1024 || value > 65535) return 0;
+  return value;
+}
+
+inline bool IsLoopbackRpcHostPort(const std::string& host_port) {
+  return RpcPortFromHostPort(host_port) != 0;
+}
+
+// SHAPE gate only — non-empty, bounded, NUL-free, PEM-framed. NOT crypto
+// validation: the SDK's own parse is, and it throws. This exists to catch the
+// two cheap failures before either side calls into the SDK, and in particular
+// to catch a handle-0 urnet::generateDeviceRpcKeyMaterial, whose four getters
+// return four EMPTY strings with no exception (the binding maps a NULL char*
+// to "" rather than throwing).
+inline bool LooksLikePem(const std::string& pem) {
+  if (pem.empty() || pem.size() > kMaxRpcPemBytes) return false;
+  if (pem.find('\0') != std::string::npos) return false;
+  if (pem.compare(0, 11, "-----BEGIN ") != 0) return false;
+  return pem.find("-----END ") != std::string::npos;
 }
 
 // ---- verbs -----------------------------------------------------------------
@@ -294,18 +398,22 @@ struct StartTunnelRequest {
   bool kill_switch = false;
 
   // ---- device-RPC mTLS pinning (windows TunnelController.cpp:800-806) -----
-  // The SDK's loopback device RPC pins with EXACT raw-certificate equality
-  // (tls.RequireAnyClientCert), and the two halves keep SEPARATE SDK storage
-  // roots (~/.local/share/urnetwork vs /var/lib/urnetwork/sdk), so no
-  // "defaults" path can produce a matching pinned pair. The GUI generates one
+  // REQUIRED, all three, every start (see the mTLS section above and
+  // ValidateStartTunnelRequest below). The GUI generates one
   // urnet::DeviceRpcKeyMaterial and splits it: server_pem + client_cert_pem
-  // to the daemon (DeviceLocal::setRpcServer), client_pem + server_cert_pem
-  // kept for its own DeviceRemote::setRpcServer. All three empty = the SDK's
-  // built-in default listener, which is what shipped before this field
-  // existed; all three must be present together or none.
-  std::string rpc_server_pem;
-  std::string rpc_client_cert_pem;
-  std::string rpc_listen_hostport;  // e.g. "127.0.0.1:12025"
+  // travel here for DeviceLocal::setRpcServer, and client_pem +
+  // server_cert_pem stay in the GUI for its own DeviceRemote::setRpcServer.
+  //
+  // The "all three empty = the SDK's built-in default listener" clause that
+  // used to live on this comment is GONE, deliberately: it was a silent
+  // fall-back to an unpinned root listener, and the whole point of this field
+  // set is that there is no such path.
+  //
+  // Nothing travels the other way. client_pem and server_cert_pem NEVER leave
+  // the GUI — the verifier has to choose its own pin, or it is not pinning.
+  std::string rpc_server_pem;       // server KEY+CERT the daemon presents
+  std::string rpc_client_cert_pem;  // client CERT the daemon pins
+  std::string rpc_listen_hostport;  // "127.0.0.1:<port>", GUI-chosen
 };
 inline void to_json(nlohmann::json& j, const StartTunnelRequest& v) {
   j["by_jwt"] = v.by_jwt;
@@ -330,27 +438,65 @@ inline void from_json(const nlohmann::json& j, StartTunnelRequest& v) {
   detail::Get(j, "rpc_listen_hostport", v.rpc_listen_hostport);
 }
 
-// Validation the daemon applies before constructing anything. Pure so the
-// contract is unit-testable: `instance_id` is the DEVICE PAIRING KEY — the
-// daemon constructs its DeviceLocal with exactly this value and the GUI hands
-// the same value to newDeviceRemoteWithDefaults; the device rpc rejects a
-// sync whose InstanceId differs from the DeviceLocal's
-// (sdk/device_rpc.go:6545), which surfaces as a remote that connects but
-// never populates. An empty id must therefore fail loudly here, never fall
-// back to a daemon-generated one.
-inline std::optional<std::string> ValidateStartTunnelRequest(const StartTunnelRequest& req) {
-  if (req.by_jwt.empty()) return "by_jwt is required";
-  if (req.instance_id.empty()) return "instance_id is required";
-  // The rpc pinning triple is all-or-nothing: a half-supplied pair would make
-  // the daemon listen with a pinned server while the GUI dials with the SDK
-  // default (or the reverse), which presents as a DeviceRemote that connects
-  // and never populates — the exact silent failure the exact-match hello
-  // exists to prevent.
+// A rejected start_tunnel, with the machine-readable code attached. The code
+// is a pointer into the kCode* table (static storage, never freed) and is
+// nullptr for the two plain field errors, which have no actionable branch
+// beyond their message.
+struct StartTunnelRejection {
+  std::string message;
+  const char* code = nullptr;
+};
+
+// Validation the daemon applies before constructing anything, and which the
+// GUI-side client applies before putting a frame on the wire. Pure, so the
+// contract is unit-testable and both halves enforce the identical rule.
+//
+// `instance_id` is the DEVICE PAIRING KEY — the daemon constructs its
+// DeviceLocal with exactly this value and the GUI hands the same value to
+// newDeviceRemoteWithDefaults; the device rpc rejects a sync whose InstanceId
+// differs from the DeviceLocal's (sdk/device_rpc.go:6545), which surfaces as a
+// remote that connects but never populates. An empty id must therefore fail
+// loudly here, never fall back to a daemon-generated one.
+//
+// The rpc pinning triple is REQUIRED. This is a deliberate BEHAVIOUR change
+// inside protocol v1 (the wire is still purely additive): an old GUI's
+// start_tunnel now fails with kCodeRpcPinRequired instead of quietly getting
+// an unpinned root listener on 127.0.0.1:12025. Per the hello exact-version
+// match, a mismatched shipped pair is already refused before start_tunnel is
+// reachable, so this branch turns "should be unreachable" into "is".
+inline std::optional<StartTunnelRejection> ValidateStartTunnelRequest(
+    const StartTunnelRequest& req) {
+  if (req.by_jwt.empty()) return StartTunnelRejection{"by_jwt is required", nullptr};
+  if (req.instance_id.empty()) return StartTunnelRejection{"instance_id is required", nullptr};
   const int rpcParts = (req.rpc_server_pem.empty() ? 0 : 1) +
                        (req.rpc_client_cert_pem.empty() ? 0 : 1) +
                        (req.rpc_listen_hostport.empty() ? 0 : 1);
-  if (rpcParts != 0 && rpcParts != 3) {
-    return "rpc_server_pem, rpc_client_cert_pem and rpc_listen_hostport must be sent together";
+  if (rpcParts == 0) {
+    return StartTunnelRejection{
+        "this start_tunnel carries no device-rpc pinning material; the daemon will not run "
+        "an unauthenticated local rpc listener",
+        kCodeRpcPinRequired};
+  }
+  if (rpcParts != 3) {
+    // A half-supplied pair would make the daemon listen with a pinned server
+    // while the GUI dials with the SDK default (or the reverse), which
+    // presents as a DeviceRemote that connects and never populates.
+    return StartTunnelRejection{
+        "rpc_server_pem, rpc_client_cert_pem and rpc_listen_hostport must be sent together",
+        kCodeRpcPinRequired};
+  }
+  if (!LooksLikePem(req.rpc_server_pem)) {
+    return StartTunnelRejection{"rpc_server_pem is not a usable PEM", kCodeRpcPinInvalid};
+  }
+  if (!LooksLikePem(req.rpc_client_cert_pem)) {
+    return StartTunnelRejection{"rpc_client_cert_pem is not a usable PEM", kCodeRpcPinInvalid};
+  }
+  if (!IsLoopbackRpcHostPort(req.rpc_listen_hostport)) {
+    // THE ESCALATION GATE. Unvalidated, this value makes ROOT bind wherever
+    // the caller says.
+    return StartTunnelRejection{
+        "rpc_listen_hostport must be 127.0.0.1:<port> with 1024 <= port <= 65535",
+        kCodeRpcPinInvalid};
   }
   return std::nullopt;
 }
@@ -361,10 +507,21 @@ struct StartTunnelReply {
   // for and the bring-up is still running. A client that ignores this field
   // sees exactly the old contract.
   TunnelState tunnel_state = TunnelState::Up;
+  // The daemon actually called DeviceLocal::setRpcServer with the supplied
+  // triple and it returned without throwing. ADDITIVE within v1, and absent
+  // parses FALSE — which is the fail-closed default: a daemon predating this
+  // field never pinned, so a client that sees false must refuse to dial rather
+  // than fall back to plaintext.
+  //
+  // rpc_port beside it is an ECHO, not a discovery (the SDK exposes no getter
+  // for the bound address), so the client's check is
+  // rpc_pinned && rpc_port == RpcPortFromHostPort(the hostport it sent).
+  bool rpc_pinned = false;
 };
 inline void to_json(nlohmann::json& j, const StartTunnelReply& v) {
   j["rpc_port"] = v.rpc_port;
   j["tunnel_state"] = ToString(v.tunnel_state);
+  j["rpc_pinned"] = v.rpc_pinned;
 }
 inline void from_json(const nlohmann::json& j, StartTunnelReply& v) {
   detail::Get(j, "rpc_port", v.rpc_port);
@@ -373,6 +530,7 @@ inline void from_json(const nlohmann::json& j, StartTunnelReply& v) {
   // absent = a daemon predating the field, which only ever replied ok on a
   // completed start
   v.tunnel_state = state.empty() ? TunnelState::Up : TunnelStateFromString(state);
+  detail::Get(j, "rpc_pinned", v.rpc_pinned);  // absent = false = fails closed
 }
 
 struct SetKillSwitchRequest {
@@ -428,6 +586,15 @@ struct StatusReply {
   // a captured machine with no UI attached — the state the tray "Stop the
   // tunnel" recovery item exists for.
   bool owner_connected = false;
+
+  // The live session's device RPC is pinned to the material this client sent.
+  // The SAME fact as StartTunnelReply::rpc_pinned, published here because it
+  // is UNREADABLE on the async start path: an async start replies
+  // tunnel_state=starting with rpc_port=0, so the real answer can only arrive
+  // on `status`. A client that constructs its DeviceRemote off a `status`
+  // transition to Up must gate on this field exactly as the synchronous path
+  // gates on the start reply. Absent parses false — fail closed.
+  bool rpc_pinned = false;
 };
 inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["tunnel_state"] = ToString(v.tunnel_state);
@@ -446,6 +613,7 @@ inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["stop_reason"] = v.stop_reason;
   j["up_since_millis"] = v.up_since_millis;
   j["owner_connected"] = v.owner_connected;
+  j["rpc_pinned"] = v.rpc_pinned;
 }
 inline void from_json(const nlohmann::json& j, StatusReply& v) {
   std::string state;
@@ -468,6 +636,7 @@ inline void from_json(const nlohmann::json& j, StatusReply& v) {
   detail::Get(j, "stop_reason", v.stop_reason);
   detail::Get(j, "up_since_millis", v.up_since_millis);
   detail::Get(j, "owner_connected", v.owner_connected);
+  detail::Get(j, "rpc_pinned", v.rpc_pinned);  // absent = false = fails closed
 }
 
 struct LocationOverrideAvailableReply {
@@ -546,6 +715,9 @@ inline constexpr const char* kCodeKillSwitchFailed = "kill_switch_failed";
 // DNS could not be pointed at the tunnel AND the kill switch was requested, so
 // coming up would leave the machine unable to resolve at all.
 inline constexpr const char* kCodeDnsApplyFailed = "dns_apply_failed";
+// Also in this table, declared earlier because ValidateStartTunnelRequest
+// returns them: kCodeRpcPinRequired, kCodeRpcPinInvalid, kCodeRpcListenFailed
+// (see the device-RPC mTLS pinning section near the top of this header).
 
 // {"verb":…,"id":N,…payload}
 inline nlohmann::json MakeRequest(Verb verb, int64_t id,

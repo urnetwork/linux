@@ -93,17 +93,22 @@ class ControlClient {
   std::string LastSocketPath();
 
   // ---- verbs (each ensures a session first) --------------------------------
-  // start_tunnel: on success fills rpcPort (informational — the DeviceRemote
-  // dials the SDK default). On failure `error` carries the daemon's message
-  // (e.g. another client owns the tunnel). networkSpaceJson is the GUI's
-  // active space, so the daemon's DeviceLocal lives in the same network
-  // ("" = the compiled-in default).
+  // DEAD PATH, kept only so its one remaining caller (SdkHost.cpp:853) still
+  // compiles while it migrates to StartTunnelEx. It carries NO device-RPC
+  // pinning material, and pinning is now mandatory in both directions, so this
+  // overload can only ever fail: it is refused locally, before a frame reaches
+  // the socket, with ctl::kCodeRpcPinRequired in `error`. Falling back to an
+  // unpinned root rpc listener is exactly what this change removes, so there is
+  // no "compatible" behaviour left to give it. DELETE IT once SdkHost calls
+  // StartTunnelEx.
+  [[deprecated(
+      "device-rpc mTLS pinning is mandatory: call StartTunnelEx with "
+      "rpc_server_pem/rpc_client_cert_pem/rpc_listen_hostport")]]
   bool StartTunnel(const std::string& byJwt, const std::string& instanceId,
                    const std::string& appVersion, const std::string& networkSpaceJson,
                    int* rpcPort, std::string* error);
 
-  // The full start_tunnel surface. Kept separate from StartTunnel() above so
-  // the existing caller keeps compiling unchanged while it migrates.
+  // The full start_tunnel surface — the ONLY working start path.
   struct StartTunnelOptions {
     std::string by_jwt;
     std::string instance_id;
@@ -120,7 +125,13 @@ class ControlClient {
     // urnet::generateDeviceRpcKeyMaterial(): the daemon pins
     // (server_pem, client_cert_pem) and the caller keeps
     // (client_pem, server_cert_pem) for its own DeviceRemote::setRpcServer.
-    // All three empty = the SDK's built-in default listener.
+    //
+    // ALL THREE ARE REQUIRED. StartTunnelEx runs
+    // ctl::ValidateStartTunnelRequest on them BEFORE it sends anything, so a
+    // missing or malformed triple is refused here with kCodeRpcPinRequired /
+    // kCodeRpcPinInvalid rather than reaching the daemon. rpc_listen_hostport
+    // must be literal "127.0.0.1:<port>"; draw the port from
+    // [ctl::kRpcPortMin, ctl::kRpcPortMax].
     std::string rpc_server_pem;
     std::string rpc_client_cert_pem;
     std::string rpc_listen_hostport;
@@ -135,7 +146,24 @@ class ControlClient {
     // particular means "do NOT retry", not "it failed".
     std::string code;
     DaemonSessionState session = DaemonSessionState::Unreachable;
+    // The daemon confirmed it pinned the device RPC to the material we sent.
+    // Absent on the wire parses false, so an old daemon that ignored the
+    // fields lands here as false and ok=false (see StartTunnelEx).
+    //
+    // Meaningful only when tunnel_state == Up. On the ASYNC path the start
+    // reply is `starting` and this is necessarily false; the caller must gate
+    // on StatusReply::rpc_pinned at the transition to Up instead.
+    bool rpc_pinned = false;
   };
+  // Fail-closed by construction. Beyond the transport it enforces two things
+  // the caller can no longer forget:
+  //   1) the pinning triple is validated BEFORE the frame is sent;
+  //   2) on a SYNCHRONOUS start that comes back Up, the reply must report
+  //      rpc_pinned and must echo the port we asked for — otherwise the
+  //      outcome is turned into a failure AND the daemon is told to stop,
+  //      because a running tunnel whose root rpc listener is unauthenticated
+  //      is worse than no tunnel.
+  // The async path cannot be gated here; see StartTunnelOutcome::rpc_pinned.
   StartTunnelOutcome StartTunnelEx(const StartTunnelOptions& options);
 
   bool StopTunnel(std::string* error = nullptr);
@@ -174,6 +202,11 @@ class ControlClient {
   std::optional<nlohmann::json> CallLocked(ctl::Verb verb, nlohmann::json payload,
                                            std::string* error, bool allowRetry = true,
                                            long receiveTimeoutSeconds = 0);
+  // The body of StopTunnel(), so the pinning-refusal path inside
+  // StartTunnelEx can tear the daemon's session down without re-entering
+  // mutex_ (std::mutex is not recursive: calling StopTunnel() there would
+  // deadlock the GUI on its own control client).
+  bool StopTunnelLocked(std::string* error);
   void SetReceiveTimeoutLocked(long seconds);
   bool SendAllLocked(const std::string& data);
   // Reads one full line (frame) into `line`, false on EOF/error/timeout.

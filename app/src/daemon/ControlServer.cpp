@@ -498,8 +498,19 @@ nlohmann::json ControlServer::HandleStartTunnel(Connection* conn, int64_t id,
   // instance_id is the device pairing key (the DeviceLocal is constructed
   // with it and the GUI's DeviceRemote syncs on it) — reject rather than
   // fall back to a daemon-generated id, which would pair-mismatch silently.
-  if (auto invalid = ctl::ValidateStartTunnelRequest(req)) {
-    return ctl::MakeErrorReply(id, *invalid);
+  //
+  // The same validator is now also the mTLS gate, and it runs BEFORE anything
+  // is constructed: a missing triple (kCodeRpcPinRequired) or a malformed one
+  // (kCodeRpcPinInvalid) never reaches DeviceLocal::setRpcServer, so a
+  // control-socket peer cannot make root bind the device RPC off loopback.
+  // The reply now carries the code — it used to be dropped on the floor, which
+  // left the client with prose and nothing to branch on.
+  if (const auto invalid = ctl::ValidateStartTunnelRequest(req)) {
+    if (invalid->code != nullptr) {
+      std::fprintf(stderr, "[control] rejecting start_tunnel from uid=%lld: %s (%s)\n",
+                   static_cast<long long>(conn->uid), invalid->message.c_str(), invalid->code);
+    }
+    return ctl::MakeErrorReply(id, invalid->message, invalid->code);
   }
 
   // ADOPT before restarting. The client issues start_tunnel unconditionally at
@@ -513,6 +524,12 @@ nlohmann::json ControlServer::HandleStartTunnel(Connection* conn, int64_t id,
     ctl::StartTunnelReply payload;
     payload.rpc_port = status.rpc_port;
     payload.tunnel_state = status.tunnel_state;
+    // The LIVE session's fact, not a re-derivation: CanAdopt only returns true
+    // when the request's rpc triple is byte-identical to the one the running
+    // listener was pinned with, so this is the same pinning the client asked
+    // for. Reporting it is what lets the client dial after a reattach instead
+    // of refusing its own working tunnel.
+    payload.rpc_pinned = status.rpc_pinned;
     return ctl::MakeReply(id, true, nlohmann::json(payload));
   }
 
@@ -542,6 +559,9 @@ nlohmann::json ControlServer::HandleStartTunnel(Connection* conn, int64_t id,
   ctl::StartTunnelReply payload;
   payload.rpc_port = status.rpc_port;
   payload.tunnel_state = status.tunnel_state;
+  // false on the async path (the bring-up has not reached setRpcServer yet) —
+  // the client reads StatusReply::rpc_pinned at the transition to Up instead.
+  payload.rpc_pinned = status.rpc_pinned;
   return ctl::MakeReply(id, true, nlohmann::json(payload));
 }
 

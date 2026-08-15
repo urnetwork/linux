@@ -49,6 +49,9 @@ namespace urnw {
 class ConnectDrawer : public Gtk::Box {
  public:
   ConnectDrawer(SdkHost& host, Gtk::Window& parent, SubscriptionBalanceStore& balance);
+  // Bumps epoch_ so a kill-switch completion still in flight against the
+  // daemon cannot land on a destroyed drawer.
+  ~ConnectDrawer() override;
 
   // SdkHost drawer events, already marshalled onto the GTK main loop.
   void OnHostEvent(DrawerEvent event);
@@ -108,9 +111,15 @@ class ConnectDrawer : public Gtk::Box {
   Gtk::Switch* anonSwitch_ = nullptr;
   Gtk::Switch* pqeSwitch_ = nullptr;
   bool updatingControls_ = false;
-  // kill switch (inverted routeLocal; own handler — not a profile control)
+  // kill switch (own handler — not a profile control). The switch is the
+  // REQUEST; the note under it is what urnetworkd says is actually in force,
+  // and the two can legitimately disagree.
   Gtk::Switch* killSwitch_ = nullptr;
+  Gtk::Label* killSwitchNote_ = nullptr;
   bool updatingKillSwitch_ = false;
+  // Stale-completion guard for the kill-switch write, which round-trips to the
+  // daemon on a worker and can land after this drawer is gone.
+  std::shared_ptr<uint64_t> epoch_ = std::make_shared<uint64_t>(0);
 
   // stats cards
   TransferChart* remoteChart_ = nullptr;

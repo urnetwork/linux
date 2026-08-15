@@ -7,6 +7,7 @@
 
 #include "Formatters.hpp"
 #include "I18n.hpp"
+#include "KillSwitchCopy.hpp"
 #include "Ui.hpp"
 
 namespace urnw {
@@ -241,10 +242,11 @@ void ConnectDrawer::BuildControlsCard() {
   pqeRow->append(*pqeSwitch_);
   card->append(*pqeRow);
 
-  // kill switch = the inverted device routeLocal (apple SettingsForm parity):
-  // ON means the device DROPS tunnel-captured traffic whenever no provider
-  // connection is up, instead of falling back to local egress. Not part of the
-  // performance profile, so it has its own handler + refresh, like the blocker.
+  // kill switch. THREE legs behind this one control (SdkHost::SetKillSwitch):
+  // the persisted preference, the device's routeLocal, and — the leg that
+  // makes it a kill switch rather than a preference — urnetworkd's nftables
+  // ruleset. Not part of the performance profile, so it has its own handler +
+  // refresh, like the blocker.
   auto* killRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
   auto* killLabel = Gtk::make_managed<Gtk::Label>(T_("kill_switch", "Kill switch"));
   killLabel->set_xalign(0);
@@ -253,16 +255,39 @@ void ConnectDrawer::BuildControlsCard() {
   killSwitch_ = Gtk::make_managed<Gtk::Switch>();
   killSwitch_->set_valign(Gtk::Align::CENTER);
   killSwitch_->property_active().signal_changed().connect([this] {
-    if (updatingKillSwitch_) return;
-    // the GUI persists the preference (local state) and applies it live over
-    // the device rpc; with the tunnel down it restores at the next start
-    host_.SetRouteLocal(!killSwitch_->get_active());
+    if (updatingKillSwitch_) return;  // echo guard: a feed-driven write stops here
+    const bool wanted = killSwitch_->get_active();
+    auto epoch = epoch_;
+    const uint64_t seen = *epoch_;
+    host_.SetKillSwitch(wanted, [this, epoch, seen, wanted](KillSwitchStatus) {
+      if (*epoch != seen) return;  // the drawer is gone or was rebuilt
+      // Read back rather than trust the write. Only a preference that did not
+      // take moves the switch; a FAILED enforcement leg is disclosed in the
+      // note, never hidden by reverting the control.
+      if (host_.CurrentKillSwitch() != wanted) {
+        g_warning("drawer: kill switch preference did not take (wanted %d)",
+                  static_cast<int>(wanted));
+      }
+      RefreshKillSwitch();
+    });
+    RefreshKillSwitch();  // "Applying…" immediately; the control is never inert
   });
   killRow->append(*killSwitch_);
   card->append(*killRow);
 
+  // What is REALLY in force, under the switch. The switch says what was asked
+  // for; this says whether the machine is actually being protected, and the
+  // two are different facts.
+  killSwitchNote_ = Gtk::make_managed<Gtk::Label>();
+  killSwitchNote_->set_xalign(0);
+  killSwitchNote_->set_wrap(true);
+  killSwitchNote_->set_visible(false);
+  card->append(*killSwitchNote_);
+
   append(*card);
 }
+
+ConnectDrawer::~ConnectDrawer() { ++*epoch_; }
 
 void ConnectDrawer::BuildClientStatsCard() {
   auto* card = MakeCard(12);
@@ -500,6 +525,17 @@ void ConnectDrawer::RefreshAll() {
   RefreshDnsCard();
   RefreshBlocker();
   RefreshKillSwitch();
+  // ...and ask urnetworkd what is REALLY installed. The floor moves on its own
+  // — the daemon's reaper arms it when a tunnel drops unexpectedly — and there
+  // is no event to ride for that, so a resync has to go and look.
+  {
+    auto epoch = epoch_;
+    const uint64_t seen = *epoch_;
+    host_.RefreshKillSwitchStatus([this, epoch, seen](KillSwitchStatus) {
+      if (*epoch != seen) return;
+      RefreshKillSwitch();
+    });
+  }
   RefreshPlanCard();
   if (pqiPanel_) pqiPanel_->Refresh();
   if (contractsSheet_->is_visible()) contractsSheet_->Refresh();
@@ -737,10 +773,23 @@ void ConnectDrawer::RefreshBlocker() {
   updatingBlocker_ = false;
 }
 
+// ONE writer for both halves of the control: the switch shows the REQUEST
+// (which is instant and local), the note shows what urnetworkd says is
+// actually installed (which is a round trip, and can be a refusal).
 void ConnectDrawer::RefreshKillSwitch() {
+  const KillSwitchStatus status = host_.CurrentKillSwitchStatus();
   updatingKillSwitch_ = true;
-  killSwitch_->set_active(!host_.GetRouteLocal());  // kill switch ON = routeLocal off
+  killSwitch_->set_active(status.requested);
   updatingKillSwitch_ = false;
+  if (killSwitchNote_ == nullptr) return;
+  const KillSwitchCopy copy = KillSwitchStateLine(status);
+  killSwitchNote_->set_visible(!copy.line.empty());
+  if (copy.line.empty()) return;
+  // Markup, not a css class: this line changes tone as the state changes, and
+  // the surrounding card carries no per-severity style of its own.
+  killSwitchNote_->set_markup("<span size='small' foreground='" +
+                              HexForMarkup(copy.attention ? kUrDanger : kUrTextMuted) + "'>" +
+                              Glib::Markup::escape_text(copy.line) + "</span>");
 }
 
 }  // namespace urnw

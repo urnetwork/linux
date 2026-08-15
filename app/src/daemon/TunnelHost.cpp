@@ -13,6 +13,7 @@
 #include <gio/gio.h>
 
 #include "NetworkSpaceConfig.hpp"
+#include "daemon/DaemonLog.hpp"
 
 namespace urnw {
 namespace {
@@ -28,6 +29,20 @@ constexpr const char* kProvideKeyFile = "provide_key.pem";
 // dead IoLoop, arm the kill switch after an UNEXPECTED drop, and enforce the
 // orphan timeout.
 constexpr guint kReaperIntervalSeconds = 1;
+
+// How often the reaper asks the kernel whether our table is still there.
+// nftables has no tamper callback, so a poll is the entire mitigation for a
+// foreign `nft flush ruleset` — and on Fedora/Bazzite the shipped
+// /etc/sysconfig/nftables.conf BEGINS with `flush ruleset`, so a
+// `systemctl restart nftables` destroys `table inet urnetwork` silently.
+// Every poll is one `nft list table` fork/exec, so it is deliberately NOT on
+// every 1 s tick: 5 s bounds the tamper window at 5 s for ~17k execs a day
+// instead of 86k.
+constexpr int kFilterVerifyIntervalSeconds = 5;
+// A Verify/re-install that keeps failing (nft uninstalled underneath us) must
+// not turn the journal into a 5 s heartbeat. Log the first failure, then one
+// in this many.
+constexpr int kFilterVerifyLogEvery = 12;  // ~once a minute
 
 int64_t UnixMillis() { return g_get_real_time() / 1000; }
 int64_t MonotonicSeconds() { return g_get_monotonic_time() / G_USEC_PER_SEC; }
@@ -63,12 +78,22 @@ bool WriteFileBytes(const std::string& path, const std::vector<uint8_t>& bytes) 
   return true;
 }
 
-// "127.0.0.1:12025" -> 12025; 0 when there is no usable port.
-int PortFromHostPort(const std::string& hostPort) {
-  const size_t colon = hostPort.rfind(':');
-  if (colon == std::string::npos || colon + 1 >= hostPort.size()) return 0;
-  return std::atoi(hostPort.c_str() + colon + 1);
+// The interface name the NEXT tun will get, taken from the same default
+// TunnelConfig RunStart builds — never a second literal "urnet0". The
+// Connecting ruleset needs it before the interface exists, which is legal
+// precisely because the permits match with oifname/iifname (a per-packet
+// string match) and not oif/iif (resolved to an index at load time).
+const std::string& PlannedTunName() {
+  static const std::string kName = TunnelConfig().name;
+  return kName;
 }
+
+// The file-local PortFromHostPort that used to live here is GONE. It parsed
+// with std::atoi, so "127.0.0.1:notaport" yielded 0 and the published rpc_port
+// silently stayed at the SDK default while the listener was somewhere else —
+// a mismatch the GUI had no way to detect. Both halves now call
+// ctl::RpcPortFromHostPort, which is the same function the shared validator
+// uses, so the reply's rpc_port is a trustworthy cross-check.
 
 }  // namespace
 
@@ -86,6 +111,17 @@ TunnelHost::TunnelHost(std::string storageRoot) : storageRoot_(std::move(storage
   resolvedWatchId_ = g_bus_watch_name(G_BUS_TYPE_SYSTEM, "org.freedesktop.resolve1",
                                       G_BUS_NAME_WATCHER_FLAGS_NONE,
                                       &TunnelHost::OnResolvedAppeared, nullptr, this, nullptr);
+}
+
+void TunnelHost::AdoptArmedFloor() {
+  std::scoped_lock lock(opMutex_);
+  filter_.AdoptArmedFloor();
+  // Publish it, so the very FIRST status read after a crash-restart tells the
+  // truth instead of the reassuring lie. Armed, not Connected: there is no
+  // tunnel — the floor is all there is.
+  killSwitchRequested_.store(true);
+  status_.kill_switch = ctl::KillSwitchState::Armed;
+  status_.kill_switch_detail.clear();
 }
 
 TunnelHost::~TunnelHost() {
@@ -167,36 +203,113 @@ void TunnelHost::SetOwnerConnected(bool connected) {
 
 // ---- the nftables floor ----------------------------------------------------
 
-bool TunnelHost::ApplyFilterLocked(FilterState state, bool killSwitch, std::string* error) {
+FilterConfig TunnelHost::FilterConfigForLocked(FilterState state, bool floor) const {
   FilterConfig cfg;
   cfg.state = state;
-  cfg.kill_switch = killSwitch;
+  cfg.floor = floor;
   cfg.cgroup = cgroup_;
   cfg.block_ipv6 = true;  // leak prevention is not a preference (§6.3)
-  if (state == FilterState::Connected && tunnel_) {
-    cfg.tun_name = tunnel_->name();
+  cfg.block_offtunnel_dns = false;
+  if (state == FilterState::Connecting || state == FilterState::Connected) {
+    // By NAME, and set even while the interface does not exist yet: that is
+    // what removes the blackhole window between the capture routes landing and
+    // the swap to Connected.
+    cfg.tun_name = tunnel_ ? tunnel_->name() : PlannedTunName();
+  }
+  if (tunnel_ != nullptr) {
+    // THE OFF-TUNNEL DNS FLOOR, which before this line never installed in ANY
+    // state: DeriveFilter (Tunnel.cpp) refuses to close :53 unless at least one
+    // tunnel resolver survived inet_pton, and nothing in the daemon ever filled
+    // tunnel_resolvers — so the field was empty on every single Apply and the
+    // whole off-tunnel DNS block was dead code. Tunnel::resolvers() is what was
+    // ACTUALLY handed to systemd-resolved (not what the device asked for), so
+    // the pinned permit and the DNS override can never name different servers.
+    cfg.tunnel_resolvers = tunnel_->resolvers();
     // Only close the off-tunnel DNS ports when DNS actually landed on the
     // tunnel. Blocking them when the override failed would leave the machine
     // unable to resolve at all; the honest alternative is to report
     // dns_applied=false loudly, which Status() does.
     cfg.block_offtunnel_dns = tunnel_->report().dns_applied;
   }
+  if (state == FilterState::Connecting && floor) {
+    // A FLOORED bring-up is a reconnect made from Armed, and on a
+    // systemd-resolved host the SDK's own lookup leaves resolved's cgroup, not
+    // ours: without this bounded permit the reconnect cannot resolve and the
+    // user is stuck in Armed forever. Emitted by the builder only for this
+    // exact case (state == Connecting && floor), and only for cgroups that
+    // exist.
+    cfg.dns_helper_cgroups = DnsHelperCgroupsV2();
+  }
+  return cfg;
+}
+
+bool TunnelHost::InstallFilterLocked(FilterState state, bool floor, std::string* error) {
+  const FilterConfig cfg = FilterConfigForLocked(state, floor);
   const bool ok = filter_.Apply(cfg, error);
+
+  // What is IN FORCE, never what was asked for.
+  const bool floorInForce = ok && filter_.floorInstalled();
   ctl::KillSwitchState published = ctl::KillSwitchState::Off;
-  if (!ok && killSwitch) {
+  if (!ok && floor) {
     published = ctl::KillSwitchState::Failed;
-  } else if (ok && killSwitch) {
+  } else if (floorInForce) {
     published = (state == FilterState::Connected) ? ctl::KillSwitchState::Connected
                                                   : ctl::KillSwitchState::Armed;
   }
-  {
+  // A teardown that FAILED publishes nothing: the old value (Connected/Armed)
+  // is closer to the truth than "off", because whatever we failed to delete is
+  // very probably still in the kernel filtering this machine. The retry below
+  // is what corrects it.
+  if (state != FilterState::Off || ok) {
     std::scoped_lock lock(statusMutex_);
     status_.kill_switch = published;
     status_.kill_switch_detail =
         (published == ctl::KillSwitchState::Failed) ? filter_.lastError() : std::string();
-    status_.ipv6_blocked = ok && state == FilterState::Connected && cfg.block_ipv6;
+    // True for every installed state, because it is true in every installed
+    // state: Connecting, Armed and Connected all carry the v6 fail-closed
+    // rules. Reporting it only for Connected told an armed-but-disconnected
+    // user that v6 was flowing while it was being dropped.
+    status_.ipv6_blocked = ok && state != FilterState::Off && cfg.block_ipv6;
+  }
+
+  if (state == FilterState::Off) {
+    // A failed teardown is NOT a completed one. Remember it so the reaper
+    // retries; the filter cannot remember it for us (see filterRemovalPending_).
+    filterRemovalPending_.store(!ok);
+    if (!ok) {
+      DaemonLogf(
+          "[tunnel] ERROR: the firewall teardown did not complete: %s. This machine may still "
+          "be filtered by URnetwork. It will be retried every %ds; to lift it by hand run: %s\n",
+          error != nullptr && !error->empty() ? error->c_str() : filter_.lastError().c_str(),
+          static_cast<int>(kReaperIntervalSeconds), NetFilter::RecoveryCommand());
+    }
+  } else if (ok) {
+    // We own a table again, and it is the one we intended.
+    filterRemovalPending_.store(false);
+  }
+  if (floorInForce) {
+    // Into the ring as well as the journal: the ring is what the GUI's log tail
+    // shows, so the way out is on a surface a blocked user can actually reach.
+    DaemonLogf(
+        "[tunnel] the kill-switch block floor is in force (%s). If this daemon dies while armed "
+        "the machine stays blocked; recover with: %s\n",
+        ToString(state), NetFilter::RecoveryCommand());
   }
   return ok;
+}
+
+bool TunnelHost::ApplyFilterLocked(FilterState next, std::string* error) {
+  // THE one decision site. FloorForTransition (Tunnel.hpp) is pure and is the
+  // documented authority; it needs the state we are coming FROM, which is why
+  // it cannot live at the call sites.
+  const bool floor = FloorForTransition(filter_.state(), next, killSwitchRequested_.load());
+  return InstallFilterLocked(next, floor, error);
+}
+
+bool TunnelHost::ReinstallFilterLocked(std::string* error) {
+  const FilterState state = filter_.state();
+  if (state == FilterState::Off) return true;  // nothing is claimed
+  return InstallFilterLocked(state, filter_.floorInstalled(), error);
 }
 
 // ---- start / stop ----------------------------------------------------------
@@ -231,6 +344,10 @@ ctl::StatusReply TunnelHost::Start(const ctl::StartTunnelRequest& config) {
     status_.tunnel_interface.clear();
     status_.up_since_millis = 0;
     status_.rpc_port = 0;
+    // Cleared wherever rpc_port is cleared: a stale true would tell a polling
+    // client that the NEXT session's listener is already pinned to material it
+    // has not sent yet.
+    status_.rpc_pinned = false;
     status_.client_id.clear();
   }
   if (config.async) {
@@ -244,6 +361,12 @@ ctl::StatusReply TunnelHost::Start(const ctl::StartTunnelRequest& config) {
 void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
   {
     std::scoped_lock lock(opMutex_);
+    // What was in force BEFORE this attempt, captured before anything can
+    // change it. It decides where a FAILED start lands: back on the armed floor
+    // it interrupted, or on a completely clean machine. (StopInternalLocked
+    // with an empty reason deliberately does not touch the filter, so this
+    // stays true across the line below.)
+    const bool entryFloor = filter_.floorInstalled();
     // Idempotent restart, but NOT a "stop": no stop_reason is recorded for a
     // teardown that exists only to make room for this start.
     StopInternalLocked(std::string());
@@ -251,6 +374,22 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
     ioLoopDied_.store(false);
 
     try {
+      // --- 0) re-validate the request, before anything is built -------------
+      // ControlServer already ran this, but Start() is a public entry point
+      // and this process is root: re-check rather than trust the caller.
+      // Deliberately the FIRST thing in the bring-up, so a request that cannot
+      // produce a pinned rpc listener never costs a DeviceLocal construction
+      // (a network round trip) or an nftables transaction.
+      //
+      // rpc_listen_hostport is the one that matters most: unvalidated, it lets
+      // a control-socket peer choose where ROOT binds the device RPC —
+      // "0.0.0.0:12025" would expose it to the whole LAN.
+      if (const auto invalid = ctl::ValidateStartTunnelRequest(config)) {
+        PublishError(invalid->message,
+                     invalid->code == nullptr ? ctl::kCodeRpcPinRequired : invalid->code);
+        throw std::runtime_error(invalid->message);
+      }
+
       // --- 1) egress self-exclusion FIRST -----------------------------------
       // The mark chain has to exist before a single capture route lands, or
       // the daemon's own SDK sockets (jwt refresh, window enumeration, DoH,
@@ -272,12 +411,18 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       }
       if (egressPossible) {
         std::string filterError;
-        // Deliberately NO block floor during the bring-up, even when the kill
-        // switch was requested: a failed start must not leave the machine cut
-        // off. Windows arms during Connecting because its Go resolver leaves
-        // through svchost; on Linux the daemon's own lookups leave its own
-        // sockets and are covered by the mark, so the tighter state is free.
-        if (!ApplyFilterLocked(FilterState::Idle, /*killSwitch=*/false, &filterError)) {
+        // The floor is NOT hardcoded here any more. FloorForTransition answers
+        // it, and it answers differently for the two bring-ups that used to be
+        // treated as one:
+        //   * from Off (a first connect): NO floor, because a failed start must
+        //     never leave a clean machine cut off the network.
+        //   * from Armed (a reconnect after an unexpected drop): the floor
+        //     STAYS, because that window is the whole reason the kill switch
+        //     exists. The bounded DNS-helper permit rides along so the
+        //     reconnect can still resolve.
+        // Hardcoding false meant the second case silently lifted the kill
+        // switch for the length of every reconnect attempt.
+        if (!ApplyFilterLocked(FilterState::Connecting, &filterError)) {
           throw std::runtime_error("could not install the egress-exclusion ruleset: " +
                                    filterError);
         }
@@ -304,7 +449,24 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       if (!networkSpace_) networkSpace_ = BuildUrNetworkSpace(*spaceManager_);
       if (stopRequested_.load()) throw std::runtime_error("start cancelled");
 
-      // --- 3) DeviceLocal, rpc enabled --------------------------------------
+      // --- 3) DeviceLocal, with NO listener of its own -----------------------
+      // enable_rpc is FALSE here, and that is the fix for a real hole rather
+      // than a style choice. The SDK's `enable_rpc=true` constructor builds its
+      // OWN rpc manager immediately (device_local.go: `if settings.EnableRpc {
+      // deviceLocal.deviceLocalRpcManager = newDeviceLocalRpcManagerWithDefaults
+      // (...) }`), and that default manager binds 127.0.0.1:12025 as PLAIN ws
+      // with no server cert and no client pinning. Every local process able to
+      // open a TCP socket — including one the control socket's SO_PEERCRED +
+      // `urnetwork` group check exists to refuse — could drive this ROOT device
+      // for the whole window between construction and setRpcServer below.
+      //
+      // With enable_rpc=false the constructor creates no listener at all, and
+      // DeviceLocal.SetRpcServer() (device_local.go) creates the manager
+      // unconditionally from the pinned material — it does not consult
+      // EnableRpc — so the ONLY listener this device ever has is the mTLS one
+      // installed at step 4. The single other thing enable_rpc=false changes is
+      // newSecurityPolicyMonitor(ctx, device, settings.Verbose), which returns
+      // nil immediately because DefaultDeviceLocalSettings sets Verbose=false.
       const std::string appVersion =
           config.app_version.empty() ? kUrAppVersionFallback : config.app_version;
       const bool hadStoredMaterial = HasStoredKeyMaterial();
@@ -313,7 +475,7 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
         try {
           device_ = urnet::newDeviceLocalWithKeyMaterial(
               *networkSpace_, config.by_jwt, UrDeviceDescription(), UrDeviceSpec(), appVersion,
-              config.instance_id, /*enable_rpc=*/true, *km);
+              config.instance_id, /*enable_rpc=*/false, *km);
         } catch (const std::exception& e) {
           restoreFailed = true;
           std::fprintf(stderr, "[tunnel] restore device key material failed: %s\n", e.what());
@@ -323,7 +485,7 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
         device_ = urnet::newDeviceLocalWithDefaults(*networkSpace_, config.by_jwt,
                                                     UrDeviceDescription(), UrDeviceSpec(),
                                                     appVersion, config.instance_id,
-                                                    /*enable_rpc=*/true);
+                                                    /*enable_rpc=*/false);
         // Persist ONLY when nothing was stored. Overwriting after a FAILED
         // restore silently rotates this device's provider identity — peers
         // stop recognising it and its reputation is gone — for what may be a
@@ -353,21 +515,40 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       }
 
       // --- 4) device-RPC mTLS pinning (windows TunnelController parity) -----
-      // Both halves must pin the SAME generated material; the SDK compares raw
-      // certificates for equality, so no "defaults" path can produce a
-      // matching pair across two processes with separate storage roots. Absent
-      // fields keep the SDK's built-in default listener, which is what shipped
-      // before this field existed.
-      int rpcPort = ctl::kDeviceRpcPort;
-      if (!config.rpc_server_pem.empty()) {
+      // MANDATORY. Both halves pin the SAME generated material; the SDK
+      // compares raw certificates for equality, so no "defaults" path can
+      // produce a matching pair across two processes with separate storage
+      // roots. There is no unpinned branch left, and as of step 3 there is no
+      // unpinned WINDOW either: the SDK's built-in default listener has no
+      // client pinning at all, so every local process able to open a TCP socket
+      // to it — including one the control socket's SO_PEERCRED + `urnetwork`
+      // group check would refuse — could drive this root DeviceLocal, and with
+      // enable_rpc=true it was already listening by the time control reached
+      // this line. This call is now the FIRST thing that binds the port.
+      //
+      // The triple was validated at step 0, so this port is guaranteed
+      // non-zero and the old `int rpcPort = ctl::kDeviceRpcPort;` fallback is
+      // gone: reporting a port nothing is listening on is a fiction the client
+      // cross-checks against, so it must not be possible to produce one.
+      const int rpcPort = ctl::RpcPortFromHostPort(config.rpc_listen_hostport);
+      bool rpcPinned = false;
+      try {
         device_->setRpcServer(config.rpc_server_pem, config.rpc_client_cert_pem,
                               config.rpc_listen_hostport);
-        if (const int port = PortFromHostPort(config.rpc_listen_hostport); port > 0) {
-          rpcPort = port;
-        }
-        std::fprintf(stderr, "[tunnel] device rpc pinned on %s\n",
-                     config.rpc_listen_hostport.c_str());
+        rpcPinned = true;
+      } catch (const std::exception& e) {
+        // Publish BEFORE rethrowing. Without this the throw fell through to
+        // the generic catch below and was labelled kCodeTunOpenFailed, so an
+        // mTLS bind failure reached the user as "could not open or configure
+        // the tun device" — exactly the class of lie the code table exists to
+        // prevent. The realistic cause is the port already being held.
+        PublishError(std::string("the local control connection could not be secured on ") +
+                         config.rpc_listen_hostport + ": " + e.what(),
+                     ctl::kCodeRpcListenFailed);
+        throw;
       }
+      std::fprintf(stderr, "[tunnel] device rpc pinned on %s\n",
+                   config.rpc_listen_hostport.c_str());
 
       // A set_provide that arrived while the tunnel was down applies now. (The
       // GUI also restores its persisted mode over the device RPC right after
@@ -446,7 +627,7 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       // --- 7) the leak floor, now that the tun exists -----------------------
       std::string filterError;
       const bool wantKillSwitch = killSwitchRequested_.load();
-      if (!ApplyFilterLocked(FilterState::Connected, wantKillSwitch, &filterError)) {
+      if (!ApplyFilterLocked(FilterState::Connected, &filterError)) {
         if (wantKillSwitch) {
           PublishError("the kill switch could not be installed: " + filterError,
                        ctl::kCodeKillSwitchFailed);
@@ -465,6 +646,12 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
         std::scoped_lock lock(statusMutex_);
         status_.tunnel_state = ctl::TunnelState::Up;
         status_.rpc_port = rpcPort;
+        // Published in the SAME block that flips the state to Up, so a client
+        // polling `status` on the async path can never observe Up with a stale
+        // rpc_pinned. rpcPinned can only be true here — setRpcServer rethrows
+        // otherwise — but it is carried rather than hardcoded so the fact
+        // stays tied to the call that established it.
+        status_.rpc_pinned = rpcPinned;
         status_.up_since_millis = UnixMillis();
         activeConfig_ = config;  // what a later start_tunnel is compared against
         try {
@@ -492,12 +679,58 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       const std::string keptError = Status().error;
       const std::string keptCode = Status().error_code;
       StopInternalLocked(std::string());
+
+      // AND THE FIREWALL, which this path used to walk straight past.
+      // StopInternalLocked(<empty reason>) deliberately does not touch the
+      // filter (it is also the "make room for this start" path), so the
+      // Connecting ruleset installed at step 1 — which blocks ALL global IPv6
+      // machine-wide — survived every failed start: no tunnel, no UI signal,
+      // and nothing that would ever remove it short of a reboot.
+      //
+      // Where it lands depends only on where the attempt came FROM:
+      //   * it interrupted an ARMED machine and the switch is still on -> go
+      //     back to Armed. Falling to Off here would lift the kill switch
+      //     BECAUSE the reconnect failed, which is the one moment it must not
+      //     lift.
+      //   * anything else -> remove the table completely. A start that failed
+      //     from a clean machine must leave the machine exactly as it found it.
+      const bool restoreArmed = entryFloor && killSwitchRequested_.load();
+      {
+        std::string filterError;
+        if (restoreArmed) {
+          // FloorForTransition returns true for Armed structurally, so this
+          // cannot come back without a floor.
+          if (!ApplyFilterLocked(FilterState::Armed, &filterError)) {
+            DaemonLogf(
+                "[tunnel] the start failed and the armed floor could not be restored: %s\n",
+                filterError.c_str());
+          } else {
+            DaemonLogf(
+                "[tunnel] the start failed; this machine stays blocked because the kill switch "
+                "is armed. Disconnect in the app to lift it, or run: %s\n",
+                NetFilter::RecoveryCommand());
+          }
+        } else if (!ApplyFilterLocked(FilterState::Off, &filterError)) {
+          // InstallFilterLocked has already logged the recovery command and
+          // set filterRemovalPending_, so the reaper keeps retrying.
+          std::fprintf(stderr, "[tunnel] start failed and the ruleset could not be removed: %s\n",
+                       filterError.c_str());
+        }
+      }
       {
         std::scoped_lock lock(statusMutex_);
         status_.tunnel_state = ctl::TunnelState::Error;
         status_.error = keptError;
         status_.error_code = keptCode;
         status_.stop_reason = "start_failed";
+        if (!restoreArmed && keptCode == ctl::kCodeKillSwitchFailed) {
+          // The teardown above published kill_switch=Off, which is true of the
+          // machine but not of the request: the user asked for the switch and
+          // it could not be installed. KillSwitchState::Failed exists exactly
+          // so this is never rendered as Off.
+          status_.kill_switch = ctl::KillSwitchState::Failed;
+          status_.kill_switch_detail = keptError;
+        }
       }
     }
   }
@@ -537,15 +770,19 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
   }
   if (!reason.empty()) {
     // An explicit stop ALWAYS lifts the policy (windows semantics: only an
-    // unexpected drop keeps or installs Armed).
+    // unexpected drop keeps or installs Armed) — FloorForTransition answers
+    // `false` for every transition into Off, so this needs no argument and
+    // cannot be given the wrong one. A failure here is remembered in
+    // filterRemovalPending_ and retried by the reaper.
     std::string ignored;
-    ApplyFilterLocked(FilterState::Off, /*killSwitch=*/false, &ignored);
+    ApplyFilterLocked(FilterState::Off, &ignored);
   }
   // spaceManager_/networkSpace_ persist across sessions (Windows parity).
   {
     std::scoped_lock lock(statusMutex_);
     status_.tunnel_state = ctl::TunnelState::Stopped;
     status_.rpc_port = 0;
+    status_.rpc_pinned = false;  // the listener died with the DeviceLocal
     status_.client_id.clear();
     activeConfig_ = ctl::StartTunnelRequest();
     status_.routes_installed = false;
@@ -594,21 +831,28 @@ bool TunnelHost::SetKillSwitch(bool enabled, std::string* error) {
     return true;
   }
   const bool up = tunnel_ != nullptr;
+  // Both branches below re-derive the floor from killSwitchRequested_, which
+  // was set at the top of this function — so the toggle is the input and
+  // FloorForTransition is still the only place the answer is produced.
   if (!enabled) {
     // Off while armed lifts immediately. With a live tunnel the Connected
     // floor stays (leak prevention is not a preference) minus the block-all.
-    if (up) return ApplyFilterLocked(FilterState::Connected, false, error);
+    if (up) return ApplyFilterLocked(FilterState::Connected, error);
     std::string ignored;
-    ApplyFilterLocked(FilterState::Off, false, &ignored);
+    ApplyFilterLocked(FilterState::Off, &ignored);
     return true;
   }
-  if (up) return ApplyFilterLocked(FilterState::Connected, true, error);
+  if (up) return ApplyFilterLocked(FilterState::Connected, error);
   // Switching it on with nothing connected must NOT cut the machine off: the
   // preference is recorded and takes effect at the next start, or the moment
-  // a live tunnel drops unexpectedly.
+  // a live tunnel drops unexpectedly. It must not LIE either: re-asserting the
+  // toggle while the machine is already sitting on the Armed floor (an
+  // unexpected drop) used to publish Off, i.e. "you are not blocked" to the one
+  // user who is.
   {
     std::scoped_lock statusLock(statusMutex_);
-    status_.kill_switch = ctl::KillSwitchState::Off;
+    status_.kill_switch = filter_.floorInstalled() ? ctl::KillSwitchState::Armed
+                                                   : ctl::KillSwitchState::Off;
     status_.kill_switch_detail.clear();
   }
   return true;
@@ -621,17 +865,87 @@ gboolean TunnelHost::OnReaperTick(gpointer data) {
   return G_SOURCE_CONTINUE;
 }
 
+void TunnelHost::MaintainFilterLocked() {
+  // 1) A teardown that failed is retried until it takes. Nothing else will:
+  //    NetFilter::Remove() moves state_ to Off before it looks at nft's exit
+  //    status, so neither ~NetFilter nor a later Remove() knows there is
+  //    anything left to undo.
+  if (filterRemovalPending_.load()) {
+    if (device_.has_value() || tunnel_ != nullptr || ioLoop_.has_value()) {
+      // A new session installed its own table in the meantime; the stale
+      // removal is not ours to make any more.
+      filterRemovalPending_.store(false);
+    } else {
+      std::string error;
+      if (InstallFilterLocked(FilterState::Off, /*floor=*/false, &error)) {
+        DaemonLogf("[tunnel] the firewall teardown that failed earlier has now completed\n");
+      }
+      return;  // nothing is installed on purpose, so nothing to verify
+    }
+  }
+
+  // 2) TAMPER / FLUSH DETECTION. nftables hands out no notification when a
+  //    third party destroys our table, and `nft flush ruleset` is the FIRST
+  //    LINE of the /etc/sysconfig/nftables.conf Fedora and Bazzite ship — so
+  //    `systemctl restart nftables` silently deletes `table inet urnetwork`,
+  //    taking the kill switch, the IPv6 fail-closed rules, the DNS floor and
+  //    the egress self-exclusion with it, while the UI still says Connected.
+  //    Polling Verify() here is the entire mitigation, and re-installing the
+  //    SAME config (floor included) is the entire repair.
+  if (!filter_.installed()) return;
+  if (++filterVerifyTicks_ < kFilterVerifyIntervalSeconds) return;
+  filterVerifyTicks_ = 0;
+
+  std::string error;
+  if (filter_.Verify(&error)) {
+    filterVerifyFailures_ = 0;
+    return;
+  }
+  const bool loud = (filterVerifyFailures_ % kFilterVerifyLogEvery) == 0;
+  ++filterVerifyFailures_;
+  if (loud) {
+    DaemonLogf(
+        "[tunnel] the URnetwork nftables table is no longer in force (%s); re-installing it. "
+        "Something outside URnetwork flushed the ruleset — on Fedora/Bazzite "
+        "`systemctl restart nftables` does exactly that.\n",
+        error.c_str());
+  }
+  std::string reinstallError;
+  if (!ReinstallFilterLocked(&reinstallError)) {
+    if (loud) {
+      DaemonLogf(
+          "[tunnel] ERROR: the ruleset could not be re-installed: %s. The tunnel is running "
+          "WITHOUT its leak floor%s.\n",
+          reinstallError.c_str(),
+          killSwitchRequested_.load() ? " and without the kill switch" : "");
+    }
+    return;
+  }
+  filterVerifyFailures_ = 0;
+  DaemonLogf("[tunnel] the URnetwork nftables table has been re-installed (%s)\n",
+             ToString(filter_.state()));
+}
+
 void TunnelHost::Reap() {
-  if (busy_.load()) return;  // a bring-up owns the session
+  if (busy_.load()) return;  // a bring-up owns the session AND the filter
+
+  std::unique_lock<std::mutex> lock(opMutex_, std::try_to_lock);
+  if (!lock.owns_lock()) return;  // next tick
+
   const bool died = ioLoopDied_.load();
   const int orphanTimeout = orphanTimeoutSeconds_.load();
   const bool orphaned = orphanTimeout > 0 && !ownerConnected_.load() &&
                         ownerLostMonotonicSeconds_ > 0 &&
                         MonotonicSeconds() - ownerLostMonotonicSeconds_ >= orphanTimeout;
-  if (!died && !orphaned) return;
-
-  std::unique_lock<std::mutex> lock(opMutex_, std::try_to_lock);
-  if (!lock.owns_lock()) return;  // next tick
+  if (!died && !orphaned) {
+    // THE STEADY STATE, which is where the whole tamper problem lives and is
+    // why NetFilter::Verify() had no caller at all: a machine whose ruleset
+    // was flushed under it has neither a dead io loop nor an absent owner. It
+    // looks perfectly healthy from in here, and the early return above it used
+    // to be the end of the tick.
+    MaintainFilterLocked();
+    return;
+  }
 
   if (died) {
     // The tunnel went away under us. Before this, the done callback only
@@ -648,12 +962,14 @@ void TunnelHost::Reap() {
     // An UNEXPECTED drop is the one case that arms the kill switch.
     if (killSwitchRequested_.load()) {
       std::string error;
-      if (!ApplyFilterLocked(FilterState::Idle, true, &error)) {
-        std::fprintf(stderr, "[tunnel] could not arm the kill switch: %s\n", error.c_str());
+      if (!ApplyFilterLocked(FilterState::Armed, &error)) {
+        // Published as KillSwitchState::Failed by InstallFilterLocked, so the
+        // UI cannot render this as "off".
+        DaemonLogf("[tunnel] ERROR: could not arm the kill switch: %s\n", error.c_str());
       }
     } else {
       std::string ignored;
-      ApplyFilterLocked(FilterState::Off, false, &ignored);
+      ApplyFilterLocked(FilterState::Off, &ignored);
     }
     return;
   }
@@ -688,9 +1004,12 @@ void TunnelHost::OnResolvedAppeared(GDBusConnection*, const gchar*, const gchar*
     std::fprintf(stderr, "[tunnel] the DNS override did not survive the restart: %s\n",
                  report.dns_detail.c_str());
   }
-  // The DNS port floor is only correct while the override is in force.
+  // The DNS port floor is only correct while the override is in force, and the
+  // resolvers it pins come back out of the tunnel on this same pass — so this
+  // re-apply is what keeps the pinned :53 permit naming the servers resolved
+  // was actually given.
   std::string ignored;
-  self->ApplyFilterLocked(FilterState::Connected, self->killSwitchRequested_.load(), &ignored);
+  self->ApplyFilterLocked(FilterState::Connected, &ignored);
 }
 
 }  // namespace urnw
