@@ -105,6 +105,10 @@ struct LiveStats {
   std::string connectionStatus;
   bool connected = false;
   int64_t providerCount = 0;      // grid window current size
+  // the live provider grid the hero canvas rides (empty = the bare lattice)
+  std::vector<urnet::ProviderGridPoint> gridPoints;
+  int64_t gridWidth = 0;
+  int64_t gridHeight = 0;
   int64_t downBitsPerSecond = 0;  // remote (tunneled) ingress bit rate
   int64_t upBitsPerSecond = 0;    // remote (tunneled) egress bit rate
   bool insufficientBalance = false;
@@ -146,6 +150,54 @@ class SdkHost {
   // Guest mode: create a throwaway network (no email/password), same as iOS/macOS.
   // Upgradeable later via Api::upgradeGuest / upgradeGuestExisting.
   void LoginAsGuest(std::function<void(AuthResult)> done);
+
+  // Sign in with a BIP-39 seedphrase (macOS LoginSeedphraseView / windows
+  // parity): authLogin{seedphrase}, normalized (lowercase, single-spaced)
+  // before it leaves the process. Nothing may log the phrase.
+  void LoginWithSeedphrase(const std::string& seedphrase,
+                           std::function<void(AuthResult)> done);
+
+  // Instant (seedphrase-only) account: networkCreate with nothing but the
+  // terms consent mints a network whose only credential is a seedphrase. The
+  // phrase is shown BEFORE the device is registered — Confirm registers the
+  // held jwt, Discard drops it — so a dismissed sheet cannot leave a
+  // signed-in account nobody can ever recover.
+  struct InstantAccount {
+    bool ok = false;
+    std::string error;
+    std::string seedphrase;  // the caller zeroes its copy after display
+  };
+  void CreateInstantAccount(std::function<void(InstantAccount)> done);
+  void ConfirmInstantAccount(std::function<void(AuthResult)> done);
+  void DiscardInstantAccount();
+
+  // ---- network server (iOS NetworkServerSheet / windows parity) ------------
+  // Which network API this client talks to — on this fork, the difference
+  // between the official ur.network and a self-hosted deployment.
+  struct NetworkServer {
+    std::string hostName;
+    std::string apiUrl;      // live, derived or overridden
+    std::string connectUrl;  // live platform (connect) url
+    // the EXPLICIT overrides in force, or empty when the urls are derived
+    std::string configuredApiUrl;
+    std::string configuredConnectUrl;
+    // What "the default network" means for THIS process: the compiled-in
+    // host, or URNETWORK_NETWORK_HOST when set — never silently production.
+    std::string defaultHostName;
+    bool managerAvailable = false;
+  };
+  NetworkServer CurrentNetworkServer();
+  // Point the client at `hostName`, with optional explicit api/connect url
+  // overrides (empty = derive from the host). Changes which LocalState — and
+  // so which stored jwt — is in force: tears the live device down and
+  // re-derives Api/LocalState. Offered from the SIGNED-OUT screen only.
+  // Fires the auth-state handler with the new space's stored auth.
+  bool ApplyNetworkServer(const std::string& hostName, const std::string& apiUrl,
+                          const std::string& connectUrl);
+  // The active space serialized for the daemon's start_tunnel: the daemon
+  // must build its DeviceLocal in the SAME space or the DeviceRemote would
+  // sync against a device registered in a different network ("" = default).
+  std::string NetworkSpaceJson();
 
   // Sign in with a Solana wallet (Phantom/Solflare) via the ur.io/wallet-connect
   // browser bridge: connect -> sign a challenge -> authLogin{wallet_auth}. The
@@ -238,6 +290,17 @@ class SdkHost {
   // mode — the two writes handleProvideControlModeUpdate does; DeviceLocal
   // does not persist the control mode itself.
   void ResetProvideToNever();
+
+  // ---- Advanced Mode (the windows D5 standing-state contract) --------------
+  // A STANDING STATE, not an event: loaded from app_prefs at startup into an
+  // atomic (surfaces may build ~25s later), authority readable any time,
+  // persist-FIRST-publish-second on write, and a replay call for late-built
+  // surfaces. Bind-then-replay everywhere — change-notification-only provably
+  // loses the restored-from-disk value.
+  bool CurrentAdvancedMode();
+  void SetAdvancedMode(bool on);
+  void SetAdvancedModeHandler(std::function<void(bool)> h);
+  void RefreshAdvancedMode();  // replay the current value to the handler
 
   void SetAuthStateHandler(AuthStateHandler h) { onAuth_ = std::move(h); }
   void SetAuthInvalidHandler(AuthInvalidHandler h) { onAuthInvalid_ = std::move(h); }
@@ -421,6 +484,15 @@ class SdkHost {
   // The signed wallet_auth of a wallet sign-in with no network, carried into
   // CreateNetworkWithPendingWallet (android/apple route the same way).
   std::optional<urnet::WalletAuthArgs> pendingWalletAuth_;
+  // The instant account's jwt, held between CreateInstantAccount and the
+  // seedphrase sheet's confirm (guarded by mutex_; a secret — never log it).
+  std::optional<std::string> pendingInstantJwt_;
+
+  // Advanced Mode standing state (D5): the atomic is the authority between
+  // the disk read at startup and any later toggle.
+  std::atomic<bool> advancedMode_{false};
+  bool advancedModeLoaded_ = false;
+  std::function<void(bool)> onAdvancedMode_;
 
   AuthStateHandler onAuth_;
   AuthInvalidHandler onAuthInvalid_;

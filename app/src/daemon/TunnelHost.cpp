@@ -69,11 +69,25 @@ ctl::StatusReply TunnelHost::Start(const ctl::StartTunnelRequest& config) {
   error_.clear();
 
   try {
-    // --- network space (daemon-owned storage; same values as the GUI's) ---
+    // --- network space (daemon-owned storage) --------------------------------
+    // The GUI's active space rides in on start_tunnel (windows parity): the
+    // DeviceLocal must live in the SAME network as the jwt it registers, or a
+    // custom-server session would sync against production. An absent/broken
+    // json falls back to the compiled-in default — silence means production,
+    // never a surprise server.
     if (!spaceManager_) {
       spaceManager_ = urnet::newNetworkSpaceManager(storageRoot_ + "/sdk");
     }
-    networkSpace_ = BuildUrNetworkSpace(*spaceManager_);
+    networkSpace_.reset();
+    if (!config.network_space_json.empty()) {
+      try {
+        networkSpace_ = spaceManager_->importNetworkSpaceFromJson(config.network_space_json);
+      } catch (const std::exception& e) {
+        std::fprintf(stderr, "[tunnel] import network space failed (using default): %s\n",
+                     e.what());
+      }
+    }
+    if (!networkSpace_) networkSpace_ = BuildUrNetworkSpace(*spaceManager_);
 
     // --- DeviceLocal, rpc enabled: the SDK starts the loopback mTLS RPC
     //     listener (127.0.0.1:12025) the GUI's DeviceRemote dials. Stable

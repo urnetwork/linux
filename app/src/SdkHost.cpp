@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 
+#include "AppPrefs.hpp"
 #include "NetworkSpaceConfig.hpp"
 
 // The release version, threaded in via the -Dapp_version meson option (the
@@ -41,6 +43,24 @@ bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDi
     api_ = networkSpace_->getApi();
     asyncLocalState_ = networkSpace_->getAsyncLocalState();
     localState_ = asyncLocalState_->getLocalState();
+    // RESTORE THE API'S AUTHORIZATION FROM THE PERSISTED SESSION.
+    //
+    // api_->setByJwt is called in exactly one other place — RegisterNetworkClient,
+    // the fresh-sign-in path — so the token otherwise lives only in the Api of
+    // the process that did the login. A relaunch rebuilds the Api with no token
+    // while the app still LOOKS signed in (the client jwt is on disk, so
+    // IsLoggedIn() is true and every page runs its loads), and the SDK only
+    // re-authorizes the Api as a side effect of creating a DeviceRemote — which
+    // needs urnetworkd to be up. With no daemon, or before the tunnel is
+    // started, every authenticated read 401s and each page renders that as its
+    // own failure state. The Windows host already carries this restore
+    // (urnetwork-windows/app/src/App/SdkHost.cpp:353-357).
+    //
+    // getByJwt() is the USER jwt the Api authorizes with; getByClientJwt() is
+    // the device credential the tunnel session needs — they are not the same.
+    if (const std::string byJwt = localState_->getByJwt(); !byJwt.empty()) {
+      api_->setByJwt(byJwt);
+    }
     // sign-up name availability rides the SDK's shared view controller (the
     // apple CreateNetworkViewModel binds the same one)
     networkNameVc_ = urnet::newNetworkNameValidationViewController(*api_);
@@ -165,6 +185,254 @@ void SdkHost::LoginAsGuest(std::function<void(AuthResult)> done) {
     }
     done({false, false, "guest create returned no network"});
   });
+}
+
+namespace {
+// lowercase, trimmed, single-spaced — the normalization every client applies
+// before sending a seedphrase, so a phrase pasted with newlines or double
+// spaces authenticates (windows SdkHost / macOS LoginSeedphraseViewModel).
+std::string NormalizeSeedphrase(const std::string& raw) {
+  std::string out;
+  out.reserve(raw.size());
+  bool pendingSpace = false;
+  for (unsigned char c : raw) {
+    if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+      pendingSpace = !out.empty();
+      continue;
+    }
+    if (pendingSpace) {
+      out.push_back(' ');
+      pendingSpace = false;
+    }
+    out.push_back(static_cast<char>(std::tolower(c)));
+  }
+  return out;
+}
+}  // namespace
+
+void SdkHost::LoginWithSeedphrase(const std::string& seedphrase,
+                                  std::function<void(AuthResult)> done) {
+  urnet::AuthLoginArgs args;
+  args.seedphrase = NormalizeSeedphrase(seedphrase);
+  // NOTE: nothing on any path below may echo the args — an error log that
+  // included the request would put the credential in a file on disk.
+  api_->authLogin(args, [this, done](std::optional<urnet::AuthLoginResult> result,
+                                     std::optional<std::string> err) {
+    if (err) { done({false, false, *err}); return; }
+    if (!result) { done({false, false, "no result"}); return; }
+    if (result->error && !result->error->message.empty()) {
+      // a wrong phrase is a form error, not a session error
+      done({false, false, result->error->message});
+      return;
+    }
+    if (result->network && !result->network->by_jwt.empty()) {
+      RegisterNetworkClient(result->network->by_jwt, done);
+      return;
+    }
+    done({false, false, "seedphrase login returned no network"});
+  });
+}
+
+void SdkHost::CreateInstantAccount(std::function<void(InstantAccount)> done) {
+  // NO user_auth, password, auth_jwt or wallet_auth: that combination is what
+  // makes the server mint a seedphrase-secured network and return the phrase.
+  urnet::NetworkCreateArgs args;
+  args.terms = true;  // the form's button is gated on the terms consent
+  api_->networkCreate(args, [this, done](std::optional<urnet::NetworkCreateResult> result,
+                                         std::optional<std::string> err) {
+    InstantAccount out;
+    if (err || !result) {
+      out.error = err ? *err : "no result";
+      if (done) done(out);
+      return;
+    }
+    if (result->error && !result->error->message.empty()) {
+      out.error = result->error->message;
+      if (done) done(out);
+      return;
+    }
+    if (result->verification_required) {
+      // an instant account carries no user auth: nothing could take a code
+      out.error = "the server asked to verify an account with no user auth";
+      if (done) done(out);
+      return;
+    }
+    if (!result->seedphrase || result->seedphrase->empty()) {
+      // Refuse to register: a network whose only credential never reached the
+      // user is an account nobody can ever get back into.
+      out.error = "instant account returned no seedphrase";
+      if (done) done(out);
+      return;
+    }
+    if (!result->network || !result->network->by_jwt || result->network->by_jwt->empty()) {
+      out.error = "instant account returned no network";
+      if (done) done(out);
+      return;
+    }
+    {
+      std::scoped_lock lock(mutex_);
+      pendingInstantJwt_ = *result->network->by_jwt;
+    }
+    out.ok = true;
+    out.seedphrase = *result->seedphrase;
+    if (done) done(out);
+  });
+}
+
+void SdkHost::ConfirmInstantAccount(std::function<void(AuthResult)> done) {
+  std::string jwt;
+  {
+    std::scoped_lock lock(mutex_);
+    if (!pendingInstantJwt_) {
+      if (done) done({false, false, "no instant account is pending"});
+      return;
+    }
+    jwt = *pendingInstantJwt_;
+    pendingInstantJwt_.reset();
+  }
+  RegisterNetworkClient(jwt, done);
+}
+
+void SdkHost::DiscardInstantAccount() {
+  std::scoped_lock lock(mutex_);
+  pendingInstantJwt_.reset();
+}
+
+// ---- Advanced Mode (the windows D5 standing-state contract) -----------------
+
+bool SdkHost::CurrentAdvancedMode() {
+  if (!advancedModeLoaded_) {
+    advancedMode_.store(prefs::Get<bool>("advanced_mode", false), std::memory_order_release);
+    advancedModeLoaded_ = true;
+  }
+  return advancedMode_.load(std::memory_order_acquire);
+}
+
+void SdkHost::SetAdvancedMode(bool on) {
+  // persist FIRST, publish second: a crash between the two must lose the
+  // publish, never the preference
+  prefs::Set("advanced_mode", on);
+  advancedMode_.store(on, std::memory_order_release);
+  advancedModeLoaded_ = true;
+  if (onAdvancedMode_) onAdvancedMode_(on);
+}
+
+void SdkHost::SetAdvancedModeHandler(std::function<void(bool)> h) {
+  onAdvancedMode_ = std::move(h);
+}
+
+void SdkHost::RefreshAdvancedMode() {
+  if (onAdvancedMode_) onAdvancedMode_(CurrentAdvancedMode());
+}
+
+// ---- network server (iOS NetworkServerSheet / windows parity) ---------------
+
+SdkHost::NetworkServer SdkHost::CurrentNetworkServer() {
+  std::scoped_lock lock(mutex_);
+  NetworkServer out;
+  out.managerAvailable = spaceManager_.has_value();
+  // the same resolution the space build uses, so "Use default network" means
+  // the network this process was started against — never silently production
+  if (const char* env = std::getenv("URNETWORK_NETWORK_HOST"); env && *env) {
+    out.defaultHostName = env;
+  } else {
+    out.defaultHostName = kUrHostName;
+  }
+  if (!networkSpace_) return out;
+  try {
+    out.hostName = networkSpace_->getHostName();
+    out.apiUrl = networkSpace_->getApiUrl();
+    out.connectUrl = networkSpace_->getPlatformUrl();
+    out.configuredApiUrl = networkSpace_->getConfiguredApiUrl();
+    out.configuredConnectUrl = networkSpace_->getConfiguredPlatformUrl();
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] read network space failed: %s\n", e.what());
+  }
+  return out;
+}
+
+bool SdkHost::ApplyNetworkServer(const std::string& hostName, const std::string& apiUrl,
+                                 const std::string& connectUrl) {
+  if (hostName.empty()) return false;
+  bool ok = false;
+  bool loggedIn = false;
+  {
+    std::scoped_lock lock(mutex_);
+    if (!spaceManager_) return false;
+
+    // A different space is a different LocalState and so a different stored
+    // jwt: a running session belongs to the OLD server and cannot survive it.
+    TeardownDeviceLocked();
+    control_.StopTunnel();  // best effort — signed-out screens have none
+    pendingWalletAuth_.reset();
+    pendingInstantJwt_.reset();
+
+    try {
+      const bool official = (hostName == std::string(kUrHostName));
+      const bool explicitUrls = !apiUrl.empty() || !connectUrl.empty();
+
+      urnet::NetworkSpaceKey key;
+      key.host_name = hostName;
+      key.env_name = std::string(kUrEnvName);
+
+      // The same value set BuildUrNetworkSpace writes, with the
+      // host-dependent parts varied (iOS DeviceManager.applyNetworkSpace
+      // parity). `bundled` is true only for the official host with no
+      // overrides: a bundled space carries pinned endpoints a custom
+      // deployment does not have.
+      urnet::NetworkSpaceValues values;
+      values.bundled = official && !explicitUrls;
+      values.net_expose_server_ips = true;
+      values.net_expose_server_host_names = true;
+      values.link_host_name = official ? std::string("ur.io") : hostName;
+      values.migration_host_name = official ? std::string("bringyour.com") : std::string();
+      values.wallet = "circle";
+      values.sso_google = false;
+      values.api_url = apiUrl;
+      values.platform_url = connectUrl;
+
+      networkSpace_ = spaceManager_->updateNetworkSpaceValues(key, values);
+      spaceManager_->setActiveNetworkSpace(*networkSpace_);
+
+      // everything derived from the space re-derives: the Api talks to the
+      // new host, the LocalState holds the new host's jwt
+      api_ = networkSpace_->getApi();
+      asyncLocalState_ = networkSpace_->getAsyncLocalState();
+      localState_ = asyncLocalState_->getLocalState();
+      // ...INCLUDING the Api's authorization. Same defect as Initialize(): a
+      // freshly derived Api carries no token, so switching to a space this
+      // device is ALREADY signed in to would leave every authenticated read
+      // 401ing while the app still looked signed in.
+      if (const std::string byJwt = localState_->getByJwt(); !byJwt.empty()) {
+        api_->setByJwt(byJwt);
+      }
+      networkNameVc_ = urnet::newNetworkNameValidationViewController(*api_);
+      loggedIn = !localState_->getByClientJwt().empty();
+      ok = true;
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] switch network space to '%s' failed: %s\n",
+                   hostName.c_str(), e.what());
+      ok = false;
+    }
+  }
+  if (!ok) return false;
+  // The new space's stored auth decides what the window shows. Almost always
+  // LoggedOut — a fresh server has no jwt — and saying so is the point: the
+  // old session is genuinely gone.
+  if (onAuth_) onAuth_(loggedIn);
+  EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+  return true;
+}
+
+std::string SdkHost::NetworkSpaceJson() {
+  std::scoped_lock lock(mutex_);
+  if (!networkSpace_) return "";
+  try {
+    return networkSpace_->toJson();
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] network space toJson failed: %s\n", e.what());
+    return "";
+  }
 }
 
 // ---- sign-up / verify / password reset (Phase 3) ----------------------------
@@ -543,8 +811,19 @@ TunnelStartResult SdkHost::StartTunnel() {
   // 2) start_tunnel: the daemon builds the DeviceLocal (rpc enabled), opens
   //    the tun and wires the IoLoop. First authenticated client wins; a
   //    tunnel owned by another live client comes back as a plain error.
+  //    The active network space rides along (windows StartTunnel's
+  //    network_space_json): the daemon must build its DeviceLocal in the SAME
+  //    space, or a custom-server session would sync against a device
+  //    registered on production. (mutex_ is held: read the space directly.)
+  std::string spaceJson;
+  try {
+    if (networkSpace_) spaceJson = networkSpace_->toJson();
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] network space toJson failed: %s\n", e.what());
+  }
   int rpcPort = 0;
-  if (!control_.StartTunnel(clientJwt, instanceId, kAppVersion, &rpcPort, &error)) {
+  if (!control_.StartTunnel(clientJwt, instanceId, kAppVersion, spaceJson, &rpcPort,
+                            &error)) {
     lastTunnelError_ = error;
     switch (control_.LastSessionState()) {
       case DaemonSessionState::Unreachable:
@@ -685,8 +964,14 @@ LiveStats SdkHost::ReadStats() {
   if (connectVc_) {
     s.connectionStatus = connectVc_->getConnectionStatus();
     s.connected = connectVc_->getConnected();
-    auto grid = connectVc_->getGrid();
-    s.providerCount = grid.getWindowCurrentSize();
+    // handle 0 = no grid: make NO getter calls on it (each was a recovered
+    // Go nil-receiver panic on Windows — ~570 log lines per idle session)
+    if (auto grid = connectVc_->getGrid()) {
+      s.providerCount = grid.getWindowCurrentSize();
+      s.gridWidth = grid.getWidth();
+      s.gridHeight = grid.getHeight();
+      if (auto pts = grid.getProviderGridPointList()) s.gridPoints = *pts;
+    }
   } else if (device_) {
     s.connected = device_->getConnectLocation().has_value();
     s.connectionStatus = s.connected ? "DESTINATION_SET" : "DISCONNECTED";

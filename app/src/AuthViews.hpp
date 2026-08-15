@@ -45,6 +45,10 @@ class CreateNetworkPage : public Gtk::Box {
   // Reset the form for a fresh navigation. userAuth prefills the email field
   // (it stays editable — the login page may not have one yet).
   void Configure(Mode mode, const std::string& userAuth);
+  // Focus the first EMPTY field for the configured mode (windows
+  // EnterCreateStep parity): the guest upgrade starts at the email box,
+  // everything else at the network name.
+  void FocusFirstField();
 
   std::function<void()> on_success;                        // network ready -> start tunnel
   std::function<void(std::string userAuth)> on_verify;     // verification required
@@ -98,6 +102,9 @@ class VerifyPage : public Gtk::Box {
   explicit VerifyPage(SdkHost& host);
 
   void Configure(const std::string& userAuth);
+  // An informational line under the resend row (e.g. "a code was sent" when a
+  // password sign-in routed here) — never the error voice.
+  void ShowNotice(const std::string& text);
 
   std::function<void()> on_success;
   std::function<void()> on_back;

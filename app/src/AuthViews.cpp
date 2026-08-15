@@ -16,8 +16,7 @@ constexpr unsigned kResendCooldownSeconds = 15;  // mac startResendButtonTimer
 
 Gtk::Label* MakePageCaption(const std::string& text) {
   auto* label = Gtk::make_managed<Gtk::Label>(text);
-  label->add_css_class("dim-label");
-  label->add_css_class("caption");
+  label->add_css_class("ur-input-label");
   label->set_xalign(0);
   label->set_wrap(true);
   return label;
@@ -30,6 +29,25 @@ Gtk::Button* MakeBackButton() {
   back->add_css_class("flat");
   back->set_halign(Gtk::Align::START);
   return back;
+}
+
+// The step's fields sit on a hairlined card (windows UrCardStyle): a bare
+// column floating on the page reads as an accident. The page itself stays the
+// stack child; the card is what the fields append into.
+Gtk::Box* MakeStepCard(Gtk::Box& page) {
+  auto* card = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+  card->add_css_class("ur-card-bordered");
+  page.append(*card);
+  return card;
+}
+
+// the step heading: the display face at 20 (windows UrHeadingFontFamily)
+Gtk::Label* MakeStepHeading(const Glib::ustring& text) {
+  auto* heading = Gtk::make_managed<Gtk::Label>(text);
+  heading->add_css_class("ur-step-heading");
+  heading->set_xalign(0);
+  heading->set_wrap(true);
+  return heading;
 }
 
 }  // namespace
@@ -51,32 +69,36 @@ void CreateNetworkPage::BuildUi() {
   });
   append(*back);
 
-  title_ = Gtk::make_managed<Gtk::Label>(T_("join_urnetwork", "Join URnetwork"));
-  title_->add_css_class("title-1");
-  append(*title_);
+  auto* card = MakeStepCard(*this);
+
+  title_ = MakeStepHeading(T_("join_urnetwork", "Join URnetwork"));
+  card->append(*title_);
 
   emailCaption_ = MakePageCaption(T_("user_auth_input_label", "Email or phone number"));
-  append(*emailCaption_);
+  card->append(*emailCaption_);
   email_ = Gtk::make_managed<Gtk::Entry>();
+  email_->add_css_class("ur-input");
   email_->set_placeholder_text(T_("user_auth_placeholder", "Enter your phone number or email"));
   email_->signal_changed().connect([this] {
     errorLabel_->set_text("");
     UpdateFormValid();
   });
-  append(*email_);
+  card->append(*email_);
 
-  append(*MakePageCaption(T_("network_name_label", "Network name")));
+  card->append(*MakePageCaption(T_("network_name_label", "Network name")));
   networkName_ = Gtk::make_managed<Gtk::Entry>();
+  networkName_->add_css_class("ur-input");
   networkName_->set_placeholder_text(
       T_("enter_a_name_for_your_network", "Enter a name for your network"));
   networkName_->signal_changed().connect([this] { OnNetworkNameChanged(); });
-  append(*networkName_);
+  card->append(*networkName_);
   nameSupporting_ = MakePageCaption("");
-  append(*nameSupporting_);
+  card->append(*nameSupporting_);
 
   passwordCaption_ = MakePageCaption(T_("password_label", "Password"));
-  append(*passwordCaption_);
+  card->append(*passwordCaption_);
   password_ = Gtk::make_managed<Gtk::PasswordEntry>();
+  password_->add_css_class("ur-input");
   password_->set_show_peek_icon(true);
   password_->property_placeholder_text() = T_("password_must_be_at_least_12_characters_long",
                                               "Password must be at least 12 characters long");
@@ -84,7 +106,7 @@ void CreateNetworkPage::BuildUi() {
     errorLabel_->set_text("");
     UpdateFormValid();
   });
-  append(*password_);
+  card->append(*password_);
 
   // terms: switch + linked terms/privacy text (pango links open the browser)
   auto* termsRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 12);
@@ -106,7 +128,7 @@ void CreateNetworkPage::BuildUi() {
   termsLabel->set_xalign(0);
   termsLabel->set_hexpand(true);
   termsRow->append(*termsLabel);
-  append(*termsRow);
+  card->append(*termsRow);
 
   // bonus referral code: a flat toggle revealing the entry + apply button
   referralToggle_ = Gtk::make_managed<Gtk::Button>(T_("add_referral_code", "Add referral code"));
@@ -115,7 +137,7 @@ void CreateNetworkPage::BuildUi() {
   referralToggle_->signal_clicked().connect([this] {
     referralRevealer_->set_reveal_child(!referralRevealer_->get_reveal_child());
   });
-  append(*referralToggle_);
+  card->append(*referralToggle_);
 
   referralRevealer_ = Gtk::make_managed<Gtk::Revealer>();
   auto* referralBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
@@ -145,7 +167,7 @@ void CreateNetworkPage::BuildUi() {
   referralSupporting_->add_css_class("ur-error-text");
   referralBox->append(*referralSupporting_);
   referralRevealer_->set_child(*referralBox);
-  append(*referralRevealer_);
+  card->append(*referralRevealer_);
 
   referralAppliedRow_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
   auto* appliedCheck = Gtk::make_managed<Gtk::Image>();
@@ -158,7 +180,7 @@ void CreateNetworkPage::BuildUi() {
   appliedLabel->add_css_class("caption");
   referralAppliedRow_->append(*appliedLabel);
   referralAppliedRow_->set_visible(false);
-  append(*referralAppliedRow_);
+  card->append(*referralAppliedRow_);
 
   continueBtn_ = Gtk::make_managed<Gtk::Button>();
   auto* continueContent = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
@@ -172,12 +194,12 @@ void CreateNetworkPage::BuildUi() {
   continueBtn_->add_css_class("pill");
   continueBtn_->set_sensitive(false);
   continueBtn_->signal_clicked().connect([this] { OnContinue(); });
-  append(*continueBtn_);
+  card->append(*continueBtn_);
 
   errorLabel_ = Gtk::make_managed<Gtk::Label>();
   errorLabel_->add_css_class("ur-error-text");
   errorLabel_->set_wrap(true);
-  append(*errorLabel_);
+  card->append(*errorLabel_);
 }
 
 void CreateNetworkPage::Configure(Mode mode, const std::string& userAuth) {
@@ -211,6 +233,14 @@ void CreateNetworkPage::Configure(Mode mode, const std::string& userAuth) {
   password_->set_visible(wantsUserAuth);
   passwordCaption_->set_visible(wantsUserAuth);
   UpdateFormValid();
+}
+
+void CreateNetworkPage::FocusFirstField() {
+  if (mode_ == Mode::UpgradeGuest && email_) {
+    email_->grab_focus();
+  } else if (networkName_) {
+    networkName_->grab_focus();
+  }
 }
 
 void CreateNetworkPage::SetNameSupporting(const char* text, const char* cssClass) {
@@ -396,9 +426,10 @@ void VerifyPage::BuildUi() {
   });
   append(*back);
 
-  title_ = Gtk::make_managed<Gtk::Label>(T_("login_verify_header", "You've got mail"));
-  title_->add_css_class("title-1");
-  append(*title_);
+  auto* card = MakeStepCard(*this);
+
+  title_ = MakeStepHeading(T_("login_verify_header", "You've got mail"));
+  card->append(*title_);
 
   auto* body = Gtk::make_managed<Gtk::Label>(
       T_("verify_explanation",
@@ -406,7 +437,7 @@ void VerifyPage::BuildUi() {
   body->add_css_class("dim-label");
   body->set_wrap(true);
   body->set_justify(Gtk::Justification::CENTER);
-  append(*body);
+  card->append(*body);
 
   code_ = Gtk::make_managed<Gtk::Entry>();
   code_->set_max_length(kVerifyCodeLength);
@@ -423,17 +454,17 @@ void VerifyPage::BuildUi() {
       Submit();
     }
   });
-  append(*code_);
+  card->append(*code_);
 
   spinner_ = Gtk::make_managed<Gtk::Spinner>();
   spinner_->set_visible(false);
   spinner_->set_halign(Gtk::Align::CENTER);
-  append(*spinner_);
+  card->append(*spinner_);
 
   errorLabel_ = Gtk::make_managed<Gtk::Label>();
   errorLabel_->add_css_class("ur-error-text");
   errorLabel_->set_wrap(true);
-  append(*errorLabel_);
+  card->append(*errorLabel_);
 
   auto* resendRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
   resendRow->set_halign(Gtk::Align::CENTER);
@@ -444,13 +475,18 @@ void VerifyPage::BuildUi() {
   resendBtn_->add_css_class("flat");
   resendBtn_->signal_clicked().connect([this] { Resend(); });
   resendRow->append(*resendBtn_);
-  append(*resendRow);
+  card->append(*resendRow);
 
   resendStatus_ = Gtk::make_managed<Gtk::Label>();
   resendStatus_->add_css_class("dim-label");
   resendStatus_->add_css_class("caption");
   resendStatus_->set_wrap(true);
-  append(*resendStatus_);
+  card->append(*resendStatus_);
+}
+
+void VerifyPage::ShowNotice(const std::string& text) {
+  resendStatus_->remove_css_class("ur-error-text");
+  resendStatus_->set_text(text);
 }
 
 void VerifyPage::Configure(const std::string& userAuth) {
@@ -563,14 +599,16 @@ void ResetPasswordPage::BuildUi() {
   });
   append(*back);
 
+  auto* card = MakeStepCard(*this);
+
   // ---- form -------------------------------------------------------------------
   formBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
 
-  auto* title = Gtk::make_managed<Gtk::Label>(T_("forgot_password", "Forgot your password?"));
-  title->add_css_class("title-1");
+  auto* title = MakeStepHeading(T_("forgot_password", "Forgot your password?"));
   formBox_->append(*title);
 
   email_ = Gtk::make_managed<Gtk::Entry>();
+  email_->add_css_class("ur-input");
   email_->set_placeholder_text(T_("user_auth_placeholder", "Enter your phone number or email"));
   email_->signal_changed().connect([this] { errorLabel_->set_text(""); });
   email_->signal_activate().connect([this] { Send(); });
@@ -603,13 +641,12 @@ void ResetPasswordPage::BuildUi() {
   errorLabel_->set_wrap(true);
   formBox_->append(*errorLabel_);
 
-  append(*formBox_);
+  card->append(*formBox_);
 
   // ---- sent confirmation ---------------------------------------------------------
   sentBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
   sentBox_->set_visible(false);
-  auto* sentTitle = Gtk::make_managed<Gtk::Label>(T_("reset_link_sent", "Reset link sent"));
-  sentTitle->add_css_class("title-1");
+  auto* sentTitle = MakeStepHeading(T_("reset_link_sent", "Reset link sent"));
   sentBox_->append(*sentTitle);
   auto* sentToLabel = Gtk::make_managed<Gtk::Label>(T_("reset_link_sent_to", "Reset link sent to"));
   sentToLabel->add_css_class("dim-label");
@@ -618,7 +655,7 @@ void ResetPasswordPage::BuildUi() {
   sentTo_->add_css_class("ur-mono-13");
   sentTo_->set_wrap(true);
   sentBox_->append(*sentTo_);
-  append(*sentBox_);
+  card->append(*sentBox_);
 }
 
 void ResetPasswordPage::Configure(const std::string& userAuth) {

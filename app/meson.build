@@ -33,6 +33,10 @@ build_gui = gtkmm.found() and adwaita.found()
 gio     = dependency('gio-2.0')         # raw GDBus C API for the SNI tray (also brings glib/gobject)
 json    = dependency('nlohmann_json')
 threads = dependency('threads')
+# Runtime registration of the four licensed brand faces (UrTheme.cpp):
+# FcConfigAppFontAddFile against the default config, before the Pango font
+# map first snapshots it. GUI only — the daemon renders no text.
+fontconfig = dependency('fontconfig', required : get_option('gui'))
 
 # The release version -> UR_APP_VERSION in both binaries: urnetworkd reports
 # it as daemon_version in the control hello (the value the GUI's "daemon out
@@ -124,6 +128,10 @@ if wc_project_id != ''
   wc_args = ['-DUR_WALLETCONNECT_PROJECT_ID="' + wc_project_id + '"']
 endif
 
+if build_gui
+  gui_deps += fontconfig
+endif
+
 # ---- urnetwork: the unprivileged GUI ---------------------------------------
 # No Tunnel.cpp any more — the tun/IoLoop moved to urnetworkd; the GUI holds a
 # DeviceRemote plus the control client.
@@ -147,6 +155,22 @@ executable('urnetwork-gui',
     'src/SdkHost.cpp',
     'src/WalletConnect.cpp',
     'src/MainWindow.cpp',
+    'src/UrTheme.cpp',
+    'src/PaneKit.cpp',
+    'src/HomeShell.cpp',
+    'src/UrMotion.cpp',
+    'src/LoginCarousel.cpp',
+    'src/BrandIcons.cpp',
+    'src/SeedphraseSheet.cpp',
+    'src/NetworkServerSheet.cpp',
+    'src/ConnectCanvas.cpp',
+    'src/ConnectPage.cpp',
+    'src/SupportPage.cpp',
+    'src/NetworkPage.cpp',
+    'src/SettingsPage.cpp',
+    'src/DeveloperPage.cpp',
+    'src/EarningsPage.cpp',
+    'src/AccountPage.cpp',
     'src/Tray.cpp',
     'src/Ui.cpp',
     'src/Formatters.cpp',
@@ -197,6 +221,9 @@ endif
 # because a macOS dev build has no such flags.
 daemon_link_args = cpp.get_supported_link_arguments('-static-libstdc++', '-static-libgcc')
 
+host_integration = get_option('host_integration')
+
+if host_integration
 executable('urnetworkd',
   sources : [
     'src/daemon/main.cpp',
@@ -219,6 +246,13 @@ executable('urnetworkd',
 # placement — the pipeline's fallback copy should never be the real mechanism.
 install_data('third_party' / 'urnetwork-sdk' / sdk_arch / 'libURnetworkSdk.so',
              install_dir : 'lib' / 'urnetwork')
+else
+# GUI-only (Flatpak): no daemon to sit beside, so the SDK goes to the libdir
+# root — which is exactly what the GUI's install_rpath '$ORIGIN/../lib'
+# resolves to from bindir. Same file, one directory up.
+install_data('third_party' / 'urnetwork-sdk' / sdk_arch / 'libURnetworkSdk.so',
+             install_dir : get_option('libdir'))
+endif
 
 # ---- installed data (paths are normative — MIGRATION.md's table) -----------
 #
@@ -232,13 +266,20 @@ install_data('third_party' / 'urnetwork-sdk' / sdk_arch / 'libURnetworkSdk.so',
 # Keep it that way: if you add an integration file, add it here only.
 
 # systemd unit: /lib (not /usr/lib/systemd) — in every release's unit load path
+if host_integration
 install_data('packaging/urnetworkd.service',
              install_dir : '/lib/systemd/system')
+endif
 
 # desktop file: the filename MUST match main.cpp's app id network.ur.urnetwork
 # (D-Bus activation requires it; APPIMAGE.md §11d)
 install_data('packaging/network.ur.urnetwork.desktop',
              install_dir : get_option('datadir') / 'applications')
+
+# AppStream metadata — required by Flathub, read by GNOME Software / Discover
+# for the .deb and .rpm too. The component id matches the .desktop basename.
+install_data('packaging/network.ur.urnetwork.metainfo.xml',
+             install_dir : get_option('datadir') / 'metainfo')
 
 # hicolor icons (Icon=urnetwork in the desktop file)
 install_data('packaging/icons/hicolor/48x48/apps/urnetwork.png',
@@ -248,15 +289,19 @@ install_data('packaging/icons/hicolor/256x256/apps/urnetwork.png',
 
 # autostart INERT TEMPLATE: root-owned under /etc/urnetwork/autostart/, where
 # no desktop reads it; the GUI symlinks it into ~/.config/autostart atomically
+if host_integration
 install_data('packaging/autostart/network.ur.urnetwork.desktop',
              install_dir : '/etc/urnetwork/autostart')
+endif
 
 # NetworkManager marking + udev belt: NM must never manage urnet0 (§10c — the
 # external-down protection ends the moment the daemon brings the link up)
+if host_integration
 install_data('packaging/95-urnetwork.conf',
              install_dir : '/etc/NetworkManager/conf.d')
 install_data('packaging/85-urnetwork-unmanaged.rules',
              install_dir : '/etc/udev/rules.d')
+endif
 
 # tray art (the SNI tray resolves these from the pkgdatadir)
 install_data('assets/urnetwork-tray-disconnected.png',
@@ -269,6 +314,29 @@ install_data('assets/urnetwork-tray-disconnected.png',
 # land layer -- the sphere, graticule and provider dots still draw.
 install_data('assets/world-110m.json',
              install_dir : get_option('datadir') / 'urnetwork')
+
+# The crowned-frog referral mascot (Account's royalty badge). Without this
+# install the asset resolves ONLY out of a build tree — every packaged build
+# and every AppImage would silently render the badge as a bare sentence.
+install_data('assets/ReferralFrog.png',
+             install_dir : get_option('datadir') / 'urnetwork')
+
+# The four licensed brand faces (SEPARATELY LICENSED commercial fonts — ABC
+# Dinamo + Pangram Pangram, NOT MPL; ship deliberately, per the owner's
+# licenses). UrTheme.cpp registers them with fontconfig at runtime; the
+# internal family names are normative ("PP NeueBit" has no space in NeueBit).
+install_data('assets/fonts/abcgravity_extended.otf',
+             'assets/fonts/abcgravity_extra_condensed.otf',
+             'assets/fonts/pp_neue_bit_bold.ttf',
+             'assets/fonts/pp_neue_montreal_regular.ttf',
+             install_dir : get_option('datadir') / 'urnetwork/fonts')
+
+# The login carousel's three brand images (LoginCarousel.cpp clips them to the
+# ur globe silhouette; a missing file costs the art, the headline still runs).
+install_data('assets/carousel/LoginCarousel1.jpg',
+             'assets/carousel/LoginCarousel2.jpg',
+             'assets/carousel/LoginCarousel3.jpg',
+             install_dir : get_option('datadir') / 'urnetwork/carousel')
 
 # ---- unit tests -------------------------------------------------------------
 # The pure-logic modules (orthographic projection math, the TopoJSON decoder,
@@ -286,6 +354,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/ProviderLocationRowTest.cpp',
     'tests/LocationOverrideStateTest.cpp',
     'tests/ControlProtocolTest.cpp',
+    'tests/NetworkServerUtilsTest.cpp',
     'src/GlobeGeometry.cpp',
     'src/WorldTopology.cpp',
     'src/ProviderLocationRow.cpp',
