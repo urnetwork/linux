@@ -1,3 +1,9 @@
 out
 tests/__acceptance__/
 app/.cache
+build-flatpak
+.flatpak-builder
+app/build-noble
+app/build-jammy
+*.AppImage
+*.AppImage.zsync

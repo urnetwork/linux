@@ -22,8 +22,12 @@ set -Eeuo pipefail
 
 PKG_NAME='urnetwork-daemon'
 UNIT='urnetworkd.service'
-LIB_DIR='/usr/lib/urnetwork'
-MANIFEST_REL="${LIB_DIR}/.install-manifest"
+
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR=''
+MANIFEST_REL=''
+SHARE_DIR=''
+BIN_DIR=''
 
 DRY_RUN=0
 PREFIX=''
@@ -54,6 +58,35 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# LIB_DIR is DERIVED FROM THIS SCRIPT'S OWN LOCATION, not hardcoded: install.sh
+# puts the uninstaller at <LIB_DIR>/uninstall.sh, and on an immutable host
+# (ostree/bootc — Silverblue, Bazzite, Kinoite, MicroOS) that is
+# /usr/local/lib/urnetwork, not /usr/lib/urnetwork. Asking where we are is the
+# only answer that is right in both layouts. Resolved AFTER argument parsing so
+# a --prefix test layout can be stripped back off — every path below is
+# re-prefixed, and deriving it earlier would double the prefix.
+SELF_INSTALLED_DIR="${SELF_DIR}"
+[ -n "${PREFIX}" ] && SELF_INSTALLED_DIR="${SELF_DIR#"${PREFIX%/}"}"
+case "${SELF_INSTALLED_DIR}" in
+    */lib/urnetwork) LIB_DIR="${SELF_INSTALLED_DIR}" ;;
+    *) # running from the extracted tarball, not from the install: take
+       # whichever layout is actually present on this machine.
+       if [ -f "${PREFIX}/usr/local/lib/urnetwork/.install-manifest" ]; then
+           LIB_DIR='/usr/local/lib/urnetwork'
+       else
+           LIB_DIR='/usr/lib/urnetwork'
+       fi ;;
+esac
+MANIFEST_REL="${LIB_DIR}/.install-manifest"
+
+# The share/ and bin/ prefixes follow the same split. Only the directory
+# sweeps, the cache refreshes and the no-manifest fallback list need them —
+# individual files normally come from the manifest.
+case "${LIB_DIR}" in
+    /usr/local/*) SHARE_DIR='/usr/local/share'; BIN_DIR='/usr/local/bin' ;;
+    *)            SHARE_DIR='/usr/share';       BIN_DIR='/usr/bin' ;;
+esac
+
 if [ "${DRY_RUN}" = 0 ] && [ -z "${PREFIX}" ]; then
     [ "$(uname -s)" = 'Linux' ] || die "this uninstaller runs on Linux only (use --dry-run elsewhere)"
     [ "$(id -u)" = 0 ] || die "must run as root (sudo ${LIB_DIR}/uninstall.sh)"
@@ -76,17 +109,23 @@ if [ -f "${PREFIX}${MANIFEST_REL}" ]; then
     MANIFEST="$(cat "${PREFIX}${MANIFEST_REL}")"
 else
     warn "no manifest at ${PREFIX}${MANIFEST_REL}; using the built-in file list"
-    MANIFEST="/usr/lib/urnetwork/urnetworkd
-/usr/lib/urnetwork/libURnetworkSdk.so
-/usr/bin/urnetwork
+    # Both unit locations are listed: the standard layout ships it to
+    # /lib/systemd/system, the immutable one to /etc/systemd/system. Removing
+    # a path that does not exist is a no-op, and leaving a stale unit behind
+    # would keep a dead service in systemctl's list forever.
+    MANIFEST="${LIB_DIR}/urnetworkd
+${LIB_DIR}/libURnetworkSdk.so
+${BIN_DIR}/urnetwork
 /lib/systemd/system/urnetworkd.service
-/usr/share/applications/network.ur.urnetwork.desktop
-/usr/share/icons/hicolor/48x48/apps/urnetwork.png
-/usr/share/icons/hicolor/256x256/apps/urnetwork.png
+/etc/systemd/system/urnetworkd.service
+${SHARE_DIR}/applications/network.ur.urnetwork.desktop
+${SHARE_DIR}/metainfo/network.ur.urnetwork.metainfo.xml
+${SHARE_DIR}/icons/hicolor/48x48/apps/urnetwork.png
+${SHARE_DIR}/icons/hicolor/256x256/apps/urnetwork.png
 /etc/urnetwork/autostart/network.ur.urnetwork.desktop
 /etc/NetworkManager/conf.d/95-urnetwork.conf
 /etc/udev/rules.d/85-urnetwork-unmanaged.rules"
-    # plus whole directories swept below: /usr/share/urnetwork, locale .mo
+    # plus whole directories swept below: ${SHARE_DIR}/urnetwork, locale .mo
 fi
 
 # Stop and disable the unit first -- it may hold a live tun fd. Tolerate a
@@ -104,11 +143,11 @@ while IFS= read -r rel; do
 done <<< "${MANIFEST}"
 
 # Shared data and gettext catalogs (directory sweeps).
-[ -d "${PREFIX}/usr/share/urnetwork" ] && run rm -rf "${PREFIX}/usr/share/urnetwork"
+[ -d "${PREFIX}${SHARE_DIR}/urnetwork" ] && run rm -rf "${PREFIX}${SHARE_DIR}/urnetwork"
 if [ "${DRY_RUN}" = 1 ]; then
-    log "would remove /usr/share/locale/*/LC_MESSAGES/urnetwork.mo"
+    log "would remove ${SHARE_DIR}/locale/*/LC_MESSAGES/urnetwork.mo"
 else
-    find "${PREFIX}/usr/share/locale" -name 'urnetwork.mo' -type f -delete 2>/dev/null || true
+    find "${PREFIX}${SHARE_DIR}/locale" -name 'urnetwork.mo' -type f -delete 2>/dev/null || true
 fi
 
 # /etc/geolocation: only if URnetwork authored it (marker line) -- nothing
@@ -153,10 +192,10 @@ fi
 # resolving urnetwork:// to a desktop file that no longer exists.
 if [ -z "${PREFIX}" ]; then
     if command -v update-desktop-database >/dev/null 2>&1; then
-        [ "${DRY_RUN}" = 1 ] || update-desktop-database -q /usr/share/applications || true
+        [ "${DRY_RUN}" = 1 ] || update-desktop-database -q "${SHARE_DIR}/applications" || true
     fi
     if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-        [ "${DRY_RUN}" = 1 ] || gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+        [ "${DRY_RUN}" = 1 ] || gtk-update-icon-cache -q -t -f "${SHARE_DIR}/icons/hicolor" 2>/dev/null || true
     fi
 fi
 

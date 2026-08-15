@@ -19,13 +19,19 @@ namespace {
 // from the GTK CSS parser; adw_init runs before any window builds.
 constexpr const char* kDrawerCss = R"(
 /* surfaces + text */
-window.background { background-color: #101010; color: #ffffff; }
+window.background { background-color: #101010; color: #f8f8f8; }
 .dim-label { color: #989898; opacity: 1; }
 .ur-label-faint { color: #5a5a5a; }
 /* cards: radius 12, padding 16, tinted #1c1c1c; tappable cards lighten on hover */
-.ur-card { background-color: #1c1c1c; border-radius: 12px; padding: 16px; }
-.ur-card-tappable { transition: background-color 150ms ease; }
-.ur-card-tappable:hover { background-color: #242424; }
+.ur-card { background-color: #1c1c1c; border: 1px solid alpha(#ffffff, .12);
+  border-radius: 12px; padding: 16px; }
+.ur-card-tappable { transition: background-color 150ms ease, border-color 150ms ease; }
+.ur-card-tappable:hover { background-color: #242424; border-color: alpha(#ffffff, .22); }
+/* GTK4 never sets :active on a plain box, so pressed feedback is the .pressed
+   class WireCardPressFeedback toggles from the click gesture (windows
+   UrCardPressedBrush #2A2A2A) */
+.ur-card-tappable.pressed, .ur-card-tappable:active {
+  background-color: #2a2a2a; border-color: alpha(#ffffff, .22); }
 .ur-banner { background-color: #1c1c1c; border-radius: 12px; padding: 12px; }
 /* dns recommendation pill: a small left-aligned coral-tinted capsule atop the
    Custom DNS card, nudging when the applied dns settings differ from the
@@ -59,13 +65,13 @@ window.background { background-color: #101010; color: #ffffff; }
 /* the "N new" contract-details chip: accent capsule with dark text */
 button.ur-newchip { background-color: #eff7bb; color: #101010; border-radius: 999px;
   padding: 6px 12px; min-height: 0; }
-button.ur-newchip:hover { background-color: #f5fad2; }
-button.ur-newchip:active { background-color: #e6efa6; }
+button.ur-newchip:hover { background-color: #f5fbd1; }
+button.ur-newchip:active { background-color: #d9e3a3; }
 /* accent: pale yellow primary actions with dark text (mac UrButton parity) */
 button.suggested-action { background-color: #eff7bb; color: #101010; }
-button.suggested-action:hover { background-color: #f5fad2; }
-button.suggested-action:active { background-color: #e6efa6; }
-button.suggested-action:disabled { background-color: alpha(#eff7bb, .3); color: alpha(#101010, .6); }
+button.suggested-action:hover { background-color: #f5fbd1; }
+button.suggested-action:active { background-color: #d9e3a3; }
+button.suggested-action:disabled { background-color: alpha(#eff7bb, .2); color: alpha(#101010, .4); }
 /* danger */
 button.destructive-action { background-color: alpha(#f8523b, .15); color: #f8523b; }
 button.destructive-action:hover { background-color: alpha(#f8523b, .25); }
@@ -82,7 +88,7 @@ button.ur-option:checked { border-color: #eff7bb; background: none; }
 /* verification code entry: large centered glyphs (the mac OTP boxes) */
 entry.ur-otp { font-family: monospace; font-size: 24px; letter-spacing: 12px; }
 /* inline form validation text */
-.ur-error-text { color: #f8523b; }
+.ur-error-text { color: #ff6c58; }
 )";
 
 int HexNibble(char c) {
@@ -212,6 +218,22 @@ void RemoveAllChildren(Gtk::Box& box) {
 
 void SetPointerCursor(Gtk::Widget& widget) {
   gtk_widget_set_cursor_from_name(widget.gobj(), "pointer");
+}
+
+void WireCardPressFeedback(Gtk::Widget& widget) {
+  // GTK4 sets :hover on any widget under the pointer but :active only on real
+  // buttons, so a tappable card needs its own pressed feedback. A capture-
+  // phase gesture that CLAIMS nothing: the card's own click gesture still
+  // fires. unset_state covers release-outside and cancelled sequences.
+  auto gesture = Gtk::GestureClick::create();
+  gesture->set_propagation_phase(Gtk::PropagationPhase::CAPTURE);
+  gesture->signal_pressed().connect(
+      [&widget](int, double, double) { widget.add_css_class("pressed"); });
+  gesture->signal_released().connect(
+      [&widget](int, double, double) { widget.remove_css_class("pressed"); });
+  gesture->signal_cancel().connect(
+      [&widget](Gdk::EventSequence*) { widget.remove_css_class("pressed"); });
+  widget.add_controller(gesture);
 }
 
 void ShowToast(Gtk::Widget& context, const std::string& message) {

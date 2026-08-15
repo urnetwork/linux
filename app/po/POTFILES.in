@@ -10,16 +10,26 @@
 #   src/main.cpp        only the gettext bootstrap and stderr diagnostics
 src/AuthViews.cpp
 src/ConnectDrawer.cpp
+src/ConnectPage.cpp
 src/ContractsSheet.cpp
 src/DnsSheet.cpp
 src/Formatters.cpp
 src/LocationOverrideGuide.cpp
 src/LocationsSheet.cpp
+src/LoginCarousel.cpp
 src/MainWindow.cpp
+src/NetworkPage.cpp
+src/NetworkServerSheet.cpp
 src/PostQuantumIdentity.cpp
 src/ProviderLocationsSheet.cpp
 src/RedeemCodeSheet.cpp
+src/SeedphraseSheet.cpp
+src/DeveloperPage.cpp
+src/SettingsPage.cpp
 src/SplitRulesSheet.cpp
+src/SupportPage.cpp
 src/Tray.cpp
 src/UpgradeSheet.cpp
 src/UsageBar.cpp
+app/src/EarningsPage.cpp
+app/src/AccountPage.cpp

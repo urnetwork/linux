@@ -233,16 +233,26 @@ struct StartTunnelRequest {
   std::string by_jwt;
   std::string instance_id;
   std::string app_version;
+  // The GUI's active NetworkSpace, serialized (windows StartTunnel's
+  // network_space_json). The daemon builds its DeviceLocal in THIS space so a
+  // custom-server session never syncs against a device registered on
+  // production. Empty = the compiled-in default space (BuildUrNetworkSpace) —
+  // the safe direction: silence means production, never a surprise server.
+  // Additive within protocol v1: both halves ship from one pipeline and the
+  // hello sdk_version exact-match already refuses mismatched pairs.
+  std::string network_space_json;
 };
 inline void to_json(nlohmann::json& j, const StartTunnelRequest& v) {
   j["by_jwt"] = v.by_jwt;
   j["instance_id"] = v.instance_id;
   j["app_version"] = v.app_version;
+  if (!v.network_space_json.empty()) j["network_space_json"] = v.network_space_json;
 }
 inline void from_json(const nlohmann::json& j, StartTunnelRequest& v) {
   detail::Get(j, "by_jwt", v.by_jwt);
   detail::Get(j, "instance_id", v.instance_id);
   detail::Get(j, "app_version", v.app_version);
+  detail::Get(j, "network_space_json", v.network_space_json);
 }
 
 // Validation the daemon applies before constructing anything. Pure so the

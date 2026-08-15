@@ -39,3 +39,18 @@ option('glibc_floor', type : 'string', value : '2.35',
 # keeps it out of the source tree, the way the other platforms do it.
 option('walletconnect_project_id', type : 'string', value : '',
        description : 'WalletConnect Cloud project id for the wallet-connect bridge (optional)')
+
+# Host-integration files (the systemd unit, the autostart template, the
+# NetworkManager conf.d marker and the udev rules) install to ABSOLUTE paths
+# outside the prefix -- /lib/systemd/system, /etc/urnetwork, /etc/NetworkManager,
+# /etc/udev. That is correct for the .deb/.rpm/tarball, and IMPOSSIBLE inside a
+# Flatpak build, where everything outside /app is read-only: the install step
+# fails outright.
+#
+# The Flatpak is GUI-only by design (docs/linux_agent_help.md §10.2 -- no VPN
+# ships its privileged daemon in a sandbox; the daemon comes from the host's
+# native package and the GUI reaches it over /run/urnetwork/control.sock). So
+# -Dhost_integration=false drops the daemon binary AND those four files, and
+# puts the vendored SDK where the GUI's own rpath ($ORIGIN/../lib) finds it.
+option('host_integration', type : 'boolean', value : true,
+       description : 'Install the daemon + systemd/udev/NM/autostart integration files (false for Flatpak: GUI only)')

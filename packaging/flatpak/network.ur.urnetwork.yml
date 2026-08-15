@@ -1,0 +1,186 @@
+# URnetwork — Flatpak manifest (GUI ONLY).
+#
+# WHY GUI-ONLY (docs/linux_agent_help.md §10.1/§10.2, and it is not a
+# limitation we chose): a Flatpak sandbox has no /dev/net/tun, no
+# CAP_NET_ADMIN, and no way to install a system unit. No official VPN with a
+# kill switch ships its daemon in a Flatpak — Mozilla VPN, the one on Flathub,
+# DELETED its privileged daemon and drives NetworkManager over D-Bus instead,
+# forfeiting split tunneling. That trade contradicts this product's
+# leak-prevention requirements, so it is not taken.
+#
+# Instead this follows the Trayscale pattern: the GUI runs sandboxed and
+# reaches the host's urnetworkd over its Unix control socket, exposed with
+# --filesystem=/run/urnetwork:ro. Read-only is correct AND sufficient:
+# connect(2) on a unix socket is not a filesystem write, and Linux exempts
+# sockets from the read-only-mount EROFS check (only REG/DIR/LNK are covered).
+# The daemon itself comes from the host's native .deb/.rpm.
+#
+# The app already renders the missing-daemon case as a distinct, actionable
+# state (MainWindow::StartTunnelUi: "service not running" / "service out of
+# date" / "app out of date" / "builds differ"), so a Flatpak with no host
+# daemon explains itself instead of failing blank.
+#
+# LOCAL INSTALL (the current target — Flathub submission comes later):
+#   flatpak install -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
+#   flatpak run org.flatpak.Builder --force-clean --user --install \
+#     build-flatpak packaging/flatpak/network.ur.urnetwork.yml
+#   flatpak run network.ur.urnetwork
+#
+# FOR FLATHUB, two changes are required and are deliberately NOT made here:
+#   1. `sources: [{type: dir, path: ../..}]` must become a git/archive source
+#      with a commit or sha256 — Flathub forbids local directory sources.
+#   2. The four commercial brand faces under app/assets/fonts are NOT MPL-2.0.
+#      Flathub requires the licenses of every bundled binary asset to permit
+#      redistribution; that audit (§7.17) must land before submission.
+#
+# SPDX-License-Identifier: MPL-2.0
+id: network.ur.urnetwork
+runtime: org.gnome.Platform
+runtime-version: '49'
+sdk: org.gnome.Sdk
+command: urnetwork-gui
+
+finish-args:
+  # Display. Wayland first (this is a Wayland-native GTK4 app); X11 fallback
+  # for the sessions that still need it.
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+
+  # The SDK talks to the URnetwork API over the internet, and the GUI reaches
+  # the daemon's loopback mTLS device RPC on 127.0.0.1. Both need the host
+  # network namespace.
+  - --share=network
+
+  # THE HOST DAEMON'S CONTROL SOCKET. Without this the app runs, shows the
+  # login screen, and reports "service not running" — it never silently fails.
+  - --filesystem=/run/urnetwork:ro
+
+  # The SNI tray (Tray.cpp speaks StatusNotifier over raw GDBus). Only the
+  # WATCHER is declared: flatpak's name policy can grant a dotted subtree but
+  # not the hyphenated org.kde.StatusNotifierItem-<pid>-<id>, so no --own-name
+  # can match it (flatpak rejects the manifest outright if you try). Tray.cpp
+  # handles this by falling back to registering under the connection's unique
+  # bus name, which the SNI spec allows and which needs no ownership.
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+  # Opening sign-in / wallet-connect / support links in the user's browser.
+  - --talk-name=org.freedesktop.portal.OpenURI
+
+  # Autostart is requested through the Background portal — the sandboxed
+  # equivalent of the ~/.config/autostart symlink the native build writes.
+  - --talk-name=org.freedesktop.portal.Background
+
+  # GeoClue: the app can pin the device's reported location to the connected
+  # provider. Optional — a refused permission costs the override, nothing else.
+  - --system-talk-name=org.freedesktop.GeoClue2
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /lib/cmake
+  - /share/pkgconfig
+  - /share/aclocal
+  - /share/devhelp
+  - /share/doc
+  - /share/man
+  - '*.a'
+  - '*.la'
+
+modules:
+  # ---- the gtkmm stack --------------------------------------------------
+  # org.gnome.Sdk 49 carries GTK 4.20 and libadwaita 1.8 but NO C++ bindings,
+  # so the five -mm libraries are built here. Versions are pinned to the ones
+  # that pair with the runtime's C libraries (glib 2.86, cairo 1.18, pango
+  # 1.57, GTK 4.20) — do not bump one without the others.
+  - name: libsigc++
+    buildsystem: meson
+    config-opts:
+      - -Dbuild-documentation=false
+      - -Dbuild-examples=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/libsigc++/3.6/libsigc++-3.6.0.tar.xz
+        sha256: c3d23b37dfd6e39f2e09f091b77b1541fbfa17c4f0b6bf5c89baef7229080e17
+
+  - name: glibmm
+    buildsystem: meson
+    config-opts:
+      - -Dbuild-documentation=false
+      - -Dbuild-examples=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/glibmm/2.86/glibmm-2.86.0.tar.xz
+        sha256: 39c0e9f6da046d679390774efdb9ad564436236736dc2f7825e614b2d4087826
+
+  # cairomm 1.16+ is released by cairographics.org, NOT download.gnome.org
+  # (the GNOME mirror stops at the old 1.12/1.15 API series).
+  - name: cairomm
+    buildsystem: meson
+    config-opts:
+      - -Dbuild-documentation=false
+      - -Dbuild-examples=false
+      - -Dbuild-tests=false
+    sources:
+      - type: archive
+        url: https://www.cairographics.org/releases/cairomm-1.18.0.tar.xz
+        sha256: b81255394e3ea8e8aa887276d22afa8985fc8daef60692eb2407d23049f03cfb
+
+  - name: pangomm
+    buildsystem: meson
+    config-opts:
+      - -Dbuild-documentation=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/pangomm/2.56/pangomm-2.56.2.tar.xz
+        sha256: f1e984c85a85b6a0e61616366521f51dd8282a072bb45d15b5084762b62f4c0e
+
+  - name: gtkmm
+    buildsystem: meson
+    config-opts:
+      - -Dbuild-documentation=false
+      - -Dbuild-demos=false
+      - -Dbuild-tests=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/gtkmm/4.20/gtkmm-4.20.0.tar.xz
+        sha256: daad9bf9b70f90975f91781fc7a656c923a91374261f576c883cd3aebd59c833
+
+  # ---- nlohmann_json (header-only) --------------------------------------
+  - name: nlohmann-json
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DJSON_BuildTests=OFF
+    sources:
+      - type: archive
+        url: https://github.com/nlohmann/json/archive/refs/tags/v3.12.0.tar.gz
+        sha256: 4b92eb0c06d10683f7447ce9406cb97cd4b453be18d7279320f7b2f025c10187
+
+  # ---- the app ----------------------------------------------------------
+  - name: urnetwork
+    buildsystem: meson
+    subdir: app
+    config-opts:
+      - -Dgui=enabled
+      # Drops urnetworkd and the four host-integration files that install to
+      # ABSOLUTE paths (/lib/systemd/system, /etc/urnetwork, /etc/NetworkManager,
+      # /etc/udev) — nothing outside /app is writable in a Flatpak build, so
+      # without this the install step fails outright. It also relocates the
+      # vendored SDK to the libdir root, where the GUI's own rpath
+      # ($ORIGIN/../lib) finds it.
+      - -Dhost_integration=false
+    post-install:
+      # The installed .desktop points Exec at /usr/bin/urnetwork, the daemon
+      # package's launcher that finds and execs the user's AppImage. There is
+      # no AppImage here and no /usr/bin to put a launcher in, so the Flatpak
+      # runs the GUI binary directly.
+      - desktop-file-edit --set-key=Exec --set-value="urnetwork-gui %u"
+        /app/share/applications/network.ur.urnetwork.desktop
+      - desktop-file-edit --remove-key=TryExec
+        /app/share/applications/network.ur.urnetwork.desktop
+    sources:
+      # LOCAL SOURCE — replace with a git/archive source before any Flathub
+      # submission (see the header). The path is relative to this manifest.
+      - type: dir
+        path: ../..

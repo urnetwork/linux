@@ -71,9 +71,12 @@ class ControlClient {
   // ---- verbs (each ensures a session first) --------------------------------
   // start_tunnel: on success fills rpcPort (informational — the DeviceRemote
   // dials the SDK default). On failure `error` carries the daemon's message
-  // (e.g. another client owns the tunnel).
+  // (e.g. another client owns the tunnel). networkSpaceJson is the GUI's
+  // active space, so the daemon's DeviceLocal lives in the same network
+  // ("" = the compiled-in default).
   bool StartTunnel(const std::string& byJwt, const std::string& instanceId,
-                   const std::string& appVersion, int* rpcPort, std::string* error);
+                   const std::string& appVersion, const std::string& networkSpaceJson,
+                   int* rpcPort, std::string* error);
   bool StopTunnel(std::string* error = nullptr);
   bool SetProvide(const std::string& mode, std::string* error = nullptr);
   std::optional<ctl::StatusReply> Status(std::string* error = nullptr);

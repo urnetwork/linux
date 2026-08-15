@@ -237,13 +237,15 @@ std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann
 }
 
 bool ControlClient::StartTunnel(const std::string& byJwt, const std::string& instanceId,
-                                const std::string& appVersion, int* rpcPort,
+                                const std::string& appVersion,
+                                const std::string& networkSpaceJson, int* rpcPort,
                                 std::string* error) {
   std::scoped_lock lock(mutex_);
   ctl::StartTunnelRequest req;
   req.by_jwt = byJwt;
   req.instance_id = instanceId;
   req.app_version = appVersion;
+  req.network_space_json = networkSpaceJson;
   const auto reply = CallLocked(ctl::Verb::StartTunnel, nlohmann::json(req), error);
   if (!reply) return false;
   if (!ctl::ReplyOk(*reply)) {

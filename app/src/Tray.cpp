@@ -212,7 +212,7 @@ Tray::Tray() {
       G_BUS_TYPE_SESSION, service_name_.c_str(), G_BUS_NAME_OWNER_FLAGS_NONE,
       +[](GDBusConnection* c, const gchar*, gpointer u) { static_cast<Tray*>(u)->OnBusAcquired(c); },
       +[](GDBusConnection*, const gchar*, gpointer u) { static_cast<Tray*>(u)->RegisterWithWatcher(); },
-      +[](GDBusConnection*, const gchar*, gpointer) { /* no session bus / name lost: run without a tray */ },
+      +[](GDBusConnection* c, const gchar*, gpointer u) { static_cast<Tray*>(u)->OnNameLost(c); },
       this, nullptr);
 }
 
@@ -231,6 +231,24 @@ void Tray::OnBusAcquired(GDBusConnection* conn) {
     g_dbus_node_info_unref(info);
   }
   g_clear_error(&err);
+}
+
+// The well-known name could not be owned. Inside a Flatpak that is not a
+// failure, it is the rule: the sandbox's D-Bus policy can only grant a dotted
+// subtree (`org.foo.*`), and the SNI item name is HYPHENATED
+// (org.kde.StatusNotifierItem-<pid>-<id>), so no --own-name can ever match it.
+// The StatusNotifierItem spec allows the registered service to be either a
+// well-known name or the connection's unique name, and a unique name needs no
+// ownership at all — so registering under it is what gets a sandboxed build a
+// tray icon instead of none. A null connection means there is no session bus,
+// which really is "run without a tray".
+void Tray::OnNameLost(GDBusConnection* conn) {
+  if (!conn) return;
+  if (!conn_) OnBusAcquired(conn);
+  const char* unique = g_dbus_connection_get_unique_name(conn);
+  if (!unique) return;
+  service_name_ = unique;
+  RegisterWithWatcher();
 }
 
 void Tray::RegisterWithWatcher() {

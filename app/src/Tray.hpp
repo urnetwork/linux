@@ -37,6 +37,9 @@ class Tray {
  private:
   void OnBusAcquired(GDBusConnection* conn);
   void RegisterWithWatcher();
+  // Fallback when the well-known name cannot be owned (a Flatpak sandbox):
+  // register with the watcher under the connection's UNIQUE name.
+  void OnNameLost(GDBusConnection* conn);
   void EmitMenuLayoutUpdated();
 
   GDBusConnection* conn_ = nullptr;

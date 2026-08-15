@@ -26,6 +26,10 @@
 #                   any OS, including macOS build hosts)
 #   --prefix <dir>  root the file layout under <dir> for testing; skips all
 #                   system mutation (group, systemd, caches)
+#   --layout <l>    'standard' (/usr + /lib/systemd) or 'immutable'
+#                   (/usr/local + /etc/systemd, for ostree/bootc hosts like
+#                   Fedora Silverblue, Bazzite, Kinoite and MicroOS).
+#                   DETECTED automatically; this only overrides the detection.
 #   --update        fetch the current tarball from get.ur.network and run its
 #                   installer (the opt-in update channel where there is no apt)
 #   --force         override downgrade/preflight refusals
@@ -45,10 +49,73 @@ GLIBC_FLOOR='2.35'      # SDK is cross-built against glibc 2.35 (jammy)
 GEOCLUE_FLOOR='2.7.0'   # static-source location override needs >= 2.7.0
 DEFAULT_URL_BASE='https://get.ur.network'
 
-# Installed bookkeeping (under $PREFIX):
+# ---------------------------------------------------------------------------
+# Immutable / image-based hosts (ostree: Fedora Silverblue, Bazzite, Kinoite;
+# bootc; openSUSE MicroOS)
+# ---------------------------------------------------------------------------
+# On these systems /usr is a READ-ONLY mount owned by the image, and writing
+# into it either fails outright or is silently discarded at the next rebase.
+# The supported writable locations are /usr/local (an ostree symlink to
+# /var/usrlocal) and /etc — so the payload's paths are REMAPPED:
+#
+#     /usr/bin/...              -> /usr/local/bin/...
+#     /usr/lib/urnetwork/...    -> /usr/local/lib/urnetwork/...
+#     /usr/share/...            -> /usr/local/share/...
+#     /lib/systemd/system/...   -> /etc/systemd/system/...     (admin unit dir)
+#     /etc/...                  -> unchanged (already writable)
+#
+# and the unit's ExecStart is rewritten to match. Both destinations are in the
+# default PATH / XDG_DATA_DIRS / systemd unit load path on every one of these
+# distros, so nothing else has to know.
+#
+# This is detection, not a flag: a user who follows the documented one-liner on
+# Bazzite must not have to know their /usr is read-only. --layout forces it
+# either way for testing.
+LAYOUT=''   # '', 'standard' or 'immutable' (empty = detect)
+
+detect_layout() {
+    [ -n "${LAYOUT}" ] && { printf '%s' "${LAYOUT}"; return 0; }
+    # ostree booted systems say so; bootc/MicroOS are caught by the mount test.
+    if [ -f /run/ostree-booted ]; then printf 'immutable'; return 0; fi
+    if command -v findmnt >/dev/null 2>&1; then
+        case "$(findmnt -no OPTIONS --target /usr 2>/dev/null)" in
+            ro,*|*,ro|*,ro,*|ro) printf 'immutable'; return 0 ;;
+        esac
+    fi
+    # Last resort: ask the filesystem directly. A writable /usr on a normal
+    # distro answers instantly; the temp file is removed either way.
+    if ! (mkdir -p /usr/lib/urnetwork 2>/dev/null &&
+          touch /usr/lib/urnetwork/.urnetwork-write-test 2>/dev/null); then
+        rm -f /usr/lib/urnetwork/.urnetwork-write-test 2>/dev/null || true
+        printf 'immutable'; return 0
+    fi
+    rm -f /usr/lib/urnetwork/.urnetwork-write-test 2>/dev/null || true
+    printf 'standard'
+}
+
+# map_path <payload-relative path> -> install path
+map_path() {
+    if [ "${LAYOUT}" != 'immutable' ]; then printf '%s' "$1"; return 0; fi
+    case "$1" in
+        # The bare directories are asked for by name too (LIB_DIR, the cache
+        # refresh targets), and they do NOT match the /* patterns below.
+        /usr/bin)               printf '/usr/local/bin' ;;
+        /usr/lib/urnetwork)     printf '/usr/local/lib/urnetwork' ;;
+        /usr/share)             printf '/usr/local/share' ;;
+        /usr/bin/*)             printf '/usr/local/bin/%s'   "${1#/usr/bin/}" ;;
+        /usr/lib/urnetwork/*)   printf '/usr/local/lib/urnetwork/%s' "${1#/usr/lib/urnetwork/}" ;;
+        /usr/share/*)           printf '/usr/local/share/%s' "${1#/usr/share/}" ;;
+        /lib/systemd/system/*)     printf '/etc/systemd/system/%s' "${1#/lib/systemd/system/}" ;;
+        /usr/lib/systemd/system/*) printf '/etc/systemd/system/%s' "${1#/usr/lib/systemd/system/}" ;;
+        *)                      printf '%s' "$1" ;;
+    esac
+}
+
+# Installed bookkeeping (under $PREFIX). LIB_DIR is remapped after the layout
+# is known — the uninstaller has to live where it was actually installed.
 LIB_DIR='/usr/lib/urnetwork'
-MANIFEST_REL="${LIB_DIR}/.install-manifest"
-VERSION_REL="${LIB_DIR}/.installed-version"
+MANIFEST_REL=''
+VERSION_REL=''
 
 DRY_RUN=0
 PREFIX=''
@@ -62,7 +129,7 @@ warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
 usage() {
-    sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 # Every mutating command goes through run(); --dry-run prints instead.
@@ -113,6 +180,9 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) DRY_RUN=1; shift ;;
         --prefix)  PREFIX="${2:?--prefix needs a directory}"; shift 2 ;;
+        --layout)  LAYOUT="${2:?--layout needs standard|immutable}"
+                   case "${LAYOUT}" in standard|immutable) ;; *) die "--layout must be 'standard' or 'immutable'" ;; esac
+                   shift 2 ;;
         --update)  DO_UPDATE=1; shift ;;
         --force)   FORCE=1; shift ;;
         --yes|-y)  ASSUME_YES=1; shift ;;
@@ -170,6 +240,21 @@ PAYLOAD_ARCH="$(elf_arch "${PAYLOAD_DIR}${DAEMON_REL}")"
 
 log "urnetwork-daemon ${NEW_VERSION} installer (payload: ${PAYLOAD_ARCH})"
 [ "${DRY_RUN}" = 1 ] && log "[dry-run] no changes will be made"
+
+# Layout must be resolved BEFORE any path is formed: LIB_DIR, the manifest,
+# the version marker and every install target depend on it. Under --prefix the
+# tree is rooted somewhere writable already, so the standard layout applies.
+if [ -n "${PREFIX}" ] && [ -z "${LAYOUT}" ]; then
+    LAYOUT='standard'
+else
+    LAYOUT="$(detect_layout)"
+fi
+LIB_DIR="$(map_path '/usr/lib/urnetwork')"
+MANIFEST_REL="${LIB_DIR}/.install-manifest"
+VERSION_REL="${LIB_DIR}/.installed-version"
+if [ "${LAYOUT}" = 'immutable' ]; then
+    log "layout: immutable host (/usr is read-only) -- installing under /usr/local and /etc/systemd/system"
+fi
 
 # ---------------------------------------------------------------------------
 # Gate: OS / arch / privileges
@@ -368,12 +453,15 @@ if [ "${DRY_RUN}" = 1 ]; then
         note "back up currently installed files for rollback-on-failure"
     fi
     echo "${INSTALL_LIST}" | while IFS= read -r rel; do
-        if is_config "${rel}" && [ -e "${PREFIX}${rel}" ]; then
-            note "keep existing ${PREFIX}${rel} (admin-owned config)"
+        dst="$(map_path "${rel}")"
+        if is_config "${rel}" && [ -e "${PREFIX}${dst}" ]; then
+            note "keep existing ${PREFIX}${dst} (admin-owned config)"
         else
-            note "install ${PREFIX}${rel} ($(file_mode "${rel}"))"
+            note "install ${PREFIX}${dst} ($(file_mode "${rel}"))"
         fi
     done
+    [ "${LAYOUT}" = 'immutable' ] && \
+        note "rewrite ExecStart in the unit to $(map_path '/usr/lib/urnetwork/urnetworkd')"
     note "install ${PREFIX}${LIB_DIR}/uninstall.sh, ${PREFIX}${MANIFEST_REL}, ${PREFIX}${VERSION_REL}"
     if [ -z "${PREFIX}" ]; then
         note "systemctl daemon-reload; reload udev rules and NetworkManager config"
@@ -458,22 +546,42 @@ BACKUP_DIR="$(mktemp -d "${TMP_BASE}/urnetwork-daemon-backup.XXXXXX")"
 REPLACING=1
 
 install_one() {
-    # install_one <rel path>; records the write and backs up any prior file.
-    local rel="$1" dst="${PREFIX}$1"
+    # install_one <payload-relative path>; records the write (at its MAPPED
+    # destination, which is what a rollback and the uninstaller act on) and
+    # backs up any prior file.
+    local rel="$1" mapped dst
+    mapped="$(map_path "$1")"
+    dst="${PREFIX}${mapped}"
     if [ -f "${dst}" ]; then
-        mkdir -p "${BACKUP_DIR}$(dirname "${rel}")"
-        cp -p "${dst}" "${BACKUP_DIR}${rel}"
+        mkdir -p "${BACKUP_DIR}$(dirname "${mapped}")"
+        cp -p "${dst}" "${BACKUP_DIR}${mapped}"
     fi
-    WRITTEN_LOG="${WRITTEN_LOG}${rel}
+    WRITTEN_LOG="${WRITTEN_LOG}${mapped}
 "
     install -D -m "$(file_mode "${rel}")" "${PAYLOAD_DIR}${rel}" "${dst}"
+
+    # The unit ships with ExecStart=/usr/lib/urnetwork/urnetworkd. On an
+    # immutable host the daemon is not there, and systemd would fail the unit
+    # with status=203/EXEC — a failure that looks like a broken build rather
+    # than a misplaced file. Rewrite every /usr/lib/urnetwork path in the unit
+    # to where the binary actually landed.
+    if [ "${LAYOUT}" = 'immutable' ]; then
+        case "${rel}" in
+            */systemd/system/*.service)
+                sed -i "s|/usr/lib/urnetwork/|$(map_path '/usr/lib/urnetwork')/|g" "${dst}"
+                ;;
+        esac
+    fi
 }
 
 log "installing files..."
 while IFS= read -r rel; do
     [ -n "${rel}" ] || continue
-    if is_config "${rel}" && [ -e "${PREFIX}${rel}" ]; then
-        log "  kept existing ${PREFIX}${rel} (admin-owned config; new default stays in the tarball)"
+    # is_config asks about the PAYLOAD path on purpose: the systemd unit maps
+    # into /etc/systemd/system on an immutable host, and treating it as an
+    # admin-owned conffile there would mean an upgrade never replaces the unit.
+    if is_config "${rel}" && [ -e "${PREFIX}$(map_path "${rel}")" ]; then
+        log "  kept existing ${PREFIX}$(map_path "${rel}") (admin-owned config; new default stays in the tarball)"
         continue
     fi
     install_one "${rel}"
@@ -483,10 +591,14 @@ done <<< "${INSTALL_LIST}"
 # (never under /etc or /var/lib -- upgrades only replace binaries, units and
 # integration files).
 if [ -n "${OLD_MANIFEST}" ]; then
+    # The manifest records MAPPED paths, so compare against the mapped list.
+    MAPPED_LIST="$(printf '%s\n' "${INSTALL_LIST}" | while IFS= read -r r; do
+        [ -n "${r}" ] && map_path "${r}" && printf '\n'
+    done)"
     while IFS= read -r rel; do
         [ -n "${rel}" ] || continue
-        case "${rel}" in /etc/*|/var/lib/*) continue ;; esac
-        if ! printf '%s\n' "${INSTALL_LIST}" | grep -Fxq "${rel}" \
+        case "${rel}" in /etc/systemd/system/*) ;; /etc/*|/var/lib/*) continue ;; esac
+        if ! printf '%s\n' "${MAPPED_LIST}" | grep -Fxq "${rel}" \
             && [ "${rel}" != "${LIB_DIR}/uninstall.sh" ] \
             && [ -f "${PREFIX}${rel}" ]; then
             log "  removing stale ${PREFIX}${rel} (no longer shipped)"
@@ -500,7 +612,11 @@ fi
 # Bookkeeping: uninstaller + manifest + version marker.
 install -D -m 0755 "${SELF_DIR}/uninstall.sh" "${PREFIX}${LIB_DIR}/uninstall.sh"
 mkdir -p "${PREFIX}${LIB_DIR}"
-printf '%s\n' "${INSTALL_LIST}" > "${PREFIX}${MANIFEST_REL}"
+# The manifest holds INSTALL paths, not payload paths — the uninstaller reads
+# it to decide what to remove, and on an immutable host those differ.
+printf '%s\n' "${INSTALL_LIST}" | while IFS= read -r rel; do
+    [ -n "${rel}" ] && map_path "${rel}" && printf '\n'
+done > "${PREFIX}${MANIFEST_REL}"
 printf '%s\n' "${NEW_VERSION}" > "${PREFIX}${VERSION_REL}"
 
 # ---------------------------------------------------------------------------
@@ -547,14 +663,27 @@ if [ -z "${PREFIX}" ]; then
     # still appears in menus (so the breakage is invisible on a dev box) but
     # urnetwork:// SSO callbacks and wallet deep links silently fail, and any
     # later `apt install` of anything repairs it -- so it escapes testing.
+    # SELinux (Fedora Silverblue / Bazzite / Kinoite): files written outside a
+    # package manager keep whatever label the parent dir gave them. The daemon
+    # is started by systemd and the launcher is exec'd from a desktop file, so
+    # a wrong label costs an AVC denial that looks like a mystery failure.
+    # restorecon applies the policy's own contexts; a system without SELinux
+    # simply has no such command.
+    if [ "${LAYOUT}" = 'immutable' ] && command -v restorecon >/dev/null 2>&1; then
+        restorecon -R "$(map_path '/usr/lib/urnetwork')" \
+                      "$(map_path '/usr/bin')/urnetwork" \
+                      /etc/systemd/system >/dev/null 2>&1 || \
+            warn "restorecon failed -- if the service is denied by SELinux, run: sudo restorecon -R $(map_path '/usr/lib/urnetwork')"
+    fi
+
     if command -v update-desktop-database >/dev/null 2>&1; then
-        update-desktop-database -q /usr/share/applications || \
+        update-desktop-database -q "$(map_path '/usr/share')/applications" || \
             warn "update-desktop-database failed -- urnetwork:// links may not resolve"
     else
         warn "update-desktop-database not found (desktop-file-utils): urnetwork:// SSO/deep links will NOT resolve until it runs. Headless servers can ignore this."
     fi
     if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-        gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || \
+        gtk-update-icon-cache -q -t -f "$(map_path '/usr/share')/icons/hicolor" 2>/dev/null || \
             warn "gtk-update-icon-cache failed -- the launcher icon may not appear until the cache refreshes"
     else
         warn "gtk-update-icon-cache not found: the launcher icon may not appear until the icon cache refreshes. Headless servers can ignore this."

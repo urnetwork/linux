@@ -15,10 +15,22 @@
 
 #include "AuthViews.hpp"
 #include "ConnectDrawer.hpp"
+#include "ConnectPage.hpp"
+#include "HomeShell.hpp"
+#include "AccountPage.hpp"
+#include "DeveloperPage.hpp"
+#include "EarningsPage.hpp"
+#include "NetworkPage.hpp"
+#include "SettingsPage.hpp"
+#include "SupportPage.hpp"
 #include "LocationOverride.hpp"
+#include "LoginCarousel.hpp"
+#include "NetworkServerSheet.hpp"
 #include "ProviderLocationsSheet.hpp"
 #include "SdkHost.hpp"
+#include "SeedphraseSheet.hpp"
 #include "SubscriptionBalance.hpp"
+#include "UrMotion.hpp"
 
 namespace urnw {
 
@@ -31,8 +43,11 @@ class MainWindow : public Gtk::ApplicationWindow {
   std::function<void(bool connected)> on_connected_change;
 
  private:
+  void BuildChrome();         // 48px title bar: 20px app icon + PP NeueBit wordmark
   void BuildLogin();          // initial step: user auth discovery + the other entry points
   void BuildPasswordStep();   // password step of the email-first login
+  void BuildSeedphraseStep(); // sign in with a 12/24-word phrase (windows parity)
+  void BuildInstantStep();    // instant (seedphrase-only) account (windows parity)
   void BuildHome();
   // StartTunnel + render the daemon session state. "Daemon unreachable" and
   // "daemon too old" are DISTINCT actionable lines (MIGRATION.md) — the same
@@ -44,11 +59,38 @@ class MainWindow : public Gtk::ApplicationWindow {
   void BuildAuthPages();  // create network / verify / password reset
   void OnGetStarted();  // authLogin discovery -> password / create / inline error
   void OnSignIn();
-  void OnUseCode();
-  void OnGuestMode();
+  void OnUseCode();     // auth-code login: a modal sheet, not an inline field
+  void OnSolanaChooser();  // ONE Solana button -> a Phantom/Solflare chooser
   void OnSolana(WalletConnect::Provider provider);
   void OnBittensor();
   void OnWalletAuth(const AuthResult& result);  // shared tail of both wallet sign-ins
+  void OnSeedphraseChanged();
+  void OnSeedphraseSubmit();
+  void OnInstantSubmit();
+  // android disables every sign-in affordance while any one is in flight
+  void SetLoginBusy(bool busy);
+  // narrow <-> wide login (the app-wide 1000dip breakpoint): the wide layout
+  // reparents the carousel into the art pane beside a fixed 544dip form column
+  void ApplyLoginBreakpoint(bool wide);
+  // The signed-in twin of ApplyLoginBreakpoint: fan the window's content width
+  // out to every destination so their pane folds actually fire (each page owns
+  // its own thresholds; the window only measures).
+  void ApplyPageBreakpoint(int widthDip);
+
+ protected:
+  // GTK4 has no size-allocate signal; the window's own vfunc is the only place
+  // the real (maximized, tiled, WM-resized) content width is observable.
+  void size_allocate_vfunc(int width, int height, int baseline) override;
+
+ private:
+  // run the carousel only on the initial login step while the window shows
+  void UpdateCarouselRunning();
+  // one label, two voices: a coral inline error vs a muted progress notice
+  void SetLoginError(const Glib::ustring& text);
+  void SetLoginNotice(const Glib::ustring& text);
+  // the signed-out Hero Bloom (motion-overhaul §2.1): hero spring + ripple
+  void RunSignedOutReveal();
+  void SettleReveal();  // CancelToFinal: every ring to the settled pose
   void NavigateCreate(CreateNetworkPage::Mode mode, const std::string& userAuth, bool fromHome);
   void NavigateVerify(const std::string& userAuth);
   void ApplyAuthState(bool loggedIn);
@@ -70,10 +112,40 @@ class MainWindow : public Gtk::ApplicationWindow {
   Gtk::Entry email_;
   Gtk::Button* getStartedBtn_ = nullptr;  // disabled while a discovery is in flight
   Gtk::PasswordEntry password_;           // lives on the password step
+  Gtk::Button* signInBtn_ = nullptr;      // disabled while a sign-in is in flight
+  bool signingIn_ = false;
   Gtk::Label passwordUserAuth_;           // the discovered auth the password belongs to
   Gtk::Label passwordError_;
-  Gtk::Entry code_;
   Gtk::Label loginError_;
+
+  // ---- the branded initial step (windows LoginPanel parity) ----------------
+  LoginCarousel* carousel_ = nullptr;
+  motion::MotionBin* heroBin_ = nullptr;   // the carousel's motion wrapper (the HERO)
+  Gtk::Box* artPane_ = nullptr;            // wide login: the carousel's pane
+  Gtk::Box* loginPanel_ = nullptr;         // the initial step's column
+  Gtk::Widget* loginFormColumn_ = nullptr; // fixed 544dip in the wide layout
+  bool wideLogin_ = false;
+  // reveal rings (the signed-out Hero Bloom table)
+  motion::MotionBin* brandBin_ = nullptr;      // the wordmark's reveal ring (120ms beat)
+  motion::MotionBin* emailGroupBin_ = nullptr;
+  motion::MotionBin* getStartedBin_ = nullptr;
+  motion::MotionBin* orBin_ = nullptr;
+  motion::MotionBin* walletBin_ = nullptr;
+  motion::MotionBin* secondaryBin_ = nullptr;
+  std::vector<Gtk::Widget*> loginAffordances_;  // everything SetLoginBusy toggles
+
+  // ---- seedphrase + instant steps (windows parity) -------------------------
+  Gtk::TextView* seedphraseView_ = nullptr;
+  Gtk::Label* seedphraseCount_ = nullptr;
+  Gtk::Button* seedphraseSubmit_ = nullptr;
+  Gtk::Label* seedphraseError_ = nullptr;
+  bool seedphraseLoggingIn_ = false;
+  Gtk::CheckButton* instantTerms_ = nullptr;
+  Gtk::Button* instantCreate_ = nullptr;
+  Gtk::Label* instantError_ = nullptr;
+  bool creatingInstant_ = false;
+  std::unique_ptr<SeedphraseSheet> seedphraseSheet_;
+  std::unique_ptr<NetworkServerSheet> networkServerSheet_;
   // The user auth the discovery routed to the password step (normalized echo);
   // the password sign-in, forgot-password, and reset flows all key off it.
   std::string loginUserAuth_;
@@ -105,6 +177,25 @@ class MainWindow : public Gtk::ApplicationWindow {
   Gtk::Label peersStatusText_;  // "{n} peers"; tapping opens the chooser
   Gtk::Label discoverableLabel_;  // "This device is discoverable" (apple parity)
   ConnectDrawer* drawer_ = nullptr;  // connect drawer (controls/stats/dns/blocker/plan cards)
+  HomeShell* shell_ = nullptr;       // the signed-in nav shell (windows NavigationView home)
+  // Windows-parity destinations (docs/parity/*.md); the rest are placeholders
+  // until their pages land.
+  ConnectPage* connectPage_ = nullptr;
+  NetworkPage* networkPage_ = nullptr;
+  SettingsPage* settingsPage_ = nullptr;
+  DeveloperPage* developerPage_ = nullptr;
+  SupportPage* supportPage_ = nullptr;
+  EarningsPage* earningsPage_ = nullptr;
+  AccountPage* accountPage_ = nullptr;
+  // Account's Redeem row opens the same sheet the drawer owns, but the
+  // drawer exposes no opener, so the window keeps its own (lazily built).
+  std::unique_ptr<RedeemCodeSheet> redeemSheet_;
+  // Last width (in dip) fanned out to the destinations. Pages fold their own
+  // panes; nothing else in the app measures the window for them.
+  int pageWidthDip_ = -1;
+  // One modal sheet at a time across the whole signed-in shell (the windows
+  // rule): a page asks before presenting and reports its own open/close.
+  bool sheetOpen_ = false;
 
   // login-flow pages (stack children; MainWindow wires the navigation)
   CreateNetworkPage* createPage_ = nullptr;
