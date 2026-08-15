@@ -241,7 +241,14 @@ std::string CommandResult::Describe() const {
   if (term_signal != 0) {
     out = "killed by signal " + std::to_string(term_signal);
   } else if (exit_code == 127) {
-    out = "command not found";
+    out = "not found on PATH";
+  } else if (exit_code == 126) {
+    // The tool is THERE and we were refused permission to exec it. On a
+    // Fedora-family box that is nearly always SELinux refusing the domain
+    // transition, so say where to look instead of leaving a bare EACCES.
+    out = "permission denied executing it (check SELinux: journalctl -t audit | grep denied)";
+  } else if (exit_code > 128 && exit_code < 192) {
+    out = std::string("exec failed: ") + std::strerror(exit_code - 128);
   } else {
     out = "exit " + std::to_string(exit_code);
   }
@@ -290,7 +297,20 @@ CommandResult RunCommand(const std::vector<std::string>& argv, const std::string
     // the daemon ignores SIGPIPE; children must not inherit that decision
     ::signal(SIGPIPE, SIG_DFL);
     ::execvp(args[0], args.data());
-    ::_exit(127);  // "command not found", decoded in Describe()
+    // CARRY THE REAL REASON OUT. This used to be a blanket _exit(127), which
+    // Describe() rendered as "command not found" for EVERY exec failure — and
+    // that message cost real debugging time on Bazzite, where the file existed,
+    // was executable, ran fine by hand, and was refused by SELinux with EACCES
+    // (NoNewPrivileges blocking the init_t -> iptables_t domain transition).
+    // "command not found" for a file that is present and runnable sends the
+    // reader hunting for a missing package that is already installed.
+    //
+    // 128 + errno keeps the one-byte exit status: 126 (EACCES) and 127 (ENOENT)
+    // stay conventional, anything else is decoded by Describe().
+    const int err = errno;
+    if (err == ENOENT) ::_exit(127);
+    if (err == EACCES || err == EPERM) ::_exit(126);
+    ::_exit(128 + (err & 0x3F));
   }
 
   ::close(inPipe[0]);

@@ -106,7 +106,29 @@ LogsDirectoryMode=0700
 # Beyond that, give up what we can. No ProtectSystem=: the location override
 # writes /etc/geolocation (APPIMAGE.md section 7). The daemon is headless and
 # must never read user homes.
-NoNewPrivileges=yes
+#
+# *** NoNewPrivileges IS DELIBERATELY NOT SET. *** It is the obvious hardening
+# knob and it BREAKS THIS DAEMON OUTRIGHT on every SELinux-enforcing distro
+# (Fedora, RHEL, Silverblue, Bazzite, Kinoite). Measured on Bazzite, kernel
+# audit, with NoNewPrivileges=yes:
+#
+#   avc: denied { nnp_transition } scontext=init_t tcontext=iptables_t
+#   SELINUX_ERR op=security_bounded_transition seresult=denied
+#   avc: denied { execute_no_trans } path="/usr/bin/nft" tcontext=iptables_exec_t
+#
+# Why: /usr/bin/nft is labelled iptables_exec_t and /usr/sbin/ip is
+# ifconfig_exec_t, so executing either performs a DOMAIN TRANSITION
+# (init_t -> iptables_t / ifconfig_t). NoNewPrivileges forbids any transition
+# whose target domain is not "bounded by" the source, and neither target is a
+# subset of init_t. The kernel then falls back to execute_no_trans (run the
+# tool inside init_t), which init_t is also not granted. execve() therefore
+# fails with EACCES and the tunnel can never be built: no ruleset, no routes.
+#
+# This is not theoretical and it is not recoverable in the app: with it set,
+# every single Connect fails at the first `nft -f`. A daemon whose entire job
+# is executing privileged network tools cannot also promise never to gain
+# privilege through exec — which is why no shipping VPN daemon sets this.
+# The daemon already runs as root by necessity, so the knob buys nothing here.
 ProtectHome=yes
 PrivateTmp=yes
 LimitNOFILE=65536
