@@ -2391,6 +2391,16 @@ msgctxt "kill_switch"
 msgid "Kill switch"
 msgstr ""
 
+#. Title for the disclosure explaining traffic that intentionally bypasses the VPN kill switch.
+msgctxt "kill_switch_exception"
+msgid "Kill switch exception"
+msgstr ""
+
+#. Explains the deliberate SMTP exception to the VPN kill switch and the encrypted SMTP behavior.
+msgctxt "kill_switch_smtp_exception"
+msgid "While the VPN is connected, outbound SMTP on TCP port 25 bypasses the VPN and uses your local network, even when the kill switch is on. This may expose your local public IP to the mail server. SMTP on ports 465 and 587 stays in the VPN and must establish TLS."
+msgstr ""
+
 #. Button text for entering the one-time authentication code and entering the app
 msgctxt "launch"
 msgid "Launch"
@@ -3935,6 +3945,11 @@ msgstr ""
 #. Call to action
 msgctxt "show_icon_when_connected"
 msgid "Show UR icon when connected"
+msgstr ""
+
+#. Accessibility label for the kill switch exception information button.
+msgctxt "show_kill_switch_exception"
+msgid "Show kill switch exception"
 msgstr ""
 
 #. Used in Main/Connect/ConnectView-macOS.swift.

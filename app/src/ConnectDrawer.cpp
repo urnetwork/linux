@@ -246,10 +246,45 @@ void ConnectDrawer::BuildControlsCard() {
   // connection is up, instead of falling back to local egress. Not part of the
   // performance profile, so it has its own handler + refresh, like the blocker.
   auto* killRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  auto* killLabelRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
+  killLabelRow->set_hexpand(true);
   auto* killLabel = Gtk::make_managed<Gtk::Label>(T_("kill_switch", "Kill switch"));
   killLabel->set_xalign(0);
-  killLabel->set_hexpand(true);
-  killRow->append(*killLabel);
+  killLabelRow->append(*killLabel);
+
+  auto* killInfo = Gtk::make_managed<Gtk::MenuButton>();
+  killInfo->set_icon_name("help-about-symbolic");
+  killInfo->add_css_class("flat");
+  killInfo->set_tooltip_text(
+      T_("show_kill_switch_exception", "Show kill switch exception"));
+  {
+    auto* popover = Gtk::make_managed<Gtk::Popover>();
+    auto* content = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+    content->set_margin(12);
+    content->set_size_request(320, -1);
+
+    auto* title = Gtk::make_managed<Gtk::Label>(
+        T_("kill_switch_exception", "Kill switch exception"));
+    title->add_css_class("heading");
+    title->set_xalign(0);
+    content->append(*title);
+
+    auto* body = Gtk::make_managed<Gtk::Label>(T_(
+        "kill_switch_smtp_exception",
+        "While the VPN is connected, outbound SMTP on TCP port 25 bypasses the VPN and uses "
+        "your local network, even when the kill switch is on. This may expose your local "
+        "public IP to the mail server. SMTP on ports 465 and 587 stays in the VPN and must "
+        "establish TLS."));
+    body->set_xalign(0);
+    body->set_wrap(true);
+    content->append(*body);
+
+    popover->set_child(*content);
+    killInfo->set_popover(*popover);
+  }
+  killLabelRow->append(*killInfo);
+  killRow->append(*killLabelRow);
+
   killSwitch_ = Gtk::make_managed<Gtk::Switch>();
   killSwitch_->set_valign(Gtk::Align::CENTER);
   killSwitch_->property_active().signal_changed().connect([this] {
