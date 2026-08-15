@@ -42,6 +42,10 @@ namespace urnw {
 class ConnectPage : public Gtk::Box {
  public:
   explicit ConnectPage(SdkHost& host);
+  // Orphans every marshaled completion (see alive_) before any member dies:
+  // SdkHost::RequestReliability delivers on the main loop and cannot know this
+  // page is gone.
+  ~ConnectPage() override;
 
   // live feeds (MainWindow relays; all already marshaled to the GTK loop)
   void ApplyStats(const LiveStats& stats);
@@ -71,14 +75,10 @@ class ConnectPage : public Gtk::Box {
   // the selected-provider row opens the chooser (owned by MainWindow)
   std::function<void()> on_open_locations;
   // pane C's "Connected to N providers" row opens the globe sheet, which
-  // MainWindow owns (it carries the GeoClue location-override controller).
-  // TODO(wiring): MainWindow::BuildHome assigns on_toggle_connect and
-  // on_open_locations but NOT this one, so the row stays insensitive and
-  // ProviderLocationsSheet (with the whole location-override surface) has no
-  // door on Home. One line beside the others:
-  //   connectPage_->on_open_provider_locations = [this] { OpenProviderLocations(); };
-  // The page cannot own that sheet itself: it needs MainWindow's
-  // LocationOverrideController.
+  // MainWindow owns (it carries the GeoClue location-override controller); the
+  // page cannot own that sheet itself. Assigned in MainWindow::BuildHome
+  // beside the other two (MainWindow.cpp: on_open_provider_locations ->
+  // OpenProviderLocations).
   std::function<void()> on_open_provider_locations;
 
  private:
@@ -130,6 +130,33 @@ class ConnectPage : public Gtk::Box {
   void ApplyDnsRecommendationPill();
   void ApplyInspector();
   void ApplyInspectorVisibility();
+  // The exit a destination ip routed through, and that exit's health, joined
+  // out of the reliability snapshot (DestinationExit.DestinationIp ->
+  // ClientId -> Exit). nullopt = "no recorded address of this action is in the
+  // snapshot", the normal case for a host that resolved after the last
+  // refresh. Absent, never guessed: an inspector that answers "which exit"
+  // with a plausible WRONG exit is worse than one that says it does not know.
+  struct ExitRouting {
+    std::string clientId;
+    int32_t flowCount = 0;
+    bool haveExit = false;  // the clientId was also found in exits_
+    int32_t tier = 0;
+    int32_t effectiveTier = 0;
+    int32_t exitFlowCount = 0;
+    int32_t dialFailureCount = 0;
+    bool quarantined = false;
+    bool warning = false;
+    std::string warningCause;
+    bool proven = false;
+    int64_t probeAgeSeconds = 0;
+  };
+  std::optional<ExitRouting> RoutingForAddresses(
+      const std::optional<urnet::StringList>& addresses) const;
+  // Refresh the two tables the inspector joins against, via
+  // SdkHost::RequestReliability (ExitsOnly): the host owns the worker, the
+  // host-wide single-flight gate and the marshal back to the main loop, so
+  // nothing here may call ReadReliability directly — it is several synchronous
+  // device rpcs taken under the host lock.
   void RefreshExitRouting();
   void PullThroughput();
   // Re-read every feed and apply ONLY the surfaces whose reading changed.
@@ -160,6 +187,12 @@ class ConnectPage : public Gtk::Box {
   // so a refresh in flight across a logout / mode toggle / teardown cannot
   // write into a surface that has since been rebuilt (see RefreshExitRouting).
   std::shared_ptr<uint64_t> epoch_ = std::make_shared<uint64_t>(0);
+  // The other half of the guard. epoch_ alone is NOT enough for a completion
+  // marshaled back from a worker: reading the epoch means dereferencing a
+  // member of this page, so a completion that lands after the page is
+  // destroyed would already have touched freed memory to discover it is late.
+  // alive_ is held by the completion itself and is tested FIRST.
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 
   bool advanced_ = false;
   bool presenting_ = false;
@@ -185,6 +218,14 @@ class ConnectPage : public Gtk::Box {
   std::optional<urnet::ContractPeerRowList> contractRows_;
   std::optional<urnet::BlockActionOverrideList> splitRules_;
   std::optional<urnet::DnsResolverSettings> dnsSettings_;
+  // §4.1's exit-routing cache, refreshed every 5 s in Advanced Mode. Carried
+  // with the SNAPSHOT's own optionality, because on this surface a fabricated
+  // zero is the failure mode: nullopt = "no session, or nothing has been read
+  // yet / the rpc threw" (UNKNOWN); an EMPTY list is the real answer "this
+  // device has no exits". The inspector and the "Exits" figure render those
+  // two differently. UI thread only.
+  std::optional<urnet::ExitList> exits_;
+  std::optional<urnet::DestinationExitList> destinationExits_;
   std::string countryCode_;  // lowercased connected country (dns pill)
   std::string countryName_;
   std::optional<urnet::NetworkPeerList> peers_;  // nullopt = discovery down

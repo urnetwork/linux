@@ -120,6 +120,7 @@ enum class Verb {
   StartTunnel,
   StopTunnel,
   SetProvide,
+  SetKillSwitch,
   LocationOverrideAvailable,
   LocationOverrideWrite,
   LocationOverrideClear,
@@ -133,6 +134,7 @@ inline const char* ToString(Verb v) {
     case Verb::StartTunnel: return "start_tunnel";
     case Verb::StopTunnel: return "stop_tunnel";
     case Verb::SetProvide: return "set_provide";
+    case Verb::SetKillSwitch: return "set_kill_switch";
     case Verb::LocationOverrideAvailable: return "location_override_available";
     case Verb::LocationOverrideWrite: return "location_override_write";
     case Verb::LocationOverrideClear: return "location_override_clear";
@@ -147,6 +149,7 @@ inline Verb VerbFromString(const std::string& s) {
   if (s == "start_tunnel") return Verb::StartTunnel;
   if (s == "stop_tunnel") return Verb::StopTunnel;
   if (s == "set_provide") return Verb::SetProvide;
+  if (s == "set_kill_switch") return Verb::SetKillSwitch;
   if (s == "location_override_available") return Verb::LocationOverrideAvailable;
   if (s == "location_override_write") return Verb::LocationOverrideWrite;
   if (s == "location_override_clear") return Verb::LocationOverrideClear;
@@ -180,6 +183,38 @@ inline TunnelState TunnelStateFromString(const std::string& s) {
   if (s == "stopping") return TunnelState::Stopping;
   if (s == "error") return TunnelState::Error;
   return TunnelState::Stopped;
+}
+
+// ---- kill-switch state (status.kill_switch) --------------------------------
+// What is ACTUALLY installed, not what the toggle says. The Linux kill switch
+// is an nftables table (`table inet urnetwork`), so unlike the Windows dynamic
+// WFP session it can be present without this process, and it can fail to
+// install while the toggle reads on. The UI must render the INSTALLED state:
+// Device::setRouteLocal alone is not a kill switch (windows WfpPolicy.h:9-19
+// says why: it is a branch inside sendPacket, so it never sees IPv6, the
+// deliberately-excluded LAN, another adapter's resolver, or a dead daemon).
+enum class KillSwitchState {
+  Off,        // no floor installed
+  Armed,      // floor installed, no tunnel: nothing but the daemon/LAN leaves
+  Connected,  // floor installed alongside a live tunnel
+  Failed,     // asked for, could NOT be installed — never render this as Off
+};
+
+inline const char* ToString(KillSwitchState s) {
+  switch (s) {
+    case KillSwitchState::Off: return "off";
+    case KillSwitchState::Armed: return "armed";
+    case KillSwitchState::Connected: return "connected";
+    case KillSwitchState::Failed: return "failed";
+  }
+  return "off";
+}
+
+inline KillSwitchState KillSwitchStateFromString(const std::string& s) {
+  if (s == "armed") return KillSwitchState::Armed;
+  if (s == "connected") return KillSwitchState::Connected;
+  if (s == "failed") return KillSwitchState::Failed;
+  return KillSwitchState::Off;
 }
 
 // ---- payloads --------------------------------------------------------------
@@ -241,18 +276,58 @@ struct StartTunnelRequest {
   // Additive within protocol v1: both halves ship from one pipeline and the
   // hello sdk_version exact-match already refuses mismatched pairs.
   std::string network_space_json;
+
+  // ---- additive within protocol v1 (same argument as network_space_json:
+  //      both halves ship from one pipeline and the hello sdk_version
+  //      exact-match already refuses a mismatched pair) --------------------
+
+  // Return as soon as the request is accepted (tunnel_state=starting) and let
+  // the client poll `status`, instead of holding both main loops for the whole
+  // bring-up — DeviceLocal construction is a network round trip and the tun +
+  // route + DNS setup is ~35 subprocesses. A client that leaves this false
+  // gets the old synchronous behaviour unchanged.
+  bool async = false;
+
+  // The kill switch the client wants in force for this session. The daemon
+  // reports back what it ACTUALLY installed in StatusReply::kill_switch —
+  // never assume the request took.
+  bool kill_switch = false;
+
+  // ---- device-RPC mTLS pinning (windows TunnelController.cpp:800-806) -----
+  // The SDK's loopback device RPC pins with EXACT raw-certificate equality
+  // (tls.RequireAnyClientCert), and the two halves keep SEPARATE SDK storage
+  // roots (~/.local/share/urnetwork vs /var/lib/urnetwork/sdk), so no
+  // "defaults" path can produce a matching pinned pair. The GUI generates one
+  // urnet::DeviceRpcKeyMaterial and splits it: server_pem + client_cert_pem
+  // to the daemon (DeviceLocal::setRpcServer), client_pem + server_cert_pem
+  // kept for its own DeviceRemote::setRpcServer. All three empty = the SDK's
+  // built-in default listener, which is what shipped before this field
+  // existed; all three must be present together or none.
+  std::string rpc_server_pem;
+  std::string rpc_client_cert_pem;
+  std::string rpc_listen_hostport;  // e.g. "127.0.0.1:12025"
 };
 inline void to_json(nlohmann::json& j, const StartTunnelRequest& v) {
   j["by_jwt"] = v.by_jwt;
   j["instance_id"] = v.instance_id;
   j["app_version"] = v.app_version;
   if (!v.network_space_json.empty()) j["network_space_json"] = v.network_space_json;
+  j["async"] = v.async;
+  j["kill_switch"] = v.kill_switch;
+  if (!v.rpc_server_pem.empty()) j["rpc_server_pem"] = v.rpc_server_pem;
+  if (!v.rpc_client_cert_pem.empty()) j["rpc_client_cert_pem"] = v.rpc_client_cert_pem;
+  if (!v.rpc_listen_hostport.empty()) j["rpc_listen_hostport"] = v.rpc_listen_hostport;
 }
 inline void from_json(const nlohmann::json& j, StartTunnelRequest& v) {
   detail::Get(j, "by_jwt", v.by_jwt);
   detail::Get(j, "instance_id", v.instance_id);
   detail::Get(j, "app_version", v.app_version);
   detail::Get(j, "network_space_json", v.network_space_json);
+  detail::Get(j, "async", v.async);
+  detail::Get(j, "kill_switch", v.kill_switch);
+  detail::Get(j, "rpc_server_pem", v.rpc_server_pem);
+  detail::Get(j, "rpc_client_cert_pem", v.rpc_client_cert_pem);
+  detail::Get(j, "rpc_listen_hostport", v.rpc_listen_hostport);
 }
 
 // Validation the daemon applies before constructing anything. Pure so the
@@ -266,17 +341,48 @@ inline void from_json(const nlohmann::json& j, StartTunnelRequest& v) {
 inline std::optional<std::string> ValidateStartTunnelRequest(const StartTunnelRequest& req) {
   if (req.by_jwt.empty()) return "by_jwt is required";
   if (req.instance_id.empty()) return "instance_id is required";
+  // The rpc pinning triple is all-or-nothing: a half-supplied pair would make
+  // the daemon listen with a pinned server while the GUI dials with the SDK
+  // default (or the reverse), which presents as a DeviceRemote that connects
+  // and never populates — the exact silent failure the exact-match hello
+  // exists to prevent.
+  const int rpcParts = (req.rpc_server_pem.empty() ? 0 : 1) +
+                       (req.rpc_client_cert_pem.empty() ? 0 : 1) +
+                       (req.rpc_listen_hostport.empty() ? 0 : 1);
+  if (rpcParts != 0 && rpcParts != 3) {
+    return "rpc_server_pem, rpc_client_cert_pem and rpc_listen_hostport must be sent together";
+  }
   return std::nullopt;
 }
 
 struct StartTunnelReply {
   int rpc_port = 0;
+  // "up" for a completed synchronous start; "starting" when async was asked
+  // for and the bring-up is still running. A client that ignores this field
+  // sees exactly the old contract.
+  TunnelState tunnel_state = TunnelState::Up;
 };
 inline void to_json(nlohmann::json& j, const StartTunnelReply& v) {
   j["rpc_port"] = v.rpc_port;
+  j["tunnel_state"] = ToString(v.tunnel_state);
 }
 inline void from_json(const nlohmann::json& j, StartTunnelReply& v) {
   detail::Get(j, "rpc_port", v.rpc_port);
+  std::string state;
+  detail::Get(j, "tunnel_state", state);
+  // absent = a daemon predating the field, which only ever replied ok on a
+  // completed start
+  v.tunnel_state = state.empty() ? TunnelState::Up : TunnelStateFromString(state);
+}
+
+struct SetKillSwitchRequest {
+  bool enabled = false;
+};
+inline void to_json(nlohmann::json& j, const SetKillSwitchRequest& v) {
+  j["enabled"] = v.enabled;
+}
+inline void from_json(const nlohmann::json& j, SetKillSwitchRequest& v) {
+  detail::Get(j, "enabled", v.enabled);
 }
 
 struct SetProvideRequest {
@@ -287,17 +393,59 @@ inline void from_json(const nlohmann::json& j, SetProvideRequest& v) {
   detail::Get(j, "mode", v.mode);
 }
 
+// The daemon's whole feedback channel. Every field beyond the original four is
+// additive within protocol v1 and answers a question the UI previously had no
+// way to ask: "routes are in but DNS is not", "the kill switch is holding this
+// machine blocked", "the tunnel is up over nothing", "why did it stop".
+// Windows pushes the same inventory as TunnelStatus.
 struct StatusReply {
   TunnelState tunnel_state = TunnelState::Stopped;
   int rpc_port = 0;          // 0 while the tunnel is down
   std::string client_id;     // the DeviceLocal's client id ("" while down)
   std::string error;         // last start error ("" when none)
+
+  // Machine-readable twin of `error` (one of the kCode* below), so the UI
+  // branches on a code and never on prose.
+  std::string error_code;
+  // What is actually in force, as opposed to what was attempted.
+  bool routes_installed = false;
+  // The daemon's own SDK sockets are demonstrably steered around the tunnel
+  // (defect R4). false with tunnel_state=up means the control plane is
+  // starving and the session cannot carry traffic.
+  bool egress_protected = false;
+  bool dns_applied = false;
+  std::string dns_detail;    // why DNS is not in force ("" when it is)
+  KillSwitchState kill_switch = KillSwitchState::Off;
+  std::string kill_switch_detail;  // why it is Failed ("" otherwise)
+  bool ipv6_blocked = false;       // v6 has no tunnel: blocked rather than leaked
+  std::string tunnel_interface;    // "urnet0" while up
+  // Why the last session ended: "user" (an explicit stop_tunnel), "io_loop"
+  // (the SDK loop finished under us), "start_failed", "daemon_shutdown", or ""
+  // when no session has ended.
+  std::string stop_reason;
+  int64_t up_since_millis = 0;     // unix millis of the up edge, 0 while down
+  // A control client currently owns this tunnel. false with tunnel_state=up is
+  // a captured machine with no UI attached — the state the tray "Stop the
+  // tunnel" recovery item exists for.
+  bool owner_connected = false;
 };
 inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["tunnel_state"] = ToString(v.tunnel_state);
   j["rpc_port"] = v.rpc_port;
   j["client_id"] = v.client_id;
   j["error"] = v.error;
+  j["error_code"] = v.error_code;
+  j["routes_installed"] = v.routes_installed;
+  j["egress_protected"] = v.egress_protected;
+  j["dns_applied"] = v.dns_applied;
+  j["dns_detail"] = v.dns_detail;
+  j["kill_switch"] = ToString(v.kill_switch);
+  j["kill_switch_detail"] = v.kill_switch_detail;
+  j["ipv6_blocked"] = v.ipv6_blocked;
+  j["tunnel_interface"] = v.tunnel_interface;
+  j["stop_reason"] = v.stop_reason;
+  j["up_since_millis"] = v.up_since_millis;
+  j["owner_connected"] = v.owner_connected;
 }
 inline void from_json(const nlohmann::json& j, StatusReply& v) {
   std::string state;
@@ -306,6 +454,20 @@ inline void from_json(const nlohmann::json& j, StatusReply& v) {
   detail::Get(j, "rpc_port", v.rpc_port);
   detail::Get(j, "client_id", v.client_id);
   detail::Get(j, "error", v.error);
+  detail::Get(j, "error_code", v.error_code);
+  detail::Get(j, "routes_installed", v.routes_installed);
+  detail::Get(j, "egress_protected", v.egress_protected);
+  detail::Get(j, "dns_applied", v.dns_applied);
+  detail::Get(j, "dns_detail", v.dns_detail);
+  std::string killSwitch;
+  detail::Get(j, "kill_switch", killSwitch);
+  v.kill_switch = KillSwitchStateFromString(killSwitch);
+  detail::Get(j, "kill_switch_detail", v.kill_switch_detail);
+  detail::Get(j, "ipv6_blocked", v.ipv6_blocked);
+  detail::Get(j, "tunnel_interface", v.tunnel_interface);
+  detail::Get(j, "stop_reason", v.stop_reason);
+  detail::Get(j, "up_since_millis", v.up_since_millis);
+  detail::Get(j, "owner_connected", v.owner_connected);
 }
 
 struct LocationOverrideAvailableReply {
@@ -346,6 +508,44 @@ inline constexpr const char* kCodeClientProtocolTooOld = "client_protocol_too_ol
 inline constexpr const char* kCodeSdkVersionMismatch = "sdk_version_mismatch";
 inline constexpr const char* kCodeHelloRequired = "hello_required";
 inline constexpr const char* kCodeTunnelOwnedByOtherClient = "tunnel_owned_by_other_client";
+
+// ---- start_tunnel failure codes -------------------------------------------
+// Each one is a DIFFERENT problem with a DIFFERENT fix, and the whole point of
+// carrying them is that none of them may reach the user as the single string
+// "could not open/configure the tun device" (which is what every one of them
+// used to render as), and none may render as a blank.
+//
+// A start already running; NOT a reason to tear down and restart (which is how
+// a 30 s client timeout used to turn into a restart loop on exactly the slow
+// networks where it fires).
+inline constexpr const char* kCodeStartInProgress = "start_in_progress";
+// The `tun` kernel module is absent and modprobe could not load it.
+inline constexpr const char* kCodeTunModuleMissing = "tun_module_missing";
+// /dev/net/tun or TUNSETIFF was refused: the daemon lacks CAP_NET_ADMIN.
+inline constexpr const char* kCodeTunPermissionDenied = "tun_permission_denied";
+// The interface name is taken by another process.
+inline constexpr const char* kCodeTunBusy = "tun_busy";
+// open()/TUNSETIFF failed for some other reason (message carries strerror).
+inline constexpr const char* kCodeTunOpenFailed = "tun_open_failed";
+// The device handed back an address/mtu/prefix that is not usable.
+inline constexpr const char* kCodeTunConfigInvalid = "tun_config_invalid";
+// `ip`, `nft` or `resolvectl` is not installed.
+inline constexpr const char* kCodeMissingTool = "missing_tool";
+// A capture route or a policy rule could not be installed (message names the
+// prefix and the command's own stderr).
+inline constexpr const char* kCodeRouteInstallFailed = "route_install_failed";
+// THE R4 REFUSAL: the daemon's own SDK sockets would be captured by its own
+// tunnel, so the control plane would starve the instant we returned success.
+// Never start in this state — a tunnel that comes up and carries nothing is
+// worse than a start that says why it refused.
+inline constexpr const char* kCodeEgressUnprotected = "egress_unprotected";
+// The nftables floor the kill switch needs could not be installed. Only fatal
+// when the client asked for the kill switch: a protection that is not in force
+// must never be reported as on.
+inline constexpr const char* kCodeKillSwitchFailed = "kill_switch_failed";
+// DNS could not be pointed at the tunnel AND the kill switch was requested, so
+// coming up would leave the machine unable to resolve at all.
+inline constexpr const char* kCodeDnsApplyFailed = "dns_apply_failed";
 
 // {"verb":…,"id":N,…payload}
 inline nlohmann::json MakeRequest(Verb verb, int64_t id,

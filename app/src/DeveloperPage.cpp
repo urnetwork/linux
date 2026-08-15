@@ -42,6 +42,19 @@ const std::vector<int> kProbeColumns{3, 1, 1, 1, 1, 1, 2};
 constexpr int kTableRowHeight = 36;
 constexpr int kExitRowHeight = 48;  // four buttons ride this row
 
+// ---- the session log card ---------------------------------------------------
+// time | source | text. ALL THREE read left as text (textColumns = 3): a log
+// line is prose, and the kit's default of one text column would right-align the
+// source and the message against the figure rule.
+const std::vector<int> kLogColumns{2, 1, 9};
+constexpr int kLogRowHeight = 20;  // a dense tail, not a table of records
+// How many rows exist as widgets. The client buffer holds ctl::kLogTailClientCap
+// (2000) — Copy and Save carry all of it — but 2000 live GTK rows is a cost
+// nobody is looking at: the tail is what you read.
+constexpr size_t kLogRenderCap = 500;
+constexpr int kLogScrollerMinHeight = 200;
+constexpr int kLogScrollerMaxHeight = 420;
+
 // ---- the localization convention (spec §2, "Dev(key, english)") -----------
 // NONE of the dev_* keys are in the store today: the English literals ARE the
 // shipped strings, and T_ renders them until the store grows the key. Two
@@ -472,6 +485,59 @@ T ReadGuarded(const char* what, Fn&& fn, T fallback) {
   return fallback;
 }
 
+// ---- session-log line rendering --------------------------------------------
+
+// Wall clock, local, seconds resolution — enough to line a log line up against
+// a `journalctl -f` beside it, which is the whole point of showing a time.
+std::string FormatClockTime(int64_t unixMs) {
+  static const char* kUnknown = "--:--:--";
+  if (unixMs <= 0) return kUnknown;  // the daemon's clock failed: say so, never guess
+  GDateTime* moment = g_date_time_new_from_unix_local(unixMs / 1000);
+  if (moment == nullptr) return kUnknown;
+  gchar* formatted = g_date_time_format(moment, "%H:%M:%S");
+  std::string out = formatted != nullptr ? formatted : kUnknown;
+  g_free(formatted);
+  g_date_time_unref(moment);
+  return out;
+}
+
+std::string FormatStampIso(int64_t unixMs) {
+  if (unixMs <= 0) return "(no timestamp)";
+  GDateTime* moment = g_date_time_new_from_unix_local(unixMs / 1000);
+  if (moment == nullptr) return "(no timestamp)";
+  gchar* formatted = g_date_time_format(moment, "%Y-%m-%d %H:%M:%S");
+  std::string out = formatted != nullptr ? formatted : "(no timestamp)";
+  g_free(formatted);
+  g_date_time_unref(moment);
+  return out;
+}
+
+// The reliability stream: `[rel] event=<name> key=value` plus the session
+// banner the Windows README points at ("read the session banner in the log").
+// Matching the "[rel]" tag rather than the full "[rel] event=" prefix on
+// purpose — the banner and the event lines share the tag, and this is the
+// stream the Advanced-Mode knobs are supposed to prove themselves in.
+bool LineIsReliability(const std::string& text) {
+  return text.find("[rel]") != std::string::npos;
+}
+
+// A DISPLAY HINT ONLY — never a verdict, and never used to hide anything. The
+// daemon's own breadcrumbs carry no severity field, so failure-shaped lines are
+// coloured by their words. A miss costs a colour, not a line.
+bool LineIsFailure(const std::string& text) {
+  static const char* kMarkers[] = {"failed", "error", "could not", "cannot",
+                                   "rejecting", "no credentials"};
+  std::string lowered;
+  lowered.reserve(text.size());
+  for (const char c : text) {
+    lowered.push_back(static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c));
+  }
+  for (const char* marker : kMarkers) {
+    if (lowered.find(marker) != std::string::npos) return true;
+  }
+  return false;
+}
+
 // The outcome of one action, carried from the bridge thread to the UI thread.
 struct ActionOutcome {
   bool issued = false;    // false: no device, or the rpc threw
@@ -697,6 +763,10 @@ void DeveloperPage::EnsureBuilt() {
   BuildExitsCard();
   BuildDestinationsCard();
   BuildProbeSuiteCard();
+  // Between the probe suite and the override sections, per the spec: it needs
+  // the full-width tables lane, and it is what you scroll to AFTER acting on a
+  // knob to see whether the knob did anything.
+  BuildSessionLogCard();
   BuildOverrideSections();
 
   // Render the no-session state immediately: with no jwt and no device every
@@ -923,6 +993,110 @@ void DeveloperPage::BuildProbeSuiteCard() {
   deviceCards_.push_back(card.root);
 }
 
+// ---- the session log card ---------------------------------------------------
+// The read half of the Advanced-Mode workflow: the write half (the ~34 knobs
+// below) already shipped, and the Windows README states the loop outright —
+// flip a knob, then read the session banner in the log to see whether it did
+// anything. On Linux the DeviceLocal that emits those lines lives in
+// urnetworkd, whose log directory is 0700 root-owned, so this card is the only
+// way this process can show them.
+//
+// DELIBERATELY NOT IN deviceCards_. Every other card on this page folds when
+// there is no session; this one must not. The moment you most need the log is
+// the moment start_tunnel refused and there is no device to read.
+void DeveloperPage::BuildSessionLogCard() {
+  DevCard card = MakeDevCard(T_("dev_session_log", "Session log"));
+
+  card.body->append(*MakeTextLine(
+      T_("dev_session_log_detail",
+         "What the daemon has written since it started. The reliability lines ([rel] "
+         "event=...) are how a knob below proves it changed something."),
+      11, &kUrTextFaint));
+
+  auto* controls = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+
+  // Follow: auto-scroll, on by default, and it turns ITSELF off the moment the
+  // user scrolls up — a tail that yanks you back to the bottom while you are
+  // reading is worse than no tail.
+  logFollow_ = Gtk::make_managed<Gtk::CheckButton>(T_("dev_session_log_follow", "Follow"));
+  logFollow_->set_active(true);
+  logFollow_->set_valign(Gtk::Align::CENTER);
+  logFollow_->signal_toggled().connect([this] {
+    if (applyingFollow_) return;  // echo guard: the scroll handler flips this control
+    logFollowing_ = logFollow_->get_active();
+    if (logFollowing_) ScrollSessionLogToBottom();
+  });
+  controls->append(*logFollow_);
+
+  auto* copyButton = MakeActionButton(T_("copy", "Copy"), false);
+  copyButton->signal_clicked().connect([this] { CopySessionLog(); });
+  controls->append(*copyButton);
+
+  auto* saveButton = MakeActionButton(T_("save_logs", "Save logs"), false);
+  saveButton->signal_clicked().connect([this] { SaveSessionLog(); });
+  controls->append(*saveButton);
+  card.body->append(*controls);
+
+  // The gap/restart meta line: a ring that wrapped and a daemon that restarted
+  // are both STATED here rather than silently changing what the tail contains.
+  logGapLine_ = MakeTextLine({}, 11, &kUrAmber);
+  logGapLine_->set_visible(false);
+  card.body->append(*logGapLine_);
+
+  // The one line that carries Loading / Empty / Failed / Refused. Kept as a
+  // single reusable label instead of building and destroying an empty-state
+  // widget per state: one writer per surface, and it can never be the case that
+  // the card shows nothing at all.
+  logStatusLine_ = kit::MakePaneEmptyLine(T_("loading", "Loading..."));
+  // The kit sets vexpand on this species (it is normally the only thing in a
+  // pane that fills). GTK4 propagates a child's expand flag up through its
+  // ancestors, which would stretch the whole card column — clear it.
+  logStatusLine_->set_vexpand(false);
+  card.body->append(*logStatusLine_);
+
+  logScroller_ = Gtk::make_managed<Gtk::ScrolledWindow>();
+  // Its OWN overflow on both axes. propagate_natural_width(false) is the
+  // load-bearing half: a 300-character [rel] line must scroll inside this box,
+  // never widen the destination (the page body must not scroll horizontally).
+  logScroller_->set_policy(Gtk::PolicyType::AUTOMATIC, Gtk::PolicyType::AUTOMATIC);
+  logScroller_->set_propagate_natural_width(false);
+  logScroller_->set_propagate_natural_height(true);
+  logScroller_->set_min_content_height(kLogScrollerMinHeight);
+  logScroller_->set_max_content_height(kLogScrollerMaxHeight);
+  logScroller_->set_hexpand(true);
+  logScroller_->set_vexpand(false);  // same GTK4 propagation rule as above
+  logScroller_->set_visible(false);  // nothing read yet: the status line speaks
+  logBody_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+  logBody_->set_valign(Gtk::Align::START);
+  logScroller_->set_child(*logBody_);
+  card.body->append(*logScroller_);
+
+  // Bottom-anchoring rides the adjustment rather than a post-append call: the
+  // upper bound is only correct after GTK has allocated the new rows, and
+  // `changed` is exactly the signal that fires then.
+  if (auto adjustment = logScroller_->get_vadjustment()) {
+    adjustment->signal_changed().connect([this] {
+      if (logFollowing_) ScrollSessionLogToBottom();
+    });
+    adjustment->signal_value_changed().connect([this] {
+      if (scrollingToBottom_ || !logFollowing_) return;  // our own write, or already off
+      auto current = logScroller_->get_vadjustment();
+      if (!current) return;
+      const double bottom = current->get_upper() - current->get_page_size();
+      // 2px of slack: a wheel tick landing a subpixel short of the bottom is
+      // not a request to stop following.
+      if (current->get_value() >= bottom - 2.0) return;
+      logFollowing_ = false;
+      applyingFollow_ = true;
+      if (logFollow_ != nullptr) logFollow_->set_active(false);
+      applyingFollow_ = false;
+    });
+  }
+
+  tablesStack_.append(*card.root);
+  // NOT pushed into deviceCards_ — see the note above.
+}
+
 void DeveloperPage::BuildOverrideSections() {
   struct SectionSpec {
     Section section;
@@ -1094,6 +1268,34 @@ DeveloperPage::Snapshot DeveloperPage::ReadSnapshot() {
   // field, not the whole snapshot — and the list getters are null-guarded (a
   // suite that never ran answers with a nil slice).
   Snapshot snap;
+
+  // The session log comes from the CONTROL SOCKET, not from a DeviceRemote, so
+  // it is read BEFORE the no-device fold below. That order is the whole point:
+  // the case where the log is the only thing that can explain what happened is
+  // exactly the case where start_tunnel refused and there is no device at all.
+  if (!logSdkVersionSet_) {
+    // Asked for lazily, here on the bridge, because the page can be constructed
+    // before the SDK is initialized. Unset fails CLOSED as a version mismatch,
+    // which is the right direction — an unversioned pair must never be told the
+    // log is simply empty.
+    logSdkVersionSet_ = true;
+    try {
+      logTail_.SetLocalSdkVersion(urnet::version());
+    } catch (const std::exception& e) {
+      g_warning("developer: urnet::version threw: %s", e.what());
+    }
+  }
+  LogTailClient::FetchResult fetched = logTail_.Fetch(ctl::kLogTailDefaultMaxLines);
+  snap.logRead = true;
+  snap.logOk = fetched.ok;
+  snap.logLines = std::move(fetched.lines);
+  snap.logCursor = fetched.cursor;
+  snap.logDropped = fetched.dropped;
+  snap.logRestarted = fetched.restarted;
+  snap.logState = fetched.state;
+  snap.logError = std::move(fetched.error);
+  snap.logCode = std::move(fetched.code);
+
   if (!host_.hasDevice()) return snap;  // no session: haveDevice false, all cards fold
   snap.haveDevice = true;
   urnet::DeviceRemote& device = host_.device();
@@ -1135,6 +1337,10 @@ void DeveloperPage::ApplySnapshot(const Snapshot& snap) {
   ApplyExits(snap.exits);
   ApplyDestinations(snap.destinationExits);
   ApplyProbeSuite(snap);
+  // Last, and OUTSIDE both visibility groups: the log card renders in every
+  // state this page can be in, including the no-session one the two loops above
+  // just folded everything else for.
+  ApplySessionLog(snap);
 }
 
 void DeveloperPage::ApplySettings(const Snapshot& snap) {
@@ -1492,6 +1698,230 @@ void DeveloperPage::ApplyProbeSuite(const Snapshot& snap) {
 
 void DeveloperPage::SetLastAction(const Glib::ustring& text) {
   SetLineOrCollapse(lastAction_, text, 12, &kUrTextMuted);
+}
+
+// ---- the session log (spec: the four distinguishable states) ---------------
+
+void DeveloperPage::ClearSessionLogRows() {
+  if (logBody_ == nullptr) return;
+  RemoveAllChildren(*logBody_);
+  logRows_.clear();
+}
+
+void DeveloperPage::ScrollSessionLogToBottom() {
+  if (logScroller_ == nullptr) return;
+  auto adjustment = logScroller_->get_vadjustment();
+  if (!adjustment) return;
+  // Guarded so the value_changed handler does not read our own write as the
+  // user scrolling away and turn Follow off on every append.
+  scrollingToBottom_ = true;
+  adjustment->set_value(adjustment->get_upper() - adjustment->get_page_size());
+  scrollingToBottom_ = false;
+}
+
+void DeveloperPage::AppendSessionLogRow(const ctl::LogLine& line) {
+  if (logBody_ == nullptr) return;
+  // textColumns = 3: all three cells read LEFT. The kit's default of one text
+  // column right-aligns the rest against the figure rule, which for a log turns
+  // the message column into a ragged right edge.
+  kit::PaneTableRow row = kit::MakePaneTableRow(kLogColumns, kLogRowHeight, 3);
+  if (row.cells.size() < 3) return;
+  for (Gtk::Label* cell : row.cells) PrepCell(*cell, "ur-mono-12");
+
+  // The message is NOT trimmed. An ellipsized log line reads as the whole line,
+  // and the one that got cut is always the one you needed; it scrolls
+  // horizontally inside the card instead. Selectable so a single line can be
+  // pasted into a bug report without exporting the file.
+  row.cells[2]->set_ellipsize(Pango::EllipsizeMode::NONE);
+  row.cells[2]->set_selectable(true);
+
+  const Rgba* messageColor = &kUrTextMuted;
+  if (LineIsReliability(line.text)) {
+    messageColor = &kUrAccent;  // the stream the knobs above are judged by
+  } else if (LineIsFailure(line.text)) {
+    messageColor = &kUrDanger;
+  }
+  WriteCell(*row.cells[0], FormatClockTime(line.unix_ms), 11, &kUrTextFaint);
+  WriteCell(*row.cells[1], line.source, 11, &kUrTextFaint);
+  WriteCell(*row.cells[2], line.text, 12, messageColor);
+
+  logBody_->append(*row.root);
+  logRows_.push_back(row.root);
+  while (logRows_.size() > kLogRenderCap) {
+    Gtk::Widget* oldest = logRows_.front();
+    logRows_.pop_front();
+    logBody_->remove(*oldest);
+  }
+}
+
+Glib::ustring DeveloperPage::SessionLogStatusText(const Snapshot& snap) const {
+  // 1. LOADING — the first poll has not answered yet. Distinct from empty: we
+  //    have not looked, so we cannot say there is nothing.
+  if (!snap.logRead) return T_("loading", "Loading...");
+
+  // 2. REFUSED — reachable only if the owner picks the gated policy. It exists
+  //    in this state machine from the first version deliberately: a refusal
+  //    bolted on later becomes a blank.
+  if (snap.logCode == ctl::kCodeLogAccessDenied) {
+    return T_("dev_session_log_denied",
+              "This account may drive the daemon but may not read its log.");
+  }
+
+  // 3. FAILED — each daemon-session state in the words it ALREADY ships in
+  //    (MainWindow's daemon copy), because they are four different problems
+  //    with four different fixes and none may collapse into a blank.
+  switch (snap.logState) {
+    case DaemonSessionState::Unreachable:
+      return T_("daemon_unreachable",
+                "The URnetwork system service is not running. Install or start it, then "
+                "try again.");
+    case DaemonSessionState::DaemonTooOld:
+      return T_("daemon_too_old",
+                "The URnetwork system service is out of date. Update it to connect.");
+    case DaemonSessionState::ClientTooOld:
+      return T_("app_too_old_for_daemon",
+                "This app is older than the installed URnetwork system service. Update the "
+                "app to connect.");
+    case DaemonSessionState::SdkMismatch:
+      return T_("daemon_sdk_mismatch",
+                "The app and the URnetwork system service are different builds. Update both "
+                "to the same version.");
+    case DaemonSessionState::Error:
+      // The daemon's own message VERBATIM when it has one — including the
+      // "unknown verb" a daemon predating log_tail answers with, which is a
+      // real and actionable fact about the pair.
+      return snap.logError.empty()
+                 ? Glib::ustring(T_("something_went_wrong", "Something went wrong."))
+                 : Glib::ustring(snap.logError);
+    case DaemonSessionState::Ok:
+      break;
+  }
+
+  // 4. EMPTY — reachable, answered, and it has genuinely written nothing.
+  //    Deliberately NOT the shipped no_log_files_found ("No log file found"),
+  //    which is a different fact and belongs to the Settings row.
+  if (!logBuffer_.empty()) return {};  // rows are on screen; they speak for themselves
+  return T_("dev_session_log_empty", "The daemon has not written anything yet.");
+}
+
+void DeveloperPage::ApplySessionLog(const Snapshot& snap) {
+  if (logBody_ == nullptr) return;
+
+  // A daemon restart rewinds the seq space. Interleaving two processes' lines
+  // would produce a plausible WRONG order, so the previous run is dropped and
+  // the fact is said in words on the meta line rather than fabricated into a
+  // log row (nothing this app invents may end up in an exported log).
+  if (snap.logRestarted) {
+    logBuffer_.clear();
+    ClearSessionLogRows();
+    logDroppedTotal_ = 0;  // the previous run's gaps are not this run's
+    logRestartNoted_ = true;
+  }
+
+  // ACCUMULATED, because a reply only reports the gap IT crossed: after the
+  // first fetch past a wrap the cursor is beyond the hole and every later reply
+  // reports 0. Without the running total the marker would blink once and vanish.
+  logDroppedTotal_ += snap.logDropped;
+
+  for (const ctl::LogLine& line : snap.logLines) {
+    logBuffer_.push_back(line);
+    AppendSessionLogRow(line);
+  }
+  while (logBuffer_.size() > ctl::kLogTailClientCap) logBuffer_.pop_front();
+
+  Glib::ustring meta;
+  if (logRestartNoted_) {
+    meta = T_("dev_session_log_restarted",
+              "The daemon restarted. This is a new log; the previous run's lines are gone.");
+  }
+  if (logDroppedTotal_ > 0) {
+    const Glib::ustring dropped =
+        Format(T_("dev_session_log_dropped", "{} lines were dropped before this point"),
+               logDroppedTotal_);
+    meta = meta.empty() ? dropped : meta + " " + dropped;
+  }
+  SetLineOrCollapse(logGapLine_, meta, 11, &kUrAmber);
+
+  const bool failed = snap.logRead && snap.logState != DaemonSessionState::Ok;
+  SetLineOrCollapse(logStatusLine_, SessionLogStatusText(snap), 13,
+                    failed ? &kUrDanger : &kUrTextMuted);
+
+  // A failure does NOT blank what was already read: lines already delivered are
+  // still true, and they are usually what explains the failure.
+  if (logScroller_ != nullptr) logScroller_->set_visible(!logRows_.empty());
+}
+
+std::string DeveloperPage::ComposeSessionLogText() const {
+  std::string out = "== urnetwork daemon session log (urnetworkd) ==\n";
+  out += "# This is the DAEMON half. The app's own log is exported from "
+         "Settings > Save logs.\n";
+  out += "# lines: " + std::to_string(logBuffer_.size());
+  if (logDroppedTotal_ > 0) {
+    out += ", dropped before this point: " + std::to_string(logDroppedTotal_);
+  }
+  if (logRestartNoted_) out += ", daemon restarted during this session";
+  out += "\n\n";
+  for (const ctl::LogLine& line : logBuffer_) {
+    out += FormatStampIso(line.unix_ms) + "  " + line.source + "  " + line.text + "\n";
+  }
+  return out;
+}
+
+void DeveloperPage::CopySessionLog() {
+  // The FULL buffer, not the rendered tail — the same rule the kit's CopyField
+  // follows (what is copied is the value, never the display of it).
+  get_clipboard()->set_text(ComposeSessionLogText());
+  SetLastAction(T_("copy", "Copy"));
+}
+
+void DeveloperPage::SaveSessionLog() {
+  auto* root = dynamic_cast<Gtk::Window*>(get_root());
+  if (root == nullptr) {
+    g_warning("developer: save session log dropped (page has no window yet)");
+    return;
+  }
+  // Composed NOW, on the UI thread, so the file is what was on screen when the
+  // button was pressed rather than whatever the poll had reached by the time
+  // the user picked a filename.
+  const std::string text = ComposeSessionLogText();
+
+  GtkFileDialog* dialog = gtk_file_dialog_new();
+  gtk_file_dialog_set_title(dialog, T_("export_logs", "Export Logs"));
+  gtk_file_dialog_set_initial_name(dialog, "urnetworkd-session.log");
+  struct SavePayload {
+    DeveloperPage* page;
+    std::shared_ptr<bool> alive;
+    std::shared_ptr<uint64_t> epoch;
+    uint64_t seen;
+    std::string text;
+  };
+  auto* payload = new SavePayload{this, alive_, epoch_, *epoch_, text};
+  gtk_file_dialog_save(
+      dialog, GTK_WINDOW(root->gobj()), nullptr,
+      +[](GObject* source, GAsyncResult* result, gpointer data) {
+        std::unique_ptr<SavePayload> owned(static_cast<SavePayload*>(data));
+        GFile* target =
+            gtk_file_dialog_save_finish(GTK_FILE_DIALOG(source), result, nullptr);
+        if (target == nullptr) return;  // dismissed: a cancel is never a failure
+        GError* error = nullptr;
+        const bool ok =
+            g_file_replace_contents(target, owned->text.data(), owned->text.size(), nullptr,
+                                    FALSE, G_FILE_CREATE_NONE, nullptr, nullptr,
+                                    &error) != FALSE;
+        if (!ok) {
+          g_warning("developer: save session log failed: %s",
+                    error != nullptr ? error->message : "(no error text)");
+        }
+        g_clear_error(&error);
+        g_object_unref(target);
+        // BOTH guards, and only after the file work: the completion can land
+        // after the page was destroyed or a newer Load() took ownership.
+        if (!*owned->alive || *owned->epoch != owned->seen) return;
+        owned->page->SetLastAction(ok ? T_("save_logs", "Save logs")
+                                      : T_("something_went_wrong", "Something went wrong."));
+      },
+      payload);
+  g_object_unref(dialog);
 }
 
 // ---- actions (spec §2.12) ---------------------------------------------------

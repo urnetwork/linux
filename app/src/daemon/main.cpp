@@ -31,7 +31,9 @@
 #include <urnetwork_sdk.hpp>
 
 #include "LocationOverride.hpp"
+#include "Tunnel.hpp"
 #include "daemon/ControlServer.hpp"
+#include "daemon/DaemonLog.hpp"
 #include "daemon/TunnelHost.hpp"
 
 // The release version, threaded in via the -Dapp_version meson option (the
@@ -96,12 +98,64 @@ struct Daemon {
 gboolean OnTerminate(gpointer data) {
   auto* d = static_cast<Daemon*>(data);
   std::fprintf(stderr, "[daemon] terminating\n");
-  // Stop accepting/serving first, then tear the tunnel down cleanly (routes +
-  // resolvectl revert happen in the Tunnel dtor).
+  // Stop accepting/serving first, then tear the tunnel down cleanly (routes,
+  // policy rules, the nftables table and the resolvectl revert all happen
+  // under Stop).
   d->server->Stop();
-  d->tunnel->Stop();
+  d->tunnel->Stop("daemon_shutdown");
   g_main_loop_quit(d->loop);
   return G_SOURCE_REMOVE;
+}
+
+// Everything the data plane needs from the host, resolved ONCE at startup and
+// printed, so a broken environment is named before the first Connect instead
+// of during it (the audit's "no preflight for ip/resolvectl being on PATH").
+// Returns the number of REQUIRED tools that are missing.
+int ReportPreflight() {
+  struct Tool {
+    const char* name;
+    bool required;
+    const char* why;
+  };
+  static const Tool kTools[] = {
+      {"ip", true, "iproute2: the tun address, the capture routes and the policy rules"},
+      {"nft", true, "nftables: egress self-exclusion (without it the daemon's own sockets "
+                    "fall into its own tunnel), the IPv6 and DNS leak floor, the kill switch"},
+      {"resolvectl", false,
+       "systemd-resolved: pointing DNS at the tunnel. Without it the session comes up with "
+       "dns_applied=false and says so"},
+      {"modprobe", false, "loading the tun kernel module when /dev/net/tun is absent"},
+  };
+  int missingRequired = 0;
+  for (const Tool& tool : kTools) {
+    const std::string path = urnw::FindTool(tool.name);
+    if (!path.empty()) {
+      std::fprintf(stderr, "[preflight] %-11s %s\n", tool.name, path.c_str());
+      continue;
+    }
+    if (tool.required) ++missingRequired;
+    std::fprintf(stderr, "[preflight] %-11s MISSING (%s) — %s\n", tool.name,
+                 tool.required ? "required" : "optional", tool.why);
+  }
+  const urnw::CgroupRef cgroup = urnw::SelfCgroupV2();
+  if (cgroup.valid) {
+    std::fprintf(stderr, "[preflight] cgroup      %s (level %d)\n", cgroup.path.c_str(),
+                 cgroup.level);
+  } else {
+    ++missingRequired;
+    std::fprintf(stderr,
+                 "[preflight] cgroup      MISSING (required) — no cgroup v2 unified "
+                 "hierarchy, so the daemon's own sockets cannot be marked and no tunnel can "
+                 "be started safely\n");
+  }
+  if (::access("/dev/net/tun", F_OK) == 0) {
+    std::fprintf(stderr, "[preflight] /dev/net/tun present\n");
+  } else {
+    std::fprintf(stderr,
+                 "[preflight] /dev/net/tun absent — the tun module is not loaded yet "
+                 "(one modprobe is attempted at the first start)\n");
+  }
+  return missingRequired;
 }
 
 }  // namespace
@@ -119,11 +173,23 @@ int main(int argc, char** argv) {
       foreground = true;
       continue;
     }
+    if (arg == "--diagnose") {
+      // Print-and-exit field-support tool: everything the data plane needs
+      // from the host, without touching the network or the control socket.
+      std::printf("urnetworkd %s (control protocol %d, sdk %s)\n", UR_APP_VERSION,
+                  urnw::ctl::kControlProtocolVersion, urnet::version().c_str());
+      std::printf("control socket: %s\n", urnw::ControlServer::SocketPath().c_str());
+      std::printf("state dir:      %s\n", StateDir().c_str());
+      std::printf("log dir:        %s\n", LogDir().c_str());
+      std::fflush(stdout);
+      return ReportPreflight() == 0 ? 0 : 1;
+    }
     if (arg == "--help" || arg == "-h") {
       std::printf(
-          "usage: urnetworkd [--foreground] [--version]\n"
+          "usage: urnetworkd [--foreground] [--diagnose] [--version]\n"
           "URnetwork privileged daemon: control socket at %s,\n"
-          "device RPC on 127.0.0.1:%d while the tunnel is up.\n",
+          "device RPC on 127.0.0.1:%d while the tunnel is up.\n"
+          "  --diagnose  print the host preflight (ip/nft/resolvectl, cgroup, tun) and exit\n",
           urnw::ControlServer::SocketPath().c_str(), urnw::ctl::kDeviceRpcPort);
       return 0;
     }
@@ -139,6 +205,14 @@ int main(int argc, char** argv) {
   g_mkdir_with_parents(stateDir.c_str(), 0700);
   g_mkdir_with_parents(logDir.c_str(), 0700);
   urnet::setLogDir(logDir);
+  // The log ring is the READ half of the Advanced-Mode session log: the SDK
+  // writes its [rel] reliability stream to glog files in this directory, and
+  // the ring tails them so the app can show them live over the control socket.
+  // Without these two calls the ring exists, serves log_tail, and truthfully
+  // reports that it holds nothing — a working pipe with no water in it.
+  urnw::DaemonLog::Instance().SetSdkLogDir(logDir);
+  urnw::DaemonLog::Instance().StartSdkLogPolling();
+  urnw::DaemonLogf("[daemon] urnetworkd %s starting (log dir %s)\n", UR_APP_VERSION, logDir.c_str());
   urnet::setMemoryLimit(kMemoryLimit);
 
   // Clear a location override left behind by a previous run BEFORE serving any
@@ -157,7 +231,35 @@ int main(int argc, char** argv) {
     }
   }
 
+  // Crash safety is NOT inherited on Linux: unlike the Windows dynamic WFP
+  // session, an nftables table and a set of `ip rule`s outlive the process
+  // that installed them. Sweep our own leftovers (by table name, by our fwmark
+  // and by our route-table id — never by priority alone, which would let us
+  // delete a co-installed WireGuard's rules) before serving anyone.
+  urnw::NetFilter::SweepStaleState();
+  if (const int missing = ReportPreflight(); missing > 0) {
+    // Do not refuse to start: the control socket must still come up so the GUI
+    // gets a real answer instead of "the service is not running". The first
+    // start_tunnel is what fails, with a code naming the missing piece.
+    std::fprintf(stderr,
+                 "[daemon] %d required host component(s) are missing: the control socket will "
+                 "serve, but start_tunnel will refuse until they are installed\n",
+                 missing);
+  }
+
   urnw::TunnelHost tunnel(stateDir);
+  // Off by default: a tunnel survives a GUI crash or restart and is adoptable.
+  // Set $URNETWORK_ORPHAN_TIMEOUT_SECONDS to have the daemon stop a tunnel
+  // nobody has owned for that long — the "captured machine with no UI"
+  // recovery, for setups that prefer it to the tray action.
+  if (const char* env = std::getenv("URNETWORK_ORPHAN_TIMEOUT_SECONDS");
+      env != nullptr && *env != '\0') {
+    const int seconds = std::atoi(env);
+    if (seconds > 0) {
+      tunnel.SetOrphanTimeoutSeconds(seconds);
+      std::fprintf(stderr, "[daemon] orphan timeout: %ds\n", seconds);
+    }
+  }
   urnw::ControlServer server(tunnel, geoWriter);
   server.SetDaemonVersion(UR_APP_VERSION);
   // exact-match enforced against the GUI's hello: the gob device RPC carries

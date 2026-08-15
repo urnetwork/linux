@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "daemon/ControlServer.hpp"
 
+#include "daemon/DaemonLog.hpp"
+
 #include <fcntl.h>
 #include <grp.h>
 #include <poll.h>
@@ -289,8 +291,12 @@ void ControlServer::CloseConnection(Connection* conn) {
   }
   if (tunnelOwner_ == conn) {
     // the owner went away: the tunnel keeps running (the GUI may only have
-    // crashed or be restarting) and ownership becomes adoptable
+    // crashed or be restarting) and ownership becomes adoptable. `status` now
+    // reports owner_connected=false, so a captured machine with no UI attached
+    // is discoverable instead of invisible, and the orphan timeout (off by
+    // default) starts running from here.
     tunnelOwner_ = nullptr;
+    tunnel_.SetOwnerConnected(false);
     std::fprintf(stderr, "[control] tunnel owner disconnected (tunnel stays up)\n");
   }
   if (overrideWriter_ == conn) {
@@ -312,13 +318,41 @@ nlohmann::json ControlServer::Dispatch(Connection* conn, const nlohmann::json& r
   const ctl::Verb verb = ctl::RequestVerb(request);
   const int64_t id = ctl::FrameId(request);
 
-  if (verb == ctl::Verb::Hello) return HandleHello(conn, id, request);
+  // HandleHello parses the frame with json::get<>, which THROWS on a malformed
+  // or wrongly-typed field. It used to sit outside the try below, so a single
+  // bad hello frame took the ROOT daemon down (measured: core dumped) and with
+  // it every other client's tunnel. Nothing reachable before authorization may
+  // be able to kill this process.
+  if (verb == ctl::Verb::Hello) {
+    try {
+      return HandleHello(conn, id, request);
+    } catch (const std::exception& e) {
+      return ctl::MakeErrorReply(id, std::string("malformed hello: ") + e.what(),
+                                 ctl::kCodeHelloRequired);
+    } catch (...) {
+      return ctl::MakeErrorReply(id, "malformed hello", ctl::kCodeHelloRequired);
+    }
+  }
 
   // hello is mandatory before anything else: this is what makes the version
   // negotiation enforced rather than declared
   if (!conn->helloOk) {
     return ctl::MakeErrorReply(id, "hello with a supported protocol_version is required",
                                ctl::kCodeHelloRequired);
+  }
+
+  // log_tail is ADDITIVE within protocol v1: it is not a ctl::Verb, so it is
+  // recognised off the raw frame by name. It sits after the helloOk gate above,
+  // so an unauthorized peer can never read the daemon's log.
+  if (ctl::IsLogTailRequest(request)) {
+    try {
+      const auto req = request.at("args").get<ctl::LogTailRequest>();
+      return ctl::MakeReply(id, true,
+                            nlohmann::json(DaemonLog::Instance().Tail(req.cursor, req.max_lines)));
+    } catch (const std::exception& e) {
+      return ctl::MakeErrorReply(id, std::string("malformed log_tail: ") + e.what(),
+                                 ctl::kCodeLogAccessDenied);
+    }
   }
 
   try {
@@ -332,9 +366,14 @@ nlohmann::json ControlServer::Dispatch(Connection* conn, const nlohmann::json& r
       case ctl::Verb::StopTunnel: {
         nlohmann::json denied;
         if (!CheckTunnelOwner(conn, id, &denied)) return denied;
-        tunnel_.Stop();
-        if (tunnelOwner_ == conn) tunnelOwner_ = nullptr;
-        return ctl::MakeReply(id, true);
+        // An explicit stop is the one path that also lifts the kill-switch
+        // policy (windows semantics: only an unexpected drop keeps it armed).
+        tunnel_.Stop("user");
+        if (tunnelOwner_ == conn) {
+          tunnelOwner_ = nullptr;
+          tunnel_.SetOwnerConnected(false);
+        }
+        return ctl::MakeReply(id, true, nlohmann::json(tunnel_.Status()));
       }
 
       case ctl::Verb::SetProvide: {
@@ -345,6 +384,23 @@ nlohmann::json ControlServer::Dispatch(Connection* conn, const nlohmann::json& r
           return ctl::MakeErrorReply(id, "set provide mode failed");
         }
         return ctl::MakeReply(id, true);
+      }
+
+      case ctl::Verb::SetKillSwitch: {
+        nlohmann::json denied;
+        if (!CheckTunnelOwner(conn, id, &denied)) return denied;
+        const auto req = request.get<ctl::SetKillSwitchRequest>();
+        std::string error;
+        if (!tunnel_.SetKillSwitch(req.enabled, &error)) {
+          // The reply still carries the status, whose kill_switch field now
+          // reads "failed": a protection that is not in force must never be
+          // reported as merely off.
+          nlohmann::json reply = ctl::MakeReply(id, false, nlohmann::json(tunnel_.Status()));
+          reply["error"] = error.empty() ? "the kill switch could not be installed" : error;
+          reply["code"] = ctl::kCodeKillSwitchFailed;
+          return reply;
+        }
+        return ctl::MakeReply(id, true, nlohmann::json(tunnel_.Status()));
       }
 
       case ctl::Verb::LocationOverrideAvailable: {
@@ -446,14 +502,46 @@ nlohmann::json ControlServer::HandleStartTunnel(Connection* conn, int64_t id,
     return ctl::MakeErrorReply(id, *invalid);
   }
 
+  // ADOPT before restarting. The client issues start_tunnel unconditionally at
+  // launch, so without this a live tunnel from a previous GUI run was torn
+  // down and rebuilt every single time the app started.
+  if (tunnel_.CanAdopt(req)) {
+    tunnelOwner_ = conn;
+    tunnel_.SetOwnerConnected(true);
+    const ctl::StatusReply status = tunnel_.Status();
+    std::fprintf(stderr, "[control] adopted the running tunnel for a reconnecting client\n");
+    ctl::StartTunnelReply payload;
+    payload.rpc_port = status.rpc_port;
+    payload.tunnel_state = status.tunnel_state;
+    return ctl::MakeReply(id, true, nlohmann::json(payload));
+  }
+
   const ctl::StatusReply status = tunnel_.Start(req);
-  if (status.tunnel_state != ctl::TunnelState::Up) {
-    return ctl::MakeErrorReply(
-        id, status.error.empty() ? "tunnel start failed" : status.error);
+  if (status.error_code == ctl::kCodeStartInProgress) {
+    // Distinct on purpose: a client that timed out and reconnected must NOT
+    // cause a teardown-and-rebuild of the bring-up already running.
+    nlohmann::json reply = ctl::MakeReply(id, false, nlohmann::json(status));
+    reply["error"] = status.error;
+    reply["code"] = ctl::kCodeStartInProgress;
+    return reply;
+  }
+  // async: `starting` is a success — the client polls `status` from here.
+  const bool accepted = status.tunnel_state == ctl::TunnelState::Up ||
+                        (req.async && status.tunnel_state == ctl::TunnelState::Starting);
+  if (!accepted) {
+    nlohmann::json reply = ctl::MakeReply(id, false, nlohmann::json(status));
+    reply["error"] = status.error.empty() ? "tunnel start failed" : status.error;
+    // The actionable code the tun/route/DNS layers produced ("the tun kernel
+    // module is not loaded", "CAP_NET_ADMIN missing", "route 8.0.0.0/7
+    // failed: …", "egress_unprotected"), never a generic failure.
+    if (!status.error_code.empty()) reply["code"] = status.error_code;
+    return reply;
   }
   tunnelOwner_ = conn;
+  tunnel_.SetOwnerConnected(true);
   ctl::StartTunnelReply payload;
   payload.rpc_port = status.rpc_port;
+  payload.tunnel_state = status.tunnel_state;
   return ctl::MakeReply(id, true, nlohmann::json(payload));
 }
 

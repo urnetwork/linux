@@ -122,6 +122,7 @@ PREFIX=''
 FORCE=0
 ASSUME_YES=0
 DO_UPDATE=0
+GROUP_ADDED=0
 
 log()  { printf '%s\n' "$*"; }
 note() { printf -- '- %s\n' "$*"; }
@@ -449,6 +450,7 @@ if [ "${DRY_RUN}" = 1 ]; then
     [ -n "${PREFIX}" ] && log "  file layout rooted at prefix: ${PREFIX}"
     if [ -z "${PREFIX}" ]; then
         note "create system group 'urnetwork' (if missing)"
+        note "add the invoking user to the urnetwork group (the control socket is root:urnetwork 0750)"
         note "stop ${UNIT} if running (it may hold a live tun fd)"
         note "back up currently installed files for rollback-on-failure"
     fi
@@ -528,6 +530,38 @@ if [ -z "${PREFIX}" ]; then
         else
             run addgroup --system urnetwork
         fi
+    fi
+
+    # ...AND PUT THE HUMAN IN IT. The control socket is 0750 root:urnetwork, so
+    # a user who is not a member gets EACCES on connect(2) and the app can only
+    # report "the service is not running" — which is false and unfixable from
+    # the UI. Creating the group without ever adding anyone to it is the single
+    # most likely way a correct install still cannot connect.
+    #
+    # sudo/pkexec keep the invoking user in SUDO_USER/PKEXEC_UID; a plain root
+    # shell has neither, and root does not need the group.
+    TARGET_USER=""
+    if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != 'root' ]; then
+        TARGET_USER="${SUDO_USER}"
+    elif [ -n "${PKEXEC_UID:-}" ]; then
+        TARGET_USER="$(getent passwd "${PKEXEC_UID}" 2>/dev/null | cut -d: -f1)"
+    fi
+    if [ -n "${TARGET_USER}" ]; then
+        if id -nG "${TARGET_USER}" 2>/dev/null | tr ' ' '\n' | grep -qx urnetwork; then
+            note "${TARGET_USER} is already in the urnetwork group"
+        elif command -v usermod >/dev/null 2>&1; then
+            log "adding ${TARGET_USER} to the urnetwork group"
+            run usermod -aG urnetwork "${TARGET_USER}"
+            GROUP_ADDED=1
+        elif command -v gpasswd >/dev/null 2>&1; then
+            log "adding ${TARGET_USER} to the urnetwork group"
+            run gpasswd -a "${TARGET_USER}" urnetwork
+            GROUP_ADDED=1
+        else
+            warn "could not add ${TARGET_USER} to the urnetwork group (no usermod/gpasswd): run 'sudo usermod -aG urnetwork ${TARGET_USER}' or the app cannot reach the service"
+        fi
+    else
+        warn "could not tell which user to add to the urnetwork group (no SUDO_USER/PKEXEC_UID). Run: sudo usermod -aG urnetwork <you>"
     fi
 fi
 
@@ -698,6 +732,12 @@ log ""
 log "urnetwork-daemon ${NEW_VERSION} ${MODE} complete."
 if [ -z "${PREFIX}" ]; then
     log "The daemon is running idle; nothing connects until you sign in from the app."
+    if [ "${GROUP_ADDED}" = 1 ]; then
+        log ""
+        log "IMPORTANT: you were added to the 'urnetwork' group, and group membership"
+        log "only applies to NEW login sessions. Log out and back in (or reboot) before"
+        log "starting the app, or it will report that the service is not running."
+    fi
     log "Next: install the URnetwork GUI AppImage to ~/.local/lib/urnetwork/URnetwork.AppImage"
     log "and run 'urnetwork' (https://ur.io/download)."
     log "Uninstall later with: sudo ${LIB_DIR}/uninstall.sh"

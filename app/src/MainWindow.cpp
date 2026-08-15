@@ -274,47 +274,46 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
 // stats use.
 TunnelStartResult MainWindow::StartTunnelUi() {
   const TunnelStartResult result = host_.StartTunnel();
+  // ONE text, TWO sinks. These strings used to be written only to
+  // daemonStatusLabel_, which lives in the legacy single-column home that the
+  // nav shell never shows — so every daemon failure was invisible and pressing
+  // Connect looked like a silent no-op. ConnectPage::SetDaemonNotice is the
+  // surface the user actually sees; the legacy label is kept in sync until the
+  // legacy column is deleted.
+  Glib::ustring notice;
   switch (result) {
     case TunnelStartResult::Started:
-      daemonStatusLabel_.set_text("");
-      daemonStatusLabel_.set_visible(false);
-      break;
+      break;  // empty notice clears both
     case TunnelStartResult::DaemonUnreachable:
-      daemonStatusLabel_.set_text(
-          T_("daemon_unreachable",
-             "The URnetwork system service is not running. Install or start it, then try "
-             "again."));
-      daemonStatusLabel_.set_visible(true);
+      notice = T_("daemon_unreachable",
+                  "The URnetwork system service is not running. Install or start it, then "
+                  "try again.");
       break;
     case TunnelStartResult::DaemonTooOld:
-      daemonStatusLabel_.set_text(
-          T_("daemon_too_old",
-             "The URnetwork system service is out of date. Update it to connect."));
-      daemonStatusLabel_.set_visible(true);
+      notice = T_("daemon_too_old",
+                  "The URnetwork system service is out of date. Update it to connect.");
       break;
     case TunnelStartResult::AppTooOld:
-      daemonStatusLabel_.set_text(
-          T_("app_too_old_for_daemon",
-             "This app is older than the installed URnetwork system service. Update the app "
-             "to connect."));
-      daemonStatusLabel_.set_visible(true);
+      notice = T_("app_too_old_for_daemon",
+                  "This app is older than the installed URnetwork system service. Update "
+                  "the app to connect.");
       break;
     case TunnelStartResult::SdkMismatch:
-      daemonStatusLabel_.set_text(
-          T_("daemon_sdk_mismatch",
-             "The app and the URnetwork system service are different builds. Update both to "
-             "the same version."));
-      daemonStatusLabel_.set_visible(true);
+      notice = T_("daemon_sdk_mismatch",
+                  "The app and the URnetwork system service are different builds. Update "
+                  "both to the same version.");
       break;
     case TunnelStartResult::Failed: {
       const std::string error = host_.LastTunnelError();
-      daemonStatusLabel_.set_text(
-          error.empty() ? T_("tunnel_start_failed", "Could not start the connection")
-                        : error);
-      daemonStatusLabel_.set_visible(true);
+      notice = error.empty() ? Glib::ustring(T_("tunnel_start_failed",
+                                                "Could not start the connection"))
+                             : Glib::ustring(error);
       break;
     }
   }
+  daemonStatusLabel_.set_text(notice);
+  daemonStatusLabel_.set_visible(!notice.empty());
+  if (connectPage_) connectPage_->SetDaemonNotice(notice);
   return result;
 }
 

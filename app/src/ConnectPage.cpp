@@ -327,6 +327,17 @@ ConnectPage::ConnectPage(SdkHost& host)
   });
 }
 
+ConnectPage::~ConnectPage() {
+  // Order matters: alive_ FIRST, so a reliability completion already queued on
+  // the main loop drops itself without dereferencing this page at all. The
+  // epoch bump is belt to that brace (a completion captured on the old
+  // generation is stale either way), and the clock is stopped explicitly
+  // rather than left to sigc::track_obj's teardown ordering.
+  *alive_ = false;
+  ++(*epoch_);
+  tick_.disconnect();
+}
+
 // ---- PANE A -----------------------------------------------------------------
 
 void ConnectPage::BuildPaneA() {
@@ -1107,11 +1118,10 @@ void ConnectPage::ApplyStats(const LiveStats& stats) {
              : Glib::ustring());
     if (providerCountLine_) {
       kit::SetAccessibleLabel(*providerCountLine_, providerCountText_->get_text());
-      // A row that cannot act must not claim it can. NOTE: while
-      // on_open_provider_locations is unassigned this reads as a permanently
-      // greyed row — see the TODO(wiring) on the callback in ConnectPage.hpp;
-      // the globe sheet cannot be owned here (it needs MainWindow's
-      // LocationOverrideController).
+      // A row that cannot act must not claim it can: with the callback
+      // unassigned (the globe sheet cannot be owned here — it needs
+      // MainWindow's LocationOverrideController) the row stays greyed rather
+      // than swallowing the click.
       providerCountLine_->set_sensitive(show && on_open_provider_locations != nullptr);
     }
   }
@@ -1263,16 +1273,34 @@ void ConnectPage::ApplySessionRows() {
                           static_cast<int64_t>(blockActions_->size())))
                     : none);
   if (advanced_) {
-    // Advanced sees through the simplification: the pre-clamp status.
-    // TODO(sdk-wiring): LiveStats.rawConnectionStatus / LiveStats.rpcOnly — the
-    // Linux LiveStats carries no rpc-only clamp, so this is the ONLY status the
-    // page has; it is not relabelled as something it is not.
+    // §4.3 row 6: the PRE-CLAMP connection status. This host applies NO clamp
+    // (Windows' LiveStats rewrites the status to RPC_ONLY / SERVICE_DOWN and
+    // Advanced reads the raw field through it), so stats_.connectionStatus IS
+    // the pre-clamp reading and this row is truthful exactly as written.
+    //
+    // TODO(sdk-wiring): what is missing here is the CLAMP, not the field. A
+    // DeviceRemote whose loopback rpc to urnetworkd has gone away keeps
+    // returning the last status it was told, so the hero can read Connected
+    // over a tunnel that no longer exists. The reading that would drive it is
+    // reachable — ReliabilitySnapshot::remoteConnected arrives on the very
+    // snapshot RefreshExitRouting below takes every 5 s, and is deliberately
+    // NOT kept here — but the clamp belongs in SdkHost::ReadStats, where
+    // LiveStats gains
+    // daemonDown/rawConnectionStatus and every consumer sees it at once. It
+    // must NOT be applied here: ApplyConnectStatus is the single writer of the
+    // status line, the dot, the hero and the button, and it must not acquire a
+    // second status source behind its back.
     add(T_("adv_raw_status", "Raw status"),
         stats_.connectionStatus.empty() ? Glib::ustring(T_("adv_none", "none"))
                                         : Glib::ustring(stats_.connectionStatus));
-    // TODO(sdk-wiring): Sdk().ReadReliability() — no exits table is readable on
-    // Linux, so the denominator is UNKNOWN, never 0.
-    add(T_("adv_exits", "Exits"), T_("adv_none", "none"));
+    // §4.3 row 7: the denominator behind every inspector "via exit" line.
+    // nullopt is UNKNOWN — no session, or no snapshot has landed yet / the rpc
+    // threw — and a never-read table rendered as "0" would fabricate the one
+    // number this row exists to report. A table that WAS read and is empty
+    // renders as a real 0.
+    add(T_("adv_exits", "Exits"),
+        exits_ ? Glib::ustring(FormatCountCompact(static_cast<int64_t>(exits_->size())))
+               : Glib::ustring(T_("adv_none", "none")));
   }
 }
 
@@ -1446,6 +1474,46 @@ void ConnectPage::ApplyInspectorVisibility() {
   if (inspectorGroup_) inspectorGroup_->set_visible(advanced_);
 }
 
+// The §4.1 join: the FIRST address of this action that appears in the
+// destination-exit table decides, and its ClientId is then looked up in the
+// exit table for that exit's health. Both halves are absent-capable — with no
+// snapshot (nullopt) there is nothing to join and the caller must say so
+// rather than report "not in the routing table", which would assert a lookup
+// that never ran.
+std::optional<ConnectPage::ExitRouting> ConnectPage::RoutingForAddresses(
+    const std::optional<urnet::StringList>& addresses) const {
+  if (!addresses || !destinationExits_) return std::nullopt;
+  for (const auto& ip : *addresses) {
+    for (const auto& dest : *destinationExits_) {
+      if (dest.DestinationIp != ip) continue;
+      ExitRouting out;
+      out.clientId = dest.ClientId.value_or(std::string());
+      out.flowCount = dest.FlowCount;
+      // The exit table is read separately and can be UNKNOWN while the
+      // destination table is not (each getter is guarded on its own): the
+      // routing is still reported, the health rows are simply not claimed.
+      if (exits_) {
+        for (const auto& exitRow : *exits_) {
+          if (!exitRow.ClientId || *exitRow.ClientId != out.clientId) continue;
+          out.haveExit = true;
+          out.tier = exitRow.Tier;
+          out.effectiveTier = exitRow.EffectiveTier;
+          out.exitFlowCount = exitRow.FlowCount;
+          out.dialFailureCount = exitRow.DialFailureCount;
+          out.quarantined = exitRow.Quarantined;
+          out.warning = exitRow.Warning;
+          out.warningCause = exitRow.WarningCause;
+          out.proven = exitRow.Proven;
+          out.probeAgeSeconds = exitRow.ProbeAgeSeconds;
+          break;
+        }
+      }
+      return out;
+    }
+  }
+  return std::nullopt;
+}
+
 void ConnectPage::ApplyInspector() {
   if (!inspectorGroup_ || !inspectorRows_) return;
   RemoveAllChildren(*inspectorRows_);
@@ -1530,11 +1598,46 @@ void ConnectPage::ApplyInspector() {
     add(T_("adv_last_decision", "Last decision"), RelativeTime(secondsAgo));
   }
   if (!action->Block) {
-    // TODO(sdk-wiring): Sdk().ReadReliability() — SdkHost exposes no exits /
-    // destination-exits table, so the exit-routing rows have nothing to resolve
-    // against. Absent-not-guessed: the row says the destination is not in the
-    // routing table rather than inventing an exit.
-    add(T_("adv_via_exit", "Via exit"), T_("adv_unknown_exit", "Not in the routing table"));
+    // §4.1 item 10, in THREE distinguishable readings. The middle one is the
+    // answer; the outer two are different kinds of "I don't know" and must not
+    // be collapsed into each other.
+    if (!destinationExits_) {
+      // UNKNOWN: no snapshot has landed for this session (no device, the first
+      // 5 s read has not returned, or the rpc threw). Rendering "Not in the
+      // routing table" here would assert a lookup that never ran.
+      add(T_("adv_via_exit", "Via exit"), T_("adv_none", "none"));
+    } else if (const auto routing = RoutingForAddresses(action->Ips)) {
+      addText(T_("adv_via_exit", "Via exit"), routing->clientId);
+      add(T_("adv_exit_flows", "Flows to this destination"),
+          FormatCountCompact(routing->flowCount));
+      // The exit's own health, only when the client id resolved to an exit
+      // record — a routed destination whose exit has aged out of the window
+      // reports the routing and stops there.
+      if (routing->haveExit) {
+        add(T_("adv_exit_tier", "Exit tier"),
+            Glib::ustring(std::to_string(routing->effectiveTier) + " / " +
+                          std::to_string(routing->tier)));
+        add(T_("adv_exit_flows_total", "Exit flows"), FormatCountCompact(routing->exitFlowCount));
+        add(T_("adv_exit_dial_failures", "Dial failures"),
+            FormatCountCompact(routing->dialFailureCount));
+        add(T_("adv_exit_state", "Exit state"),
+            routing->quarantined ? T_("adv_exit_quarantined", "Quarantined")
+            : routing->warning   ? T_("adv_exit_warning", "Warning")
+            : routing->proven    ? T_("adv_exit_proven", "Proven")
+                                 : T_("adv_exit_ok", "OK"));
+        if (routing->warning && !routing->warningCause.empty()) {
+          addText(T_("adv_exit_warning_cause", "Warning cause"), routing->warningCause);
+        }
+        if (routing->probeAgeSeconds > 0) {
+          add(T_("adv_probe_age", "Probe age"),
+              Glib::ustring(std::to_string(routing->probeAgeSeconds) + "s"));
+        }
+      }
+    } else {
+      // Read, and this destination is genuinely not in it — the normal reading
+      // for a host that resolved after the last refresh.
+      add(T_("adv_via_exit", "Via exit"), T_("adv_unknown_exit", "Not in the routing table"));
+    }
     if (!countryName_.empty()) {
       // labelled as the SESSION's, because per-exit geo is not bridged
       add(T_("adv_session_exit_country", "Session exit country"), countryName_);
@@ -1553,23 +1656,57 @@ void ConnectPage::ApplyInspector() {
   }
 }
 
-// The 5s exit-routing cache refresh (§4.1). SdkHost has no ReadReliability, so
-// there is nothing to run on a worker and nothing to cache; the inspector's
-// exit rows already render the real "not in the routing table" reading.
+// The 5 s exit-routing cache refresh (§4.1), fired from the clock and
+// immediately when Advanced Mode turns on.
 void ConnectPage::RefreshExitRouting() {
-  // TODO(sdk-wiring): Sdk().ReadReliability() -> exits_/destinationExits_
-  // (several synchronous device RPCs; single-flight on a worker thread, then
-  // marshal back and re-run ApplyInspector only if something is selected).
-  //
-  // The completion MUST carry the stale-async guard, because it can land after
-  // a logout, an Advanced-Mode toggle or a teardown has rebuilt the inspector:
-  //   auto epoch = epoch_; const uint64_t gen = *epoch;
-  //   ... on the worker ...
-  //   PostToMain([this, epoch, gen, result] {
-  //     if (*epoch != gen) return;        // re-checked ON ARRIVAL, not on entry
-  //     if (!advanced_ || !presenting_) return;
-  //     exits_ = ...; if (!selectedConnectionId_.empty()) ApplyInspector();
-  //   });
+  // §4.1's gate in full: Advanced Mode, this destination on screen, window
+  // presenting. A background rpc batch for a pane nobody is looking at is the
+  // cost of the feature with none of the value.
+  if (!advanced_ || !presenting_ || !pageVisible_) return;
+
+  if (!host_.hasDevice()) {
+    // No session. The tables are UNKNOWN, not empty — and the PREVIOUS
+    // session's tables must not survive here, or the inspector could join a
+    // destination ip against an exit that belonged to a device which no longer
+    // exists. Dropped inline (no rpc to make) and the two surfaces re-read.
+    if (exits_ || destinationExits_) {
+      exits_.reset();
+      destinationExits_.reset();
+      ApplySessionRows();
+      if (!selectedConnectionId_.empty()) ApplyInspector();
+    }
+    return;
+  }
+
+  // SdkHost owns the worker, the host-wide single-flight gate and the marshal
+  // back to the main loop: ReadReliability is several SYNCHRONOUS device rpcs
+  // taken under the host lock and must never run on the GTK loop. A read
+  // already in flight returns false and this tick is SKIPPED rather than
+  // queued behind the lock — the next one is 5 s away.
+  auto alive = alive_;
+  auto epoch = epoch_;
+  const uint64_t gen = *epoch_;
+  host_.RequestReliability(
+      ReliabilityRead::ExitsOnly, [this, alive, epoch, gen](ReliabilitySnapshot snap) {
+        // Re-checked ON ARRIVAL, not on entry: this lands one rpc batch later
+        // and a logout, an Advanced-Mode toggle, a resync or the page's own
+        // destruction can have happened in between. alive_ FIRST — the epoch
+        // lives inside the page.
+        if (!*alive || *epoch != gen) return;
+        const bool hadExits = exits_.has_value();
+        const size_t before = hadExits ? exits_->size() : 0;
+        // Assigned wholesale, INCLUDING a nullopt: a getter that threw makes
+        // the table unknown again, and keeping the last good reading would
+        // quietly age into a fabrication.
+        exits_ = std::move(snap.exits);
+        destinationExits_ = std::move(snap.destinationExits);
+        // The "Exits" session figure is the denominator behind every "via
+        // exit" line; it must not wait for the next stats push to catch up.
+        if (hadExits != exits_.has_value() || (exits_ && before != exits_->size())) {
+          ApplySessionRows();
+        }
+        if (advanced_ && !selectedConnectionId_.empty()) ApplyInspector();
+      });
 }
 
 // ---- provide control mode -----------------------------------------------------
@@ -1901,23 +2038,26 @@ void ConnectPage::RefreshFeeds(bool force) {
 
 // The clock-driven fallback for the change feed.
 //
-// TODO(wiring): SdkHost::SetDrawerEventHandler is a SINGLE slot and MainWindow
-// owns it, routing every DrawerEvent to the legacy drawer only
-// (MainWindow.cpp: `if (windowVisible_ && drawer_) drawer_->OnHostEvent(event)`).
-// Until it also calls `connectPage_->OnHostEvent(event)`, OnHostEvent below is
-// unreachable and panes B and C would never see a single SDK push: the charts
-// would sit flat, the routing list would freeze on the snapshot taken when the
-// window was shown, and the contracts / split-rules / DNS surfaces would keep
-// rendering state the user has already changed. The page therefore re-reads its
-// own feeds off the clock, applying only what actually changed (each read is
-// fingerprinted, so an idle session rebuilds nothing). The moment a real event
-// lands, the poll drops to a slow safety net.
+// SdkHost::SetDrawerEventHandler is a SINGLE slot and MainWindow owns it; it
+// now fans out to both surfaces (MainWindow.cpp: `if (windowVisible_ &&
+// connectPage_) connectPage_->OnHostEvent(event)`), so OnHostEvent below is
+// reached. It is gated on the window being visible, though, and every push
+// that lands while the window is hidden is DROPPED — so the clock-driven
+// re-read stays as the safety net that closes that gap on re-show, applying
+// only what actually changed (each read is fingerprinted, so an idle session
+// rebuilds nothing). Once a real event has landed the poll steps back to 5 s.
 void ConnectPage::PollFeeds() { RefreshFeeds(false); }
 
 void ConnectPage::Resync() {
   ++(*epoch_);  // anything in flight against the old reading is stale
   SyncProvideControlMode();
   RefreshAllPanes();
+  // Seed the exit tables on entry rather than waiting up to a full 5 s tick:
+  // Resync is login / tab entry / window re-show, i.e. exactly the moments the
+  // pane comes back on screen. The tables are deliberately NOT cleared here —
+  // Resync is not a session change, and blanking them would flash the
+  // inspector's UNKNOWN reading through on every window re-show.
+  if (advanced_) RefreshExitRouting();
 }
 
 // The drawer's dispatcher, per group: re-read through the accessor, re-apply
@@ -1927,7 +2067,14 @@ void ConnectPage::OnHostEvent(DrawerEvent event) {
   eventsWired_ = true;
   switch (event) {
     case DrawerEvent::DeviceLifecycle:
+      // A new device is a new routing table. The old one must not be joined
+      // against — the ids in it belonged to a device that no longer exists, so
+      // a hit would be a plausible WRONG answer — and it is UNKNOWN until a
+      // fresh read lands, not empty.
+      exits_.reset();
+      destinationExits_.reset();
       RefreshAllPanes();
+      if (advanced_) RefreshExitRouting();
       break;
     case DrawerEvent::Throughput:
       PullThroughput();
@@ -2206,9 +2353,10 @@ void ConnectPage::Tick() {
   // every 10th tick (~1 s): re-read the feeds the page has no event path for
   // (see PollFeeds) and re-run the open split-rules sheet.
   if (tickCount_ % 10 == 0) {
-    // Once MainWindow routes DrawerEvent here this drops to a 5s safety net.
-    // A changed feed cascades into an open split-rules sheet from there (as
-    // the event path does), so the sheet is never re-read for nothing.
+    // With events reaching OnHostEvent this is already the 5 s safety net for
+    // the pushes dropped while the window was hidden. A changed feed cascades
+    // into an open split-rules sheet from there (as the event path does), so
+    // the sheet is never re-read for nothing.
     //
     // TODO(sheet): §4.5 wants the sheet's "Ns ago" captions aged on the CLOCK.
     // SplitRulesSheet has no RefreshTimes() entry point and its Refresh()

@@ -5,9 +5,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 
 #include "AppPrefs.hpp"
 #include "NetworkSpaceConfig.hpp"
+#include "Ui.hpp"  // PostToMain — the only UI dependency here, and only to marshal
 
 // The release version, threaded in via the -Dapp_version meson option (the
 // pipeline passes $VERSION); the fallback matches the option's default.
@@ -31,7 +33,33 @@ constexpr const char* kWalletSignInMessage = "Welcome to URnetwork";
 // AuthLogin{wallet_auth} blockchain ids. The server matches case-insensitively:
 // "solana" -> ed25519, urnet::TAO ("TAO") -> sr25519 (bittensor).
 constexpr const char* kSolanaBlockchain = "solana";
+
+// One rpc, guarded: a throwing getter costs its OWN field (which then reads as
+// UNKNOWN), not the whole snapshot. The failure is logged because the two bool
+// fields have no unknown state to carry — false is all they can say.
+template <typename T, typename Fn>
+T ReadGuarded(const char* what, Fn&& fn, T fallback) {
+  try {
+    return fn();
+  } catch (const std::exception& e) {
+    g_warning("sdkhost: %s threw: %s", what, e.what());
+  } catch (...) {
+    g_warning("sdkhost: %s threw", what);
+  }
+  return fallback;
+}
 }  // namespace
+
+SdkHost::~SdkHost() {
+  // The worker holds `this` and calls back into ReadReliability, so it must be
+  // finished before any member dies. It never takes reliabilityWorkerMutex_,
+  // so joining under that lock cannot deadlock. The join is NOT bounded — a
+  // read blocked on mutex_ (held across a slow StartTunnel) or on a hung
+  // daemon rpc can hold quit for seconds. That is the same trade the Developer
+  // page's bridge makes, and it is the right one against a use-after-free.
+  std::scoped_lock lock(reliabilityWorkerMutex_);
+  if (reliabilityWorker_.joinable()) reliabilityWorker_.join();
+}
 
 bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDir) {
   std::scoped_lock lock(mutex_);
@@ -1422,6 +1450,87 @@ void SdkHost::StepProviderSelection(int steps) {
   providerLocationsVc_->stepSelection(steps);
 }
 
+// ---- reliability / exits ---------------------------------------------------
+// Everything here reads the DeviceRemote's smart-routing getters, which are
+// forwarded over the loopback mTLS device rpc to the DeviceLocal in
+// urnetworkd. They are SYNCHRONOUS and they are several, which is the whole
+// reason this pair exists rather than a handful of one-line accessors: the
+// batch must be one lock hold (so the tables agree about which session they
+// describe) and it must not be on the GTK loop (so a slow daemon is a stale
+// pane, not a frozen app).
+
+ReliabilitySnapshot SdkHost::ReadReliability(ReliabilityRead scope) {
+  // ONE hold for the whole batch, deliberately. Separate holds would let the
+  // exit table and the destination table come from either side of a teardown,
+  // and the inspector's join (destination ip -> client id -> exit) would then
+  // produce a PLAUSIBLE WRONG answer — worse than "I don't know".
+  //
+  // The cost is that a slow daemon holds mutex_ for the batch, and mutex_ is
+  // what the UI-thread accessors take. That cost is why ExitsOnly exists and
+  // why neither caller may run this on the main loop.
+  std::scoped_lock lock(mutex_);
+  ReliabilitySnapshot snap;
+  if (!device_) return snap;  // no session: haveDevice false, everything UNKNOWN
+  snap.haveDevice = true;
+  snap.remoteConnected = ReadGuarded<bool>(
+      "getRemoteConnected", [&] { return device_->getRemoteConnected(); }, false);
+  snap.exits = ReadGuarded<std::optional<urnet::ExitList>>(
+      "getExits", [&] { return device_->getExits(); }, std::nullopt);
+  snap.destinationExits = ReadGuarded<std::optional<urnet::DestinationExitList>>(
+      "getDestinationExits", [&] { return device_->getDestinationExits(); }, std::nullopt);
+  if (scope == ReliabilityRead::ExitsOnly) return snap;
+  snap.settings = ReadGuarded<std::optional<urnet::ReliabilitySettings>>(
+      "getReliabilitySettings", [&] { return device_->getReliabilitySettings(); },
+      std::nullopt);
+  snap.metrics = ReadGuarded<std::optional<urnet::ReliabilityMetrics>>(
+      "getReliabilityMetrics", [&] { return device_->getReliabilityMetrics(); }, std::nullopt);
+  snap.probeSuiteRunning = ReadGuarded<bool>(
+      "probeSuiteRunning", [&] { return device_->probeSuiteRunning(); }, false);
+  snap.probeResults = ReadGuarded<std::optional<urnet::ProbeResultList>>(
+      "getProbeResults", [&] { return device_->getProbeResults(); }, std::nullopt);
+  return snap;
+}
+
+bool SdkHost::RequestReliability(ReliabilityRead scope,
+                                 std::function<void(ReliabilitySnapshot)> done) {
+  if (!done) return false;
+  bool expected = false;
+  // Single-flight. A refresh that is slower than its own tick must SKIP, never
+  // queue: queued reads stack behind mutex_ and the pane then lags by however
+  // many ticks the daemon was slow for.
+  if (!reliabilityBusy_.compare_exchange_strong(expected, true)) return false;
+
+  std::scoped_lock lock(reliabilityWorkerMutex_);
+  // The previous worker cleared reliabilityBusy_ before its final marshal, so
+  // its thread object can still be joinable here — and assigning over a
+  // joinable std::thread is std::terminate. The join returns as soon as that
+  // worker's PostToMain enqueue is done (g_idle_add, not a wait), so this does
+  // not put a daemon round trip on the main loop.
+  if (reliabilityWorker_.joinable()) reliabilityWorker_.join();
+  reliabilityWorker_ = std::thread([this, scope, done = std::move(done)]() mutable {
+    // ReadReliability guards every rpc, so nothing should escape — but an
+    // escaping exception on a worker thread is std::terminate, and a snapshot
+    // that says UNKNOWN everywhere is the honest fallback.
+    ReliabilitySnapshot snap;
+    try {
+      snap = ReadReliability(scope);
+    } catch (const std::exception& e) {
+      g_warning("sdkhost: reliability read threw: %s", e.what());
+    } catch (...) {
+      g_warning("sdkhost: reliability read threw");
+    }
+    // Cleared HERE, on the worker, BEFORE the marshal: the gate must not
+    // depend on the main loop ever running the completion. A main loop that is
+    // blocked, or gone at quit, would otherwise wedge every later read for the
+    // process lifetime and the pane would look merely stale rather than broken.
+    reliabilityBusy_.store(false);
+    PostToMain([done = std::move(done), snap = std::move(snap)]() mutable {
+      done(std::move(snap));
+    });
+  });
+  return true;
+}
+
 std::string SdkHost::PublicIdentityKeyHash() {
   std::scoped_lock lock(mutex_);
   return pqiVc_ ? pqiVc_->getPublicIdentityKeyHash() : std::string();
@@ -1464,6 +1573,13 @@ void SdkHost::Disconnect() {
     controller.disconnect();
     device_->closeConnectViewController(controller);
   }
+  // AND BRING THE DAEMON'S TUNNEL DOWN. Ending the provider session does not
+  // touch the tun device or the 31 capture routes — those are the daemon's,
+  // and they are removed only by an explicit stop_tunnel. Without this the
+  // user presses Disconnect and every packet keeps being routed into a tunnel
+  // with nothing on the other end: the machine loses its internet and the UI
+  // says "Disconnected". Best effort, exactly as Logout/Shutdown do it.
+  control_.StopTunnel();
 }
 
 bool SdkHost::Connected() {

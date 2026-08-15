@@ -14,9 +14,15 @@
 namespace urnw {
 namespace {
 
-// start_tunnel covers device creation + tun + route/DNS setup in the daemon;
-// everything else answers immediately. One generous bound for all verbs.
+// Every verb except start_tunnel answers off a published snapshot and returns
+// in microseconds, so a short bound is right for them and a long one only
+// hides a wedged daemon.
 constexpr time_t kReceiveTimeoutSeconds = 30;
+// A SYNCHRONOUS start_tunnel covers device creation (a network round trip),
+// the tun, ~35 subprocesses for routes/rules/DNS and the nftables swap. 30 s
+// was not a generous bound for that, it was a restart-loop trigger. Clients
+// that ask for async never wait this long — they get `starting` and poll.
+constexpr time_t kStartTunnelReceiveTimeoutSeconds = 180;
 constexpr time_t kSendTimeoutSeconds = 10;
 constexpr size_t kMaxFrameBytes = 1 << 20;  // a reply line beyond 1 MiB is a protocol error
 
@@ -47,11 +53,14 @@ void ControlClient::CloseLocked() {
   }
   helloOk_ = false;
   recvBuffer_.clear();
+  receiveTimeoutSeconds_ = 0;
 }
 
 bool ControlClient::ConnectLocked(std::string* error) {
   CloseLocked();
   const std::string path = SocketPath();
+  lastSocketPath_ = path;
+  lastUnreachable_ = DaemonUnreachableReason::Other;
   sockaddr_un addr{};
   addr.sun_family = AF_UNIX;
   if (path.size() >= sizeof(addr.sun_path)) {
@@ -74,14 +83,40 @@ bool ControlClient::ConnectLocked(std::string* error) {
 #endif
   SetTimeout(fd, SO_RCVTIMEO, kReceiveTimeoutSeconds);
   SetTimeout(fd, SO_SNDTIMEO, kSendTimeoutSeconds);
+  receiveTimeoutSeconds_ = kReceiveTimeoutSeconds;
 
   if (::connect(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) != 0) {
-    if (error) *error = path + ": " + std::strerror(errno);
+    const int e = errno;
+    // The three Unreachable causes are three different problems. EACCES in
+    // particular is "the daemon IS running and you are not in the `urnetwork`
+    // group" — the state a fresh install lands in, because the installers
+    // create the group empty.
+    switch (e) {
+      case EACCES:
+      case EPERM:
+        lastUnreachable_ = DaemonUnreachableReason::PermissionDenied;
+        break;
+      case ENOENT:
+      case ECONNREFUSED:
+        lastUnreachable_ = DaemonUnreachableReason::SocketMissing;
+        break;
+      default:
+        lastUnreachable_ = DaemonUnreachableReason::Other;
+        break;
+    }
+    if (error) *error = path + ": " + std::strerror(e);
     ::close(fd);
     return false;
   }
+  lastUnreachable_ = DaemonUnreachableReason::None;
   fd_ = fd;
   return true;
+}
+
+void ControlClient::SetReceiveTimeoutLocked(long seconds) {
+  if (fd_ < 0 || seconds <= 0 || seconds == receiveTimeoutSeconds_) return;
+  SetTimeout(fd_, SO_RCVTIMEO, static_cast<time_t>(seconds));
+  receiveTimeoutSeconds_ = seconds;
 }
 
 bool ControlClient::SendAllLocked(const std::string& data) {
@@ -220,15 +255,29 @@ std::string ControlClient::DaemonVersion() {
   return daemonVersion_;
 }
 
+DaemonUnreachableReason ControlClient::LastUnreachableReason() {
+  std::scoped_lock lock(mutex_);
+  return lastUnreachable_;
+}
+
+std::string ControlClient::LastSocketPath() {
+  std::scoped_lock lock(mutex_);
+  return lastSocketPath_.empty() ? SocketPath() : lastSocketPath_;
+}
+
 std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann::json payload,
-                                                        std::string* error) {
-  for (int attempt = 0; attempt < 2; ++attempt) {
+                                                        std::string* error, bool allowRetry,
+                                                        long receiveTimeoutSeconds) {
+  const int attempts = allowRetry ? 2 : 1;
+  for (int attempt = 0; attempt < attempts; ++attempt) {
     if (EnsureSessionLocked(error) != DaemonSessionState::Ok) return std::nullopt;
+    SetReceiveTimeoutLocked(receiveTimeoutSeconds);
     const int64_t id = nextId_++;
     if (auto reply = RoundTripLocked(ctl::MakeRequest(verb, id, payload), id)) {
       return reply;
     }
-    // dead socket (daemon restarted?): reconnect once, then give up
+    // dead socket (daemon restarted?): reconnect once for idempotent verbs,
+    // never for start_tunnel.
     CloseLocked();
     lastState_ = DaemonSessionState::Unreachable;
     if (error) *error = "lost connection to the daemon";
@@ -236,24 +285,75 @@ std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann
   return std::nullopt;
 }
 
+ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
+    const StartTunnelOptions& options) {
+  std::scoped_lock lock(mutex_);
+  StartTunnelOutcome outcome;
+  ctl::StartTunnelRequest req;
+  req.by_jwt = options.by_jwt;
+  req.instance_id = options.instance_id;
+  req.app_version = options.app_version;
+  req.network_space_json = options.network_space_json;
+  req.async = options.async;
+  req.kill_switch = options.kill_switch;
+  req.rpc_server_pem = options.rpc_server_pem;
+  req.rpc_client_cert_pem = options.rpc_client_cert_pem;
+  req.rpc_listen_hostport = options.rpc_listen_hostport;
+
+  // NO retry (a re-sent start_tunnel used to restart the bring-up), and an
+  // async request needs only the ordinary bound because the daemon answers as
+  // soon as it has accepted the request.
+  const auto reply = CallLocked(
+      ctl::Verb::StartTunnel, nlohmann::json(req), &outcome.error, /*allowRetry=*/false,
+      options.async ? kReceiveTimeoutSeconds : kStartTunnelReceiveTimeoutSeconds);
+  outcome.session = lastState_;
+  if (!reply) return outcome;
+  if (!ctl::ReplyOk(*reply)) {
+    outcome.error = ctl::ReplyError(*reply);
+    outcome.code = ctl::ReplyCode(*reply);
+    // A start already in progress is not a session error — the daemon is
+    // healthy and busy. Collapsing it into Error would make the UI offer
+    // "install or start the service".
+    if (outcome.code != ctl::kCodeStartInProgress) lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+  const auto payload = reply->get<ctl::StartTunnelReply>();
+  outcome.ok = true;
+  outcome.rpc_port = payload.rpc_port;
+  outcome.tunnel_state = payload.tunnel_state;
+  return outcome;
+}
+
 bool ControlClient::StartTunnel(const std::string& byJwt, const std::string& instanceId,
                                 const std::string& appVersion,
                                 const std::string& networkSpaceJson, int* rpcPort,
                                 std::string* error) {
+  StartTunnelOptions options;
+  options.by_jwt = byJwt;
+  options.instance_id = instanceId;
+  options.app_version = appVersion;
+  options.network_space_json = networkSpaceJson;
+  const StartTunnelOutcome outcome = StartTunnelEx(options);
+  if (error) *error = outcome.error;
+  if (rpcPort) *rpcPort = outcome.rpc_port;
+  return outcome.ok;
+}
+
+bool ControlClient::SetKillSwitch(bool enabled, ctl::StatusReply* out, std::string* error) {
   std::scoped_lock lock(mutex_);
-  ctl::StartTunnelRequest req;
-  req.by_jwt = byJwt;
-  req.instance_id = instanceId;
-  req.app_version = appVersion;
-  req.network_space_json = networkSpaceJson;
-  const auto reply = CallLocked(ctl::Verb::StartTunnel, nlohmann::json(req), error);
+  ctl::SetKillSwitchRequest req;
+  req.enabled = enabled;
+  const auto reply = CallLocked(ctl::Verb::SetKillSwitch, nlohmann::json(req), error);
   if (!reply) return false;
+  // The status rides on BOTH the success and the failure reply: a kill switch
+  // that could not be installed reports kill_switch=failed, which the UI must
+  // render as its own state and never as "off".
+  if (out) *out = reply->get<ctl::StatusReply>();
   if (!ctl::ReplyOk(*reply)) {
     if (error) *error = ctl::ReplyError(*reply);
-    lastState_ = DaemonSessionState::Error;
     return false;
   }
-  if (rpcPort) *rpcPort = reply->get<ctl::StartTunnelReply>().rpc_port;
   return true;
 }
 

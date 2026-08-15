@@ -39,6 +39,7 @@
 #include <gtkmm.h>
 #include <urnetwork_sdk.hpp>
 
+#include "LogTailClient.hpp"
 #include "SdkHost.hpp"
 
 namespace urnw {
@@ -70,6 +71,22 @@ class DeveloperPage : public Gtk::Box {
     std::vector<urnet::DestinationExit> destinationExits;
     bool probeSuiteRunning = false;
     std::vector<urnet::ProbeResult> probeResults;
+
+    // ---- the session log (read over the CONTROL socket, not the device) ----
+    // Read BEFORE the !hasDevice() fold in ReadSnapshot, deliberately: the log
+    // comes from the daemon, not from a DeviceRemote, and the moment you most
+    // need it is the moment the tunnel refused to start and there is no device
+    // at all. Everything below is "what this poll learned", never accumulated
+    // state — the page owns the buffer.
+    bool logRead = false;               // a fetch was ATTEMPTED this poll
+    bool logOk = false;                 // ...and the daemon answered ok:true
+    std::vector<ctl::LogLine> logLines; // NEW lines only, oldest first
+    int64_t logCursor = 0;              // where the conversation stands now
+    int64_t logDropped = 0;             // ring gap crossed by THIS reply
+    bool logRestarted = false;          // the daemon's seq rewound: a new process
+    DaemonSessionState logState = DaemonSessionState::Unreachable;
+    std::string logError;               // the daemon's message, verbatim
+    std::string logCode;                // machine-readable rejection code
   };
 
   enum class Action {
@@ -136,6 +153,7 @@ class DeveloperPage : public Gtk::Box {
   void BuildExitsCard();
   void BuildDestinationsCard();
   void BuildProbeSuiteCard();
+  void BuildSessionLogCard();
   void BuildOverrideSections();
   void AddBoolRow(Gtk::Box* body, size_t specIndex);
   void AddNumRow(Gtk::Box* body, size_t specIndex);
@@ -153,6 +171,21 @@ class DeveloperPage : public Gtk::Box {
   void ApplyDestinations(const std::vector<urnet::DestinationExit>& destinations);
   void ApplyProbeSuite(const Snapshot& snap);
   void SetLastAction(const Glib::ustring& text);
+
+  // ---- session log (UI thread) --------------------------------------------
+  void ApplySessionLog(const Snapshot& snap);
+  // The four failure states in the words they already ship in (MainWindow's
+  // daemon copy), plus the refused state. Empty = nothing to say.
+  Glib::ustring SessionLogStatusText(const Snapshot& snap) const;
+  void AppendSessionLogRow(const ctl::LogLine& line);
+  void ClearSessionLogRows();
+  void ScrollSessionLogToBottom();
+  void CopySessionLog();
+  void SaveSessionLog();
+  // Exactly what is on screen, plus a banner naming which half of the split
+  // this is. Nothing is synthesized into it — a saved log the app invented
+  // lines into is not a log.
+  std::string ComposeSessionLogText() const;
 
   // actions (submit to the bridge; outcome reported AFTER the fact)
   void RunAction(Action action, const Glib::ustring& described,
@@ -219,6 +252,31 @@ class DeveloperPage : public Gtk::Box {
   Gtk::Label* probeState_ = nullptr;
   Gtk::Button* probeStartBtn_ = nullptr;
   Gtk::Button* probeStopBtn_ = nullptr;
+
+  // ---- session log ---------------------------------------------------------
+  // NOT in deviceCards_/settingsCards_: this card is visible in EVERY state,
+  // including no-session, because a refused bring-up is exactly when its
+  // content matters.
+  Gtk::ScrolledWindow* logScroller_ = nullptr;
+  Gtk::Box* logBody_ = nullptr;         // the rows; own overflow, never widens the page
+  Gtk::Label* logStatusLine_ = nullptr; // Loading / Empty / Failed / Refused, in words
+  Gtk::Label* logGapLine_ = nullptr;    // "N lines were dropped before this point"
+  Gtk::CheckButton* logFollow_ = nullptr;
+  std::deque<ctl::LogLine> logBuffer_;  // UI thread only; capped at kLogTailClientCap
+  std::deque<Gtk::Widget*> logRows_;    // the rendered tail of logBuffer_
+  int64_t logDroppedTotal_ = 0;         // ACCUMULATED: the reply only reports its own gap
+  bool logRestartNoted_ = false;        // the daemon restarted under us; said in words
+  bool logFollowing_ = true;            // auto-scroll; self-disables on a scroll up
+  bool applyingFollow_ = false;         // echo guard for the Follow check button
+  bool scrollingToBottom_ = false;      // ...and for the programmatic scroll
+  // bridge thread only: urnet::version() is asked for once, lazily, because the
+  // page can be constructed before the SDK is initialized.
+  bool logSdkVersionSet_ = false;
+
+  // The GUI-side log transport. Declared BEFORE bridge_ so it is destroyed
+  // AFTER it: the destructor body joins the bridge first, so no fetch can be
+  // inside this object when it dies.
+  LogTailClient logTail_;
 
   // override rows
   std::vector<BoolRowUi> boolRows_;

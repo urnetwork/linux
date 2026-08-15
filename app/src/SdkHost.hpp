@@ -21,6 +21,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <urnetwork_sdk.hpp>
@@ -123,8 +124,46 @@ struct LiveStats {
   bool provideHasNetworkKey = false;
 };
 
+// ONE consistent reading of the SDK's smart-routing (reliability) state: the
+// exit window, the destination->exit routing table, the knob set, the counters
+// and the probe suite. Taken under a single SdkHost lock hold so the parts can
+// never describe different sessions — separate reads can straddle a device
+// teardown and then join a destination ip against an exit that belonged to a
+// device which no longer exists.
+//
+// EVERY field distinguishes UNKNOWN from a real answer, because on this
+// surface a fabricated zero is the failure mode:
+//   * `settings`/`metrics` nullopt = "nothing was read". It is NOT "every knob
+//     is off / every counter is zero". A default-constructed ReliabilitySettings
+//     written back would disable the whole reliability stack (that bug shipped
+//     once on Windows) — never round-trip a nullopt read as a struct.
+//   * the three list fields nullopt = "never read, or the getter threw"; an
+//     EMPTY list is a real answer ("this device has no exits"). A caller must
+//     render the two differently — "unknown" and "none" are different facts.
+//   * the two bools have no third state to carry: a read that threw reads as
+//     false, which is why the getter failure is also logged (g_warning).
+struct ReliabilitySnapshot {
+  bool haveDevice = false;       // a DeviceRemote existed when the read ran
+  bool remoteConnected = false;  // the daemon's device rpc is attached
+  std::optional<urnet::ReliabilitySettings> settings;
+  std::optional<urnet::ReliabilityMetrics> metrics;
+  std::optional<urnet::ExitList> exits;
+  std::optional<urnet::DestinationExitList> destinationExits;
+  bool probeSuiteRunning = false;
+  std::optional<urnet::ProbeResultList> probeResults;
+};
+
+// How much of the snapshot to pay for. Each field is one SYNCHRONOUS device
+// rpc, so the scope is the difference between a 3-rpc poll and a 7-rpc one.
+enum class ReliabilityRead {
+  ExitsOnly,  // remoteConnected + the two exit tables (Home's Advanced inspector)
+  Full,       // + settings/metrics/probe suite (the Developer destination)
+};
+
 class SdkHost {
  public:
+  ~SdkHost();
+
   using AuthStateHandler = std::function<void(bool loggedIn)>;
   // Fired when the sdk finds the stored auth is no longer valid on the server
   // (e.g. the client was removed): the sdk has already cleared its local auth
@@ -411,6 +450,39 @@ class SdkHost {
   void SetSelectedProviderClientId(const std::string& clientId);
   void StepProviderSelection(int steps);
 
+  // ---- reliability / exits (Home's Advanced inspector + the Developer page) --
+  // The locked, BLOCKING read. Every field behind it is a synchronous device
+  // rpc over the loopback mTLS channel to urnetworkd — three for ExitsOnly,
+  // seven for Full — and the whole batch runs under mutex_, the same lock the
+  // UI-thread accessors take. So:
+  //
+  //   NEVER call this on the GTK main loop.
+  //
+  // Call it only from a thread that already exists for SDK work (the Developer
+  // page's serial FIFO bridge), or use RequestReliability below, which owns
+  // the thread and the marshal for you. Each getter is guarded individually: a
+  // throwing rpc costs its own field (which then reads as UNKNOWN), never the
+  // whole snapshot. No device is not an error — the snapshot then carries
+  // haveDevice=false, a DEFINITE "no session" the caller can render, rather
+  // than silence.
+  ReliabilitySnapshot ReadReliability(ReliabilityRead scope = ReliabilityRead::Full);
+
+  // The GTK-safe form: runs ONE ReadReliability(scope) on a worker thread and
+  // delivers the snapshot to `done` ON THE MAIN LOOP (PostToMain).
+  //
+  // SINGLE-FLIGHT for the whole host and across both scopes: while a read is
+  // outstanding this returns false IMMEDIATELY and `done` is never invoked, so
+  // a poll whose read is slower than its own interval cannot stack requests
+  // behind mutex_ — the caller simply skips that tick and asks again on the
+  // next one. Returns true when the read was started, and then `done` runs
+  // exactly once unless the main loop is gone by the time it lands.
+  //
+  // Call from the main loop. `done` must carry its OWN liveness/epoch guard:
+  // the completion can land after the calling page was destroyed, and this
+  // host has no way to know that.
+  bool RequestReliability(ReliabilityRead scope,
+                          std::function<void(ReliabilitySnapshot)> done);
+
   // Exposed so the (full-parity) UI/view models can drive the SDK directly.
   urnet::Api& api() { return *api_; }
   bool hasDevice() { return device_.has_value(); }
@@ -472,6 +544,17 @@ class SdkHost {
   // so like the Windows GUI the listener feeds this atomic and ReadStats
   // reads it.
   std::atomic<bool> provideHasNetworkKey_{false};
+  // RequestReliability's worker. Two guards, deliberately separate:
+  //   * reliabilityBusy_ is the single-flight gate and is cleared BY THE WORKER
+  //     as soon as the read returns — lock-free, and never under the mutex
+  //     below (the joiner holds that one, so taking it on the worker would
+  //     deadlock). Clearing it before the marshal also means a blocked or
+  //     vanished main loop cannot wedge the next read.
+  //   * reliabilityWorkerMutex_ guards ONLY the thread object: assigning over
+  //     a still-joinable std::thread is std::terminate.
+  std::atomic<bool> reliabilityBusy_{false};
+  std::mutex reliabilityWorkerMutex_;
+  std::thread reliabilityWorker_;
   bool presentationActive_ = false;
   std::vector<urnet::Sub> subs_;
   std::vector<urnet::Sub> presentationSubs_;
