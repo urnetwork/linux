@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream metadata. Required by Flathub, and read by GNOME Software / KDE
+  Discover for every other channel too. The component id MUST equal the .desktop
+  basename and the GTK application id in src/main.cpp (network.ur.urnetwork) or
+  the store shows a nameless entry and D-Bus activation misses.
+
+  project_license is the CODE license (MPL-2.0). The four commercial brand
+  faces under assets/fonts are separately licensed and NOT MPL — they are
+  declared here as a non-free content attribute rather than folded into the
+  project license, because claiming MPL over them would be false.
+
+  SPDX-License-Identifier: MPL-2.0
+-->
+<component type="desktop-application">
+  <id>network.ur.urnetwork</id>
+
+  <name>URnetwork</name>
+  <summary>Private, decentralized VPN powered by a peer network</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+
+  <developer id="ur.io">
+    <name>URnetwork</name>
+  </developer>
+
+  <description>
+    <p>
+      URnetwork routes your traffic through a decentralized network of peers
+      instead of a single provider's servers. Choose a country or let the app
+      pick the best available provider, and connect.
+    </p>
+    <p>
+      Provide bandwidth back to the network and earn payouts in USDC. Track
+      what you have provided, what you are owed, and where your network ranks.
+    </p>
+    <p>
+      This Flatpak ships the graphical client only. Connecting requires the
+      URnetwork system service, which must be installed from your
+      distribution's native package: a sandboxed application cannot create a
+      tunnel device or enforce a kill switch. The app talks to that service
+      over a local socket and tells you plainly when it is missing or out of
+      date.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">network.ur.urnetwork.desktop</launchable>
+
+  <url type="homepage">https://ur.io</url>
+  <url type="bugtracker">https://github.com/urnetwork/urnetwork-linux/issues</url>
+  <url type="help">https://ur.xyz</url>
+
+  <categories>
+    <category>Network</category>
+    <category>Security</category>
+  </categories>
+
+  <keywords>
+    <keyword>VPN</keyword>
+    <keyword>privacy</keyword>
+    <keyword>proxy</keyword>
+    <keyword>decentralized</keyword>
+  </keywords>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+
+  <requires>
+    <display_length compare="ge">480</display_length>
+  </requires>
+
+  <content_rating type="oars-1.1"/>
+
+  <releases>
+    <release version="0.0.1" date="2026-08-14">
+      <description>
+        <p>First Linux release of the GTK4 client.</p>
+      </description>
+    </release>
+  </releases>
+</component>
