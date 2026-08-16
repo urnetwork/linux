@@ -1331,6 +1331,33 @@ if [ "${POLKIT_PRESENT}" = 1 ]; then
         if [ "${LAYOUT}" = 'immutable' ]; then
             note "this host's /usr is read-only, so the action file is at ${POLICY_MAPPED} rather than /usr/share/polkit-1/actions. polkit reads both. If the app still reports a permission problem after this install, the daemon looked for the file in the wrong one of them."
         fi
+        # TELL POLKITD THE FILE EXISTS. Writing a .policy is not enough:
+        # polkitd reads its action directories at START and does not reliably
+        # notice a file appearing in one later -- especially when the installer
+        # had to CREATE /usr/local/share/polkit-1/actions, since there was no
+        # directory to be watching in the first place.
+        #
+        # MEASURED on Bazzite: after a clean install the daemon correctly
+        # reported `authorization: polkit`, and `pkaction --action-id
+        # network.ur.urnetwork.control-tunnel` answered "No action with action
+        # id" -- polkitd had been up since the previous boot, two days earlier.
+        # Every authorization check would have been made against an action
+        # polkit did not know, so Connect would have failed on a host the
+        # installer had just declared ready.
+        #
+        # reload, never restart: polkit.service is Type=notify-reload with
+        # CanReload=yes, so this re-reads actions and rules without dropping
+        # the sessions of everything else on the box that depends on polkit.
+        if [ -z "${PREFIX}" ] && [ -d /run/systemd/system ]; then
+            if [ "${DRY_RUN}" = 1 ]; then
+                log "  would reload polkit so it picks up the new action file"
+            elif systemctl reload polkit.service >/dev/null 2>&1 \
+                 || systemctl reload polkit >/dev/null 2>&1; then
+                note "polkit reloaded -- the action file is live now, no reboot needed"
+            else
+                warn "could not reload polkit. It will not know about ${POLICY_MAPPED} until it restarts, and until then the app will report a permission problem. Fix with: sudo systemctl reload polkit"
+            fi
+        fi
     else
         warn "polkit was detected but ${PREFIX}${POLICY_MAPPED} was not installed -- the daemon will fall back to the 'urnetwork' group, which needs a log-out"
     fi
