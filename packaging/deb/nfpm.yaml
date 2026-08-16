@@ -51,6 +51,17 @@ depends:
   # Tunnel.cpp configures the TUN link and its capture routes with /sbin/ip.
   # Minimal Ubuntu/Debian installations do not necessarily include it.
   - "iproute2"
+  # nftables is NOT optional and was missing here while the rpm declared it.
+  # app/src/daemon/main.cpp's preflight marks `nft` required=true, and the
+  # tunnel uses it for the egress self-exclusion (without which the daemon's
+  # OWN sockets fall into its own tunnel -- a measured 3.38 Tb amplification
+  # loop, not a theoretical one), the IPv6 and DNS leak floors, and the kill
+  # switch. Debian and Ubuntu do not install it on a minimal system, so the
+  # package installed cleanly, the service started cleanly, and the first
+  # Connect failed with a message about a missing tool rather than apt saying
+  # what was needed. Declared as a dependency, which is the whole reason to
+  # ship a native package instead of a tarball.
+  - "nftables"
   # The one genuine win of the deb shape (APPIMAGE.md 11d): the GUI AppImage
   # needs libfuse2 at runtime and Ubuntu 22.04+ does not ship it by default,
   # so every AppImage-only vendor walks users through installing it by hand.

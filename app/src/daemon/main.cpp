@@ -143,9 +143,9 @@ void PrintRecovery(const char* argv0) {
       "    sudo systemctl stop urnetworkd\n"
       "    sudo %s --revert\n"
       "\n"
-      "  --revert removes the firewall table, the policy rules, the capture routes and the\n"
-      "  armed marker, so the next start comes up open. With no systemd and no working\n"
-      "  daemon binary, the firewall half alone is:\n"
+      "  --revert removes the firewall table, the policy rules, the capture routes, any\n"
+      "  /etc/resolv.conf takeover and the armed marker, so the next start comes up open.\n"
+      "  With no systemd and no working daemon binary, the firewall half alone is:\n"
       "\n"
       "    %s\n"
       "\n"
@@ -902,7 +902,11 @@ int main(int argc, char** argv) {
         std::fprintf(stderr,
                      "urnetworkd --revert: WARNING — %s still exists, so urnetworkd may still be "
                      "running. It re-installs its own ruleset within seconds of anything removing "
-                     "it; stop it first (systemctl stop urnetworkd) or this will not stick.\n",
+                     "it; stop it first (systemctl stop urnetworkd) or this will not stick.\n"
+                     "  This sweep ALSO restores /etc/resolv.conf if a tunnel took it over. On a "
+                     "host with no systemd-resolved that is how DNS reaches the tunnel, so running "
+                     "this against a LIVE session pulls the tunnel's resolver out from under it "
+                     "and names stop resolving until you reconnect.\n",
                      urnw::ControlServer::SocketPath().c_str());
       }
       // Whether the sweep is SUPPOSED to leave a table behind, decided before
@@ -949,7 +953,7 @@ int main(int argc, char** argv) {
           "                         touches no routes, no nftables and no DNS; sends no packet.\n"
           "                         Needs root (bpf() does). Exit 0 = works, 1 = does not,\n"
           "                         2 = could not be measured\n"
-          "  --revert               lift the URnetwork firewall table, policy rules and capture\n"
+          "  --revert               lift the URnetwork firewall table, policy rules, capture\n"
           "                         routes, and clear the armed marker; then exit. Run this when\n"
           "                         a machine is stuck blocked. Requires root.\n"
           "  --revert-unless-armed  the same sweep, but a machine that was armed when the daemon\n"

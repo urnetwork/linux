@@ -572,7 +572,7 @@ struct StatusReply {
   // starving and the session cannot carry traffic.
   bool egress_protected = false;
   bool dns_applied = false;
-  std::string dns_detail;    // why DNS is not in force ("" when it is)
+  std::string dns_detail;    // always set: which tier holds DNS, or why none could
   KillSwitchState kill_switch = KillSwitchState::Off;
   std::string kill_switch_detail;  // why it is Failed ("" otherwise)
   bool ipv6_blocked = false;       // v6 has no tunnel: blocked rather than leaked

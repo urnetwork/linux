@@ -88,6 +88,16 @@ cleanup:
   - '*.a'
   - '*.la'
 
+# EVERY MESON MODULE BELOW MUST INSTALL INTO /app/lib, NOT /app/lib64.
+# meson's default libdir on this SDK resolves to lib64, and flatpak-builder's
+# default PKG_CONFIG_PATH covers /app/lib/pkgconfig only. The failure that
+# causes is deeply unhelpful: libsigc++ builds and installs perfectly, then
+# glibmm reports "Run-time dependency sigc++-3.0 found: NO", falls back to its
+# wrap, and tries to `git clone` libsigcplusplus -- inside a build sandbox with
+# no network. The error you see names git and glibmm, and says nothing about
+# libdir or about the module that actually misplaced its .pc file. The runtime
+# loader has the same blind spot (/app/lib is what it searches), so pinning
+# libdir is the fix rather than widening PKG_CONFIG_PATH.
 modules:
   # ---- the gtkmm stack --------------------------------------------------
   # org.gnome.Sdk 49 carries GTK 4.20 and libadwaita 1.8 but NO C++ bindings,
@@ -97,6 +107,7 @@ modules:
   - name: libsigc++
     buildsystem: meson
     config-opts:
+      - --libdir=lib
       - -Dbuild-documentation=false
       - -Dbuild-examples=false
     sources:
@@ -107,6 +118,7 @@ modules:
   - name: glibmm
     buildsystem: meson
     config-opts:
+      - --libdir=lib
       - -Dbuild-documentation=false
       - -Dbuild-examples=false
     sources:
@@ -119,6 +131,7 @@ modules:
   - name: cairomm
     buildsystem: meson
     config-opts:
+      - --libdir=lib
       - -Dbuild-documentation=false
       - -Dbuild-examples=false
       - -Dbuild-tests=false
@@ -130,6 +143,7 @@ modules:
   - name: pangomm
     buildsystem: meson
     config-opts:
+      - --libdir=lib
       - -Dbuild-documentation=false
     sources:
       - type: archive
@@ -139,6 +153,7 @@ modules:
   - name: gtkmm
     buildsystem: meson
     config-opts:
+      - --libdir=lib
       - -Dbuild-documentation=false
       - -Dbuild-demos=false
       - -Dbuild-tests=false
@@ -162,6 +177,7 @@ modules:
     buildsystem: meson
     subdir: app
     config-opts:
+      - --libdir=lib
       - -Dgui=enabled
       # Drops urnetworkd and the four host-integration files that install to
       # ABSOLUTE paths (/lib/systemd/system, /etc/urnetwork, /etc/NetworkManager,

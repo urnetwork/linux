@@ -173,17 +173,16 @@ env:
   # and the release publishes the other assets. It must go back to "true" --
   # a silent-missing-rpm mode is exactly how the .deb would have quietly
   # stopped shipping.
-  # CURRENTLY "false" FOR EXACTLY ONE REASON, AND IT IS TEMPORARY: the .rpm has
-  # never been built by CI. It builds on a Fedora host (verified end to end:
-  # exit 0, ~15 MB, 123 payload entries), but jammy's SELinux tooling split is
-  # different and the build-host .pp has never been produced there. Until one
-  # green run proves it, an rpm problem must not be able to take the four
-  # already-contracted assets (tarball, .deb, AppImage, .zsync) off the
-  # release -- turning a missing fifth asset into a release of nothing is a
-  # strictly worse outcome than shipping four.
-  # FLIP BACK TO "true" the moment a run publishes an .rpm. A silent-missing-rpm
-  # mode left on permanently is exactly how the .deb would quietly stop shipping.
-  UR_REQUIRE_RPM: "false"
+  # Back to "true" as of v2026.8.16-1020748320-beta, which is the first release
+  # that actually PUBLISHED an rpm (5 assets: tarball, .deb, .rpm, AppImage,
+  # .zsync) with the SELinux policy module compiled on the jammy container --
+  # the thing this was held open for. A silent-missing-rpm mode left on
+  # permanently is exactly how the .deb would quietly stop shipping.
+  #
+  # It was briefly "false" while the rpm was landing, and that is the right
+  # move again if the rpm ever breaks: a new package that cannot build must not
+  # take the four already-contracted assets off the release with it.
+  UR_REQUIRE_RPM: "true"
   # The Flatpak has NO equivalent knob here on purpose: a job-level `if:`
   # cannot read the `env` context (only github/needs/vars/inputs), so its kill
   # switch is the repository VARIABLE `UR_BUILD_FLATPAK` -- set it to "false"
