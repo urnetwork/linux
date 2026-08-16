@@ -752,8 +752,8 @@ int ReportPreflight() {
       {"nft", true, "nftables: egress self-exclusion (without it the daemon's own sockets "
                     "fall into its own tunnel), the IPv6 and DNS leak floor, the kill switch"},
       {"resolvectl", false,
-       "systemd-resolved: pointing DNS at the tunnel. Without it the session comes up with "
-       "dns_applied=false and says so"},
+       "systemd-resolved: the FIRST of three ways DNS is pointed at the tunnel "
+       "(resolvconf and a direct /etc/resolv.conf takeover follow it)"},
       {"modprobe", false, "loading the tun kernel module when /dev/net/tun is absent"},
   };
   int missingRequired = 0;
@@ -777,6 +777,30 @@ int ReportPreflight() {
                  "[preflight] cgroup      MISSING (required) — no cgroup v2 unified "
                  "hierarchy, so the daemon's own sockets cannot be marked and no tunnel can "
                  "be started safely\n");
+  }
+  // WHICH DNS TIER THIS MACHINE WILL ACTUALLY TAKE. The tool table above can
+  // only answer "is resolvectl on $PATH", and on Arch/CachyOS that answer is
+  // YES on a machine where systemd-resolved is not running at all — the systemd
+  // package ships the binary regardless. Preflight therefore used to print a
+  // reassuring line about the exact mechanism that was about to fail. This runs
+  // the same probe the tunnel runs, so what is printed here is what will happen.
+  {
+    const urnw::DnsHostProbe dns = urnw::ProbeDnsHost();
+    const char* tier = "3 (direct /etc/resolv.conf takeover)";
+    if (dns.resolved_running && dns.resolvectl_present) {
+      tier = "1 (systemd-resolved)";
+    } else if (dns.resolvconf_present && !dns.resolvconf_is_resolvectl) {
+      tier = "2 (resolvconf)";
+    }
+    std::fprintf(stderr, "[preflight] dns         tier %s\n", tier);
+    std::fprintf(stderr, "[preflight]             %s\n", dns.detail.c_str());
+    if (dns.nss_resolve_before_dns && !dns.resolved_running) {
+      std::fprintf(stderr,
+                   "[preflight]             note: /etc/nsswitch.conf puts `resolve` before "
+                   "`dns` while systemd-resolved is NOT running. nss-resolve answers UNAVAIL "
+                   "and lookups fall through to /etc/resolv.conf, so tier 3 is authoritative "
+                   "here.\n");
+    }
   }
   if (::access("/dev/net/tun", F_OK) == 0) {
     std::fprintf(stderr, "[preflight] /dev/net/tun present\n");

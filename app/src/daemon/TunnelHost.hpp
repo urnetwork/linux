@@ -190,6 +190,11 @@ class TunnelHost {
   void StopUnsafeSessionLocked(const std::string& reason, const std::string& message,
                                const std::string& code);
 
+  // Re-checks the DNS override mid-session and repairs it, escalating to
+  // StopUnsafeSessionLocked when it cannot be restored. This is the only caller
+  // of Tunnel::VerifyDnsStillApplied. Requires opMutex_.
+  void MaintainDnsLocked();
+
   void ReapRetiredLoopsLocked();
   // RUNAWAY GUARD. Samples the tun's own byte counters and tears the tunnel
   // down if it is transmitting hard while receiving nothing — the signature of
@@ -359,6 +364,15 @@ class TunnelHost {
   std::atomic<bool> filterRemovalPending_{false};
   // Reaper-tick bookkeeping for the tamper poll (main loop only).
   int filterVerifyTicks_ = 0;
+  // Latched at bring-up: did this session come up WITH DNS protection? See the
+  // comment at the assignment — the reaper cannot gate on the live dns_applied,
+  // because the failure it watches for is what clears it.
+  bool dnsProtectionExpected_ = false;
+  int dnsVerifyTicks_ = 0;
+  // Consecutive failed repairs. The session is stopped only after several, so a
+  // single transient (resolved mid-restart, a momentary unreadable
+  // /etc/resolv.conf) does not tear down a working tunnel.
+  int dnsVerifyFailures_ = 0;
   int filterVerifyFailures_ = 0;
 
   guint reaperId_ = 0;

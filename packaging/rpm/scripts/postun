@@ -1,0 +1,106 @@
+#!/bin/sh
+# %postun for urnetwork-daemon.
+#
+# rpm scriptlet argument: $1 == 0 on erase, $1 >= 1 on upgrade.
+#
+# Hand-written %systemd_postun_with_restart urnetworkd.service -- WITH THE UNIT
+# NAME AS THE ARGUMENT. systemd-rpm-macros expands it to one of:
+#
+#   systemd >= 253:
+#       if [ -x /usr/lib/systemd/systemd-update-helper ]; then
+#           /usr/lib/systemd/systemd-update-helper system-reload || :
+#       fi
+#       if [ $1 -ge 1 ] && [ -x /usr/lib/systemd/systemd-update-helper ]; then
+#           /usr/lib/systemd/systemd-update-helper mark-restart-system-units \
+#               urnetworkd.service || :
+#       fi
+#   older:
+#       systemctl daemon-reload &>/dev/null || :
+#       if [ $1 -ge 1 ]; then
+#           systemctl try-restart urnetworkd.service &>/dev/null || :
+#       fi
+#
+# Both are implemented below. Two details of the modern path, read out of
+# /usr/lib/systemd/systemd-update-helper on this host rather than assumed:
+#   - mark-restart-system-units only sets `Markers=+needs-restart`. The actual
+#     restart is performed once, at the END of the whole rpm transaction, by
+#     systemd's own %transfiletriggerpostun on /usr/lib/systemd/system, which
+#     runs `systemctl reload-or-restart --marked`. Our unit lives in that
+#     directory, so the trigger fires for us. That batching is why an rpm
+#     upgrade restarts the daemon exactly once no matter how many packages
+#     move.
+#   - the modern macro leaves the daemon-reload to that same trigger. This
+#     script calls system-reload explicitly anyway (it is what the older macro
+#     expansion did) so correct behaviour never depends on the trigger being
+#     present.
+#
+# WHY try-restart HERE IS THE RPM SHAPE OF THE .deb's STOP-THEN-START, NOT A
+# CONTRADICTION OF IT. The .deb deliberately uses dh_installsystemd
+# --no-restart-after-upgrade -- prerm stops the old binary, dpkg replaces the
+# files, postinst starts the new one -- because the daemon holds a live tun fd
+# and must never be restarted in flight. rpm has no prerm-stop convention: files
+# are replaced under the running process (which keeps its own inode, so it is
+# unaffected) and the restart happens here, at the end of the transaction. The
+# user-visible result is identical -- the daemon fully STOPS, running its
+# SIGTERM teardown and then ExecStopPost, and comes back IDLE, exactly like a
+# reboot. There is still no in-flight reload of a live tunnel.
+#
+# try-restart, not restart: it touches only a unit that was ALREADY RUNNING, so
+# an upgrade never starts a daemon an admin had stopped.
+set -e
+
+UNIT='urnetworkd.service'
+SYSTEMD_UPDATE_HELPER='/usr/lib/systemd/systemd-update-helper'
+
+# --- %systemd_postun_with_restart urnetworkd.service -------------------------
+if [ -x "${SYSTEMD_UPDATE_HELPER}" ]; then
+    "${SYSTEMD_UPDATE_HELPER}" system-reload >/dev/null 2>&1 || :
+    if [ "${1:-0}" -ge 1 ]; then
+        "${SYSTEMD_UPDATE_HELPER}" mark-restart-system-units "${UNIT}" >/dev/null 2>&1 || :
+    fi
+else
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload >/dev/null 2>&1 || :
+        if [ "${1:-0}" -ge 1 ]; then
+            systemctl try-restart "${UNIT}" >/dev/null 2>&1 || :
+        fi
+    fi
+fi
+
+# --- erase only --------------------------------------------------------------
+if [ "${1:-0}" -eq 0 ]; then
+    # THE SELINUX MODULE COMES OUT, and this asymmetry with the state below is
+    # deliberate. packaging/selinux/urnetwork.te grants three permissions to
+    # init_t, which is shared by every systemd service -- a narrow but real
+    # widening of the system policy. Leaving that behind after the package that
+    # justified it is gone would be wrong. Priority 200 matches the install in
+    # scripts/post. Guarded on command -v because nfpm can only express
+    # Requires(post), not Requires(postun).
+    if command -v semodule >/dev/null 2>&1; then
+        semodule -X 200 -r urnetwork >/dev/null 2>&1 || :
+    fi
+
+    # WHAT DELIBERATELY DOES *NOT* HAPPEN HERE, and why it differs from the
+    # .deb's postrm. dpkg has two removal states and the .deb uses both: on
+    # `remove` it only masks the unit, and only on `purge` does it delete
+    # /var/lib/urnetwork (device identity + key material), /etc/urnetwork,
+    # an URnetwork-authored /etc/geolocation, and the urnetwork group.
+    #
+    # RPM HAS NO PURGE. `dnf remove` is the equivalent of `apt remove`, not of
+    # `apt purge`, and Fedora's guidelines are explicit that erasing a package
+    # must not destroy user data or delete system groups (files elsewhere may
+    # still be group-owned). So this script removes none of it, and tells the
+    # user exactly how to, rather than silently keeping key material or
+    # silently deleting it.
+    echo "urnetwork: removed. Device credentials and settings were KEPT (rpm has no 'purge')."
+    echo "urnetwork: to erase them too:  sudo rm -rf /var/lib/urnetwork /etc/urnetwork"
+    echo "urnetwork: the 'urnetwork' group was kept:  sudo groupdel urnetwork"
+    if [ -f /etc/geolocation ] && grep -qi 'urnetwork' /etc/geolocation 2>/dev/null; then
+        # Only ever mention the file when URnetwork demonstrably authored it:
+        # the writer stamps it with a marker line, and no other actor on the
+        # system reverts it.
+        echo "urnetwork: /etc/geolocation still holds an URnetwork location override:  sudo rm -f /etc/geolocation"
+    fi
+fi
+
+exit 0

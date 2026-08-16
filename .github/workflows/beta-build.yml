@@ -55,6 +55,26 @@ name: Beta Build - Linux
 #          parsed by the in-app checker; attached because MIGRATION.md names
 #          it and because a release that ships only a tarball has no answer
 #          for Debian/Ubuntu users.
+#      urnetwork-daemon-<rpm version>-<rpm release>.<rpmarch>.rpm
+#          The SAME daemon payload for the Fedora/RHEL/openSUSE half of
+#          "universal across Linux distros" -- built in the same job, from the
+#          same `meson install --destdir` staging tree, through the same
+#          packaging/lib/common.sh assemble_daemon_root, so it CANNOT drift
+#          from the .deb or the tarball. Not parsed by the in-app checker.
+#
+#          ITS EXACT NAME IS NOT PINNED HERE, and that is deliberate: rpm
+#          FORBIDS '-' in both Version and Release, while this line's version
+#          ("2026.8.16-1020679030-beta") contains two of them. Whatever
+#          make-rpm.sh mangles that into (2026.8.16 + 1020679030.beta,
+#          2026.8.16~1020679030~beta-1, ...) is the packaging script's call --
+#          the same rule as every other asset here, where the script names the
+#          artifact and this workflow only asserts. So the assertion below
+#          matches `urnetwork-daemon[-_]*.rpm` and requires the two version
+#          TOKENS that survive any legal mangling -- the date (2026.8.16) and
+#          the beta code (1020679030) -- rather than the literal string.
+#          TODO(packaging): MIGRATION.md's normative filename table has no rpm
+#          row. Add one once make-rpm.sh has settled the mangling, and tighten
+#          this assertion to the exact name at the same time.
 #      URnetwork-<version>-<arch>.AppImage
 #          The GUI. What the GUI's own updater offers.
 #      URnetwork-<version>-<arch>.AppImage.zsync
@@ -63,10 +83,25 @@ name: Beta Build - Linux
 #          the AUTHORITATIVE copy is the self-hosted
 #          https://get.ur.network/URnetwork-latest-<arch>.AppImage.zsync that
 #          make-appimage.sh embeds as the AppImage's update information.
+#      URnetwork-<version>-<arch>.flatpak
+#          The GUI as a single-file Flatpak bundle, for hosts that would rather
+#          `flatpak install` than run an AppImage. GUI ONLY -- a Flatpak
+#          sandbox has no /dev/net/tun and no way to install a system unit, so
+#          this asset still needs the daemon from the .deb/.rpm/tarball (see
+#          packaging/flatpak/network.ur.urnetwork.yml).
+#
+#          THE ONLY OPTIONAL ASSET, and the only one attached AFTER the
+#          release is created -- see the build-flatpak job header for why. If
+#          that job fails, the release still publishes with the other five.
 #
 #    arch is the DEBIAN spelling -- amd64 / arm64 -- never x86_64/aarch64,
 #    even though the AppImage's internal ARCH is x86_64. Keep it stable: a
 #    renamed asset is an in-app updater that silently stops finding updates.
+#    THE RPM IS THE ONE EXCEPTION: rpm names its own packages with the rpm
+#    arch spelling (x86_64/aarch64), and fighting that would produce a package
+#    whose filename disagrees with its own %{ARCH}. The assertion accepts
+#    either spelling but rejects the WRONG arch (an aarch64 rpm out of the
+#    amd64 leg).
 #
 #    NO SHA256SUMS ASSET, and no .sha256 sidecars are attached. The packaging
 #    scripts still write sidecars next to their output (they are the local /
@@ -131,6 +166,34 @@ env:
   # TODO(ci): confirm this tag exists and bump deliberately; an unpinned
   # "latest" here would let a packaging-affecting nfpm change land silently.
   UR_NFPM_VERSION: "2.47.0"
+  # THE RPM IS REQUIRED FOR A RELEASE. packaging/make-rpm.sh is owned by the
+  # packaging workstream, not by this file; if this workflow lands BEFORE that
+  # script does, every push goes red and nothing publishes. Flip this one word
+  # to "false" for that window: the daemon job then warns instead of failing,
+  # and the release publishes the other assets. It must go back to "true" --
+  # a silent-missing-rpm mode is exactly how the .deb would have quietly
+  # stopped shipping.
+  # CURRENTLY "false" FOR EXACTLY ONE REASON, AND IT IS TEMPORARY: the .rpm has
+  # never been built by CI. It builds on a Fedora host (verified end to end:
+  # exit 0, ~15 MB, 123 payload entries), but jammy's SELinux tooling split is
+  # different and the build-host .pp has never been produced there. Until one
+  # green run proves it, an rpm problem must not be able to take the four
+  # already-contracted assets (tarball, .deb, AppImage, .zsync) off the
+  # release -- turning a missing fifth asset into a release of nothing is a
+  # strictly worse outcome than shipping four.
+  # FLIP BACK TO "true" the moment a run publishes an .rpm. A silent-missing-rpm
+  # mode left on permanently is exactly how the .deb would quietly stop shipping.
+  UR_REQUIRE_RPM: "false"
+  # The Flatpak has NO equivalent knob here on purpose: a job-level `if:`
+  # cannot read the `env` context (only github/needs/vars/inputs), so its kill
+  # switch is the repository VARIABLE `UR_BUILD_FLATPAK` -- set it to "false"
+  # in repo settings to skip that job entirely, with no edit to this file.
+  # The GNOME runtime this manifest targets; only used to pre-warm the runner's
+  # flatpak installation, and it MUST equal runtime-version in
+  # packaging/flatpak/network.ur.urnetwork.yml (and RUNTIME_VERSION's default
+  # in packaging/make-flatpak.sh). The build asserts that rather than trusting
+  # it.
+  UR_FLATPAK_RUNTIME: "49"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -321,6 +384,16 @@ jobs:
   # ---------------------------------------------------------------------------
   # THE DAEMON: the artifact the app downloads and installs behind pkexec.
   #
+  # THE .RPM IS BUILT HERE, NOT IN A JOB OF ITS OWN, and that is the whole
+  # point of it: the rpm, the .deb and the install tarball are three wrappers
+  # around ONE `meson install --destdir` staging tree, assembled by ONE
+  # function (packaging/lib/common.sh assemble_daemon_root). A separate rpm job
+  # would have to rebuild the daemon to get a staging tree, and the moment it
+  # did, "the rpm and the deb ship the same daemon" would stop being a fact and
+  # become a hope. It also inherits the glibc floor and the meson gate below
+  # for free -- an rpm built on a 24.04 image would carry GLIBC_2.38 symbols
+  # under a Fedora dependency set that never mentions them.
+  #
   # Built INSIDE an ubuntu:22.04 container rather than on a `runs-on:
   # ubuntu-22.04` hosted image. Both are "build on Ubuntu 22.04"; the container
   # is chosen because
@@ -337,7 +410,7 @@ jobs:
   # configure under -- do not "modernize" this to a pip meson without checking.
   # ---------------------------------------------------------------------------
   build-daemon:
-    name: Build daemon + install tarball + deb (${{ matrix.arch }})
+    name: Build daemon + install tarball + deb + rpm (${{ matrix.arch }})
     needs: build-sdk
     runs-on: ${{ matrix.runner }}
     container: ubuntu:22.04
@@ -455,6 +528,37 @@ jobs:
           chmod 0755 /usr/local/bin/nfpm
           nfpm --version
 
+      # Deliberately a step of its own, not another word on the build-deps
+      # line: if jammy's `rpm` ever moves or disappears, the failure should
+      # name the rpm and not look like the daemon failing to compile.
+      #
+      # nfpm needs NONE of this -- it writes rpms in pure Go -- but
+      # packaging/make-rpm.sh is not written yet and may reasonably use
+      # rpmbuild with a real spec (which is what docs/linux_agent_help.md 10.2
+      # actually describes: %systemd_post / %systemd_preun /
+      # %systemd_postun_with_restart scriptlets, which nfpm cannot emit). Both
+      # paths work with this installed, and `rpm -qp` is also what makes the
+      # payload assertion below possible at all.
+      - name: Install rpm tooling (for the .rpm)
+        run: |
+          # checkpolicy + semodule-utils are NOT optional extras: make-rpm.sh
+          # hard-fails without checkmodule AND semodule_package, because the
+          # SELinux policy module is the whole reason the Fedora-family package
+          # can open /dev/net/tun. Note the package split differs by family and
+          # getting it wrong looks identical to not trying -- semodule_package
+          # ships in **semodule-utils** on Debian/Ubuntu (measured by unpacking
+          # the jammy debs) but in **policycoreutils** on Fedora (measured with
+          # rpm -qf on a Bazzite host). This runner is Ubuntu, so it needs
+          # semodule-utils; installing policycoreutils here would NOT provide it.
+          apt-get install -y --no-install-recommends rpm checkpolicy semodule-utils
+          rpm --version
+          rpmbuild --version || true
+          # Fail here, with a legible message, rather than 40 lines later inside
+          # make-rpm.sh's die.
+          for t in checkmodule semodule_package; do
+            command -v "$t" >/dev/null 2>&1 || { echo "::error::${t} is missing after installing checkpolicy + semodule-utils; make-rpm.sh cannot build the SELinux policy module"; exit 1; }
+          done
+
       - name: Package the install tarball
         env:
           ARCH: ${{ matrix.arch }}
@@ -468,6 +572,45 @@ jobs:
         run: |
           export STAGING_DIR="$PWD/staging" OUT_DIR="$PWD/dist"
           packaging/make-deb.sh
+
+      # Same four-variable contract as every other packaging script
+      # (MIGRATION.md's invocation table): VERSION / ARCH / STAGING_DIR /
+      # OUT_DIR in, one normative artifact into $OUT_DIR. ARCH stays the DEBIAN
+      # spelling on the way IN even though rpm names its output x86_64 --
+      # make-deb.sh, make-install-tarball.sh and make-appimage.sh all take
+      # amd64|arm64, common.sh's check_payload_arch only understands those two,
+      # and one script taking a different vocabulary than its siblings is how
+      # an arch mismatch gets shipped.
+      - name: Package the .rpm
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          if [ ! -f packaging/make-rpm.sh ]; then
+            if [ "${UR_REQUIRE_RPM}" = "true" ]; then
+              echo "::error::packaging/make-rpm.sh does not exist. It is owned by the packaging workstream and this workflow requires it (see UR_REQUIRE_RPM at the top of this file). Either land the script or set UR_REQUIRE_RPM to \"false\" for the window in between."
+              exit 1
+            fi
+            echo "::warning::packaging/make-rpm.sh is missing and UR_REQUIRE_RPM is not \"true\" -- skipping the .rpm. The release will publish without it."
+            exit 0
+          fi
+          chmod +x packaging/make-rpm.sh
+          export STAGING_DIR="$PWD/staging" OUT_DIR="$PWD/dist"
+          # The escape hatch has to cover the SCRIPT FAILING, not just the
+          # script being absent. It did not, and that was a release-blocker:
+          # once make-rpm.sh landed, control fell through to a bare invocation
+          # whose non-zero exit failed build-daemon, which skipped `release`,
+          # which stopped the tarball, the .deb, the AppImage and the .zsync
+          # from publishing. A new package that cannot build must never take
+          # the four contracted assets down with it -- that turns a missing
+          # fifth asset into a release of nothing.
+          if packaging/make-rpm.sh; then
+            :
+          elif [ "${UR_REQUIRE_RPM}" = "true" ]; then
+            echo "::error::packaging/make-rpm.sh failed and UR_REQUIRE_RPM is \"true\". Fix the rpm, or set UR_REQUIRE_RPM to \"false\" to publish the other assets while it is broken."
+            exit 1
+          else
+            echo "::warning::packaging/make-rpm.sh failed and UR_REQUIRE_RPM is not \"true\" -- publishing without the .rpm."
+          fi
 
       # A compile-proof says nothing about what landed inside the package, and
       # that blind spot is exactly how the Windows MSI shipped for months
@@ -550,9 +693,154 @@ jobs:
             echo "::warning::dpkg-deb unavailable -- skipped the .deb content assertion"
           fi
 
+      # The .rpm gets the SAME treatment as the other two, for the same reason
+      # (a compile-proof says nothing about what landed inside the package),
+      # and `rpm` is installed above precisely so this can be a real assertion
+      # rather than a file-exists check.
+      #
+      # The version check is on TOKENS, not on the literal ${VERSION}: see the
+      # asset-name contract at the top of this file -- rpm forbids '-' in
+      # Version and Release, so no legal rpm filename can contain
+      # "2026.8.16-1020679030-beta" verbatim. The date and the beta code
+      # survive every legal mangling, and the beta code is what makes an
+      # artifact unique to THIS run, which is the property the check exists to
+      # protect.
+      - name: Verify the .rpm payload
+        working-directory: dist
+        run: |
+          shopt -s nullglob
+          # Binary rpms only. rpmbuild -ba (as opposed to -bb) also drops a
+          # .src.rpm beside them, and that is not an asset in this contract --
+          # counting it would turn a legitimate build into "expected one rpm,
+          # found two".
+          rpms=()
+          for f in urnetwork-daemon[-_]*.rpm; do
+            case "$f" in *.src.rpm) continue ;; esac
+            rpms+=("$f")
+          done
+          if [ "${#rpms[@]}" -eq 0 ]; then
+            if [ "${UR_REQUIRE_RPM}" = "true" ]; then
+              echo "::error::packaging/make-rpm.sh produced no urnetwork-daemon*.rpm in \$OUT_DIR"
+              exit 1
+            fi
+            echo "::warning::no .rpm produced and UR_REQUIRE_RPM is not \"true\" -- skipping the rpm assertions"
+            exit 0
+          fi
+          if [ "${#rpms[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one .rpm from this arch leg, found ${#rpms[@]}: ${rpms[*]}"
+            exit 1
+          fi
+          rpm_file="${rpms[0]}"
+          echo "rpm: $rpm_file"
+          fail=0
+
+          # "2026.8.16-1020679030-beta" -> date 2026.8.16, code 1020679030
+          ver_date="${VERSION%%-*}"
+          ver_rest="${VERSION#*-}"
+          ver_code="${ver_rest%%-*}"
+          for tok in "$ver_date" "$ver_code"; do
+            case "$rpm_file" in
+              *"$tok"*) ;;
+              *) echo "::error::$rpm_file does not carry version token '$tok' from ${VERSION}"; fail=1 ;;
+            esac
+          done
+
+          # The arch tag: either spelling in the FILENAME, but never the other
+          # arch. An aarch64 rpm falling out of the amd64 leg is the failure
+          # this catches, and it is not hypothetical -- the staging tree is
+          # arch-specific and a script that hardcodes an arch would produce
+          # exactly that.
+          case "${{ matrix.arch }}" in
+            amd64) want_rpm_arch=x86_64;  other_rpm_arch=aarch64; other_deb_arch=arm64 ;;
+            arm64) want_rpm_arch=aarch64; other_rpm_arch=x86_64;  other_deb_arch=amd64 ;;
+            *) echo "::error::no rpm arch mapping for '${{ matrix.arch }}'"; exit 1 ;;
+          esac
+          case "$rpm_file" in
+            *"$other_rpm_arch"*|*"$other_deb_arch"*)
+              echo "::error::$rpm_file names the wrong architecture -- this is the ${{ matrix.arch }} leg"
+              fail=1 ;;
+            *"$want_rpm_arch"*|*"${{ matrix.arch }}"*) ;;
+            *) echo "::error::$rpm_file carries no architecture tag ($want_rpm_arch or ${{ matrix.arch }})"; fail=1 ;;
+          esac
+
+          rpm -qip "$rpm_file" || { echo "::error::rpm cannot read $rpm_file -- it is not a valid rpm"; exit 1; }
+          rpm_arch=$(rpm -qp --qf '%{ARCH}' "$rpm_file")
+          echo "rpm %{ARCH}: $rpm_arch"
+          [ "$rpm_arch" = "$want_rpm_arch" ] || { echo "::error::$rpm_file has %{ARCH}=$rpm_arch, expected $want_rpm_arch"; fail=1; }
+          rpm_vr=$(rpm -qp --qf '%{VERSION}-%{RELEASE}' "$rpm_file")
+          echo "rpm %{VERSION}-%{RELEASE}: $rpm_vr"
+          for tok in "$ver_date" "$ver_code"; do
+            case "$rpm_vr" in
+              *"$tok"*) ;;
+              *) echo "::error::rpm metadata '$rpm_vr' does not carry version token '$tok'"; fail=1 ;;
+            esac
+          done
+
+          listing=$(mktemp)
+          rpm -qpl "$rpm_file" > "$listing"
+          for want in \
+            /usr/lib/urnetwork/urnetworkd \
+            /usr/lib/urnetwork/libURnetworkSdk.so \
+            /usr/bin/urnetwork \
+            /usr/share/urnetwork/world-110m.json ; do
+            grep -qx "$want" "$listing" || { echo "::error::$rpm_file is missing $want"; fail=1; }
+          done
+          # THE SYSTEMD UNIT PATH IS THE ONE PLACE THE RPM CANNOT JUST REUSE
+          # THE DEB'S TREE. assemble_daemon_root writes the unit to
+          # /lib/systemd/system, which is correct for Debian and WRONG for the
+          # rpm world: Fedora/RHEL/openSUSE are UsrMerge systems where /lib is
+          # a symlink to /usr/lib, and packaging a path under a symlinked
+          # legacy dir is a Fedora packaging violation that newer rpm rejects
+          # outright ("must not be under legacy symlinked dir"). Accept either
+          # here -- this workflow does not own make-rpm.sh -- but say so
+          # loudly, because the failure mode is an rpm that installs on Ubuntu
+          # and refuses to build or install on the distros it exists for.
+          if grep -qx '/usr/lib/systemd/system/urnetworkd.service' "$listing"; then
+            echo "unit: /usr/lib/systemd/system/urnetworkd.service (correct for rpm)"
+          elif grep -qx '/lib/systemd/system/urnetworkd.service' "$listing"; then
+            echo "::warning::$rpm_file ships the unit at /lib/systemd/system/urnetworkd.service. On UsrMerge distros (all current rpm distros) /lib is a symlink to /usr/lib; Fedora packaging forbids this path and rpm >= 4.19 errors on it. make-rpm.sh should relocate the unit to /usr/lib/systemd/system."
+          else
+            echo "::error::$rpm_file ships no urnetworkd.service under either /lib/systemd/system or /usr/lib/systemd/system"
+            fail=1
+          fi
+          entries=$(grep -cv '/$' "$listing" || true)
+          echo "rpm file entries: $entries"
+          [ "${entries:-0}" -ge 40 ] || { echo "::error::$rpm_file has only ${entries:-0} file entries -- expected at least 40"; fail=1; }
+
+          # THE SELINUX POLICY MODULE, which is the single most important thing
+          # this rpm carries that the .deb does not need. Measured on this
+          # project's own Fedora-family host: with no policy module the daemon
+          # lands in the init_t domain, which is DENIED /dev/net/tun, raw
+          # sockets and outbound 443 -- and root plus CAP_NET_ADMIN does not
+          # help, because the MAC layer refuses before the capability is ever
+          # consulted. The install tarball ships packaging/selinux/urnetwork.te
+          # and loads it from install.sh for exactly this reason; the .deb
+          # legitimately does not, because Debian/Ubuntu are AppArmor hosts.
+          # The rpm is the artifact aimed AT the SELinux distros, so shipping
+          # it without the policy produces a package that installs cleanly,
+          # starts cleanly, and cannot open a tunnel.
+          #
+          # A warning and not an error: this workflow does not own make-rpm.sh,
+          # and how the policy ships (a prebuilt .pp under
+          # /usr/share/selinux/packages plus `semodule -i` in %post, or a
+          # source .te compiled in the scriptlet) is that script's call.
+          scripts_out=$(rpm -qp --scripts "$rpm_file" 2>/dev/null || true)
+          if grep -qi 'selinux' "$listing" || printf '%s' "$scripts_out" | grep -qi 'semodule'; then
+            echo "selinux: the rpm ships a policy module and/or loads one from a scriptlet"
+          else
+            echo "::warning::$rpm_file ships no SELinux policy module and no scriptlet that runs semodule. On Fedora/RHEL/CentOS -- the distros this package exists for -- urnetworkd then runs in init_t and is refused /dev/net/tun, raw sockets and outbound 443 by the MAC layer before CAP_NET_ADMIN is consulted, so the service starts and the tunnel never comes up. packaging/selinux/urnetwork.te is the module the install tarball already uses."
+          fi
+          exit $fail
+
       # The .sha256 sidecars the packaging scripts write are deliberately NOT
       # carried forward: the release verifies through GitHub's per-asset digest
-      # (see the contract at the top of this file).
+      # (see the contract at the top of this file). The globs end in the exact
+      # extension for that reason -- `*.rpm` does not match `*.rpm.sha256`.
+      # Both rpm spellings are listed because make-rpm.sh has not settled
+      # whether it separates name from version with '-' (rpm's own convention)
+      # or '_' (the .deb's); `if-no-files-found: error` cannot police that
+      # anyway, since it fires only when the WHOLE set is empty -- the verify
+      # step above is the real gate on the rpm's presence.
       - name: Upload the daemon artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -560,6 +848,8 @@ jobs:
           path: |
             dist/urnetwork-daemon-*.install.tar.gz
             dist/urnetwork-daemon_*.deb
+            dist/urnetwork-daemon-*.rpm
+            dist/urnetwork-daemon_*.rpm
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -789,6 +1079,300 @@ jobs:
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
+  # THE FLATPAK BUNDLE: the GUI a third time, for hosts that would rather
+  # `flatpak install` than chmod +x an AppImage. GUI ONLY, for the reasons
+  # packaging/flatpak/network.ur.urnetwork.yml sets out at length -- a sandbox
+  # has no /dev/net/tun and cannot install a system unit, so this artifact
+  # needs the daemon from the .rpm/.deb/tarball and says so when it is missing.
+  #
+  # WHY THIS JOB IS OPTIONAL AND DOES NOT BLOCK THE RELEASE
+  #   The owner asked whether flatpak-builder is viable in Actions and to make
+  #   it a separate optional job if it is too slow or unreliable. It is viable,
+  #   and it is slow: this manifest builds libsigc++, glibmm, cairomm, pangomm,
+  #   gtkmm, nlohmann-json and then the app, from source, inside the sandbox --
+  #   gtkmm alone is the better part of ten minutes on a 4-core runner -- on
+  #   top of a ~1.5 GB org.gnome.Sdk download. Expect 30-50 minutes against the
+  #   ~15 the rest of the pipeline takes, and expect the source downloads
+  #   (download.gnome.org, cairographics.org, github.com) to be a flake surface
+  #   with no retry behind them, because flatpak-builder has none.
+  #
+  #   So the release job deliberately does NOT `needs:` this job. It publishes
+  #   on the daemon + AppImage schedule it always has, and a SEPARATE
+  #   release-flatpak job attaches the bundle to that already-published release
+  #   a few minutes later. A broken or slow Flatpak therefore costs the Flatpak
+  #   and nothing else: the tarball, the .deb, the .rpm and the AppImage ship
+  #   exactly when they ship today.
+  #
+  #   It is NOT `continue-on-error`, though. A failure here should be visible
+  #   as a red run so somebody looks at it; what it must not do is hold up or
+  #   fail the release, and it cannot.
+  #
+  # WHY NOT flatpak/flatpak-github-actions
+  #   That action runs flatpak-builder inside a prebuilt
+  #   ghcr.io/flathub-infra/flatpak-github-actions:gnome-<N> image. It is the
+  #   well-trodden path, but the image tag has to exist for the runtime this
+  #   manifest pins (49), and if it does not the job dies at image pull for a
+  #   reason that has nothing to do with this repo. Ubuntu 24.04's apt
+  #   flatpak-builder is a package whose existence is not in question, so the
+  #   only moving part left is Flathub itself.
+  #
+  # WHY THE BUILD RUNS UNDER sudo
+  #   Two reasons, one of them the AppArmor risk the porting notes flag as the
+  #   next SELinux. flatpak-builder drives bubblewrap, and Ubuntu 24.04 ships
+  #   `kernel.apparmor_restrict_unprivileged_userns=1` with an AppArmor profile
+  #   deciding which binaries may still create a user namespace -- exactly the
+  #   MAC-layer refusal that put the daemon in init_t on Fedora. As root the
+  #   question does not arise: the namespace is created with real privilege and
+  #   no unprivileged-userns policy is consulted. Second, make-flatpak.sh calls
+  #   `flatpak install` with no --user, which targets the SYSTEM installation;
+  #   as a non-root user with no polkit agent on the runner that is a hang or a
+  #   refusal, not an install.
+  #
+  #   `sudo env VAR=... script`, never `sudo -E`: -E depends on a SETENV tag in
+  #   sudoers that this workflow should not assume.
+  # ---------------------------------------------------------------------------
+  build-flatpak:
+    name: Build GUI Flatpak bundle (${{ matrix.arch }})
+    needs: build-sdk
+    # The kill switch. A job-level `if:` can read github/needs/vars/inputs but
+    # NOT `env`, so this one knob lives as a repository variable rather than
+    # beside UR_REQUIRE_RPM at the top of the file: set UR_BUILD_FLATPAK to
+    # "false" in the repo's variables to skip the Flatpak entirely, with no
+    # commit. Unset means build (the intended state).
+    if: vars.UR_BUILD_FLATPAK != 'false'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          # - arch: arm64
+          #   runner: ubuntu-24.04-arm
+    env:
+      VERSION: ${{ needs.build-sdk.outputs.version }}
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Check out Linux repo
+        uses: actions/checkout@v4
+
+      # Into RUNNER_TEMP, not the workspace, unlike every other job here. The
+      # manifest's app module is `type: dir, path: ../..`, i.e. flatpak-builder
+      # copies the ENTIRE repo tree into the build -- so anything dropped in
+      # the workspace is paid for on every module build. The vendored SDK has
+      # to be in there (the meson build links it); a 30 MB zip does not.
+      - name: Download the SDK zip
+        uses: actions/download-artifact@v4
+        with:
+          name: urnetwork-sdk-linux
+          path: ${{ runner.temp }}/sdk-zip
+
+      # binutils for `strings` (the version-stamp assertion below reads the
+      # built binary). Everything else the GUI needs is inside org.gnome.Sdk --
+      # that is the entire point of building in a runtime.
+      - name: Install flatpak + flatpak-builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            flatpak flatpak-builder binutils
+          flatpak --version
+          flatpak-builder --version
+
+      # Pre-warmed here rather than left to make-flatpak.sh so the download is
+      # a step that can retry and that shows its own timing, instead of silence
+      # inside the build step. The script's own `flatpak install` then finds
+      # both refs present and is a no-op.
+      - name: Add flathub and install the GNOME runtime + SDK
+        run: |
+          sudo flatpak remote-add --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+          ok=0
+          for attempt in 1 2 3; do
+            if sudo flatpak install -y --noninteractive flathub \
+                 "org.gnome.Platform//${UR_FLATPAK_RUNTIME}" \
+                 "org.gnome.Sdk//${UR_FLATPAK_RUNTIME}"; then
+              ok=1; break
+            fi
+            echo "::warning::flatpak install attempt ${attempt} failed -- retrying"
+            sleep 20
+          done
+          [ "$ok" = 1 ] || { echo "::error::could not install org.gnome.Platform//${UR_FLATPAK_RUNTIME} + org.gnome.Sdk//${UR_FLATPAK_RUNTIME} from flathub after 3 attempts"; exit 1; }
+          # assert rather than trust: a partial install is a build failure 40
+          # minutes later otherwise
+          flatpak info "org.gnome.Platform//${UR_FLATPAK_RUNTIME}" >/dev/null
+          flatpak info "org.gnome.Sdk//${UR_FLATPAK_RUNTIME}" >/dev/null
+          flatpak list --columns=application,branch,installation
+
+      - name: Vendor the SDK into third_party
+        run: app/scripts/fetch-deps.sh "$RUNNER_TEMP/sdk-zip/URnetworkSdkLinux.zip"
+
+      # TWO CI-ONLY EDITS TO THE CHECKED-OUT MANIFEST. The workspace copy is
+      # disposable and nothing is committed back, so editing it in place is
+      # safe -- and it is the only safe way: the app module's source is
+      # `type: dir, path: ../..`, resolved relative to the MANIFEST, so a
+      # rendered copy anywhere else would silently point at the wrong tree.
+      #
+      # 1. -Dapp_version. The manifest does not pass it, so the Flatpak GUI
+      #    would compile with meson's dev sentinel 0.0.0 and report that as its
+      #    app_version forever. That is not cosmetic: the GUI compares its own
+      #    version against the daemon's `hello` reply and renders "app out of
+      #    date" / "builds differ" from the comparison, so a 0.0.0 Flatpak sits
+      #    permanently in an error state against a correctly-versioned daemon.
+      #    The .deb, the tarball and the AppImage all get -Dapp_version from
+      #    their meson setup lines; this closes the one gap.
+      # 2. Nothing else. The runtime version is only ASSERTED, never rewritten:
+      #    if the manifest and UR_FLATPAK_RUNTIME disagree, the pre-warm above
+      #    installed a runtime this build will not use, and quietly patching
+      #    the manifest to match CI would be the wrong half to move.
+      #
+      # TODO(packaging): both of these belong upstream -- make-flatpak.sh
+      # already reads VERSION for the bundle filename, so threading it into the
+      # meson config-opts (or adding -Dapp_version to the manifest with a
+      # placeholder the script substitutes) would delete this step.
+      - name: Stamp the version into the manifest (CI-only)
+        run: |
+          manifest=packaging/flatpak/network.ur.urnetwork.yml
+          if ! grep -qx "runtime-version: '${UR_FLATPAK_RUNTIME}'" "$manifest"; then
+            echo "::error::$manifest does not declare runtime-version '${UR_FLATPAK_RUNTIME}'. UR_FLATPAK_RUNTIME (this workflow) and the manifest must name the same GNOME runtime -- the pre-warm step installed the wrong one."
+            grep -n 'runtime-version' "$manifest" || true
+            exit 1
+          fi
+          anchor='      - -Dhost_integration=false'
+          if ! grep -qxF "$anchor" "$manifest"; then
+            echo "::error::the app module's config-opts anchor ('-Dhost_integration=false') is gone from $manifest, so this step cannot stamp -Dapp_version and the bundle would ship reporting 0.0.0. Add -Dapp_version to the manifest (or to make-flatpak.sh) and delete this step."
+            exit 1
+          fi
+          sed -i "s|^${anchor}\$|${anchor}\n      - -Dapp_version=${VERSION}|" "$manifest"
+          grep -qxF "      - -Dapp_version=${VERSION}" "$manifest" \
+            || { echo "::error::failed to stamp -Dapp_version=${VERSION} into $manifest"; exit 1; }
+          echo "stamped -Dapp_version=${VERSION}"
+          sed -n '/name: urnetwork/,$p' "$manifest"
+
+      # BUILD_DIR is moved OUT of the repo, which contradicts make-flatpak.sh's
+      # own comment -- deliberately, and only because this job is the case that
+      # comment excludes. It says the build dir must live inside the repo
+      # because flatpak-builder runs as the org.flatpak.Builder FLATPAK, which
+      # gets a private /tmp; here flatpak-builder is a native apt binary in the
+      # `command -v flatpak-builder` branch, with no sandbox and no private
+      # /tmp. Keeping it in-tree instead would feed build-flatpak/ (every
+      # unpacked gtkmm tarball in it) back into the app module's own
+      # `type: dir, path: ../..` copy on the next module build.
+      - name: Build the Flatpak bundle
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          sudo env \
+            "VERSION=${VERSION}" \
+            "OUT_DIR=${PWD}/dist" \
+            "BUILD_DIR=${RUNNER_TEMP}/build-flatpak" \
+            "RUNTIME_VERSION=${UR_FLATPAK_RUNTIME}" \
+            packaging/make-flatpak.sh --bundle
+          sudo chown -R "$(id -u):$(id -g)" dist
+          ls -la dist
+
+      # make-flatpak.sh writes URnetwork-<version>.flatpak with NO arch in the
+      # name -- the one asset name in this pipeline that does not carry one.
+      # Renamed here so it matches its four siblings, and because the moment
+      # the arm64 legs are uncommented the two jobs would produce the SAME
+      # filename and `merge-multiple: true` would have one silently overwrite
+      # the other in the release.
+      #
+      # TODO(packaging): this rename belongs in make-flatpak.sh, which already
+      # knows VERSION and would only need ARCH. The rule everywhere else in
+      # this file is that the script names the artifact and the workflow only
+      # asserts; this step is a knowing, temporary exception, so move it and
+      # delete this step rather than letting the two drift.
+      - name: Name the bundle for the release
+        env:
+          ARCH: ${{ matrix.arch }}
+        working-directory: dist
+        run: |
+          built="URnetwork-${VERSION}.flatpak"
+          final="URnetwork-${VERSION}-${ARCH}.flatpak"
+          [ -f "$built" ] || { echo "::error::make-flatpak.sh --bundle did not produce $built"; ls -la; exit 1; }
+          mv "$built" "$final"
+          # a bundle carrying only metadata would still be a file; the gtkmm
+          # stack plus the app is tens of MB even compressed
+          size=$(stat -c %s "$final")
+          echo "$final: $size bytes"
+          [ "$size" -ge 5000000 ] || { echo "::error::$final is only $size bytes -- implausibly small for the bundled gtkmm stack"; exit 1; }
+
+      # The same lesson as the AppImage and the .deb: assert what is INSIDE.
+      # A bundle is an ostree static delta and cannot be listed with tar, so
+      # this installs it -- which is also the only check that proves the thing
+      # a user will actually run installs at all, and it costs seconds because
+      # the runtime is already local.
+      - name: Verify the bundle payload
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          bundle="$PWD/dist/URnetwork-${VERSION}-${ARCH}.flatpak"
+          sudo flatpak install -y --noninteractive --bundle "$bundle"
+          loc=$(flatpak info -l network.ur.urnetwork)
+          echo "deployed at: $loc"
+          fail=0
+          for want in \
+            files/bin/urnetwork-gui \
+            files/share/urnetwork/world-110m.json \
+            files/share/applications/network.ur.urnetwork.desktop \
+            metadata ; do
+            [ -e "$loc/$want" ] || { echo "::error::the bundle is missing $want"; fail=1; }
+          done
+          # The two libraries are looked up with `find`, not a fixed path:
+          # meson's libdir default is decided by the BUILD environment (plain
+          # lib on the freedesktop-based GNOME SDK, lib/<triplet> on a Debian
+          # host, lib64 elsewhere), and this assertion must survive that
+          # choice rather than encode one guess about it.
+          [ -n "$(find "$loc/files" -name 'libURnetworkSdk.so' -print -quit)" ] \
+            || { echo "::error::the bundle carries no libURnetworkSdk.so -- -Dhost_integration=false did not relocate the vendored SDK into the app tree"; fail=1; }
+          [ -n "$(find "$loc/files" -name 'libgtkmm-4*.so*' -print -quit)" ] \
+            || { echo "::error::the bundle carries no gtkmm -- the manifest's C++ binding modules did not install"; fail=1; }
+          ls "$loc"/files/share/urnetwork/fonts/* >/dev/null 2>&1 \
+            || { echo "::error::the bundle carries no brand fonts"; fail=1; }
+          ls "$loc"/files/share/urnetwork/icons/*.png >/dev/null 2>&1 \
+            || { echo "::error::the bundle carries no tray icons"; fail=1; }
+          ls "$loc"/files/share/locale/*/LC_MESSAGES/urnetwork.mo >/dev/null 2>&1 \
+            || { echo "::error::the bundle carries no gettext catalogs"; fail=1; }
+
+          # THE SANDBOX PERMISSIONS ARE PART OF THE ARTIFACT. Without the
+          # control socket the GUI installs, launches, and can never reach the
+          # host daemon -- it renders "service not running" forever, which is
+          # indistinguishable to a user from a broken daemon. finish-args are
+          # easy to lose in a manifest edit and impossible to notice by looking
+          # at the file list, so assert them on the built metadata.
+          echo "--- metadata ---"; cat "$loc/metadata"; echo "----------------"
+          grep -q '/run/urnetwork:ro' "$loc/metadata" \
+            || { echo "::error::the bundle's metadata does not expose /run/urnetwork:ro -- the GUI could never reach the host daemon"; fail=1; }
+          grep -q 'org.kde.StatusNotifierWatcher' "$loc/metadata" \
+            || { echo "::error::the bundle's metadata does not talk to org.kde.StatusNotifierWatcher -- no tray"; fail=1; }
+          grep -q "runtime=org.gnome.Platform/[^/]*/${UR_FLATPAK_RUNTIME}\$" "$loc/metadata" \
+            || { echo "::error::the bundle does not target org.gnome.Platform//${UR_FLATPAK_RUNTIME}"; fail=1; }
+
+          # the manifest's post-install rewrites Exec away from the daemon
+          # package's /usr/bin/urnetwork launcher, which does not exist in a
+          # sandbox. (Check the module's own copy, not export/: flatpak
+          # rewrites Exec in the exported entry to `flatpak run ...`.)
+          grep -q '^Exec=urnetwork-gui' "$loc/files/share/applications/network.ur.urnetwork.desktop" \
+            || { echo "::error::the bundled .desktop still points Exec at the host launcher -- the manifest's post-install desktop-file-edit did not run"; fail=1; }
+
+          # the version actually compiled in -- this is what the CI-only
+          # manifest stamp above exists to guarantee, so prove it on the binary
+          # rather than trusting the sed
+          if ! strings -a "$loc/files/bin/urnetwork-gui" | grep -qF "$VERSION"; then
+            echo "::error::the bundled urnetwork-gui does not contain the string ${VERSION} -- -Dapp_version did not reach the build, so this Flatpak would report 0.0.0 and sit in the GUI's version-skew error state"
+            fail=1
+          fi
+          sudo flatpak uninstall -y --noninteractive network.ur.urnetwork >/dev/null 2>&1 || true
+          exit $fail
+
+      - name: Upload the Flatpak bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: urnetwork-linux-flatpak-${{ matrix.arch }}
+          path: dist/URnetwork-*.flatpak
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
   # Every green push publishes a prerelease, the way the windows and android
   # forks do: same tag grammar, same riding-the-numbering notes line. The
   # in-app service installer and the GUI updater poll this repo's releases, so
@@ -837,6 +1421,12 @@ jobs:
           shopt -s nullglob
           tarballs=(urnetwork-daemon-*.install.tar.gz)
           debs=(urnetwork-daemon_*.deb)
+          # binary rpms only -- see the same filter in the daemon job
+          rpms=()
+          for f in urnetwork-daemon[-_]*.rpm; do
+            case "$f" in *.src.rpm) continue ;; esac
+            rpms+=("$f")
+          done
           appimages=(URnetwork-*.AppImage)
           zsyncs=(URnetwork-*.AppImage.zsync)
           fail=0
@@ -844,6 +1434,14 @@ jobs:
           [ "${#debs[@]}"      -ge 1 ] || { echo "::error::no urnetwork-daemon_<version>_<arch>.deb"; fail=1; }
           [ "${#appimages[@]}" -ge 1 ] || { echo "::error::no URnetwork-<version>-<arch>.AppImage"; fail=1; }
           [ "${#zsyncs[@]}"    -ge 1 ] || { echo "::error::no URnetwork-<version>-<arch>.AppImage.zsync"; fail=1; }
+          if [ "${#rpms[@]}" -lt 1 ]; then
+            if [ "${UR_REQUIRE_RPM}" = "true" ]; then
+              echo "::error::no urnetwork-daemon*.rpm -- the rpm is the Fedora/RHEL/openSUSE half of the native-package channel and this release requires it (UR_REQUIRE_RPM)"
+              fail=1
+            else
+              echo "::warning::no .rpm in this release and UR_REQUIRE_RPM is not \"true\""
+            fi
+          fi
           # every asset must carry THIS run's version, or the in-app checker
           # would rank a stale artifact under a fresh tag
           for f in "${tarballs[@]}" "${debs[@]}" "${appimages[@]}" "${zsyncs[@]}"; do
@@ -852,10 +1450,36 @@ jobs:
               *) echo "::error::$f does not carry version ${VERSION}"; fail=1 ;;
             esac
           done
-          # one AppImage per zsync, one deb per tarball -- an arch that built
-          # only half its pair must not reach a release
+          # THE RPM IS CHECKED ON TOKENS, not on the literal version, and the
+          # reason is rpm's, not ours: '-' is forbidden in both Version and
+          # Release, so "2026.8.16-1020679030-beta" CANNOT appear verbatim in a
+          # legal rpm filename. The date and the beta code survive every legal
+          # mangling of it, and the beta code is the part that makes an
+          # artifact unique to this run -- which is the whole property this
+          # loop protects. See the asset-name contract at the top of the file.
+          ver_date="${VERSION%%-*}"
+          ver_rest="${VERSION#*-}"
+          ver_code="${ver_rest%%-*}"
+          for f in "${rpms[@]}"; do
+            for tok in "$ver_date" "$ver_code"; do
+              case "$f" in
+                *"$tok"*) ;;
+                *) echo "::error::$f does not carry version token '$tok' from ${VERSION}"; fail=1 ;;
+              esac
+            done
+          done
+          # one AppImage per zsync, one deb per tarball, one rpm per deb -- an
+          # arch that built only half its set must not reach a release
           [ "${#appimages[@]}" -eq "${#zsyncs[@]}" ] || { echo "::error::AppImage/zsync count mismatch"; fail=1; }
           [ "${#tarballs[@]}"  -eq "${#debs[@]}" ]   || { echo "::error::tarball/deb count mismatch"; fail=1; }
+          if [ "${#rpms[@]}" -ge 1 ] && [ "${#rpms[@]}" -ne "${#debs[@]}" ]; then
+            echo "::error::rpm/deb count mismatch (${#rpms[@]} vs ${#debs[@]}) -- an arch produced one native package but not the other"
+            fail=1
+          fi
+          # The .flatpak is deliberately absent from every check here: it is
+          # attached by the release-flatpak job AFTER this one, from a build
+          # that is allowed to be slower or to fail. Requiring it would hand
+          # the optional artifact a veto over the required ones.
           ls -la
           exit $fail
 
@@ -876,22 +1500,39 @@ jobs:
             echo "| asset | what it is |"
             echo "| --- | --- |"
             echo "| \`urnetwork-daemon-<version>-<arch>.install.tar.gz\` | the privileged service; \`tar xz && sudo urnetwork-daemon/install.sh\` |"
-            echo "| \`urnetwork-daemon_<version>_<arch>.deb\` | the same service as a native package |"
+            echo "| \`urnetwork-daemon_<version>_<arch>.deb\` | the same service as a native package (Debian/Ubuntu) |"
+            echo "| \`urnetwork-daemon-<version>.<arch>.rpm\` | the same service as a native package (Fedora/RHEL/openSUSE) |"
             echo "| \`URnetwork-<version>-<arch>.AppImage\` | the GUI, unprivileged |"
             echo "| \`URnetwork-<version>-<arch>.AppImage.zsync\` | zsync control file (GitHub answers zsync's range requests with HTTP 501 -- the working mirror is get.ur.network) |"
+            echo "| \`URnetwork-<version>-<arch>.flatpak\` | the GUI as a Flatpak bundle: \`flatpak install --user <file>\`. Still needs the service from one of the packages above. Built by a separate, slower job -- if it is not attached yet, it is still building, and if it never appears that build failed while this release did not. |"
+            echo
+            echo "The three daemon packages are the SAME payload: one \`meson install\` tree, one assembly function, three wrappers. Pick whichever your distro speaks."
             echo
             echo "Asset names are a contract: the in-app installer and updater parse them and verify each download against the sha256 digest GitHub publishes for that same asset. There is deliberately no SHA256SUMS file."
             echo
-            echo "Daemon glibc floor: 2.35 (built on Ubuntu 22.04). AppImage glibc floor: 2.39 (built on Ubuntu 24.04)."
+            echo "Daemon glibc floor: 2.35 (built on Ubuntu 22.04), for the tarball, the .deb and the .rpm alike. AppImage glibc floor: 2.39 (built on Ubuntu 24.04). The Flatpak has no host glibc floor -- it runs against org.gnome.Platform."
             echo
             echo "Unsigned. Detached signatures are not produced by CI yet."
           } > notes.md
+          # nullglob, because the rpm is allowed to be absent when
+          # UR_REQUIRE_RPM is not "true": without it bash would hand gh an
+          # unexpanded pattern as a literal filename and the upload would fail
+          # with the release ALREADY DELETED. The assert step above is what
+          # guarantees the required assets are present.
+          shopt -s nullglob
           files=(
             urnetwork-daemon-*.install.tar.gz
             urnetwork-daemon_*.deb
             URnetwork-*.AppImage
             URnetwork-*.AppImage.zsync
           )
+          # The rpm is appended rather than globbed inline: make-rpm.sh may
+          # separate name from version with '-' or '_', and a .src.rpm (if it
+          # ever emits one) is not part of the asset contract.
+          for f in urnetwork-daemon[-_]*.rpm; do
+            case "$f" in *.src.rpm) continue ;; esac
+            files+=("$f")
+          done
           # --target pins the tag to the commit this run built; without it a
           # new tag would point wherever the default branch happens to be
           gh release create "$tag" \
@@ -900,3 +1541,79 @@ jobs:
             --title "$tag" \
             --notes-file notes.md \
             "${files[@]}"
+
+  # ---------------------------------------------------------------------------
+  # The Flatpak bundle rides in after the fact, onto the release the job above
+  # has already published.
+  #
+  # THIS IS THE WHOLE POINT OF SPLITTING IT OUT. The Flatpak build is 30-50
+  # minutes against the pipeline's ~15 (it compiles the entire gtkmm stack from
+  # source inside the runtime -- see the build-flatpak header). Folding it into
+  # `release`'s needs: would have delayed the tarball, the .deb, the .rpm and
+  # the AppImage by half an hour on every single push, to ship one optional
+  # GUI channel at the same instant as the rest. Attaching it separately costs
+  # only that the release is briefly missing one asset, which the notes say
+  # out loud.
+  #
+  # It cannot resurrect a failed release: it `needs: release`, and a needed job
+  # that failed or was skipped skips this one too. If build-flatpak fails, or
+  # is switched off with the UR_BUILD_FLATPAK repo variable, this job simply
+  # never runs and the release stands as published.
+  #
+  # --clobber, because a re-run of the same tag republishes the release and
+  # this job then has to overwrite its own earlier upload rather than collide
+  # with it -- the same replace-don't-collide rule `gh release delete` gives
+  # the job above.
+  # ---------------------------------------------------------------------------
+  release-flatpak:
+    name: Attach the Flatpak bundle to the prerelease
+    if: github.event_name != 'pull_request'
+    needs: [build-sdk, build-flatpak, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build-sdk.outputs.version }}
+    steps:
+      # gh resolves which repo to release into from the checkout's remote
+      - name: Check out Linux repo
+        uses: actions/checkout@v4
+
+      - name: Download the Flatpak bundle
+        uses: actions/download-artifact@v4
+        with:
+          pattern: urnetwork-linux-flatpak-*
+          path: dist
+          merge-multiple: true
+
+      # No `working-directory: dist` here on purpose: if the download matched
+      # nothing, that directory may not exist and the step would die with a
+      # bare "no such file or directory" before any of the assertions below
+      # could name what is actually wrong.
+      - name: Attach the bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          cd dist 2>/dev/null || { echo "::error::no dist/ -- the flatpak artifact did not download"; exit 1; }
+          bundles=(URnetwork-*.flatpak)
+          if [ "${#bundles[@]}" -lt 1 ]; then
+            echo "::error::build-flatpak succeeded but produced no URnetwork-*.flatpak artifact"
+            exit 1
+          fi
+          fail=0
+          for f in "${bundles[@]}"; do
+            case "$f" in
+              *"${VERSION}"*) ;;
+              *) echo "::error::$f does not carry version ${VERSION}"; fail=1 ;;
+            esac
+          done
+          [ "$fail" = 0 ] || exit 1
+          ls -la
+          # The release must already exist -- this job needs: release. If it
+          # somehow does not, fail here rather than creating a second,
+          # notes-less release under the same tag.
+          tag="v${VERSION}"
+          gh release view "$tag" >/dev/null \
+            || { echo "::error::release $tag does not exist -- nothing to attach the bundle to"; exit 1; }
+          gh release upload "$tag" --clobber "${bundles[@]}"

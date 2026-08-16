@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cctype>
 #include <cerrno>
 #include <csignal>
 #include <cstddef>
@@ -1255,6 +1256,326 @@ void DeleteRetiredSuppressRules(const std::string& ip) {
   }
 }
 
+// ---- DNS takeover: file-local machinery ------------------------------------
+//
+// Everything here is syscall-level on purpose. The tier-3 path writes a file
+// the whole machine depends on to resolve anything at all, so "mostly worked"
+// is not a state it is allowed to end in: every write is a temp file plus a
+// rename (which is atomic, and which replaces a SYMLINK rather than following
+// it), every takeover records its exact undo on disk before it mutates
+// anything, and every step that cannot be completed rolls back what it did.
+
+constexpr const char* kResolvConfPath = "/etc/resolv.conf";
+constexpr const char* kResolvConfBackupPath = "/etc/resolv.conf.urnetwork-backup";
+constexpr const char* kResolvConfStatePath = "/etc/resolv.conf.urnetwork-state";
+// STABLE ACROSS VERSIONS, DELIBERATELY. Changing this string would make a new
+// daemon fail to recognise an old daemon's file as its own and refuse to
+// restore it — leaving the user's original in a backup nothing puts back.
+constexpr const char* kResolvConfMarker =
+    "# Managed by urnetworkd (URnetwork): the tunnel owns this file while it is up.";
+// systemd-resolved's RuntimeDirectory=. systemd creates it when the unit starts
+// and REMOVES it when the unit stops, so its presence answers "is resolved
+// running" with one stat() and cannot be confused with "the systemd package
+// ships resolvectl" — which is the exact confusion that made Arch leak.
+constexpr const char* kResolvedRuntimeDir = "/run/systemd/resolve";
+constexpr const char* kResolvedStubAddress = "127.0.0.53";
+// glibc's MAXNS. Nameservers past the third are silently ignored, and a
+// resolver the user believes is in force but is not is the same class of defect
+// as the one this whole section exists to close.
+constexpr size_t kMaxResolvConfNameservers = 3;
+// Byte-identical to ctl::kCodeDnsApplyFailed, like every other code literal in
+// this file: the header stays free of ControlProtocol.hpp.
+constexpr const char* kCodeDnsApplyFailed = "dns_apply_failed";
+// The documented development escape from the fail-closed refusal, spelled like
+// URNETWORK_ALLOW_UNPROTECTED_EGRESS so there is one idiom and not two.
+constexpr const char* kAllowUnprotectedDnsEnv = "URNETWORK_ALLOW_UNPROTECTED_DNS";
+// Pins the tier for a test run: "resolved" | "resolvconf" | "file". Anything
+// else is refused loudly rather than silently ignored. It exists because the
+// three tiers cannot all be exercised on one machine — this host has resolved
+// and can therefore never reach tiers 2 or 3 by itself.
+constexpr const char* kDnsBackendEnv = "URNETWORK_DNS_BACKEND";
+
+std::string PathDirName(const std::string& path) {
+  const size_t slash = path.rfind('/');
+  if (slash == std::string::npos) return ".";
+  if (slash == 0) return "/";
+  return path.substr(0, slash);
+}
+
+bool ReadWholeFile(const std::string& path, std::string* out) {
+  // Follows symlinks on purpose: for /etc/resolv.conf the question this answers
+  // is always "what does a resolver actually read", never "what is at the path".
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return false;
+  std::ostringstream ss;
+  ss << in.rdbuf();
+  *out = ss.str();
+  return true;
+}
+
+// A rename() is only atomic once the new file's bytes are on the disk; without
+// this a power cut between the two leaves a zero-length /etc/resolv.conf, which
+// is a machine that resolves nothing and shows no reason why.
+void FsyncPath(const std::string& path, bool directory) {
+  const int fd = ::open(path.c_str(), (directory ? O_RDONLY | O_DIRECTORY : O_RDONLY) | O_CLOEXEC);
+  if (fd < 0) return;
+  ::fsync(fd);
+  ::close(fd);
+}
+
+bool WriteAllFd(int fd, const std::string& data) {
+  size_t written = 0;
+  while (written < data.size()) {
+    const ssize_t n = ::write(fd, data.data() + written, data.size() - written);
+    if (n < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    written += static_cast<size_t>(n);
+  }
+  return true;
+}
+
+// Temp file + fsync + rename, in the SAME directory so the rename cannot cross
+// a filesystem. rename() over a symlink replaces the LINK, which is the whole
+// reason tier 3 can take over an /etc/resolv.conf that points at
+// /run/systemd/resolve/stub-resolv.conf without writing a byte into resolved's
+// own file.
+//
+// inPlaceFallbackOk is for ONE case and the caller must have proven it: a
+// /etc/resolv.conf that is a BIND MOUNT (every podman/docker container), where
+// rename() answers EBUSY and the only way to change the file is to truncate and
+// rewrite it. That write is not atomic — a reader can catch it empty — so it is
+// never used for a path that is a symlink (it would follow the link into
+// another daemon's file) and it is logged when it happens.
+bool WriteFileAtomic(const std::string& path, const std::string& data, mode_t mode,
+                     bool inPlaceFallbackOk, std::string* error) {
+  const auto fail = [error](std::string message) {
+    if (error) *error = std::move(message);
+    return false;
+  };
+  const std::string dir = PathDirName(path);
+  const std::string tmpl = dir + "/.urnetwork-resolv-XXXXXX";
+  std::vector<char> name(tmpl.begin(), tmpl.end());
+  name.push_back('\0');
+  const int fd = ::mkstemp(name.data());
+  if (fd < 0) {
+    const int e = errno;
+    return fail("could not create a temporary file in " + dir + ": " + std::strerror(e) +
+                (e == EROFS ? " (the filesystem is read-only)" : ""));
+  }
+  bool ok = WriteAllFd(fd, data);
+  // mkstemp() creates 0600. WITHOUT this chmod /etc/resolv.conf becomes
+  // root-only and every unprivileged process on the machine stops resolving —
+  // a self-inflicted outage that looks exactly like the leak fix failing.
+  if (ok && ::fchmod(fd, mode) != 0) ok = false;
+  if (ok && ::fsync(fd) != 0) ok = false;
+  const int closeRc = ::close(fd);
+  if (ok && closeRc != 0) ok = false;
+  if (!ok) {
+    const int e = errno;
+    ::unlink(name.data());
+    return fail("could not write " + dir + "/(temporary): " + std::strerror(e));
+  }
+  if (::rename(name.data(), path.c_str()) == 0) {
+    FsyncPath(dir, /*directory=*/true);
+    return true;
+  }
+  const int e = errno;
+  ::unlink(name.data());
+  if (!inPlaceFallbackOk || (e != EBUSY && e != EXDEV && e != EINVAL)) {
+    std::string hint;
+    if (e == EROFS) hint = " (the filesystem is read-only)";
+    if (e == EPERM || e == EACCES) {
+      hint = " (an immutable attribute — `lsattr` / `chattr -i` — or a mandatory access control "
+             "policy can produce this even as root)";
+    }
+    if (e == EBUSY) hint = " (the path is a mount point: a bind-mounted /etc/resolv.conf)";
+    return fail("could not replace " + path + ": " + std::strerror(e) + hint);
+  }
+  // The bind-mount case. Truncate and rewrite the file the mount points at.
+  std::fprintf(stderr,
+               "[dns] %s cannot be replaced atomically (%s), so it is being rewritten in place; a "
+               "reader can briefly see it empty\n",
+               path.c_str(), std::strerror(e));
+  const int direct = ::open(path.c_str(), O_WRONLY | O_TRUNC | O_CLOEXEC);
+  if (direct < 0) return fail("could not open " + path + " to rewrite it: " + std::strerror(errno));
+  ok = WriteAllFd(direct, data);
+  if (ok) ok = (::fsync(direct) == 0);
+  const int rc2 = ::close(direct);
+  if (!ok || rc2 != 0) return fail("could not rewrite " + path + ": " + std::strerror(errno));
+  return true;
+}
+
+// The recorded undo. Written BEFORE /etc/resolv.conf is touched, so a crash in
+// the middle leaves a state file describing a takeover that may not have
+// happened — which the restore detects by looking for our marker — rather than
+// a takeover with no record, which would lose the user's file permanently.
+struct DnsTakeoverState {
+  bool present = false;
+  std::string backend;  // "file" (we own /etc/resolv.conf) | "resolvconf"
+  std::string kind;     // "symlink" | "file" | "absent" (what was there before)
+  std::string target;   // the symlink's target, verbatim
+  mode_t mode = 0644;   // the original file's mode
+  std::string iface;    // the tun, and the name registered with resolvconf
+};
+
+bool ReadTakeoverState(DnsTakeoverState* st) {
+  std::string text;
+  if (!ReadWholeFile(kResolvConfStatePath, &text)) return false;
+  std::istringstream in(text);
+  std::string line;
+  while (std::getline(in, line)) {
+    if (line.empty() || line[0] == '#') continue;
+    const size_t eq = line.find('=');
+    if (eq == std::string::npos) continue;
+    const std::string key = line.substr(0, eq);
+    const std::string value = Trim(line.substr(eq + 1));
+    if (key == "backend") st->backend = value;
+    else if (key == "kind") st->kind = value;
+    else if (key == "target") st->target = value;
+    else if (key == "iface") st->iface = value;
+    else if (key == "mode") st->mode = static_cast<mode_t>(std::strtoul(value.c_str(), nullptr, 8));
+  }
+  st->present = true;
+  return true;
+}
+
+bool WriteTakeoverState(const DnsTakeoverState& st, std::string* error) {
+  char modeBuf[16];
+  std::snprintf(modeBuf, sizeof(modeBuf), "%04o", static_cast<unsigned>(st.mode & 07777));
+  std::string text =
+      "# urnetworkd DNS takeover state. While this file exists, urnetworkd has\n"
+      "# changed how this machine resolves names and has NOT put it back yet.\n"
+      "# `sudo urnetworkd --revert` restores it. Do not edit by hand.\n";
+  text += "version=1\n";
+  text += "backend=" + st.backend + "\n";
+  text += "kind=" + st.kind + "\n";
+  text += "target=" + st.target + "\n";
+  text += "mode=" + std::string(modeBuf) + "\n";
+  text += "iface=" + st.iface + "\n";
+  text += "backup=" + std::string(kResolvConfBackupPath) + "\n";
+  // 0644, not 0600: RecoveryHelpText() reads this to print the manual way out,
+  // and main.cpp prints that from `--help`, which a user runs unprivileged.
+  return WriteFileAtomic(kResolvConfStatePath, text, 0644, /*inPlaceFallbackOk=*/false, error);
+}
+
+void ClearTakeoverState() {
+  ::unlink(kResolvConfStatePath);
+  ::unlink(kResolvConfBackupPath);
+  FsyncPath(PathDirName(kResolvConfStatePath), /*directory=*/true);
+}
+
+// A takeover record left behind by a daemon that was SIGKILLed, or by a start
+// that died between the record and the mutation it describes. Finish it BEFORE
+// any tier claims DNS again.
+//
+// BOTH LOWER TIERS SHARE THIS ONE RECORD, which is why this cannot live inside
+// either of them: writing a new record over an old one strands whatever the old
+// one described, and if the old one was a tier-3 file takeover, the user's real
+// /etc/resolv.conf ends up referenced by nothing and is gone for good. This is
+// the only moment at which it is still recoverable.
+bool FinishLeftoverTakeover(std::string* reason) {
+  DnsTakeoverState leftover;
+  if (!ReadTakeoverState(&leftover)) return true;
+  std::string detail;
+  const bool restored = RestoreDirectResolvConf(&detail);
+  std::fprintf(stderr, "[dns] a previous DNS takeover was never undone (%s left behind); %s: %s\n",
+               kResolvConfStatePath, restored ? "restored it first" : "COULD NOT restore it",
+               detail.c_str());
+  if (restored) return true;
+  if (reason != nullptr) {
+    *reason = "a previous DNS takeover could not be undone (" + detail +
+              "), so this one is refused rather than losing the original";
+  }
+  return false;
+}
+
+// Does the file a resolver would actually read carry this nameserver? Line
+// oriented, so "10.0.0.1" does not match a comment mentioning 110.0.0.10.
+bool ResolvConfHasNameserver(const std::string& content, const std::string& address) {
+  std::istringstream in(content);
+  std::string line;
+  while (std::getline(in, line)) {
+    const std::string t = Trim(line);
+    if (t.rfind("nameserver", 0) != 0) continue;
+    if (Trim(t.substr(10)) == address) return true;
+  }
+  return false;
+}
+
+// /etc/nsswitch.conf's `hosts:` line lists `resolve` before `dns`. Bracketed
+// action groups ([!UNAVAIL=return]) are skipped rather than counted, and a
+// group may legally contain spaces.
+bool NssResolveBeforeDns(const std::string& nsswitch) {
+  std::istringstream in(nsswitch);
+  std::string line;
+  while (std::getline(in, line)) {
+    if (const size_t hash = line.find('#'); hash != std::string::npos) line = line.substr(0, hash);
+    std::string t = Trim(line);
+    if (t.rfind("hosts:", 0) != 0) continue;
+    t = t.substr(6);
+    int resolveAt = -1;
+    int dnsAt = -1;
+    int index = 0;
+    size_t i = 0;
+    while (i < t.size()) {
+      while (i < t.size() && std::isspace(static_cast<unsigned char>(t[i]))) ++i;
+      if (i >= t.size()) break;
+      if (t[i] == '[') {
+        while (i < t.size() && t[i] != ']') ++i;
+        if (i < t.size()) ++i;
+        continue;
+      }
+      const size_t start = i;
+      while (i < t.size() && !std::isspace(static_cast<unsigned char>(t[i])) && t[i] != '[') ++i;
+      const std::string token = t.substr(start, i - start);
+      if (token == "resolve" && resolveAt < 0) resolveAt = index;
+      if (token == "dns" && dnsAt < 0) dnsAt = index;
+      ++index;
+    }
+    if (resolveAt < 0) return false;
+    return dnsAt < 0 || resolveAt < dnsAt;
+  }
+  return false;
+}
+
+// A path is safe to print inside a single-quoted shell suggestion. We never
+// exec any of this (RunCommand takes an argv and never a shell), so this is
+// only about not handing a user a command that does something other than what
+// it reads as.
+bool SafeInSingleQuotes(const std::string& value) {
+  if (value.empty() || value.size() > 4096) return false;
+  for (const unsigned char c : value) {
+    if (c < 0x20 || c == 0x7f || c == '\'') return false;
+  }
+  return true;
+}
+
+// The exact commands that undo a tier-2/tier-3 takeover BY HAND, built from the
+// recorded state so they can never name the wrong target. Empty when nothing is
+// owned — which is the normal case, and why RecoveryHelpText stays unchanged on
+// a machine that never reached tier 3.
+std::vector<std::string> ManualResolvConfRestoreCommands() {
+  DnsTakeoverState st;
+  if (!ReadTakeoverState(&st)) return {};
+  std::vector<std::string> out;
+  if (st.backend == "resolvconf") {
+    if (!SafeInSingleQuotes(st.iface)) return {};
+    out.push_back("sudo resolvconf -d '" + st.iface + "'");
+    out.push_back("sudo resolvconf -u");
+  } else if (st.kind == "symlink") {
+    if (!SafeInSingleQuotes(st.target)) return {};
+    out.push_back("sudo ln -sfn '" + st.target + "' " + kResolvConfPath);
+  } else if (st.kind == "absent") {
+    out.push_back(std::string("sudo rm -f ") + kResolvConfPath);
+  } else {
+    out.push_back(std::string("sudo mv -f ") + kResolvConfBackupPath + " " + kResolvConfPath);
+  }
+  out.push_back(std::string("sudo rm -f ") + kResolvConfStatePath + " " + kResolvConfBackupPath);
+  return out;
+}
+
 }  // namespace
 
 NetFilter::~NetFilter() {
@@ -1310,6 +1631,23 @@ std::string NetFilter::RecoveryHelpText() {
   s += kArmedMarkerPath;
   s += " is what makes a\n     crash-restart come back armed, so remove it too if the block "
        "returns by itself.";
+  // ONLY when it applies. A machine that never reached tier 3 of the DNS
+  // takeover (every systemd-resolved host, including this build's own CI) gets
+  // exactly the text it got before, so this cannot add noise to the common
+  // case — and a machine that DID reach it gets the one command a user cannot
+  // possibly derive, because only the state file knows whether the original was
+  // a symlink and to what.
+  if (const std::vector<std::string> dns = ManualResolvConfRestoreCommands(); !dns.empty()) {
+    s += "\n\nURnetwork is also currently managing this machine's DNS (";
+    s += kResolvConfStatePath;
+    s += " exists).\n`sudo urnetworkd --revert` puts it back. By hand, as root:\n";
+    for (const auto& command : dns) {
+      s += "       ";
+      s += command;
+      s += '\n';
+    }
+    s.pop_back();
+  }
   return s;
 }
 
@@ -1581,6 +1919,24 @@ bool NetFilter::MarkChainCounters(uint64_t* daemonPackets, uint64_t* totalPacket
 }
 
 bool NetFilter::SweepStaleState(bool preserveArmed) {
+  // FIRST, BEFORE ANY FIREWALL WORK: put /etc/resolv.conf back. This is not a
+  // new revert mechanism — it is THE revert path the daemon already has, and it
+  // is called from exactly the three moments a crashed DNS takeover has to be
+  // undone: every daemon start, `urnetworkd --revert` (the documented escape
+  // hatch a stuck user is told to run), and the unit's ExecStopPost
+  // `--revert-unless-armed`. Putting it first matters because a machine that
+  // resolves nothing cannot look anything up to work out what to do next, and
+  // because unlike the nftables half it is correct on EVERY path: the tun died
+  // with the process that owned it, so a tunnel resolver left in
+  // /etc/resolv.conf points into a tunnel that no longer exists.
+  //
+  // It is a no-op — one failed stat() — on any machine that never reached tier
+  // 3, which is every systemd-resolved host.
+  if (std::string dnsDetail; RestoreDirectResolvConf(&dnsDetail) && !dnsDetail.empty()) {
+    std::fprintf(stderr, "[dns] startup sweep: %s\n", dnsDetail.c_str());
+  } else if (!dnsDetail.empty()) {
+    std::fprintf(stderr, "[dns] startup sweep FAILED to restore DNS: %s\n", dnsDetail.c_str());
+  }
   // nftables rules and ip rules are NOT tied to process lifetime (the Windows
   // dynamic WFP session is; that safety is not inherited here), so an unclean
   // exit leaves the machine holding a policy nobody owns. Sweep by our own
@@ -1852,7 +2208,76 @@ bool Tunnel::Configure(const TunnelConfig& cfg, TunnelError* err) {
     report_.egress_detail = "the egress witness was skipped by the development override";
   }
 
-  ApplyDns();  // never fatal here: reported through TunnelReport::dns_applied
+  // ============================================================================
+  // DNS IS FAIL-CLOSED, AND THAT IS A DELIBERATE CHANGE FROM WHAT SHIPPED.
+  //
+  // What shipped: ApplyDns() was called for its side effect and its answer was
+  // thrown away here ("never fatal"). TunnelHost then refused the bring-up ONLY
+  // when the kill switch was on. With the kill switch OFF — the default, and
+  // what a first-time tester uses — the tunnel came up, carried traffic, and
+  // every name went to the ISP's resolver. On Arch that was not an edge case,
+  // it was EVERY machine.
+  //
+  // THE CASE FOR PROCEEDING (rejected): a tunnel that carries traffic is worth
+  // something even with DNS leaking; a user who is chasing a geo-block or a
+  // throttling ISP gets what they came for; browsers increasingly do DoH on
+  // their own, so the leak is partial; and refusing turns a degraded connection
+  // into no connection at all, which some users would call the worse bug.
+  //
+  // THE CASE FOR REFUSING (taken):
+  //   1. It is the rule this codebase already applies to the same class of
+  //      defect. IPv6 has no tunnel, so IPv6 is BLOCKED rather than leaked, in
+  //      every state, NOT gated on the kill switch — docs/linux_agent_help.md
+  //      §6.3 is explicit that leak prevention is not a preference. Names are a
+  //      leak in exactly the way v6 is: the UI says Connected while an observer
+  //      on the ISP's resolver sees every site the user visits, in order, with
+  //      timestamps. Deriving the answer for DNS from the kill switch made one
+  //      leak a preference and the other a rule, for no principled reason.
+  //   2. The leak is invisible to the user. The one field that reports it,
+  //      dns_detail, is rendered NOWHERE in the app today (checked: every use
+  //      in the daemon and the app is an assignment or a clear). "Proceed but
+  //      report it" was, in practice, "proceed".
+  //   3. The refusal is now RARE, which is what makes it affordable. Before the
+  //      three tiers below existed, refusing would have meant refusing on every
+  //      Arch machine. Now the direct /etc/resolv.conf tier works on any host
+  //      with a writable /etc, so the remaining population is: a read-only or
+  //      immutable /etc, an /etc/resolv.conf bind-mounted read-only inside a
+  //      container, an nss-resolve host whose resolved is broken, or a device
+  //      that reported no resolvers at all. Each of those is a machine whose
+  //      owner needs to be told something, not a machine that should quietly
+  //      leak.
+  //   4. It fails LOUD and ACTIONABLE instead of silent. dns_detail names every
+  //      tier that was tried and why it did not take, and this message reaches
+  //      MainWindow::PollDaemonHealth, which renders status.error verbatim.
+  //
+  // THE ESCAPE HATCH IS THE ONE THIS FILE ALREADY USES FOR THE SAME SHAPE OF
+  // TRADE. URNETWORK_ALLOW_UNPROTECTED_EGRESS skips the egress witness; this is
+  // spelled the same way, logged as loudly, and — like it — SKIPS the refusal
+  // rather than faking a pass: dns_applied stays false, dns_detail still says
+  // exactly what is leaking, and the nftables DNS floor stays off (it is gated
+  // on dns_applied), because closing :53 with nothing able to answer would be an
+  // outage rather than a protection.
+  // ============================================================================
+  if (!ApplyDns()) {
+    const bool allowUnprotected = ::getenv(kAllowUnprotectedDnsEnv) != nullptr;
+    if (!allowUnprotected) {
+      const std::string message =
+          "this tunnel would carry your traffic while every name you look up still went to "
+          "your current resolver, so it was not started. " +
+          report_.dns_detail + " (set " + kAllowUnprotectedDnsEnv +
+          "=1 in the daemon's environment to connect anyway, with DNS leaking.)";
+      if (err != nullptr) {
+        err->code = kCodeDnsApplyFailed;
+        err->message = message;
+      }
+      std::fprintf(stderr, "[dns] REFUSING the bring-up: %s\n", message.c_str());
+      return false;
+    }
+    std::fprintf(stderr,
+                 "[dns] %s is set: connecting with DNS NOT on the tunnel. Every name this "
+                 "machine looks up goes to the resolver it used before the tunnel. %s\n",
+                 kAllowUnprotectedDnsEnv, report_.dns_detail.c_str());
+  }
   return true;
 }
 
@@ -2304,25 +2729,258 @@ bool Tunnel::VerifyEgressWitness(const char* when, TunnelError* err) {
   return true;
 }
 
-bool Tunnel::ApplyDns() {
-  report_.dns_applied = false;
-  report_.dns_detail.clear();
-  if (dnsServers_.empty()) {
-    report_.dns_detail = "the device reported no tunnel resolvers";
+// ---- DNS: the three tiers --------------------------------------------------
+
+const char* ToString(DnsBackend b) {
+  switch (b) {
+    case DnsBackend::None: return "none";
+    case DnsBackend::SystemdResolved: return "systemd-resolved";
+    case DnsBackend::Resolvconf: return "resolvconf";
+    case DnsBackend::DirectFile: return "/etc/resolv.conf";
+  }
+  return "none";
+}
+
+const char* DirectResolvConfPath() { return kResolvConfPath; }
+const char* DirectResolvConfBackupPath() { return kResolvConfBackupPath; }
+const char* DirectResolvConfStatePath() { return kResolvConfStatePath; }
+
+DnsHostProbe ProbeDnsHost() {
+  DnsHostProbe p;
+
+  // RUNNING, not installed. See kResolvedRuntimeDir: this is the distinction
+  // the shipped build never made, and it is the whole Arch defect — the
+  // `systemd` package ships /usr/bin/resolvectl on every distro whether or not
+  // systemd-resolved is enabled, so FindTool("resolvectl") answers "yes" on a
+  // machine where resolved has never run.
+  //
+  // A stat() and not `systemctl is-active`, and not `resolvectl status`: both
+  // of those fork, and `resolvectl` in particular can D-BUS-ACTIVATE resolved
+  // on a host where the admin deliberately left it disabled. Starting a system
+  // service as a side effect of asking whether it is running is not a probe.
+  struct stat st {};
+  p.resolved_running = ::stat(kResolvedRuntimeDir, &st) == 0 && S_ISDIR(st.st_mode);
+  p.resolvectl_present = !FindTool("resolvectl").empty();
+
+  std::string nsswitch;
+  if (ReadWholeFile("/etc/nsswitch.conf", &nsswitch)) {
+    p.nss_resolve_before_dns = NssResolveBeforeDns(nsswitch);
+  }
+
+  const std::string resolvconf = FindTool("resolvconf");
+  p.resolvconf_present = !resolvconf.empty();
+  if (p.resolvconf_present) {
+    // MEASURED ON THIS HOST: /usr/bin/resolvconf is a symlink to
+    // /usr/bin/resolvectl (systemd's `systemd-resolvconf` compatibility shim).
+    // Handing that shim an `-a` when resolved is not running is not a fallback,
+    // it is the tier that already failed wearing a different name.
+    if (char* real = ::realpath(resolvconf.c_str(), nullptr); real != nullptr) {
+      const std::string resolved = real;
+      ::free(real);
+      const size_t slash = resolved.rfind('/');
+      const std::string base = (slash == std::string::npos) ? resolved : resolved.substr(slash + 1);
+      p.resolvconf_is_resolvectl = (base == "resolvectl");
+    }
+  }
+
+  struct stat ls {};
+  if (::lstat(kResolvConfPath, &ls) == 0 && S_ISLNK(ls.st_mode)) {
+    p.resolv_conf_is_symlink = true;
+    char buf[4096];
+    const ssize_t n = ::readlink(kResolvConfPath, buf, sizeof(buf) - 1);
+    if (n > 0) p.resolv_conf_link_target.assign(buf, static_cast<size_t>(n));
+  }
+  if (char* real = ::realpath(kResolvConfPath, nullptr); real != nullptr) {
+    p.resolv_conf_realpath = real;
+    ::free(real);
+  }
+  std::string content;
+  if (ReadWholeFile(kResolvConfPath, &content) &&
+      ResolvConfHasNameserver(content, kResolvedStubAddress)) {
+    p.resolv_conf_points_at_resolved = true;
+  }
+  const std::string resolvedPrefix = std::string(kResolvedRuntimeDir) + "/";
+  if (p.resolv_conf_realpath.rfind(resolvedPrefix, 0) == 0) {
+    p.resolv_conf_points_at_resolved = true;
+  }
+
+  p.detail = std::string("systemd-resolved ") +
+             (p.resolved_running ? "running" : "NOT running") + ", resolvectl " +
+             (p.resolvectl_present ? "present" : "absent") + ", nsswitch hosts " +
+             (p.nss_resolve_before_dns ? "prefers nss-resolve" : "has no nss-resolve before dns") +
+             ", resolvconf " +
+             (!p.resolvconf_present ? "absent"
+                                    : (p.resolvconf_is_resolvectl ? "is resolvectl's shim"
+                                                                  : "present")) +
+             ", " + kResolvConfPath + " -> " +
+             (p.resolv_conf_realpath.empty() ? std::string("(missing)") : p.resolv_conf_realpath) +
+             (p.resolv_conf_points_at_resolved ? " (resolved's)" : "");
+  return p;
+}
+
+std::string BuildResolvConf(const std::string& iface, const std::vector<std::string>& resolvers) {
+  std::string s = kResolvConfMarker;
+  s += "\n#\n";
+  s += "# urnetworkd replaced this file when the URnetwork tunnel came up";
+  if (!iface.empty()) s += " on " + iface;
+  s += ",\n";
+  s += "# and puts the original back when the tunnel goes down. The original is saved at\n";
+  s += std::string("#     ") + kResolvConfBackupPath + "\n";
+  s += std::string("# and ") + kResolvConfStatePath + " records exactly how to restore it\n";
+  s += "# (it may have been a symlink; that is recorded too).\n";
+  s += "#\n";
+  s += "# If the tunnel is gone and this file is still here, the daemon was killed. Run\n";
+  s += "#     sudo urnetworkd --revert\n";
+  s += "# to put the original back.\n";
+  s += "#\n";
+  s += "# ONLY the tunnel's own resolvers are listed, and there is deliberately no\n";
+  s += "# `search`/`domain` line: any other nameserver here, and any search domain a DHCP\n";
+  s += "# lease pushed, is a name that would leave this machine outside the tunnel. This\n";
+  s += "# is the /etc/resolv.conf equivalent of systemd-resolved's `~.` default-route\n";
+  s += "# domain, which the resolvectl path sets for the same reason.\n";
+  size_t written = 0;
+  for (const auto& resolver : resolvers) {
+    if (written >= kMaxResolvConfNameservers) break;
+    s += "nameserver " + resolver + "\n";
+    ++written;
+  }
+  if (resolvers.size() > written) {
+    // Said out loud rather than silently truncated: glibc reads at most MAXNS
+    // (3), so listing more would put a resolver in the file that nothing uses,
+    // which is precisely the "believed to be in force but is not" failure this
+    // whole section exists to stop producing.
+    s += "# " + std::to_string(resolvers.size() - written) +
+         " further tunnel resolver(s) are omitted: glibc reads at most " +
+         std::to_string(kMaxResolvConfNameservers) + " (MAXNS).\n";
+  }
+  return s;
+}
+
+bool RestoreDirectResolvConf(std::string* detail) {
+  const auto say = [detail](std::string message) {
+    if (detail) *detail = std::move(message);
+  };
+  DnsTakeoverState st;
+  if (!ReadTakeoverState(&st)) return true;  // nothing was ever taken over
+
+  if (st.backend == "resolvconf") {
+    // Tier 2's undo. openresolv/Debian resolvconf keep their own state in /run,
+    // so a reboot has already cleared it and the -d is a harmless no-op then.
+    const std::string resolvconf = FindTool("resolvconf");
+    if (!resolvconf.empty() && !st.iface.empty()) {
+      if (const CommandResult r = RunCommand({resolvconf, "-d", st.iface}); !r.ok()) {
+        std::fprintf(stderr, "[dns] resolvconf -d %s: %s\n", st.iface.c_str(),
+                     r.Describe().c_str());
+      }
+      RunCommand({resolvconf, "-u"});
+    }
+    ClearTakeoverState();
+    say("deregistered " + st.iface + " from resolvconf");
+    return true;
+  }
+
+  // Tier 3. IS THE FILE STILL OURS? If NetworkManager, dhcpcd or the admin has
+  // rewritten /etc/resolv.conf since we took it over, putting our backup back
+  // would clobber a NEWER and more correct file with a stale copy of a state
+  // the machine has already left. Detected by our own marker, which is the only
+  // thing that can distinguish "our file" from "a file that happens to be here".
+  std::string current;
+  const bool haveCurrent = ReadWholeFile(kResolvConfPath, &current);
+  const bool ours = haveCurrent && current.find(kResolvConfMarker) != std::string::npos;
+  if (!ours) {
+    ClearTakeoverState();
+    say(std::string(kResolvConfPath) +
+        " is no longer the file urnetworkd wrote (something else has rewritten it since), so "
+        "the saved original was NOT put back; it has been discarded instead of overwriting a "
+        "newer file");
+    return true;
+  }
+
+  std::string error;
+  bool ok = false;
+  if (st.kind == "symlink") {
+    if (st.target.empty()) {
+      say("the recorded symlink target is empty, so " + std::string(kResolvConfPath) +
+          " could not be restored; " + kResolvConfBackupPath + " is left in place");
+      return false;
+    }
+    // Create the link at a temp name and rename it into place: rename() is
+    // atomic for symlinks too, so there is never a moment with no
+    // /etc/resolv.conf at all. unlink-then-symlink would have exactly that
+    // moment, and every resolver on the machine would see it.
+    const std::string tmp = std::string(kResolvConfPath) + ".urnetwork-restore";
+    ::unlink(tmp.c_str());
+    if (::symlink(st.target.c_str(), tmp.c_str()) != 0) {
+      error = std::string("symlink: ") + std::strerror(errno);
+    } else if (::rename(tmp.c_str(), kResolvConfPath) != 0) {
+      error = std::string("rename: ") + std::strerror(errno);
+      ::unlink(tmp.c_str());
+    } else {
+      FsyncPath(PathDirName(kResolvConfPath), /*directory=*/true);
+      ok = true;
+    }
+  } else if (st.kind == "absent") {
+    ok = (::unlink(kResolvConfPath) == 0) || errno == ENOENT;
+    if (!ok) error = std::string("unlink: ") + std::strerror(errno);
+  } else {
+    std::string original;
+    if (!ReadWholeFile(kResolvConfBackupPath, &original)) {
+      say(std::string("the saved original ") + kResolvConfBackupPath +
+          " is missing, so " + kResolvConfPath +
+          " still holds the tunnel's resolvers; this machine may not resolve names until it is "
+          "written by hand or by NetworkManager/dhcpcd");
+      return false;
+    }
+    // In place when the takeover had to be in place (a bind-mounted
+    // /etc/resolv.conf): a rename cannot land on a mount point either way.
+    ok = WriteFileAtomic(kResolvConfPath, original, st.mode ? st.mode : 0644,
+                         /*inPlaceFallbackOk=*/true, &error);
+  }
+  if (!ok) {
+    say(std::string("could not restore ") + kResolvConfPath + ": " + error +
+        ". The original is still at " + kResolvConfBackupPath);
     return false;
   }
-  const std::string resolvectl = FindTool("resolvectl");
-  if (resolvectl.empty()) {
-    // Never silently keep the host resolver and call the session Connected:
-    // the caller reports this verbatim through StatusReply::dns_detail.
-    report_.dns_detail =
-        "systemd-resolved (resolvectl) is not installed: DNS is NOT going through the tunnel";
+  ClearTakeoverState();
+  say(std::string("restored ") + kResolvConfPath + " (" + st.kind + ")");
+  return true;
+}
+
+bool Tunnel::ApplyDnsViaResolved(const DnsHostProbe& probe, std::string* reason) {
+  const auto no = [reason](std::string message) {
+    if (reason) *reason = std::move(message);
     return false;
+  };
+  if (!probe.resolvectl_present) {
+    return no("systemd-resolved: resolvectl is not installed");
+  }
+  if (!probe.resolved_running) {
+    // THE ARCH CASE, NAMED. The binary is there (the `systemd` package ships
+    // it everywhere); the service is not running, which is the Arch/CachyOS
+    // default. The shipped build read the first fact and reported the second.
+    return no(std::string("systemd-resolved: resolvectl is installed but systemd-resolved is not "
+                          "running (") +
+              kResolvedRuntimeDir + " does not exist)");
+  }
+  if (!probe.nss_resolve_before_dns && !probe.resolv_conf_points_at_resolved) {
+    // Running, and consulted by nothing. `resolvectl dns` would exit 0 and
+    // change where NOTHING goes: glibc would keep reading /etc/resolv.conf,
+    // which names somebody else's resolver. This is the second silent leak in
+    // the shipped build and it is not Arch-specific.
+    return no("systemd-resolved: it is running, but this machine does not resolve through it "
+              "(/etc/nsswitch.conf has no nss-resolve before dns and " +
+              std::string(kResolvConfPath) + " does not point at the " + kResolvedStubAddress +
+              " stub), so a per-link override would change nothing");
   }
 
   // resolved learns about a new link over rtnetlink, which can land a moment
   // after `ip link set up` — a first "Unknown interface" is a race, not a
   // verdict.
+  // Resolved again rather than reusing the probe's answer: the probe records
+  // only whether it EXISTED, and an argv whose [0] is the empty string is an
+  // execvp that fails for a reason nobody can read.
+  const std::string resolvectl = FindTool("resolvectl");
+  if (resolvectl.empty()) return no("systemd-resolved: resolvectl vanished mid-bring-up");
   std::vector<std::string> dnsCmd = {resolvectl, "dns", name_};
   dnsCmd.insert(dnsCmd.end(), dnsServers_.begin(), dnsServers_.end());
   CommandResult set;
@@ -2331,47 +2989,479 @@ bool Tunnel::ApplyDns() {
     if (set.ok()) break;
     SleepMillis(200);
   }
-  if (!set.ok()) {
-    report_.dns_detail = "resolvectl dns: " + set.Describe();
-    return false;
-  }
+  if (!set.ok()) return no("systemd-resolved: resolvectl dns: " + set.Describe());
   dnsTouched_ = true;
 
   // `~.` is resolved's default-route domain: without it a DHCP search domain
   // on the physical link can still win for unqualified names.
   const CommandResult domain = RunCommand({resolvectl, "domain", name_, "~."});
-  if (!domain.ok()) {
-    report_.dns_detail = "resolvectl domain: " + domain.Describe();
-    return false;
-  }
+  if (!domain.ok()) return no("systemd-resolved: resolvectl domain: " + domain.Describe());
   // Force plain :53 on this link: never OS-level encrypted DNS for the tunnel.
   // The UpgradeMux performs the unencrypted-DNS -> DoH upgrade in-tunnel and
   // needs to see :53. Not fatal — older systemd has no such verb.
-  if (const CommandResult dot = RunCommand({resolvectl, "dnsovertls", name_, "no"});
-      !dot.ok()) {
-    std::fprintf(stderr, "[tun] resolvectl dnsovertls: %s\n", dot.Describe().c_str());
+  if (const CommandResult dot = RunCommand({resolvectl, "dnsovertls", name_, "no"}); !dot.ok()) {
+    std::fprintf(stderr, "[dns] resolvectl dnsovertls: %s\n", dot.Describe().c_str());
   }
   // The host resolver's cache still holds pre-tunnel answers (and, worse,
   // pre-tunnel addresses for the platform hosts). Windows flushes at exactly
   // this edge.
   if (const CommandResult flush = RunCommand({resolvectl, "flush-caches"}); !flush.ok()) {
-    std::fprintf(stderr, "[tun] resolvectl flush-caches: %s\n", flush.Describe().c_str());
+    std::fprintf(stderr, "[dns] resolvectl flush-caches: %s\n", flush.Describe().c_str());
   }
 
   // Read back rather than trust the exit code: this is the field that
   // separates "connected" from "connected and resolving through the tunnel".
   const CommandResult status = RunCommand({resolvectl, "status", name_});
   if (status.ok() && status.output.find(dnsServers_.front()) == std::string::npos) {
+    return no("systemd-resolved: it accepted the override but does not report " +
+              dnsServers_.front() + " on " + name_);
+  }
+
+  dnsBackend_ = DnsBackend::SystemdResolved;
+  report_.dns_detail = "DNS is on the tunnel through systemd-resolved (per-link on " + name_ +
+                       ", default-route domain `~.`)";
+  if (!probe.resolv_conf_points_at_resolved) {
+    // Everything that goes through glibc/nss-resolve is pinned. Everything that
+    // reads /etc/resolv.conf ITSELF — Go binaries with the pure-Go resolver,
+    // musl programs, `dig`, some browsers — still sees the old file. Those
+    // queries are REJECTED rather than leaked (the nftables DNS floor closes
+    // off-tunnel :53 whenever dns_applied), so this is an outage class, not a
+    // leak class, and it is worth saying which.
+    report_.dns_detail +=
+        ". NOTE: " + std::string(kResolvConfPath) +
+        " does not point at systemd-resolved, so programs that read it directly instead of "
+        "going through nss-resolve will fail to resolve (the tunnel's DNS floor rejects "
+        "off-tunnel :53 rather than letting those queries leak)";
+  }
+  return true;
+}
+
+bool Tunnel::ApplyDnsViaResolvconf(const DnsHostProbe& probe, std::string* reason) {
+  const auto no = [reason](std::string message) {
+    if (reason) *reason = std::move(message);
+    return false;
+  };
+  if (!probe.resolvconf_present) return no("resolvconf: not installed");
+  if (probe.resolvconf_is_resolvectl) {
+    return no("resolvconf: the `resolvconf` on this machine is a symlink to resolvectl "
+              "(systemd's compatibility shim), so it cannot work where systemd-resolved does not");
+  }
+  if (probe.resolved_running && probe.nss_resolve_before_dns) {
+    return no("resolvconf: systemd-resolved is running and /etc/nsswitch.conf resolves names "
+              "through it, so rewriting " +
+              std::string(kResolvConfPath) + " would not change where queries go");
+  }
+  const std::string resolvconf = FindTool("resolvconf");
+  if (resolvconf.empty()) return no("resolvconf: not installed");
+
+  // Debian's resolvconf orders interfaces through /etc/resolvconf/interface-order
+  // and expects an `<iface>.<prog>`-shaped name; openresolv takes the interface
+  // name as-is and additionally understands `-m 0 -x` (highest priority,
+  // exclusive), which is what a full-tunnel VPN wants. wg-quick makes the same
+  // distinction the same way.
+  struct stat st {};
+  const bool debianStyle = ::stat("/etc/resolvconf/interface-order", &st) == 0;
+  const std::string iface = debianStyle ? ("tun." + name_) : name_;
+
+  std::string stdinData;
+  size_t written = 0;
+  for (const auto& resolver : dnsServers_) {
+    if (written >= kMaxResolvConfNameservers) break;
+    stdinData += "nameserver " + resolver + "\n";
+    ++written;
+  }
+
+  // Not on a RE-APPLY of this same tier: the record on disk is then OUR OWN,
+  // and "finishing" it would deregister and immediately re-register, which is a
+  // window in which /etc/resolv.conf holds the pre-tunnel resolver again.
+  if (dnsBackend_ != DnsBackend::Resolvconf) {
+    if (std::string leftover; !FinishLeftoverTakeover(&leftover)) {
+      return no("resolvconf: " + leftover);
+    }
+  }
+
+  // STATE BEFORE MUTATION, the same rule tier 3 follows: a SIGKILL one
+  // instruction after the `-a` must still leave something on disk that says
+  // "urnetworkd registered an interface with resolvconf", or the registration
+  // outlives every process that knows about it. Recording a registration that
+  // then fails to happen is the harmless direction — the undo is a `-d` on an
+  // unregistered interface, which is a no-op.
+  DnsTakeoverState takeover;
+  takeover.backend = "resolvconf";
+  takeover.iface = iface;
+  takeover.kind = "resolvconf";
+  if (std::string error; !WriteTakeoverState(takeover, &error)) {
+    return no("resolvconf: the undo could not be recorded (" + error +
+              "), so the registration was not made");
+  }
+
+  // Exclusive first (openresolv), plain second (Debian resolvconf rejects the
+  // options). Whichever lands, the deregistration is identical.
+  CommandResult add = RunCommand({resolvconf, "-a", iface, "-m", "0", "-x"}, stdinData);
+  if (!add.ok()) add = RunCommand({resolvconf, "-a", iface}, stdinData);
+  if (!add.ok()) {
+    ClearTakeoverState();
+    return no("resolvconf: `resolvconf -a " + iface + "`: " + add.Describe());
+  }
+  resolvconfIface_ = iface;
+  RunCommand({resolvconf, "-u"});  // Debian's -a updates already; openresolv's is idempotent
+
+  // VERIFY AGAINST THE FILE A RESOLVER ACTUALLY READS. resolvconf can be
+  // configured to feed a local caching resolver instead of writing the
+  // nameserver through, and "the command exited 0" is not the question.
+  std::string effective;
+  if (!ReadWholeFile(kResolvConfPath, &effective) ||
+      !ResolvConfHasNameserver(effective, dnsServers_.front())) {
+    RunCommand({resolvconf, "-d", iface});
+    RunCommand({resolvconf, "-u"});
+    ClearTakeoverState();
+    resolvconfIface_.clear();
+    return no("resolvconf: it accepted the registration but " + std::string(kResolvConfPath) +
+              " still does not name " + dnsServers_.front());
+  }
+
+  // dnsTouched_ is deliberately NOT set: it means "resolvectl holds a per-link
+  // override", and this tier's undo lives on disk instead, precisely so it
+  // survives the process.
+  dnsBackend_ = DnsBackend::Resolvconf;
+  report_.dns_detail = "DNS is on the tunnel through resolvconf (registered as " + iface + ")";
+  return true;
+}
+
+bool Tunnel::ApplyDnsViaDirectFile(const DnsHostProbe& probe, std::string* reason) {
+  const auto no = [reason](std::string message) {
+    if (reason) *reason = std::move(message);
+    return false;
+  };
+  if (probe.resolved_running && probe.nss_resolve_before_dns) {
+    // Writing the file would be theatre: nss-resolve answers first for every
+    // glibc lookup and never consults it. Refusing here (rather than writing
+    // and reporting success) is the difference between this build and the one
+    // that reported dns_applied on a host where nothing was applied.
+    return no("direct /etc/resolv.conf: systemd-resolved is running and /etc/nsswitch.conf "
+              "resolves names through it (nss-resolve), so rewriting " +
+              std::string(kResolvConfPath) +
+              " would not change where queries go. Fix systemd-resolved, or remove `resolve` from "
+              "the hosts line in /etc/nsswitch.conf");
+  }
+
+  const std::string content = BuildResolvConf(name_, dnsServers_);
+
+  // A RE-APPLY (resolved restarted, or the reaper re-pushed) MUST NOT BACK UP
+  // AGAIN. The second backup would capture OUR OWN generated file and the
+  // user's original would be gone for good — the classic double-takeover bug.
+  if (dnsBackend_ == DnsBackend::DirectFile) {
+    struct stat ls {};
+    const bool nowSymlink = ::lstat(kResolvConfPath, &ls) == 0 && S_ISLNK(ls.st_mode);
+    // The mode comes from the record, not from a literal: re-applying must not
+    // quietly change the permissions the first takeover chose from the user's
+    // own file.
+    DnsTakeoverState recorded;
+    const mode_t mode =
+        (ReadTakeoverState(&recorded) && recorded.mode != 0) ? recorded.mode : 0644;
+    std::string error;
+    if (!WriteFileAtomic(kResolvConfPath, content, mode, /*inPlaceFallbackOk=*/!nowSymlink,
+                         &error)) {
+      return no("direct /etc/resolv.conf: could not re-write it: " + error);
+    }
+    report_.dns_detail = "DNS is on the tunnel through " + std::string(kResolvConfPath) +
+                         " (re-applied; the original is still saved at " +
+                         kResolvConfBackupPath + ")";
+    return true;
+  }
+
+  if (std::string leftover; !FinishLeftoverTakeover(&leftover)) {
+    return no("direct /etc/resolv.conf: " + leftover);
+  }
+  // A stray backup with no state file: a run that died between the two writes,
+  // or a restore that already ran. It describes nothing, and leaving it would
+  // make the next `mv` in the recovery text put back a file nobody recorded.
+  ::unlink(kResolvConfBackupPath);
+
+  DnsTakeoverState takeover;
+  takeover.backend = "file";
+  takeover.iface = name_;
+  takeover.mode = 0644;
+
+  struct stat ls {};
+  if (::lstat(kResolvConfPath, &ls) == 0) {
+    if (S_ISLNK(ls.st_mode)) {
+      // THE SYMLINK CASE. Replacing a symlink's TARGET is not replacing the
+      // symlink: it would write into /run/systemd/resolve/stub-resolv.conf or
+      // /run/NetworkManager/resolv.conf — files other daemons own and
+      // regenerate — and leave /etc/resolv.conf still pointing at them. The
+      // link itself is replaced (rename() does that atomically) and the target
+      // recorded so teardown recreates exactly the link that was here.
+      char buf[4096];
+      const ssize_t n = ::readlink(kResolvConfPath, buf, sizeof(buf) - 1);
+      if (n <= 0) {
+        return no(std::string("direct /etc/resolv.conf: it is a symlink whose target could not be "
+                              "read: ") +
+                  std::strerror(errno));
+      }
+      takeover.kind = "symlink";
+      takeover.target.assign(buf, static_cast<size_t>(n));
+      if (takeover.target.find('\n') != std::string::npos) {
+        return no("direct /etc/resolv.conf: it is a symlink whose target contains a newline, "
+                  "which cannot be recorded for an exact restore");
+      }
+      if (struct stat through {}; ::stat(kResolvConfPath, &through) == 0) {
+        takeover.mode = through.st_mode & 07777;
+      }
+    } else if (S_ISREG(ls.st_mode)) {
+      takeover.kind = "file";
+      takeover.mode = ls.st_mode & 07777;
+      std::string original;
+      if (!ReadWholeFile(kResolvConfPath, &original)) {
+        return no(std::string("direct /etc/resolv.conf: it could not be read, so it cannot be "
+                              "restored later: ") +
+                  std::strerror(errno));
+      }
+      if (std::string error;
+          !WriteFileAtomic(kResolvConfBackupPath, original, takeover.mode,
+                           /*inPlaceFallbackOk=*/false, &error)) {
+        return no("direct /etc/resolv.conf: the original could not be saved to " +
+                  std::string(kResolvConfBackupPath) + " (" + error +
+                  "), so it is not being replaced");
+      }
+    } else {
+      return no("direct /etc/resolv.conf: it is neither a regular file nor a symlink (mode " +
+                std::to_string(ls.st_mode & 07777) + "); refusing to touch it");
+    }
+  } else if (errno == ENOENT) {
+    takeover.kind = "absent";
+  } else {
+    return no(std::string("direct /etc/resolv.conf: it could not be examined: ") +
+              std::strerror(errno));
+  }
+
+  // STATE BEFORE MUTATION, ALWAYS. A crash between these two writes leaves a
+  // state file describing a takeover that did not happen — and the restore
+  // detects exactly that, because /etc/resolv.conf will not carry our marker,
+  // so it discards the record instead of overwriting a file it never replaced.
+  // The other order loses the original with no record at all.
+  if (std::string error; !WriteTakeoverState(takeover, &error)) {
+    ::unlink(kResolvConfBackupPath);
+    return no("direct /etc/resolv.conf: the restore state could not be recorded (" + error +
+              "), so the file is not being replaced");
+  }
+
+  // inPlaceFallbackOk ONLY for a path that is already a regular file: the
+  // fallback follows symlinks, and following one is the mistake this whole
+  // branch exists to avoid.
+  if (std::string error;
+      !WriteFileAtomic(kResolvConfPath, content, takeover.mode,
+                       /*inPlaceFallbackOk=*/takeover.kind == "file", &error)) {
+    ClearTakeoverState();  // nothing was replaced; leave no phantom ownership
+    return no("direct /etc/resolv.conf: " + error);
+  }
+
+  // READ BACK. Everything above can succeed against a path that some other
+  // layer immediately rewrites (NetworkManager's dns=default plugin does this
+  // on every connectivity change), and "we wrote it" is not the question.
+  std::string effective;
+  if (!ReadWholeFile(kResolvConfPath, &effective) ||
+      effective.find(kResolvConfMarker) == std::string::npos ||
+      !ResolvConfHasNameserver(effective, dnsServers_.front())) {
+    std::string restoreDetail;
+    RestoreDirectResolvConf(&restoreDetail);
+    return no("direct /etc/resolv.conf: it was written, but reading it back does not show " +
+              dnsServers_.front() + " — something else on this machine is rewriting it");
+  }
+
+  // Not dnsTouched_ — see the resolvconf tier: this undo is the on-disk one.
+  dnsBackend_ = DnsBackend::DirectFile;
+  // Say what is actually recorded, per kind: there is NO backup file when the
+  // original was a symlink (the target is the record) or when there was no file
+  // at all, and naming one that does not exist would send a stuck user looking
+  // for it.
+  std::string restored;
+  if (takeover.kind == "symlink") {
+    restored = "it was a symlink to " + takeover.target + ", recorded in " +
+               std::string(kResolvConfStatePath);
+  } else if (takeover.kind == "absent") {
+    restored = "there was no " + std::string(kResolvConfPath) + " before, so teardown removes ours";
+  } else {
+    restored = "the original is saved at " + std::string(kResolvConfBackupPath);
+  }
+  report_.dns_detail = "DNS is on the tunnel through " + std::string(kResolvConfPath) + " (" +
+                       restored +
+                       ", and is put back on disconnect, on the next daemon start, and by "
+                       "`urnetworkd --revert`)";
+  return true;
+}
+
+bool Tunnel::ApplyDns() {
+  report_.dns_applied = false;
+  report_.dns_detail.clear();
+  report_.dns_backend = DnsBackend::None;
+  if (dnsServers_.empty()) {
     report_.dns_detail =
-        "systemd-resolved accepted the override but does not report " + dnsServers_.front() +
-        " on " + name_;
+        "the device reported no tunnel resolvers, so there is nothing to point DNS at";
     return false;
   }
-  report_.dns_applied = true;
+
+  const DnsHostProbe probe = ProbeDnsHost();
+  std::fprintf(stderr, "[dns] host: %s\n", probe.detail.c_str());
+
+  // The test pin. Three tiers cannot all be exercised on one machine — a host
+  // with systemd-resolved never reaches tiers 2 or 3 by itself — so there has
+  // to be a way to make a tester's box take the path under test. Refused
+  // loudly on a bad value rather than ignored: a typo'd override that silently
+  // selects the default is a test that proved nothing.
+  std::string forced;
+  if (const char* env = ::getenv(kDnsBackendEnv); env != nullptr && *env != '\0') {
+    forced = env;
+    if (forced != "resolved" && forced != "resolvconf" && forced != "file") {
+      report_.dns_detail = std::string(kDnsBackendEnv) + "='" + forced +
+                           "' is not one of resolved|resolvconf|file; refusing to guess";
+      return false;
+    }
+    std::fprintf(stderr, "[dns] %s=%s: only that tier will be tried\n", kDnsBackendEnv,
+                 forced.c_str());
+  }
+
+  struct Tier {
+    const char* name;
+    bool (Tunnel::*apply)(const DnsHostProbe&, std::string*);
+  };
+  // THE CONVENTIONAL LINUX VPN ORDER. Most specific and least invasive first;
+  // the one that edits a file the whole machine shares is the last resort.
+  static constexpr Tier kTiers[] = {
+      {"resolved", &Tunnel::ApplyDnsViaResolved},
+      {"resolvconf", &Tunnel::ApplyDnsViaResolvconf},
+      {"file", &Tunnel::ApplyDnsViaDirectFile},
+  };
+
+  const auto succeed = [this]() {
+    report_.dns_applied = true;
+    report_.dns_backend = dnsBackend_;
+    std::fprintf(stderr, "[dns] %s\n", report_.dns_detail.c_str());
+    return true;
+  };
+  const auto tierName = [](DnsBackend b) -> const char* {
+    switch (b) {
+      case DnsBackend::SystemdResolved: return "resolved";
+      case DnsBackend::Resolvconf: return "resolvconf";
+      case DnsBackend::DirectFile: return "file";
+      case DnsBackend::None: break;
+    }
+    return "";
+  };
+
+  std::string reasons;
+  // A RE-APPLY RE-RUNS THE TIER THAT IS ALREADY IN FORCE, FIRST, AND UNDOES IT
+  // BEFORE LETTING ANOTHER TIER CLAIM DNS. Not an optimisation: tiers 2 and 3
+  // share one on-disk undo record (DirectResolvConfStatePath), so letting tier
+  // 3 take over while a tier-2 registration was still live would overwrite the
+  // record of the registration with the record of the file takeover and strand
+  // the registration with nothing left that knows about it. Undo first, claim
+  // second, in that order, always.
+  if (const DnsBackend previous = dnsBackend_; previous != DnsBackend::None) {
+    const std::string same = tierName(previous);
+    if (forced.empty() || forced == same) {
+      for (const Tier& tier : kTiers) {
+        if (same != tier.name) continue;
+        std::string reason;
+        if ((this->*tier.apply)(probe, &reason)) return succeed();
+        reasons = reason;
+        std::fprintf(stderr, "[dns] the tier already in force ('%s') no longer takes: %s\n",
+                     tier.name, reason.c_str());
+      }
+    }
+    if (previous == DnsBackend::SystemdResolved) {
+      if (const std::string resolvectl = FindTool("resolvectl"); !resolvectl.empty()) {
+        RunCommand({resolvectl, "revert", name_});
+      }
+      dnsTouched_ = false;
+    } else {
+      std::string undoDetail;
+      RestoreDirectResolvConf(&undoDetail);
+      if (!undoDetail.empty()) std::fprintf(stderr, "[dns] %s\n", undoDetail.c_str());
+      resolvconfIface_.clear();
+    }
+    dnsBackend_ = DnsBackend::None;
+  }
+
+  for (const Tier& tier : kTiers) {
+    if (!forced.empty() && forced != tier.name) continue;
+    std::string reason;
+    if ((this->*tier.apply)(probe, &reason)) return succeed();
+    if (!reasons.empty()) reasons += "; ";
+    reasons += reason;
+    std::fprintf(stderr, "[dns] tier '%s' did not take: %s\n", tier.name, reason.c_str());
+  }
+
+  // NOTHING COULD APPLY DNS. Say it in words a user can act on, and say every
+  // tier that was tried — "DNS is NOT going through the tunnel" with no reason
+  // is what the shipped build said, and it is unactionable.
+  //
+  // THE FAIL-CLOSED RULE IS ASYMMETRIC TODAY, AND THIS IS WHERE THE GAP IS.
+  // Tunnel::Configure refuses a BRING-UP that cannot pin DNS. A re-apply that
+  // fails MID-SESSION (this path, reached from TunnelHost::OnResolvedAppeared)
+  // only publishes dns_applied=false and the session keeps running — with names
+  // leaking, because the nftables DNS floor is gated on dns_applied and comes
+  // down with it. Closing that needs a decision in TunnelHost, which this file
+  // does not own.
+  // TODO(TunnelHost owner): treat a failed re-apply the way a failed egress
+  // re-check is treated — tear the session down (or re-arm) rather than
+  // continuing with DNS off the tunnel.
+  report_.dns_detail =
+      "DNS is NOT going through the tunnel: every mechanism was tried and none could take. " +
+      reasons +
+      ". Install and start systemd-resolved (`sudo systemctl enable --now systemd-resolved`), or "
+      "install openresolv, or make " +
+      std::string(kResolvConfPath) + " a writable regular file or symlink.";
+  return false;
+}
+
+bool Tunnel::VerifyDnsStillApplied(std::string* detail) const {
+  const auto no = [detail](std::string message) {
+    if (detail) *detail = std::move(message);
+    return false;
+  };
+  if (!report_.dns_applied || dnsBackend_ == DnsBackend::None) {
+    return no("DNS was never applied on this tunnel");
+  }
+  if (dnsBackend_ == DnsBackend::SystemdResolved) {
+    const std::string resolvectl = FindTool("resolvectl");
+    if (resolvectl.empty()) return no("resolvectl has gone away");
+    const CommandResult status = RunCommand({resolvectl, "status", name_});
+    if (!status.ok()) return no("resolvectl status " + name_ + ": " + status.Describe());
+    if (status.output.find(dnsServers_.front()) == std::string::npos) {
+      return no("systemd-resolved no longer reports " + dnsServers_.front() + " on " + name_);
+    }
+    return true;
+  }
+  std::string effective;
+  if (!ReadWholeFile(kResolvConfPath, &effective)) {
+    return no(std::string(kResolvConfPath) + " could not be read");
+  }
+  if (dnsBackend_ == DnsBackend::DirectFile &&
+      effective.find(kResolvConfMarker) == std::string::npos) {
+    // NetworkManager's dns=default plugin and dhcpcd both do this, on every
+    // connectivity change. The DNS floor turns it into an outage rather than a
+    // leak; naming it is what makes that outage diagnosable.
+    return no(std::string(kResolvConfPath) +
+              " has been rewritten by something else since the tunnel came up");
+  }
+  if (!ResolvConfHasNameserver(effective, dnsServers_.front())) {
+    return no(std::string(kResolvConfPath) + " no longer names " + dnsServers_.front());
+  }
   return true;
 }
 
 Tunnel::~Tunnel() {
+  // TWO INDEPENDENT UNDOS, NEITHER GATED ON WHICH TIER "WON", because a tier
+  // can leave state behind WITHOUT winning. ApplyDnsViaResolved sets the
+  // per-link DNS and only then discovers that `resolvectl domain` fails: that
+  // returns false, ApplyDns falls through to a lower tier, and dnsBackend_ ends
+  // up naming the lower one. A teardown that switched on dnsBackend_ alone
+  // would walk straight past resolved's live override — which is exactly the
+  // bug shape this file keeps finding: cleanup keyed on the happy path.
+  //
+  //   dnsTouched_          -> resolvectl holds a per-link override on this tun.
+  //   the on-disk state    -> tier 2 or 3 changed something that outlives us.
   if (dnsTouched_ && !name_.empty()) {
     const std::string resolvectl = FindTool("resolvectl");
     if (resolvectl.empty()) {
@@ -2379,15 +3469,31 @@ Tunnel::~Tunnel() {
       // not a no-op. Benign in practice (resolved drops per-link settings when
       // the link goes away with the fd below) but never silent.
       std::fprintf(stderr,
-                   "[tun] WARNING: resolvectl is gone, so the DNS override on %s could not be "
+                   "[dns] WARNING: resolvectl is gone, so the DNS override on %s could not be "
                    "reverted explicitly\n",
                    name_.c_str());
     } else {
       if (const CommandResult r = RunCommand({resolvectl, "revert", name_}); !r.ok()) {
-        std::fprintf(stderr, "[tun] resolvectl revert %s: %s\n", name_.c_str(),
+        std::fprintf(stderr, "[dns] resolvectl revert %s: %s\n", name_.c_str(),
                      r.Describe().c_str());
       }
       RunCommand({resolvectl, "flush-caches"});
+    }
+  }
+  // UNCONDITIONAL, and it is the SAME call the crash path makes
+  // (NetFilter::SweepStaleState). A teardown that took a different route from
+  // the crash recovery is two behaviours that have to agree, and they would
+  // stop agreeing the first time either one changed. It costs one failed
+  // open() on every machine that never left tier 1.
+  {
+    std::string detail;
+    if (RestoreDirectResolvConf(&detail)) {
+      if (!detail.empty()) std::fprintf(stderr, "[dns] %s\n", detail.c_str());
+    } else {
+      std::fprintf(stderr,
+                   "[dns] WARNING: %s. `sudo urnetworkd --revert` retries this, and the next "
+                   "daemon start does it automatically.\n",
+                   detail.c_str());
     }
   }
   RemovePolicyRules();

@@ -86,7 +86,8 @@
 //
 //   3. Tunnel — the tun fd, its address, the 31 capture prefixes (in a
 //      DEDICATED route table, not main, so the fwmark rule can steer the
-//      daemon around them), the systemd-resolved DNS override, and a
+//      daemon around them), the DNS takeover (THREE mechanisms, not one — see
+//      "DNS on a host that may not have systemd-resolved" below), and a
 //      deterministic self-check that BOTH halves took before the caller is
 //      allowed to call the tunnel up.
 //
@@ -644,6 +645,13 @@ class NetFilter {
   //       delete-then-add), so the block is continuous across a crash with no
   //       open window.
   //   otherwise => delete everything (the landed behaviour).
+  // IT ALSO PUTS /etc/resolv.conf BACK (RestoreDirectResolvConf), on every
+  // path, before it touches nftables. That is deliberate reuse rather than a
+  // second revert mechanism: this function is ALREADY what runs at daemon
+  // start, from `urnetworkd --revert` and from the unit's ExecStopPost, i.e.
+  // exactly the three moments at which a crashed tier-3 takeover has to be
+  // undone. It runs first because a machine that cannot resolve names is
+  // stuck in a way it cannot read the rest of the recovery text to fix.
   // Returns TRUE when it left an ARMED FLOOR installed in the kernel (the
   // crash-restart path). The caller MUST hand that to NetFilter::AdoptArmedFloor
   // on the instance that will own the tunnel: the sweep is static, so without
@@ -676,6 +684,13 @@ class NetFilter {
   // One ready-to-print block: every route out, cheapest first (the app toggle
   // works over AF_UNIX, which no ruleset this file emits can block), then the
   // root commands. Ends without a trailing blank line.
+  //
+  // It gains ONE MORE paragraph, and only when it applies: if tier 3 of the DNS
+  // takeover currently owns /etc/resolv.conf (DirectResolvConfStatePath exists),
+  // the exact command that puts the user's original back by hand is appended —
+  // built from the recorded state, so it is `ln -sf <the real target>` for a
+  // symlink and `mv` for a regular file, never a guess. A user whose daemon
+  // never comes back needs that command and cannot derive it.
   static std::string RecoveryHelpText();
 
   // Tmpfs marker that says "this machine was armed when the daemon died", so a
@@ -708,6 +723,169 @@ class NetFilter {
   std::string lastError_;
   const char* lastErrorCode_ = "";
 };
+
+// ---- DNS on a host that may not have systemd-resolved ----------------------
+//
+// ============================================================================
+// THE DEFECT THIS SECTION EXISTS TO CLOSE. Builds before this one applied DNS
+// through `resolvectl` AND NOTHING ELSE. Two ways that fails, and BOTH of them
+// are the DEFAULT on Arch/CachyOS, which does not enable systemd-resolved:
+//   * resolvectl absent            -> ApplyDns returned false;
+//   * resolvectl present but resolved NOT RUNNING (the `systemd` package ships
+//     the binary either way, so "the tool is on $PATH" was never the question)
+//                                  -> `resolvectl dns` failed, ApplyDns
+//                                     returned false.
+// With the kill switch ON, TunnelHost refused the bring-up. With it OFF — the
+// default, and what a first-time tester uses — the tunnel came up, carried
+// traffic, and every DNS QUERY WENT TO THE ISP RESOLVER. Traffic tunnelled,
+// names not: a silent leak on every Arch machine, present in every shipped
+// build, and invisible because the one field that said so (dns_detail) is not
+// rendered anywhere in the app.
+//
+// THE ORDER IS THE CONVENTIONAL LINUX VPN ORDER, AND EACH TIER IS GATED ON
+// WHAT IS ACTUALLY TRUE OF THE HOST, NEVER ON WHAT IS INSTALLED:
+//   1. systemd-resolved, via resolvectl — but ONLY when resolved is RUNNING
+//      (probed by /run/systemd/resolve, its RuntimeDirectory, which systemd
+//      removes when the unit stops) AND the host's name resolution actually
+//      GOES THROUGH IT (nss-resolve in /etc/nsswitch.conf's hosts line, or
+//      /etc/resolv.conf pointing at the 127.0.0.53 stub). Setting per-link DNS
+//      on a resolved that nothing consults is the SECOND silent leak in the
+//      shipped build: `resolvectl dns` exits 0, dns_applied goes true, and the
+//      queries still leave through whatever /etc/resolv.conf says.
+//   2. openresolv / Debian resolvconf — the tool every non-resolved distro
+//      already arbitrates /etc/resolv.conf with. NOTE that on a systemd host
+//      `resolvconf` is very often a SYMLINK TO resolvectl (measured: it is on
+//      the owner's Bazzite machine). Following it and finding `resolvectl` is
+//      how this tier knows it is looking at resolved's compatibility shim
+//      rather than a real resolvconf, and skips it.
+//   3. /etc/resolv.conf directly — the last resort, and the one that needs
+//      care. See DirectResolvConfStatePath().
+//
+// WHAT HAPPENS WHEN NONE OF THEM WORKS: the tunnel REFUSES TO COME UP,
+// regardless of the kill switch. Defended at Tunnel::Configure, where the
+// refusal is written.
+// ============================================================================
+
+// Which mechanism is actually holding the tunnel's DNS. Published through
+// TunnelReport::dns_detail so a user (and a bug report) can tell tier 1 from
+// tier 3 without reading the journal.
+enum class DnsBackend {
+  None,             // nothing applied: names are NOT on the tunnel
+  SystemdResolved,  // resolvectl dns/domain on the tun link
+  Resolvconf,       // openresolv / Debian resolvconf, `-a <iface>`
+  DirectFile,       // we own /etc/resolv.conf, with an exact restore recorded
+};
+const char* ToString(DnsBackend b);
+
+// Everything the tier choice is made from, probed READ-ONLY: no forks except
+// the ones named, nothing started, nothing D-Bus-activated. Deliberately a
+// value, so the decision can be logged in one line and so the same probe backs
+// the choice, the verification and the failure message.
+struct DnsHostProbe {
+  // resolved is RUNNING, not merely installed. /run/systemd/resolve is its
+  // RuntimeDirectory=; systemd creates it at start and removes it at stop, so
+  // its presence is a cheap syscall-only liveness answer that cannot be
+  // confused with "the systemd package is installed".
+  bool resolved_running = false;
+  bool resolvectl_present = false;
+  // /etc/nsswitch.conf `hosts:` lists `resolve` BEFORE `dns`. When resolved is
+  // also running, this makes nss-resolve authoritative for every glibc lookup
+  // and /etc/resolv.conf a decoration — so tiers 2 and 3 CANNOT fix DNS on
+  // such a host and must not pretend to. When resolved is NOT running,
+  // nss-resolve answers UNAVAIL and `[!UNAVAIL=return]` falls through to dns,
+  // which is exactly the Arch default and why tier 3 is authoritative there.
+  bool nss_resolve_before_dns = false;
+  bool resolvconf_present = false;       // a `resolvconf` exists on $PATH
+  bool resolvconf_is_resolvectl = false; // ...and it is resolved's shim
+  bool resolv_conf_is_symlink = false;
+  std::string resolv_conf_link_target;   // readlink(), verbatim, "" when not a link
+  std::string resolv_conf_realpath;      // where it actually lands
+  // The effective /etc/resolv.conf names the resolved stub (127.0.0.53) or is
+  // one of resolved's own generated files.
+  bool resolv_conf_points_at_resolved = false;
+  std::string detail;                    // one line, for the journal
+};
+DnsHostProbe ProbeDnsHost();
+
+// ---- tier 3: we own /etc/resolv.conf ---------------------------------------
+//
+// THE FOUR THINGS THAT MAKE THIS DANGEROUS, AND WHERE EACH IS HANDLED:
+//
+//  1. /etc/resolv.conf IS USUALLY A SYMLINK (to /run/systemd/resolve/
+//     stub-resolv.conf, to /run/NetworkManager/resolv.conf, to /etc/resolvconf/
+//     run/resolv.conf...). WRITING THROUGH IT IS NOT THE SAME AS REPLACING IT:
+//     it would overwrite a file another daemon owns and regenerates, on a path
+//     that is often tmpfs, and the user's own /etc/resolv.conf would still be
+//     that symlink afterwards. So the symlink itself is REPLACED (rename() over
+//     a symlink replaces the link, not its target) and the link target is
+//     recorded so teardown can recreate it byte-for-byte.
+//  2. THE ORIGINAL MUST COME BACK EXACTLY, INCLUDING AFTER A CRASH. The
+//     original bytes go to DirectResolvConfBackupPath() and the metadata
+//     (symlink? target? mode?) to DirectResolvConfStatePath(). Both are under
+//     /etc and NOT under /run on purpose: /run is cleared by a reboot, and a
+//     backup that a reboot destroys leaves a machine pointing at a resolver
+//     inside a tunnel that no longer exists — a DNS outage that SURVIVES the
+//     reboot and that the user has no way to undo.
+//  3. THE RESTORE IS NOT A SECOND MECHANISM. It is called from exactly the
+//     revert path the daemon already has — NetFilter::SweepStaleState, which
+//     runs at every daemon start, from `urnetworkd --revert` (the documented
+//     escape hatch) and from the unit's ExecStopPost `--revert-unless-armed` —
+//     plus ~Tunnel for the ordinary teardown. Nothing new to remember to call.
+//  4. A PARTIALLY-APPLIED STATE IS DETECTABLE, AND SO IS A FOREIGN ONE.
+//     ApplyDns restores FIRST when it finds a state file already there,
+//     because backing up a second time would back up OUR OWN generated file
+//     and destroy the user's original forever. And the restore refuses to put
+//     the backup back when /etc/resolv.conf no longer carries our marker line:
+//     something else (NetworkManager, dhcpcd, the admin) has moved on since,
+//     and clobbering their newer file with our stale copy is the worse error.
+//
+// THE ONE THING THIS TIER CHANGES THAT TIER 1 DOES NOT, WRITTEN DOWN BECAUSE IT
+// CANNOT BE MEASURED FROM A systemd-resolved MACHINE: /etc/resolv.conf is read
+// by THIS DAEMON TOO, and the daemon's own sockets are deliberately steered
+// AROUND the tunnel (kEgressMark). Under tier 1 the daemon's lookups go to the
+// 127.0.0.53 stub, and resolved re-issues them from ITS cgroup, unmarked, so
+// they enter the tun and the SDK's UpgradeMux answers them — that is the path
+// that is measured working. Under tier 3 a daemon lookup that goes through
+// getaddrinfo/the Go resolver reads our file, gets the tunnel's resolver
+// address, and sends it from a MARKED socket, i.e. off-tunnel, where that
+// address may answer nothing.
+//
+// THE OBVIOUS FIX IS FORBIDDEN, AND BY THIS FILE. Routing the tunnel resolvers
+// into the tun in table main would put MARKED DAEMON PACKETS INTO OUR OWN TUN —
+// which is leg 3 of Tunnel::VerifyEgressWitness (urnw_probe_tun must be exactly
+// zero, it is the 2026-08-15 amplification signature) and would tear the tunnel
+// down, correctly. Adding an off-tunnel fallback nameserver is the leak this
+// section exists to remove. So neither is done.
+//
+// WHAT MAKES IT SURVIVABLE, AND WHAT STILL HAS TO BE CHECKED ON A REAL ARCH BOX:
+// the SDK does its own DoH from its own sockets (it is listed among the
+// daemon's off-tunnel socket users beside jwt refresh and contract waits), and
+// the urnw_out chain ACCEPTS the daemon's cgroup and mark ABOVE the DNS floor,
+// so the daemon is permitted to resolve off-tunnel by whatever means it has.
+// Nobody has watched a control plane survive tier 3 for an hour. That
+// measurement needs a machine without systemd-resolved and cannot be faked
+// here.
+const char* DirectResolvConfPath();        // /etc/resolv.conf
+const char* DirectResolvConfBackupPath();  // the original bytes
+const char* DirectResolvConfStatePath();   // the metadata; its EXISTENCE means
+                                           // "urnetworkd owns /etc/resolv.conf
+                                           // right now and has not put it back"
+
+// PURE: the exact bytes tier 3 writes, so the generated file can be reviewed
+// (and diffed) without a tunnel, a root shell or a host that lacks resolved.
+// Caps at MAXNS (3) because glibc silently ignores the rest, and emits NO
+// `search`/`domain` line — the DHCP search list is the /etc/resolv.conf
+// equivalent of the domain that resolved's `~.` exists to override.
+std::string BuildResolvConf(const std::string& iface, const std::vector<std::string>& resolvers);
+
+// Puts /etc/resolv.conf back exactly as it was, and clears the state. A no-op
+// (true) when no state file exists, so it is safe on every path. *detail gets
+// one line describing what happened whenever anything did.
+//
+// A SIGKILL between the takeover and this call leaves the state file behind on
+// purpose: that is what the next daemon start (and `urnetworkd --revert`)
+// reads to finish the job.
+bool RestoreDirectResolvConf(std::string* detail);
 
 // ---- the tun ---------------------------------------------------------------
 
@@ -745,7 +923,17 @@ struct TunnelReport {
   std::string egress_mechanism;
   std::string egress_detail;
   bool dns_applied = false;
-  std::string dns_detail;         // why not, when dns_applied is false
+  // WIDENED, DELIBERATELY. It used to be "why not, when dns_applied is false"
+  // and empty otherwise — which meant a machine whose names were on the tunnel
+  // could not say HOW, and the three tiers below are not interchangeable to
+  // anyone diagnosing a leak. It now always carries one line: on success, which
+  // mechanism holds DNS plus any caveat that survived; on failure, every tier
+  // that was tried and the reason it did not take, in words a user can act on.
+  // ControlProtocol.hpp's StatusReply::dns_detail comment still says the old
+  // thing; nothing branches on it being empty (checked: every use in the daemon
+  // and the app is an assignment or a clear).
+  std::string dns_detail;
+  DnsBackend dns_backend = DnsBackend::None;
   std::string route_detail;       // the first failing step, verbatim
 };
 
@@ -776,10 +964,35 @@ class Tunnel {
   // permit and the DNS override can never name different servers.
   const std::vector<std::string>& resolvers() const { return dnsServers_; }
 
-  // Re-push the systemd-resolved override. Called when resolved restarts
-  // (it forgets per-link settings across a restart, and a DHCP lease can beat
-  // our `~.` default-route domain — docs/linux_agent_help.md R5).
+  // Put the tunnel's resolvers in force, by whichever of the three tiers this
+  // host can actually carry (see "DNS on a host that may not have
+  // systemd-resolved" above). Idempotent and re-callable: TunnelHost calls it
+  // again when resolved restarts (it forgets per-link settings across a
+  // restart, and a DHCP lease can beat our `~.` default-route domain —
+  // docs/linux_agent_help.md R5), and a re-call is also how a host that LOST
+  // resolved mid-session falls down to a lower tier instead of staying leaked.
+  //
+  // Re-calling never re-backs-up: tier 3 recognises its own marker in
+  // /etc/resolv.conf and rewrites the content in place, so the user's original
+  // is captured exactly once, on the first takeover.
   bool ApplyDns();
+
+  // Is the DNS we applied STILL in force? Cheap (one file read for tiers 2/3,
+  // one `resolvectl status` for tier 1) and side-effect free, so it can sit on
+  // the reaper tick beside NetFilter::Verify().
+  //
+  // IT IS NOT HYPOTHETICAL, AND THAT IS THE POINT. NetworkManager's `dns=default`
+  // plugin rewrites /etc/resolv.conf on every connectivity change, dhcpcd does
+  // the same, and either one silently un-applies tier 3 mid-session. The nftables
+  // DNS floor (pinned :53, installed whenever dns_applied) turns that from a leak
+  // into an outage — off-tunnel :53 is rejected — but an outage nobody can name
+  // is still a bug report nobody can answer.
+  //
+  // TODO(TunnelHost owner): call this from the reaper tick and re-ApplyDns() on
+  // false, the way Verify() re-applies the ruleset. Nothing calls it yet.
+  bool VerifyDnsStillApplied(std::string* detail) const;
+
+  DnsBackend dnsBackend() const { return dnsBackend_; }
 
   // THE GATE, AND THE ONLY ONE. Every surface that says "egress is protected"
   // — the bring-up refusal, the post-connect gate TunnelHost runs after the
@@ -847,12 +1060,26 @@ class Tunnel {
   // VerifyEgressWitness, asked of a real socket instead of a hypothetical, and
   // every caller asks it every time.
 
+  // One per tier. Each fills *reason on false with the sentence the user sees
+  // in dns_detail when every tier has failed, so the failure message is
+  // assembled from what was actually tried rather than guessed at the end.
+  bool ApplyDnsViaResolved(const DnsHostProbe& probe, std::string* reason);
+  bool ApplyDnsViaResolvconf(const DnsHostProbe& probe, std::string* reason);
+  bool ApplyDnsViaDirectFile(const DnsHostProbe& probe, std::string* reason);
+
   int fd_ = -1;
   std::string name_;
   std::string localAddr_;  // the tun's own address; leg A compares against it
   std::vector<std::string> dnsServers_;
   bool rulesInstalled_ = false;
+  // "resolvectl was given a per-link override that must be reverted". Tiers 2
+  // and 3 record their undo on DISK (DirectResolvConfStatePath) instead, because
+  // theirs has to survive this process dying.
   bool dnsTouched_ = false;
+  DnsBackend dnsBackend_ = DnsBackend::None;
+  // The name tier 2 registered with resolvconf (`tun.` prefixed on Debian
+  // resolvconf), so teardown deregisters exactly what was registered.
+  std::string resolvconfIface_;
   TunnelReport report_;
 };
 

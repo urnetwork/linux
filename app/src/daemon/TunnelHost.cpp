@@ -50,6 +50,19 @@ constexpr int kFilterVerifyLogEvery = 12;  // ~once a minute
 // exists for ran for forty minutes.
 constexpr int kEgressWitnessIntervalSeconds = 30;
 
+// How often the DNS override is re-checked mid-session. NetworkManager's
+// dns=default plugin and dhcpcd rewrite /etc/resolv.conf on EVERY connectivity
+// change, so the direct-file tier can be silently displaced seconds after it is
+// applied — and the resolvectl tier can be displaced by a resolved restart. 10s
+// is a compromise: the check is one file read (tiers 2/3) or one resolvectl fork
+// (tier 1), and the window it leaves is bounded by the DNS floor, which turns a
+// displaced override into an outage rather than a leak.
+constexpr int kDnsVerifyIntervalSeconds = 10;
+
+// Consecutive failed re-applies before the session is stopped. Three ticks of
+// kDnsVerifyIntervalSeconds ~= 30s of unprotected names, bounded by the floor.
+constexpr int kDnsRepairAttempts = 3;
+
 int64_t UnixMillis() { return g_get_real_time() / 1000; }
 int64_t MonotonicSeconds() { return g_get_monotonic_time() / G_USEC_PER_SEC; }
 
@@ -646,6 +659,16 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
         status_.dns_detail = report.dns_detail;
         status_.tunnel_interface = report.interface;
       }
+      // PER-SESSION LATCH for the reaper's DNS check. It cannot gate on the
+      // live dns_applied, because the very failure it exists to catch clears
+      // that flag — gating on it would make the check switch itself off at the
+      // moment it became necessary. This records what the session was BUILT
+      // with: false means the user opted out via URNETWORK_ALLOW_UNPROTECTED_DNS
+      // and must not be nagged, true means DNS protection is owed for the whole
+      // session.
+      dnsProtectionExpected_ = tunnel_->report().dns_applied;
+      dnsVerifyTicks_ = 0;
+      dnsVerifyFailures_ = 0;
       if (killSwitchRequested_.load() && !tunnel_->report().dns_applied) {
         // The kill switch closes off-tunnel :53. Coming up with the DNS
         // override not in force would leave the machine unable to resolve at
@@ -1170,6 +1193,75 @@ void TunnelHost::MaintainFilterLocked() {
              ToString(filter_.state()));
 }
 
+void TunnelHost::MaintainDnsLocked() {
+  // THE CONSUMER FOR Tunnel::VerifyDnsStillApplied. It had none — the check was
+  // written, documented as the mitigation for the NetworkManager rewrite, and
+  // then called from nowhere, which is the same shape as NetFilter::Verify()
+  // before MaintainFilterLocked existed and as the egress witness before the
+  // reaper called it. A safety check with no caller is not a mitigation; it is
+  // a comment that compiles.
+  //
+  // What it defends against: the override is applied ONCE at bring-up, and
+  // every mechanism that owns /etc/resolv.conf on a desktop (NetworkManager's
+  // dns=default plugin, dhcpcd, a resolved restart) rewrites it later, on a
+  // schedule nothing tells us about. The DNS floor means the consequence is an
+  // outage rather than a leak — but an unexplained outage on a machine that
+  // says "Connected" is precisely the failure a tester cannot diagnose.
+  if (tunnel_ == nullptr) return;
+  if (!dnsProtectionExpected_) return;  // the session opted out at bring-up
+  if (++dnsVerifyTicks_ < kDnsVerifyIntervalSeconds) return;
+  dnsVerifyTicks_ = 0;
+
+  std::string detail;
+  if (tunnel_->VerifyDnsStillApplied(&detail)) {
+    dnsVerifyFailures_ = 0;
+    return;
+  }
+  ++dnsVerifyFailures_;
+  DaemonLogf("[tunnel] the DNS override is no longer in force (%s); re-applying it\n",
+             detail.c_str());
+
+  // REPAIR FIRST, the same order MaintainFilterLocked uses: re-applying is
+  // almost always enough, because the displacing write is a one-shot.
+  const bool applied = tunnel_->ApplyDns();
+  {
+    std::scoped_lock statusLock(statusMutex_);
+    status_.dns_applied = tunnel_->report().dns_applied;
+    status_.dns_detail = tunnel_->report().dns_detail;
+  }
+  if (applied) {
+    dnsVerifyFailures_ = 0;
+    DaemonLogf("[tunnel] the DNS override has been re-applied (%s)\n",
+               tunnel_->report().dns_detail.c_str());
+    // The floor pins the resolvers the override just (re)published, so it has
+    // to be rebuilt from the new report rather than left naming the old ones.
+    std::string ignored;
+    ApplyFilterLocked(FilterState::Connected, &ignored);
+    return;
+  }
+
+  // Repair failed. Rebuild the filter anyway so the floor tracks
+  // dns_applied=false honestly, then escalate: a session whose names cannot be
+  // protected is the same class of defect as proven-unprotected egress, and
+  // bring-up already refuses it. Staying up would mean the tunnel is stricter
+  // about the leak at connect time than it is one second later.
+  std::string ignored;
+  ApplyFilterLocked(FilterState::Connected, &ignored);
+  if (dnsVerifyFailures_ < kDnsRepairAttempts) {
+    DaemonLogf("[tunnel] the DNS override could not be re-applied (attempt %d of %d): %s\n",
+               dnsVerifyFailures_, kDnsRepairAttempts,
+               tunnel_->report().dns_detail.c_str());
+    return;
+  }
+  StopUnsafeSessionLocked(
+      "dns override lost",
+      "Your DNS stopped going through the tunnel and could not be restored, so the "
+      "connection was stopped rather than left resolving names outside it. Something "
+      "on this machine is taking ownership of /etc/resolv.conf — NetworkManager and "
+      "dhcpcd both do. (" + tunnel_->report().dns_detail + ")",
+      ctl::kCodeDnsApplyFailed);
+}
+
 namespace {
 
 // Read one of the tun's kernel byte counters. Absent/unreadable -> 0, which the
@@ -1329,6 +1421,7 @@ void TunnelHost::Reap() {
     // looks perfectly healthy from in here, and the early return above it used
     // to be the end of the tick.
     MaintainFilterLocked();
+    MaintainDnsLocked();
     return;
   }
 
@@ -1410,16 +1503,25 @@ void TunnelHost::OnResolvedAppeared(GDBusConnection*, const gchar*, const gchar*
     self->status_.dns_applied = report.dns_applied;
     self->status_.dns_detail = report.dns_detail;
   }
-  if (!applied) {
-    std::fprintf(stderr, "[tunnel] the DNS override did not survive the restart: %s\n",
-                 report.dns_detail.c_str());
-  }
   // The DNS port floor is only correct while the override is in force, and the
   // resolvers it pins come back out of the tunnel on this same pass — so this
   // re-apply is what keeps the pinned :53 permit naming the servers resolved
   // was actually given.
   std::string ignored;
   self->ApplyFilterLocked(FilterState::Connected, &ignored);
+
+  if (!applied) {
+    // THIS USED TO BE AN fprintf AND NOTHING ELSE, and the ApplyFilterLocked
+    // above re-derives block_offtunnel_dns from the now-false dns_applied — so
+    // the same pass that failed to restore the override also REMOVED the floor
+    // that was containing the failure, leaving the LAN permit to accept :53 to
+    // the router. A session that comes up refusing this exact condition must
+    // not tolerate it mid-flight; hand it to the reaper, which repairs a few
+    // times and then stops the session with a reason the user can act on.
+    DaemonLogf("[tunnel] the DNS override did not survive the systemd-resolved restart: %s\n",
+               report.dns_detail.c_str());
+    self->dnsVerifyTicks_ = kDnsVerifyIntervalSeconds;  // check on the next tick
+  }
 }
 
 }  // namespace urnw

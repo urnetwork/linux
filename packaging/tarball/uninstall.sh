@@ -12,6 +12,11 @@
 # whenever URnetwork wrote it (leaving a faked location behind would be a
 # bug, so that is not behind the prompt).
 #
+# It also LIFTS THE FIREWALL before removing anything. The kill switch is an
+# nftables table that deliberately outlives the process, and the unit's
+# ExecStopPost preserves an armed floor across a stop -- so uninstalling an
+# armed machine used to delete the only binary that knows how to unblock it.
+#
 # Options:
 #   --purge         also remove state without prompting
 #   --keep-state    keep state without prompting
@@ -53,7 +58,8 @@ while [ $# -gt 0 ]; do
         --yes|-y)     ASSUME_YES=1; shift ;;
         --dry-run)    DRY_RUN=1; shift ;;
         --prefix)     PREFIX="${2:?--prefix needs a directory}"; shift 2 ;;
-        -h|--help)    sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,/^set -Eeuo/p' "${BASH_SOURCE[0]}" \
+                          | sed -e '$d' -e 's/^# \{0,1\}//'; exit 0 ;;
         *) die "unknown argument: $1 (see --help)" ;;
     esac
 done
@@ -100,6 +106,23 @@ if command -v dpkg >/dev/null 2>&1; then
         *installed*) die "${PKG_NAME} is owned by dpkg/apt -- remove it with: sudo apt purge ${PKG_NAME}" ;;
     esac
 fi
+if command -v rpm >/dev/null 2>&1 && rpm -q "${PKG_NAME}" >/dev/null 2>&1; then
+    die "${PKG_NAME} is owned by rpm -- remove it with: sudo dnf remove ${PKG_NAME}"
+fi
+# ...and never remove a pacman-owned one either. Queried by PATH rather than by
+# name for the same reason install.sh does it: a future Arch/AUR package could
+# be called urnetwork, urnetwork-bin, urnetwork-daemon or urnetwork-git, and
+# the file is what actually collides. `pacman -Qo` exits non-zero both when
+# nothing owns the path and when the path does not exist.
+if command -v pacman >/dev/null 2>&1 && [ -z "${PREFIX}" ]; then
+    for _p in "${LIB_DIR}/urnetworkd" "${BIN_DIR}/urnetwork" \
+              /usr/lib/systemd/system/"${UNIT}" /lib/systemd/system/"${UNIT}"; do
+        _owner="$( (pacman -Qoq "${_p}" 2>/dev/null || true) | head -n1 )"
+        if [ -n "${_owner}" ]; then
+            die "the pacman package '${_owner}' owns ${_p} -- remove it with: sudo pacman -R ${_owner}"
+        fi
+    done
+fi
 
 # File list: the manifest install.sh wrote; a hardcoded fallback otherwise.
 # Fallback must track the MIGRATION.md installed-path table (and
@@ -109,14 +132,20 @@ if [ -f "${PREFIX}${MANIFEST_REL}" ]; then
     MANIFEST="$(cat "${PREFIX}${MANIFEST_REL}")"
 else
     warn "no manifest at ${PREFIX}${MANIFEST_REL}; using the built-in file list"
-    # Both unit locations are listed: the standard layout ships it to
-    # /lib/systemd/system, the immutable one to /etc/systemd/system. Removing
-    # a path that does not exist is a no-op, and leaving a stale unit behind
-    # would keep a dead service in systemctl's list forever.
+    # ALL THREE unit locations are listed. The immutable layout ships it to
+    # /etc/systemd/system; the standard layout writes /lib/systemd/system,
+    # which on every usr-merged distribution (Arch, CachyOS, Debian >= 12,
+    # Ubuntu >= 20.04, Fedora) is a symlink and lands the file in
+    # /usr/lib/systemd/system -- which is also where install.sh now records it.
+    # An older install's manifest says /lib/..., a newer one says /usr/lib/...,
+    # and a host where /lib is a real directory says /lib/... and means it.
+    # Removing a path that does not exist is a no-op; leaving a stale unit
+    # behind keeps a dead service in systemctl's list forever.
     MANIFEST="${LIB_DIR}/urnetworkd
 ${LIB_DIR}/libURnetworkSdk.so
 ${BIN_DIR}/urnetwork
 /lib/systemd/system/urnetworkd.service
+/usr/lib/systemd/system/urnetworkd.service
 /etc/systemd/system/urnetworkd.service
 ${SHARE_DIR}/applications/network.ur.urnetwork.desktop
 ${SHARE_DIR}/metainfo/network.ur.urnetwork.metainfo.xml
@@ -133,6 +162,35 @@ fi
 if [ -z "${PREFIX}" ] && [ -d /run/systemd/system ]; then
     run systemctl stop "${UNIT}" || true
     run systemctl disable "${UNIT}" || true
+fi
+
+# LIFT THE FIREWALL BEFORE DELETING THE ONLY THING THAT CAN LIFT IT.
+#
+# The kill switch is an nftables table that outlives the process ON PURPOSE,
+# and the unit's ExecStopPost is `--revert-unless-armed`: a machine that was
+# ARMED when the daemon stopped keeps its block floor, by design, so a crash
+# does not open a window. That design turns an uninstall into a trap -- stop
+# the unit, delete /usr/lib/urnetwork/urnetworkd, and the floor is still in the
+# kernel with nothing left on the machine that knows how to remove it. The user
+# is off the network, and the recovery command the unit file documented has
+# just been deleted.
+#
+# `--revert` is the unconditional sweep (table, policy rules, capture routes,
+# armed marker) and is idempotent by construction, so running it on a machine
+# with nothing installed is a successful no-op. It needs root, which we already
+# checked, and it must run while the binary still exists.
+if [ -z "${PREFIX}" ] && [ "$(uname -s)" = 'Linux' ] && [ -x "${LIB_DIR}/urnetworkd" ]; then
+    log "lifting the URnetwork firewall (nftables table, policy rules, capture routes)..."
+    if [ "${DRY_RUN}" = 1 ]; then
+        printf 'would run: %s --revert\n' "${LIB_DIR}/urnetworkd"
+    elif ! "${LIB_DIR}/urnetworkd" --revert; then
+        warn "'${LIB_DIR}/urnetworkd --revert' failed. If this machine is now blocked, run
+  sudo nft delete table inet urnetwork
+before or after this uninstall finishes -- the binary is about to be removed."
+    fi
+elif [ -z "${PREFIX}" ] && [ "$(uname -s)" = 'Linux' ]; then
+    # No binary to revert with: say what to type rather than leaving it silent.
+    warn "no ${LIB_DIR}/urnetworkd to revert the firewall with. If this machine is blocked, run: sudo nft delete table inet urnetwork"
 fi
 
 log "removing installed files..."
@@ -182,6 +240,27 @@ if [ "${remove_state}" = 1 ]; then
             run delgroup --system urnetwork
         fi
     fi
+fi
+
+# The SELinux policy module install.sh built and loaded on an enforcing host.
+# It is an integration artifact, not user state, so it goes with the files
+# rather than behind the state prompt -- and nothing else on the system will
+# ever remove it. Hosts with no SELinux (Arch, CachyOS, Debian, Ubuntu) have no
+# semodule and skip this entirely; `semodule -l` is read-only, so a host that
+# never had the module installed does nothing either.
+if [ -z "${PREFIX}" ] && command -v semodule >/dev/null 2>&1; then
+    if semodule -l 2>/dev/null | grep -qx 'urnetwork'; then
+        log "removing the 'urnetwork' SELinux policy module..."
+        run semodule -r urnetwork || \
+            warn "could not remove the SELinux policy module; remove it with: sudo semodule -r urnetwork"
+    fi
+fi
+
+# /run/urnetwork survives a stop on purpose (RuntimeDirectoryPreserve=yes in the
+# unit, so a crash-restart keeps the kill-switch marker). With the daemon gone
+# that directory is just a leftover holding a marker nothing will ever read.
+if [ -z "${PREFIX}" ] && [ -d /run/urnetwork ]; then
+    run rm -rf /run/urnetwork
 fi
 
 if [ -z "${PREFIX}" ] && [ -d /run/systemd/system ]; then
