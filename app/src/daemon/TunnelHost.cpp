@@ -43,6 +43,12 @@ constexpr int kFilterVerifyIntervalSeconds = 5;
 // not turn the journal into a 5 s heartbeat. Log the first failure, then one
 // in this many.
 constexpr int kFilterVerifyLogEvery = 12;  // ~once a minute
+// The live egress witness costs one nft read + one socket + four datagrams and
+// no network round trip, so it is cheap — but it does emit packets, so it does
+// not belong on every tick either. 30 s means two consecutive failures cap the
+// exposure at ~60 s. The comparison that sets the bar: the incident this
+// exists for ran for forty minutes.
+constexpr int kEgressWitnessIntervalSeconds = 30;
 
 int64_t UnixMillis() { return g_get_real_time() / 1000; }
 int64_t MonotonicSeconds() { return g_get_monotonic_time() / G_USEC_PER_SEC; }
@@ -391,12 +397,43 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       }
 
       // --- 1) egress self-exclusion FIRST -----------------------------------
-      // The mark chain has to exist before a single capture route lands, or
-      // the daemon's own SDK sockets (jwt refresh, window enumeration, DoH,
+      // The exclusion has to be in force before a single capture route lands,
+      // or the daemon's own SDK sockets (jwt refresh, window enumeration, DoH,
       // contract waits, the provider transports) fall into our own tun and the
-      // control plane starves. urnet::setEgressInterfaceIndex cannot do this
-      // job: connect:egress_other.go makes applyEgressInterface a no-op off
-      // Windows.
+      // control plane starves — or, as measured on 2026-08-15, loops.
+      //
+      // 1a. THE MECHANISM: mark this process's sockets AT CREATION. This must
+      //     happen before step 3 builds the DeviceLocal, because that is what
+      //     creates the SDK's sockets, and a mark that arrives after connect()
+      //     is too late to matter — the route (and with it the source address)
+      //     is already chosen. urnet::setEgressInterfaceIndex cannot do this
+      //     job: connect:egress_other.go makes applyEgressInterface an 11-line
+      //     `return nil` off Windows, and the SDK ABI exposes no dialer
+      //     Control hook, so the mark has to be applied from outside the
+      //     process. A cgroup-bpf sock_create program is the one hook that
+      //     reaches Go's sockets without touching the vendored SDK.
+      //
+      //     A failure here is NOT fatal on its own: the nftables chain below
+      //     is a genuine belt for sockets that already exist, and some hosts
+      //     have no CONFIG_CGROUP_BPF. What is fatal is failing the packet
+      //     witness in Tunnel::Configure, which is what decides whether this
+      //     tunnel is allowed to exist.
+      {
+        std::string markerError;
+        if (egressMarker_.Attach(cgroup_, kEgressMark, &markerError)) {
+          DaemonLogf("[tunnel] egress: %s\n", egressMarker_.detail().c_str());
+        } else {
+          DaemonLogf(
+              "[tunnel] WARNING: this daemon's own sockets could NOT be marked at creation "
+              "(%s). Falling back to the nftables mark chain alone, which cannot repair a "
+              "source address connect() has already chosen. The packet witness in the tun "
+              "bring-up decides whether that is good enough; it usually is not.\n",
+              markerError.c_str());
+        }
+      }
+
+      // 1b. THE BELT: the nftables cgroup mark chain, plus the ruleset that
+      //     carries the packet witness's counters.
       const bool egressPossible = cgroup_.valid && !FindTool("nft").empty();
       if (!egressPossible && !allowUnprotectedEgress_) {
         const std::string why =
@@ -651,6 +688,32 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
                      ctl::kCodeKillSwitchFailed);
       }
 
+      // --- 7b) WITNESS THE GENERATION THAT ACTUALLY GOVERNS THIS SESSION ----
+      // The witness in step 5 ran against the CONNECTING ruleset. The apply
+      // immediately above emits `add table` / `delete table` / `table {...}` —
+      // the atomic swap — which destroys that table and resets every counter
+      // in it. Before this block existed, the only measurement of the egress
+      // exclusion belonged to a ruleset that was thrown away seconds later,
+      // and the ruleset the tunnel actually ran under was never measured at
+      // all. That is how a tunnel ran forty minutes and 3.38 Tb while
+      // reporting egress_protected = true.
+      //
+      // The io loop IS live by now, so a failure here is a teardown rather
+      // than a refusal — but it is still a teardown, immediately, on four
+      // datagrams, instead of whenever a human happens to look.
+      if (!allowUnprotectedEgress_) {
+        TunnelError witnessError;
+        if (!tunnel_->VerifyEgressWitness("connected", &witnessError)) {
+          PublishError(witnessError.message, ctl::kCodeEgressUnprotected);
+          throw std::runtime_error(witnessError.message);
+        }
+        {
+          const TunnelReport& report = tunnel_->report();
+          std::scoped_lock lock(statusMutex_);
+          status_.egress_protected = report.egress_protected;
+        }
+      }
+
       {
         std::scoped_lock lock(statusMutex_);
         status_.tunnel_state = ctl::TunnelState::Up;
@@ -799,6 +862,13 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
     device_->close();
     device_.reset();
   }
+  // AFTER the device is gone, so no SDK socket is ever created unmarked while
+  // the capture routes could still be up. The mark is inert once the `ip rule`
+  // is removed (nothing consults it), so the ordering costs nothing and the
+  // detach keeps the blast radius to the session that asked for it.
+  egressMarker_.Detach();
+  egressWitnessTicks_ = 0;
+  egressWitnessFailures_ = 0;
   if (!reason.empty()) {
     // An explicit stop ALWAYS lifts the policy (windows semantics: only an
     // unexpected drop keeps or installs Armed) — FloorForTransition answers
@@ -1024,11 +1094,67 @@ bool TunnelHost::CheckTunnelStormLocked() {
   return true;
 }
 
+// Re-ask the only question that matters, with real packets, while the tunnel
+// runs. See the contract in TunnelHost.hpp for why this exists alongside the
+// storm guard rather than instead of it.
+bool TunnelHost::CheckEgressWitnessLocked() {
+  if (!tunnel_ || allowUnprotectedEgress_) {
+    egressWitnessTicks_ = 0;
+    egressWitnessFailures_ = 0;
+    return false;
+  }
+  // Never while a bring-up owns the session: it is mid-way through swapping
+  // the very table whose counters this reads, and a measurement taken across
+  // an atomic table swap is not a measurement. The bring-up runs its own
+  // witness at step 5 and again at step 7b.
+  if (busy_.load()) {
+    egressWitnessTicks_ = 0;
+    return false;
+  }
+  if (++egressWitnessTicks_ < kEgressWitnessIntervalSeconds) return false;
+  egressWitnessTicks_ = 0;
+
+  TunnelError witnessError;
+  if (tunnel_->VerifyEgressWitness("recheck", &witnessError)) {
+    egressWitnessFailures_ = 0;
+    {
+      std::scoped_lock lock(statusMutex_);
+      status_.egress_protected = true;
+    }
+    return false;
+  }
+
+  ++egressWitnessFailures_;
+  {
+    std::scoped_lock lock(statusMutex_);
+    status_.egress_protected = false;
+  }
+  if (egressWitnessFailures_ < 2) {
+    DaemonLogf(
+        "[tunnel] WARNING: the egress witness failed (%s). Re-checking in %ds; two in a row "
+        "tears this tunnel down.\n",
+        witnessError.message.c_str(), static_cast<int>(kEgressWitnessIntervalSeconds));
+    return false;
+  }
+
+  DaemonLogf(
+      "[tunnel] STOPPING: this daemon's own traffic is no longer demonstrably outside its own "
+      "tunnel, twice running. %s\n",
+      witnessError.message.c_str());
+  PublishError(witnessError.message, ctl::kCodeEgressUnprotected);
+  egressWitnessFailures_ = 0;
+  StopInternalLocked("egress_unprotected");
+  return true;
+}
+
 void TunnelHost::Reap() {
   {
     std::scoped_lock lock(opMutex_);
     ReapRetiredLoopsLocked();
     if (CheckTunnelStormLocked()) return;  // the tunnel is gone; nothing else to reap
+    // Ordered AFTER the storm guard: if traffic is already amplifying, stop it
+    // on the cheap byte-counter read rather than spending an nft fork first.
+    if (CheckEgressWitnessLocked()) return;
   }
   if (busy_.load()) return;  // a bring-up owns the session AND the filter
 

@@ -175,6 +175,40 @@ class TunnelHost {
   uint64_t stormLastRx_ = 0;
   int stormStrikes_ = 0;
 
+  // THE CONTINUOUS EGRESS WITNESS. Re-runs Tunnel::VerifyEgressWitness on the
+  // reaper tick and tears the session down on two CONSECUTIVE failures.
+  //
+  // The bring-up witness proves the exclusion held at t=0. It cannot prove it
+  // still holds at t=40min, and the incident this exists for ran for forty
+  // minutes: a `systemctl restart nftables` (whose shipped Fedora/Bazzite
+  // config begins with `flush ruleset`), a default-route change, an interface
+  // flap or a competing `ip rule` can each end the exclusion under a tunnel
+  // that has already been declared up.
+  //
+  // WHY IT DOES NOT REPLACE THE STORM GUARD, AND WHY BOTH SHIP. The storm
+  // guard fires on a SYMPTOM — >=64 MiB out with <1 MiB back, three ticks
+  // running — so it needs a loop already moving ~192 MiB before it acts, and
+  // it is blind to a low-rate failure where the SDK simply backs off and the
+  // UI sits on Connected forever. This fires on DIRECT ATTRIBUTION, at four
+  // datagrams, at any rate. The witness proves the precondition; the storm
+  // guard bounds the damage if the precondition fails between samples.
+  //
+  // TWO consecutive failures, not one: a genuine transient during an interface
+  // change is real, and tearing a healthy tunnel down on a single sample would
+  // make the guard the outage. Two samples caps exposure at ~60s against the
+  // 40 minutes that actually happened.
+  bool CheckEgressWitnessLocked();
+  int egressWitnessTicks_ = 0;
+  int egressWitnessFailures_ = 0;
+
+  // R4's primary mechanism: marks every socket this process creates with
+  // kEgressMark at socket() time, from a cgroup-bpf sock_create program, so
+  // the SDK's sockets never resolve a tunnel route (or a tunnel source
+  // address) in the first place. Owned for the length of a session and
+  // detached in the teardown; see EgressSocketMarker in Tunnel.hpp for why the
+  // nftables mark chain alone cannot do this job.
+  EgressSocketMarker egressMarker_;
+
   // ---- the nftables floor: ONE decision site --------------------------------
   //
   // Every state change goes through ApplyFilterLocked, which asks
