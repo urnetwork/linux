@@ -11,6 +11,10 @@ daemon's only channel, so if the tarball is broken there is no fallback.
 
 ### 0.1 Nothing in this document has been run on Arch
 
+> **UPDATE 2026-08-16:** the installer half now HAS been — see §0.2b for measured
+> results from a real CachyOS box, including `--selftest-egress` passing on a
+> custom CachyOS-LTS kernel. Everything from sign-in onward is still unrun.
+
 Every command and every expected line below was derived by **reading this repository's
 source**, and every claim that something *works* was measured **on the owner's Bazzite
 (Fedora/ostree) machine**, not here. The three states are labelled throughout:
@@ -59,6 +63,43 @@ binary either way. It now runs the same probe the tunnel runs:
 [preflight] dns         tier 3 (direct /etc/resolv.conf takeover)
 [preflight]             <the reason, naming what it found>
 ```
+
+### 0.2b MEASURED ON A REAL CachyOS BOX — 2026-08-16, and it corrects §0.2
+
+First run on the tester's machine (CachyOS, kernel `6.18.42-1-cachyos-lts`,
+glibc 2.44, KDE). **Everything below is MEASURED, not inferred** — the first
+non-Bazzite column in this project with real data behind it.
+
+| Check | Result |
+|---|---|
+| Host detection | CachyOS, `pacman` family — correct |
+| glibc | 2.44 (floor is 2.35) |
+| `ip`, `nft`, `modprobe` | all present; **no missing packages** |
+| cgroup v2 | unified hierarchy present |
+| `/dev/net/tun` | present |
+| SELinux | not active → policy module correctly **skipped**, not errored |
+| Unit path | `/usr/lib/systemd/system/urnetworkd.service` — the `/lib`→`/usr/lib` symlink canonicalisation **works** |
+| GeoClue | absent → degrades to "location override unavailable", install continues |
+| **`--selftest-egress`** | **PASS on a custom CachyOS-LTS kernel.** All four socket kinds (`AF_INET`/`AF_INET6` × `SOCK_DGRAM`/`SOCK_STREAM`) came back carrying `0x55524e57`; the control socket outside the cgroup did not |
+
+**THE CORRECTION: CachyOS ships `systemd-resolved` ACTIVE, with
+`/etc/resolv.conf` pointing at it.** §0.2 was written on the premise that Arch
+does not enable it and that **tier 3 would be the expected path here**. That is
+true of vanilla Arch and **false of CachyOS**, which enables it as part of its
+default network setup.
+
+Consequences, and they cut both ways:
+
+* The DNS leak this whole workstream was built around **does not occur on a
+  stock CachyOS box.** It takes **tier 1**, the same path Bazzite takes.
+* So **tier 3 remains unexecuted on any machine on earth.** The one host we
+  expected to exercise it does not. Reaching it now requires deliberately
+  forcing it — see §0.3 — and that is a *separate* test run, not something that
+  falls out of ordinary use.
+* The fail-closed refusal is likewise not exercised by a normal connect here.
+
+Do the ordinary connect first and get a clean baseline. Forcing tier 3 is a
+second pass, and it is the more interesting one.
 
 ### 0.3 What we have NOT tested — and why your box is the only way to find out
 

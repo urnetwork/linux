@@ -325,6 +325,23 @@ the kill switch is available), the `.deb` exists, and the daemon's floor is exac
 
 ### B.4 Arch
 
+> **CachyOS is now a MEASURED column — 2026-08-16.** A real CachyOS box (kernel
+> `6.18.42-1-cachyos-lts`, glibc 2.44) ran the tarball installer end to end.
+> Measured there: host+pacman detection correct; `ip`/`nft`/`modprobe` all
+> present; cgroup v2 unified; `/dev/net/tun` present; SELinux branch correctly
+> **skipped** (not errored); unit resolved to `/usr/lib/systemd/system` through
+> the `/lib` symlink; GeoClue absent and degraded gracefully; and
+> **`--selftest-egress` PASSED on that custom kernel** — all four socket kinds
+> marked `0x55524e57`, control socket unmarked. The cgroup-BPF marker is no
+> longer a Bazzite-only measurement.
+>
+> **AND ONE PREDICTION BELOW IS WRONG FOR CachyOS: it ships
+> `systemd-resolved` ACTIVE**, with `/etc/resolv.conf` pointing at it. The row
+> below is correct for *vanilla* Arch and wrong for this derivative — so
+> CachyOS takes **tier 1**, exactly like Bazzite, and does NOT exercise the
+> direct-`/etc/resolv.conf` tier. Everything from sign-in onward is still
+> unmeasured anywhere on Arch.
+
 | | Arch (rolling) |
 |---|---|
 | Channel today | **T** (tarball) + **A** |
@@ -412,8 +429,8 @@ which distro you test next.
 |---|---|---|
 | C1 | **The `.deb` does not depend on `nftables`, but `nft` is a hard requirement.** A perfectly successful `apt install` can be followed by a connect that refuses. Independently corroborated: the in-flight rpm template declares `nftables` and leaves a note calling the Debian side "a genuine gap" **[M]**. | `packaging/deb/nfpm.yaml` `depends:` vs `TunnelHost::RunStart` **[M-src]** |
 | C2 | **The `.deb` does not depend on glib** although `urnetworkd` `NEEDED`s `libgio-2.0.so.0` + `libglib-2.0.so.0`. | `readelf -d` **[M-bin]** |
-| C3 | **No systemd-resolved ⇒ no kill switch, anywhere.** Debian, Arch and openSUSE defaults all land here. | `TunnelHost.cpp` step 5 + `Tunnel::ApplyDns` **[M-src]** |
-| C4 | **`resolvectl` presence is tested; resolved *liveness* is not.** Arch prints a green preflight line for a service that is not running. | `ReportPreflight` **[M-src]** |
+| C3 | ~~No systemd-resolved ⇒ no kill switch, anywhere.~~ **FIXED** — `ApplyDns` now falls back to resolvconf and then to a direct `/etc/resolv.conf` takeover, so a host without resolved can still put DNS on the tunnel. Bring-up is fail-closed if no tier takes. **Tiers 2 and 3 have still never executed on any machine.** | `Tunnel::ApplyDns` **[M-src]** |
+| C4 | ~~`resolvectl` presence is tested; resolved *liveness* is not.~~ **FIXED** — `ReportPreflight` now runs `ProbeDnsHost` and prints the DNS tier the tunnel will actually take, probing `/run/systemd/resolve` for liveness rather than `$PATH` for the binary. | `ReportPreflight`, `ProbeDnsHost` **[M-src]** |
 | C5 | **The declared glibc floor (2.35) is one release above what today's binaries need (2.34).** Our own preflight and the in-flight rpm's `Requires:` are what exclude RHEL/Rocky/Alma 9 — the artifacts themselves would load there. The SDK's build target is `gnu.2.35`, so this is a *policy* to be set deliberately, not a free win. | `meson_options.txt`, `nfpm.yaml`, `install.sh` vs `readelf` **[M-src] + [M-bin]** |
 | C6 | **Daemon floor 2.34/2.35, GUI AppImage floor 2.39.** Ubuntu 22.04 and Debian 12 can run the service but not the shipped GUI. | `.github/workflows/beta-build.yml` **[M-src]** |
 | C7 | **`/lib/systemd/system` is fine for the `.deb` and wrong for an RPM.** | `nfpm.yaml` vs Fedora usrmerge rules **[M-src] + [I]** |
