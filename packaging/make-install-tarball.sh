@@ -68,6 +68,11 @@ check_payload_arch "${TOP}/payload" "${ARCH}"
 
 install -m 0755 "${SCRIPT_DIR}/tarball/install.sh" "${TOP}/install.sh"
 install -m 0755 "${SCRIPT_DIR}/tarball/uninstall.sh" "${TOP}/uninstall.sh"
+# The SELinux policy module source. install.sh compiles and installs it on an
+# enforcing host; without it the daemon starts but the tunnel cannot open
+# /dev/net/tun, because a binary installed outside a package runs in init_t.
+install -d "${TOP}/selinux"
+install -m 0644 "${SCRIPT_DIR}/selinux/urnetwork.te" "${TOP}/selinux/urnetwork.te"
 printf '%s\n' "${VERSION}" > "${TOP}/VERSION"
 
 TARBALL="${OUT}/urnetwork-daemon-${VERSION}-${ARCH}.install.tar.gz"

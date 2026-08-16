@@ -678,46 +678,40 @@ if [ -z "${PREFIX}" ]; then
     # after `systemctl start` fixes the FILE and leaves the RUNNING daemon in
     # init_t — the tunnel still cannot open /dev/net/tun, and only a restart
     # (which nothing prompts for) would apply it. Measured exactly that way.
-    # SELINUX DOMAIN FOR THE DAEMON. A binary we install ourselves carries no
-    # policy of its own, so systemd runs it in `init_t` — and init_t is
-    # deliberately forbidden the three things this daemon exists to do.
-    # Measured on Bazzite (Enforcing), as root, with the full capability set:
+    # SELINUX. A daemon installed outside a distribution package carries no
+    # policy, so systemd runs it in `init_t`, which is forbidden the three
+    # things this daemon exists to do (open /dev/net/tun, create a raw socket,
+    # reach the API on 443). Measured on Bazzite with the full capability set:
+    # SELinux refuses before the capability is ever consulted.
     #
-    #   avc denied { read write } name="tun" tcontext=tun_tap_device_t chr_file
-    #   avc denied { name_connect } dest=443 tcontext=http_port_t tcp_socket
-    #   avc denied { create } tclass=rawip_socket
+    # DO NOT "fix" this by labelling the binary unconfined_exec_t. That is the
+    # common recipe and it is wrong here: Bazzite ships no unconfined module, so
+    # init_t may not even EXECUTE such a file and the daemon fails to start with
+    # 203/EXEC. That was tried, measured, and reverted.
     #
-    # Being root with CAP_NET_ADMIN does not help: SELinux is a separate layer,
-    # and it refuses before the capability is ever consulted. Without this the
-    # tunnel cannot open /dev/net/tun and the API is unreachable.
-    #
-    # The daemon is therefore labelled unconfined_exec_t, so systemd transitions
-    # it to unconfined_service_t instead of init_t. This is the same choice
-    # several third-party VPN packages make on Fedora. It is NOT the ideal end
-    # state: a tailored policy module granting exactly tun + the nft/ip domain
-    # transitions + outbound 443 would confine this daemon properly, and that is
-    # tracked as follow-up work. Shipping unconfined beats shipping broken, and
-    # beats telling users to disable SELinux.
-    #
-    # semanage makes it survive a full relabel; chcon is the fallback when
-    # policycoreutils-python-utils is absent (it is on a stock Bazzite).
+    # Instead install the policy module shipped beside this script. It grants
+    # exactly the permissions the kernel denied and nothing else.
     if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce 2>/dev/null)" != 'Disabled' ]; then
-        DAEMON_BIN="$(map_path '/usr/lib/urnetwork')/urnetworkd"
-        if command -v semanage >/dev/null 2>&1; then
-            run semanage fcontext -a -t unconfined_exec_t "${DAEMON_BIN}" 2>/dev/null ||               run semanage fcontext -m -t unconfined_exec_t "${DAEMON_BIN}" 2>/dev/null || true
-            command -v restorecon >/dev/null 2>&1 && run restorecon -v "${DAEMON_BIN}" >/dev/null 2>&1 || true
-            note "SELinux: ${DAEMON_BIN} labelled unconfined_exec_t (persistent)"
-        elif command -v chcon >/dev/null 2>&1; then
-            if run chcon -t unconfined_exec_t "${DAEMON_BIN}" 2>/dev/null; then
-                note "SELinux: ${DAEMON_BIN} labelled unconfined_exec_t (chcon; a full relabel will drop it -- install policycoreutils-python-utils for a persistent label)"
+        SEPOL_TE="${SELF_DIR}/selinux/urnetwork.te"
+        if [ ! -f "${SEPOL_TE}" ]; then
+            warn "SELinux is enabled but selinux/urnetwork.te is missing from this tarball: the tunnel will not be able to open /dev/net/tun"
+        elif command -v checkmodule >/dev/null 2>&1 && command -v semodule_package >/dev/null 2>&1 \
+             && command -v semodule >/dev/null 2>&1; then
+            SEPOL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/urnetwork-selinux.XXXXXX")"
+            if [ "${DRY_RUN}" = 1 ]; then
+                note "build and install the SELinux policy module (checkmodule + semodule -i)"
+            elif checkmodule -M -m -o "${SEPOL_DIR}/urnetwork.mod" "${SEPOL_TE}" >/dev/null 2>&1 \
+                 && semodule_package -o "${SEPOL_DIR}/urnetwork.pp" -m "${SEPOL_DIR}/urnetwork.mod" >/dev/null 2>&1 \
+                 && semodule -i "${SEPOL_DIR}/urnetwork.pp" >/dev/null 2>&1; then
+                note "SELinux: policy module 'urnetwork' installed (remove with: sudo semodule -r urnetwork)"
             else
-                warn "SELinux is enforcing and ${DAEMON_BIN} could not be labelled: the tunnel will fail to open /dev/net/tun. Run: sudo chcon -t unconfined_exec_t ${DAEMON_BIN}"
+                warn "SELinux policy module failed to build or install. The daemon will run but the tunnel cannot open /dev/net/tun. Build it by hand from ${SEPOL_TE}, or see: sudo journalctl -t audit | grep 'denied.*tun'"
             fi
+            rm -rf "${SEPOL_DIR}"
         else
-            warn "SELinux is enforcing and neither semanage nor chcon is available: the tunnel will fail to open /dev/net/tun."
+            warn "SELinux is enforcing but the policy tools are missing (checkmodule/semodule_package/semodule, from policycoreutils-devel). The daemon will run but the tunnel cannot open /dev/net/tun. Install those tools and re-run this installer."
         fi
     fi
-
 
     if [ -d /run/systemd/system ]; then
         if [ "${MODE}" = 'install' ]; then
