@@ -1,0 +1,902 @@
+name: Beta Build - Linux
+
+# =============================================================================
+# THE RELEASE CONTRACT
+#
+# This workflow is the Linux half of the fork's beta line. It mirrors
+# urnetwork-windows/.github/workflows/beta-build.yml deliberately and
+# literally, because the two lines share ONE version identity (the same
+# scheme the android and apple beta lines use) and because the in-app
+# checkers on both platforms parse the same shape of release JSON.
+#
+# 1. VERSION
+#      version = "$(date -u +%Y.%-m.%-d)-<code>-beta"
+#      code    = (epoch(run.created_at) - epoch(2023-05-23)) * 10
+#    Derived ONCE, in the build-sdk job, from THIS RUN's created_at (read back
+#    through the actions API) -- never from `date` at step time -- so every job
+#    of one run agrees even when the run straddles midnight UTC. Job outputs
+#    are the only channel that crosses job boundaries, so it is re-exported
+#    from build-sdk and consumed by every later job.
+#
+#    Windows additionally derives version_major/minor/patch (VERSIONINFO's
+#    16-bit numeric fields) and msi_version (the MSI's 8-bit ProductVersion).
+#    Neither has a Linux analogue -- a .deb and an AppImage carry the full
+#    string -- so those outputs are deliberately absent here. The `version`
+#    math itself is byte-identical to the Windows step.
+#
+# 2. TAG + RELEASE
+#      tag "v${VERSION}", published as a PRERELEASE, `--target $GITHUB_SHA`
+#      (so the tag pins the commit this run built, not wherever the default
+#      branch drifted), and the tag's existing release is DELETED first so a
+#      re-run replaces rather than collides.
+#      Notes lead line, verbatim and shared with Windows:
+#        "Beta build (custom server fork) riding the official version
+#         numbering -- this is not an official URnetwork release."
+#
+# 3. PULL REQUESTS BUILD, BUT NEVER PUBLISH. A PR that republished (and first
+#    DELETED) the day's release would be a footgun even before fork PRs'
+#    read-only tokens made it fail halfway.
+#
+# 4. ASSET NAMES ARE A CONTRACT, NOT COSMETICS.
+#    The in-app service installer/updater and the GUI updater parse them out
+#    of the releases JSON, match on the running architecture, and pair the
+#    download URL with the sha256 GitHub computed for that same asset object.
+#    The names below are the MIGRATION.md normative names -- the packaging
+#    scripts produce exactly these, so the name is decided by the script, not
+#    by this workflow, and neither may drift from the other.
+#
+#      urnetwork-daemon-<version>-<arch>.install.tar.gz
+#          THE SERVICE. This is what the Connect page's "install/update the
+#          service" button downloads, verifies unprivileged in the sandbox,
+#          and only then hands to pkexec. Flatpak and AppImage ship the UI
+#          only; this asset is the whole service channel.
+#      urnetwork-daemon_<version>_<arch>.deb
+#          The native channel for humans and for apt-style installs. NOT
+#          parsed by the in-app checker; attached because MIGRATION.md names
+#          it and because a release that ships only a tarball has no answer
+#          for Debian/Ubuntu users.
+#      URnetwork-<version>-<arch>.AppImage
+#          The GUI. What the GUI's own updater offers.
+#      URnetwork-<version>-<arch>.AppImage.zsync
+#          The zsync control file. Attached for mirroring completeness ONLY:
+#          zsync's multi-range requests get HTTP 501 from GitHub Releases, so
+#          the AUTHORITATIVE copy is the self-hosted
+#          https://get.ur.network/URnetwork-latest-<arch>.AppImage.zsync that
+#          make-appimage.sh embeds as the AppImage's update information.
+#
+#    arch is the DEBIAN spelling -- amd64 / arm64 -- never x86_64/aarch64,
+#    even though the AppImage's internal ARCH is x86_64. Keep it stable: a
+#    renamed asset is an in-app updater that silently stops finding updates.
+#
+#    NO SHA256SUMS ASSET, and no .sha256 sidecars are attached. The packaging
+#    scripts still write sidecars next to their output (they are the local /
+#    self-hosted-mirror story); this workflow deliberately does not upload
+#    them. Verification rides the per-asset sha256 `digest` GitHub computes on
+#    upload and serves in the same releases JSON the checker already fetches,
+#    so the hash and the download URL come from the SAME asset object and a
+#    repo mutated mid-flight cannot pair one with the other.
+#
+# 5. THE GLIBC FLOOR IS A BUILD-HOST DECISION, GATED BY A TEST.
+#    The daemon is built on Ubuntu 22.04 (glibc 2.35) because the .deb's
+#    `Depends: libc6 (>= 2.35)` is hand-written -- nfpm does not run
+#    dpkg-shlibdeps -- and app/tests/glibc-floor-gate.sh (meson test
+#    `glibc-floor`) is the only thing coupling that declaration to reality. A
+#    24.04-built daemon pulls __isoc23_strtoll@GLIBC_2.38 through nlohmann's
+#    number parser and CANNOT honestly claim 2.35. See the AppImage job for
+#    the separate, deliberately different, GUI floor.
+# =============================================================================
+
+on:
+  push:
+    branches:
+      - beta/custom-server
+      - beta/algorithm-dpi
+  pull_request:
+    branches:
+      - beta/custom-server
+      - beta/algorithm-dpi
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # the version derive step reads this run's created_at via the actions api
+  actions: read
+
+# The release job DELETES the tag's release and then recreates it. Two runs of
+# the same ref interleaving inside that window would leave the release deleted.
+# Serialize pushes; cancel superseded PR runs, which never publish anyway.
+concurrency:
+  group: beta-build-linux-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The SDK/connect refs are pinned to the beta integration line REGARDLESS of
+  # which branch triggered this run -- the same rule the Windows workflow
+  # follows. beta/algorithm-dpi carries the merged reliability checkpoint, the
+  # DeviceLocalRpc bridge (sdk#135) and the cgo fixes this client needed as the
+  # first c-abi consumer.
+  UR_SDK_REPO: Ryanmello07/urnetwork-sdk
+  UR_SDK_REF: beta/algorithm-dpi
+  UR_CONNECT_REF: beta/algorithm-dpi
+  # zig is used ONLY as a glibc-pinning cross compiler for the cgo SDK
+  # (sdk:cgo/Makefile's LINUX_*_CC default is `zig cc -target
+  # <arch>-linux-gnu.2.35`). Taken from PyPI rather than ziglang.org because
+  # the PyPI package is version-addressable and its tarball URL grammar does
+  # not change between zig releases the way the ziglang.org one has.
+  UR_ZIG_VERSION: "0.14.1"
+  # nfpm builds the .deb from packaging/deb/nfpm.yaml. packaging/make-deb.sh's
+  # own comment records behavior "verified, v2.47" (contents[].src does not
+  # expand environment variables), so pin the line that comment was written
+  # against.
+  # TODO(ci): confirm this tag exists and bump deliberately; an unpinned
+  # "latest" here would let a packaging-affecting nfpm change land silently.
+  UR_NFPM_VERSION: "2.47.0"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # The cgo SDK is a c-shared .so. It is built once, for BOTH arches, on a
+  # plain ubuntu-latest runner: zig cross-compiles to either arch and pins the
+  # glibc floor at 2.35 while doing it, which is both faster and cheaper than
+  # provisioning Go onto each target-arch runner -- and it produces the exact
+  # URnetworkSdkLinux.zip layout app/scripts/fetch-deps.sh expects.
+  #
+  # This job also OWNS THE VERSION for the whole run (see the contract above).
+  # The linux repo itself is deliberately NOT checked out here: nothing in this
+  # job reads it, and `gh api repos/$GITHUB_REPOSITORY/...` resolves from the
+  # environment, not from a checkout.
+  # ---------------------------------------------------------------------------
+  build-sdk:
+    name: Build SDK .so (linux/amd64 + arm64) + derive version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_code: ${{ steps.version.outputs.version_code }}
+      source_date_epoch: ${{ steps.version.outputs.source_date_epoch }}
+    steps:
+      # Same version scheme as the windows, android and apple beta lines: the
+      # official date format with warpctl's counter (seconds since the company
+      # founding times 10), derived from the RUN's creation time so every job
+      # of one run agrees even across midnight utc.
+      - name: Derive version
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          created=$(gh api repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID --jq .created_at)
+          base=$(date -u -d "$created" '+%Y.%-m.%-d')
+          founded=$(date -u -d "2023-05-23" +%s)
+          created_epoch=$(date -u -d "$created" +%s)
+          beta_code=$(( (created_epoch - founded) * 10 ))
+          version="${base}-${beta_code}-beta"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${beta_code}" >> "$GITHUB_OUTPUT"
+          # make-install-tarball.sh honours SOURCE_DATE_EPOCH for GNU tar's
+          # --mtime, so pinning it to the run's own creation time makes the
+          # tarball reproducible for a given run rather than stamped "1970".
+          echo "source_date_epoch=${created_epoch}" >> "$GITHUB_OUTPUT"
+          echo "build date ${base} -> beta ${version} (code ${beta_code}, epoch ${created_epoch})"
+
+      - name: Check out forked SDK
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UR_SDK_REPO }}
+          ref: ${{ env.UR_SDK_REF }}
+          # MUST be the directory name `sdk`, not `urnetwork-sdk`: sdk/cgo's
+          # go.mod resolves the siblings below with `replace ... => ../../<name>`
+          # and the module path is github.com/urnetwork/sdk.
+          path: sdk
+
+      # sdk/cgo/go.mod resolves these with `replace ... => ../../<name>`, so
+      # they have to sit as siblings of the sdk checkout (i.e. at the workspace
+      # root, which is `sdk/cgo/../..`).
+      - name: Check out connect dependency
+        run: git clone --depth 1 --branch "$UR_CONNECT_REF" https://github.com/Ryanmello07/connect.git connect
+
+      - name: Check out glog dependency
+        run: git clone --depth 1 https://github.com/urnetwork/glog.git glog
+
+      - name: Check out goidenticons dependency
+        run: git clone --depth 1 https://github.com/urnetwork/goidenticons.git goidenticons
+
+      # The sdk references RenderPngV2. goidenticons did not publish it when
+      # the windows workflow was written, so it shimmed it; it does now (same
+      # signature), and an unconditional shim is a REDECLARATION that fails the
+      # build. Write it only when the symbol is genuinely absent, so this works
+      # against either version of the dependency. (Copied verbatim from the
+      # windows workflow -- same dependency, same trap.)
+      - name: Shim goidenticons RenderPngV2 if unpublished
+        run: |
+          if grep -qR '^func RenderPngV2(' goidenticons/; then
+            echo "goidenticons publishes RenderPngV2 -- no shim needed"
+          else
+            echo "goidenticons lacks RenderPngV2 -- shimming to RenderPng"
+            echo 'package goidenticons' > goidenticons/render_v2_ci_shim.go
+            echo 'func RenderPngV2(data []byte, size int) ([]byte, error) { return RenderPng(data, size) }' >> goidenticons/render_v2_ci_shim.go
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      # The Makefile's LINUX_AMD64_CC/LINUX_ARM64_CC default to `zig cc -target
+      # <arch>-linux-gnu.2.35`. Putting a `zig` shim on PATH means the recipe
+      # runs UNMODIFIED -- no CC override to drift out of sync with the
+      # Makefile, and the glibc pin stays where it is documented.
+      - name: Install zig (PyPI ziglang, pinned)
+        run: |
+          # A venv, not `pip install --user`: Ubuntu 24.04's system python is
+          # PEP 668 externally-managed and refuses a user install outright.
+          python3 -m venv "$RUNNER_TEMP/zigvenv"
+          "$RUNNER_TEMP/zigvenv/bin/pip" install --quiet "ziglang==${UR_ZIG_VERSION}"
+          sudo install -d /usr/local/bin
+          printf '#!/bin/sh\nexec %s -m ziglang "$@"\n' "$RUNNER_TEMP/zigvenv/bin/python" \
+            | sudo tee /usr/local/bin/zig >/dev/null
+          sudo chmod 0755 /usr/local/bin/zig
+          zig version
+
+      - name: Build the SDK Linux shared objects
+        working-directory: sdk/cgo
+        env:
+          WARP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # go.sum is generated (git-ignored) -- a build straight from a branch
+          # has not staged one, so produce it before the cgo build needs it
+          if [ ! -f go.sum ]; then go mod download all; fi
+          make build_linux
+          ls -la build/linux/amd64 build/linux/arm64
+
+      # The Makefile chains its recipes with `; \`, so a failing `go build`
+      # does NOT fail the target -- the trailing `cp` of the headers succeeds
+      # and make exits 0. On the windows line that is exactly how a compile
+      # error shipped a "successful" SDK job whose zip contained three headers
+      # and no DLL, leaving the app jobs to fail 40 lines later with a
+      # confusing missing-file error. `ls` and `test -s <zip>` both passed on
+      # that build, because the dirs and the zip did exist. Assert on the
+      # ARTIFACT THAT MATTERS instead -- and, because zig's glibc pin is not
+      # self-verifying (ziglang/zig#25415), assert the floor here too rather
+      # than discovering it two jobs later in the daemon's meson gate.
+      - name: Verify the SDK actually produced shared objects
+        working-directory: sdk/cgo
+        run: |
+          fail=0
+          for arch in amd64 arm64; do
+            so="build/linux/$arch/libURnetworkSdk.so"
+            if [ ! -f "$so" ]; then
+              echo "::error::$so was not produced -- the cgo build failed (see the make output above)"
+              fail=1
+              continue
+            fi
+            # a real c-shared build of this sdk is tens of MB; anything tiny
+            # means a truncated or stub link, which would fail far downstream
+            size=$(stat -c %s "$so")
+            echo "$so: $size bytes"
+            if [ "$size" -lt 5000000 ]; then
+              echo "::error::$so is only $size bytes -- implausibly small for the sdk"
+              fail=1
+            fi
+            # the .a is a container and `file` on it says nothing about the
+            # architecture; readelf on the .so reads the ELF header directly
+            machine=$(readelf -h "$so" | sed -n 's/^ *Machine: *//p')
+            echo "$so machine: $machine"
+            case "$arch:$machine" in
+              amd64:*X86-64*|arm64:*AArch64*) ;;
+              *) echo "::error::$so reports machine '$machine', which is not $arch"; fail=1 ;;
+            esac
+            # zig was asked for -target <arch>-linux-gnu.2.35. Prove it, here,
+            # on the artifact -- the pin is a compiler flag, not a guarantee.
+            maxsym=$(readelf --dyn-syms -W "$so" | { grep -o 'GLIBC_[0-9.]*' || true; } \
+                     | sed 's/^GLIBC_//' | sort -V | tail -n1)
+            echo "$so: max GLIBC_${maxsym:-none}"
+            if [ -n "$maxsym" ] && [ "$(printf '%s\n%s\n' "$maxsym" "2.35" | sort -V | tail -n1)" != "2.35" ]; then
+              echo "::error::$so references GLIBC_${maxsym}, above the declared 2.35 floor -- the zig -gnu.2.35 pin did not hold (ziglang/zig#25415)"
+              fail=1
+            fi
+            # the headers the app compiles against must ride along
+            for h in urnetwork_sdk.h urnetwork_sdk.hpp; do
+              [ -f "build/linux/$arch/$h" ] || { echo "::error::build/linux/$arch/$h missing"; fail=1; }
+            done
+          done
+          # and the zip must carry them, since that is what the app jobs unpack
+          for arch in amd64 arm64; do
+            if ! unzip -l build/URnetworkSdkLinux.zip | grep -q "linux/$arch/libURnetworkSdk.so"; then
+              echo "::error::URnetworkSdkLinux.zip is missing linux/$arch/libURnetworkSdk.so"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Upload the SDK zip
+        uses: actions/upload-artifact@v4
+        with:
+          # mirror of the windows line's `urnetwork-sdk-windows`; also the name
+          # `gh run download -n urnetwork-sdk-linux -D .local-deps` expects
+          name: urnetwork-sdk-linux
+          path: sdk/cgo/build/URnetworkSdkLinux.zip
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # THE DAEMON: the artifact the app downloads and installs behind pkexec.
+  #
+  # Built INSIDE an ubuntu:22.04 container rather than on a `runs-on:
+  # ubuntu-22.04` hosted image. Both are "build on Ubuntu 22.04"; the container
+  # is chosen because
+  #   * it pins glibc 2.35 to the IMAGE, independent of GitHub's runner-image
+  #     lifecycle (a retired ubuntu-22.04 label does not fail loudly -- the job
+  #     just never gets a runner), and
+  #   * it is the same split the repo's own pipeline already uses: build.sh
+  #     documents "per arch two Docker images: the daemon .deb + install
+  #     tarball on ubuntu 22.04, and the GUI AppImage on 24.04".
+  # If the hosted image is preferred instead, `runs-on: ubuntu-22.04` with the
+  # `container:` line removed is the drop-in alternative.
+  #
+  # meson 0.61.2 (jammy's apt build) is what app/meson.build is known to
+  # configure under -- do not "modernize" this to a pip meson without checking.
+  # ---------------------------------------------------------------------------
+  build-daemon:
+    name: Build daemon + install tarball + deb (${{ matrix.arch }})
+    needs: build-sdk
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          # arm64 needs a native arm64 runner (the AppImage half bundles host
+          # libraries, so cross-building is not an option there either, and
+          # keeping both halves on the same rule keeps the asset set coherent).
+          # Uncomment when the arm64 line is turned on -- nothing else in this
+          # workflow hardcodes amd64.
+          # - arch: arm64
+          #   runner: ubuntu-22.04-arm
+    env:
+      VERSION: ${{ needs.build-sdk.outputs.version }}
+      SOURCE_DATE_EPOCH: ${{ needs.build-sdk.outputs.source_date_epoch }}
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      # git first: actions/checkout silently degrades to a REST tarball
+      # download without it, and the packaging scripts want a real tree.
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential meson ninja-build pkg-config gettext \
+            libglib2.0-dev nlohmann-json3-dev \
+            git curl ca-certificates unzip xz-utils binutils file python3
+          meson --version
+
+      - name: Check out Linux repo
+        uses: actions/checkout@v4
+
+      - name: Download the SDK zip
+        uses: actions/download-artifact@v4
+        with:
+          name: urnetwork-sdk-linux
+          path: sdk-zip
+
+      # The repo's own vendoring entry point -- never unzip by hand here, the
+      # script also stages urnetwork_sdk.h NEXT TO the .hpp (the .hpp includes
+      # it relative to itself, so a missing .h is a compile error, not a link
+      # error).
+      # $PWD, not ${{ github.workspace }}: inside a container job the expression
+      # can resolve to the HOST path, while the shell is in the mapped
+      # container path. Every absolute path in this job is derived from the
+      # shell's own cwd for that reason.
+      - name: Vendor the SDK into third_party
+        run: app/scripts/fetch-deps.sh "$PWD/sdk-zip/URnetworkSdkLinux.zip"
+
+      # -Dgui=disabled, not the 'auto' default: this image has no GTK4 at all,
+      # and being explicit means a future image that happens to carry gtkmm
+      # cannot silently start building (and shipping) a GUI from the low-glibc
+      # daemon leg.
+      - name: Configure (meson)
+        run: |
+          meson setup build app \
+            --prefix=/usr \
+            -Dgui=disabled \
+            -Dhost_integration=true \
+            -Dsdk_arch=${{ matrix.arch }} \
+            -Dapp_version="$VERSION" \
+            -Dglibc_floor=2.35
+
+      - name: Build
+        run: ninja -C build
+
+      # Runs BOTH meson tests:
+      #   unit         the pure-logic suite (projection math, TopoJSON decoder,
+      #                provider rows, location-override state machine, the
+      #                control protocol's framing/version/SDK-build/peer-cred
+      #                rules)
+      #   glibc-floor  app/tests/glibc-floor-gate.sh against the built
+      #                urnetworkd AND the vendored libURnetworkSdk.so. THIS IS
+      #                THE GATE the owner asked for: it is the only thing
+      #                coupling the .deb's hand-written
+      #                `Depends: libc6 (>= 2.35)` to the actual binary.
+      - name: Test (unit + glibc-floor gate)
+        run: meson test -C build --print-errorlogs
+
+      - name: Upload the meson logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meson-logs-daemon-${{ matrix.arch }}
+          path: |
+            build/meson-logs/
+          if-no-files-found: warn
+
+      # The packaging scripts consume ONLY a `meson install --destdir` tree --
+      # that is their documented input contract, and it is what keeps the .deb
+      # and the tarball from ever drifting apart (both go through
+      # packaging/lib/common.sh assemble_daemon_root against this same tree).
+      - name: Stage the install tree
+        run: |
+          DESTDIR="$PWD/staging" meson install -C build
+          find "$PWD/staging" -type f | sort
+
+      - name: Install nfpm (for the .deb)
+        run: |
+          # nfpm publishes GoReleaser-named tarballs: nfpm_<v>_Linux_<goarch>,
+          # where amd64 is spelled x86_64.
+          case "${{ matrix.arch }}" in
+            amd64) nfpm_arch=x86_64 ;;
+            arm64) nfpm_arch=arm64 ;;
+            *) echo "::error::no nfpm asset mapping for arch '${{ matrix.arch }}'"; exit 1 ;;
+          esac
+          curl -fsSL --retry 3 --retry-all-errors \
+            -o /tmp/nfpm.tar.gz \
+            "https://github.com/goreleaser/nfpm/releases/download/v${UR_NFPM_VERSION}/nfpm_${UR_NFPM_VERSION}_Linux_${nfpm_arch}.tar.gz"
+          sha256sum /tmp/nfpm.tar.gz
+          tar -xzf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
+          chmod 0755 /usr/local/bin/nfpm
+          nfpm --version
+
+      - name: Package the install tarball
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          export STAGING_DIR="$PWD/staging" OUT_DIR="$PWD/dist"
+          packaging/make-install-tarball.sh
+
+      - name: Package the .deb
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          export STAGING_DIR="$PWD/staging" OUT_DIR="$PWD/dist"
+          packaging/make-deb.sh
+
+      # A compile-proof says nothing about what landed inside the package, and
+      # that blind spot is exactly how the Windows MSI shipped for months
+      # installing 7 files while silently omitting the runtime and the fonts --
+      # an install on a clean machine could not start. Fail here, before
+      # anything is uploaded or attached to a release, if the payload regresses
+      # to that shape. Named files, not just a count: a count alone passes a
+      # tarball that is all locale catalogs and no daemon.
+      - name: Verify the install tarball payload
+        working-directory: dist
+        run: |
+          tarball="urnetwork-daemon-${VERSION}-${{ matrix.arch }}.install.tar.gz"
+          [ -f "$tarball" ] || { echo "::error::$tarball was not produced"; exit 1; }
+          listing=$(mktemp)
+          tar tzf "$tarball" > "$listing"
+          fail=0
+          for want in \
+            urnetwork-daemon/install.sh \
+            urnetwork-daemon/uninstall.sh \
+            urnetwork-daemon/VERSION \
+            urnetwork-daemon/selinux/urnetwork.te \
+            urnetwork-daemon/payload/usr/lib/urnetwork/urnetworkd \
+            urnetwork-daemon/payload/usr/lib/urnetwork/libURnetworkSdk.so \
+            urnetwork-daemon/payload/usr/bin/urnetwork \
+            urnetwork-daemon/payload/lib/systemd/system/urnetworkd.service \
+            urnetwork-daemon/payload/usr/share/applications/network.ur.urnetwork.desktop \
+            urnetwork-daemon/payload/usr/share/urnetwork/world-110m.json \
+            urnetwork-daemon/payload/etc/NetworkManager/conf.d/95-urnetwork.conf \
+            urnetwork-daemon/payload/etc/udev/rules.d/85-urnetwork-unmanaged.rules \
+            urnetwork-daemon/payload/etc/urnetwork/autostart/network.ur.urnetwork.desktop ; do
+            grep -qx "$want" "$listing" || { echo "::error::$tarball is missing $want"; fail=1; }
+          done
+          # tray art and the gettext catalogs are globs, not fixed names
+          grep -q '^urnetwork-daemon/payload/usr/share/urnetwork/icons/.*\.png$' "$listing" \
+            || { echo "::error::$tarball carries no tray icons"; fail=1; }
+          grep -q '^urnetwork-daemon/payload/usr/share/locale/.*/LC_MESSAGES/urnetwork\.mo$' "$listing" \
+            || { echo "::error::$tarball carries no gettext catalogs"; fail=1; }
+          # Sanity floor, not an exact count: the staged tree is ~50 files plus
+          # directory entries. A floor of 40 catches a truncated payload
+          # without failing over one added or removed locale.
+          # grep -c exits 1 on zero matches, which `bash -e` would treat as a
+          # step failure before the assertion below could report anything.
+          entries=$(grep -cv '/$' "$listing" || true)
+          echo "payload file entries: $entries"
+          [ "${entries:-0}" -ge 40 ] || { echo "::error::$tarball has only ${entries:-0} file entries -- expected at least 40"; fail=1; }
+          # the version the installer will report must be the version we tagged
+          staged_version=$(tar -xzOf "$tarball" urnetwork-daemon/VERSION)
+          echo "VERSION inside the tarball: $staged_version"
+          [ "$staged_version" = "$VERSION" ] || { echo "::error::tarball VERSION is '$staged_version', expected '$VERSION'"; fail=1; }
+          exit $fail
+
+      - name: Verify the .deb payload
+        working-directory: dist
+        run: |
+          deb="urnetwork-daemon_${VERSION}_${{ matrix.arch }}.deb"
+          [ -f "$deb" ] || { echo "::error::$deb was not produced"; exit 1; }
+          # dpkg-deb is not in the jammy container by default; the tarball
+          # assertion above already covers the shared payload (both packages go
+          # through assemble_daemon_root), so this is a secondary check.
+          if ! command -v dpkg-deb >/dev/null 2>&1; then
+            apt-get install -y --no-install-recommends dpkg-dev >/dev/null 2>&1 || true
+          fi
+          if command -v dpkg-deb >/dev/null 2>&1; then
+            dpkg-deb --info "$deb"
+            listing=$(mktemp)
+            dpkg-deb --contents "$deb" > "$listing"
+            fail=0
+            for want in \
+              ./usr/lib/urnetwork/urnetworkd \
+              ./usr/lib/urnetwork/libURnetworkSdk.so \
+              ./usr/bin/urnetwork \
+              ./lib/systemd/system/urnetworkd.service ; do
+              grep -q " ${want}\$" "$listing" || { echo "::error::$deb is missing $want"; fail=1; }
+            done
+            entries=$(grep -cv '/$' "$listing" || true)
+            echo "deb file entries: $entries"
+            [ "${entries:-0}" -ge 40 ] || { echo "::error::$deb has only ${entries:-0} file entries"; fail=1; }
+            exit $fail
+          else
+            echo "::warning::dpkg-deb unavailable -- skipped the .deb content assertion"
+          fi
+
+      # The .sha256 sidecars the packaging scripts write are deliberately NOT
+      # carried forward: the release verifies through GitHub's per-asset digest
+      # (see the contract at the top of this file).
+      - name: Upload the daemon artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: urnetwork-linux-daemon-${{ matrix.arch }}
+          path: |
+            dist/urnetwork-daemon-*.install.tar.gz
+            dist/urnetwork-daemon_*.deb
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # THE GUI: the AppImage, which ships the UI ONLY. It never contains the
+  # daemon; the service comes from the tarball above, downloaded by the app.
+  #
+  # Pinned to ubuntu-24.04, NOT ubuntu-latest: the AppDir bundles the BUILD
+  # HOST's GTK4/libadwaita stack, so the host image literally decides what the
+  # AppImage is made of and what it requires at runtime. A silent
+  # ubuntu-latest bump would silently move the GUI's floor.
+  #
+  # THE GUI FLOOR IS NOT THE DAEMON FLOOR, ON PURPOSE.
+  # Ubuntu 22.04 does not package libgtkmm-4.0 (that is exactly why the daemon
+  # can be built there), so the GUI cannot be built on the 2.35 image at all.
+  # 24.04 is glibc 2.39, so make-appimage.sh's own ceiling gate -- default
+  # 2.35 -- would refuse to package. The script documents the two honest ways
+  # out ("build the GUI against the floor (zig/sysroot), or knowingly raise the
+  # AppImage's floor"), and only the second is available today, so this job
+  # raises the ceiling EXPLICITLY rather than passing UR_SKIP_GLIBC_GATE=1.
+  # The gate still runs; it is just told the truth about this artifact.
+  #
+  #   ==> DECISION FOR THE OWNER: the AppImage's supported floor is Ubuntu
+  #       24.04 / glibc 2.39, while the daemon keeps 2.35. If the AppImage
+  #       must also run on 22.04, the GUI needs a zig/sysroot build and this
+  #       line has to go back to 2.35.
+  # ---------------------------------------------------------------------------
+  build-appimage:
+    name: Build GUI AppImage (${{ matrix.arch }})
+    needs: build-sdk
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            appimage_arch: x86_64
+            runner: ubuntu-24.04
+          # - arch: arm64
+          #   appimage_arch: aarch64
+          #   runner: ubuntu-24.04-arm
+    env:
+      VERSION: ${{ needs.build-sdk.outputs.version }}
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Check out Linux repo
+        uses: actions/checkout@v4
+
+      - name: Download the SDK zip
+        uses: actions/download-artifact@v4
+        with:
+          name: urnetwork-sdk-linux
+          path: sdk-zip
+
+      # libglib2.0-bin carries gio-querymodules AND glib-compile-schemas, both
+      # of which make-appimage.sh requires by name. libgdk-pixbuf2.0-bin, the
+      # Adwaita theme, librsvg (Adwaita's symbolic SVGs) and glib-networking
+      # (the GIO TLS modules) are all bundled INTO the AppDir from this host,
+      # so they are build deps even though nothing links against them.
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential meson ninja-build pkg-config gettext \
+            libglib2.0-dev libglib2.0-bin nlohmann-json3-dev \
+            libgtkmm-4.0-dev libadwaita-1-dev libfontconfig1-dev \
+            adwaita-icon-theme gtk-update-icon-cache librsvg2-common \
+            libgdk-pixbuf2.0-bin glib-networking \
+            squashfs-tools zsync patchelf binutils desktop-file-utils file \
+            git curl unzip
+          meson --version
+
+      # make-appimage.sh REFUSES to package a GUI with a webkitgtk NEEDED entry
+      # (WebKitGTK hardcodes absolute paths to its multi-process helpers at
+      # compile time; nothing relocates them, so an AppImage that links it
+      # cannot work). meson treats webkit as a soft dependency and would link
+      # it if the dev package were present, so assert it is not -- a clear
+      # failure here beats a confusing one after the whole AppDir is built.
+      - name: Assert webkitgtk-6.0 is absent from the build host
+        run: |
+          if pkg-config --exists webkitgtk-6.0; then
+            echo "::error::webkitgtk-6.0 is installed on this runner -- meson would link the embedded checkout webview in and make-appimage.sh would refuse to package. Do not install libwebkitgtk-6.0-dev in this job."
+            exit 1
+          fi
+          echo "webkitgtk-6.0 absent, as required"
+
+      - name: Vendor the SDK into third_party
+        run: app/scripts/fetch-deps.sh "$PWD/sdk-zip/URnetworkSdkLinux.zip"
+
+      # -Dgui=enabled makes a missing toolkit a HARD ERROR. Without it, meson's
+      # 'auto' would quietly build the daemon half only and this job would
+      # produce no GUI at all -- and make-appimage.sh's missing-binary message
+      # would be the first anyone heard of it.
+      #
+      # -Dhost_integration=true (the default) is required here, not incidental:
+      # it is what puts the vendored SDK at usr/lib/urnetwork/libURnetworkSdk.so
+      # in the staging tree, which is exactly where make-appimage.sh looks. The
+      # daemon binary it also builds is a byproduct; the AppImage never takes it.
+      - name: Configure (meson)
+        run: |
+          meson setup build app \
+            --prefix=/usr \
+            -Dgui=enabled \
+            -Dhost_integration=true \
+            -Dsdk_arch=${{ matrix.arch }} \
+            -Dapp_version="$VERSION"
+
+      - name: Build
+        run: ninja -C build
+
+      # Only the `unit` suite here. The `glibc-floor` gate belongs to the
+      # daemon job and would CORRECTLY fail on this 24.04 image -- the daemon
+      # binary built here is a byproduct that is never shipped, and running the
+      # gate against it would either produce a false red or, worse, tempt
+      # someone to weaken the gate that protects the real daemon.
+      - name: Test (unit suite)
+        run: meson test -C build --print-errorlogs unit
+
+      - name: Upload the meson logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meson-logs-gui-${{ matrix.arch }}
+          path: |
+            build/meson-logs/
+          if-no-files-found: warn
+
+      - name: Stage the install tree
+        run: |
+          DESTDIR="$PWD/staging" meson install -C build
+          test -x "$PWD/staging/usr/bin/urnetwork-gui"
+
+      # appimagetool fetches the type2 runtime from GitHub on EVERY invocation
+      # and has no retry, so a blip fails the whole build after all the AppDir
+      # work ("Failed to download runtime: server returned status code 0").
+      # Pre-fetch both with retries and hand the runtime over via
+      # UR_APPIMAGE_RUNTIME, which also pins exactly which runtime ships rather
+      # than taking whatever "continuous" serves that minute.
+      #
+      # TODO(ci): pin appimagetool and the runtime BY SHA256, the way the
+      # windows line pins wintun (sha256 + Authenticode thumbprint). Both are
+      # published only under the moving `continuous` tag, so the hashes have to
+      # be captured once by hand from the digests this step prints and then
+      # asserted here.
+      - name: Fetch appimagetool + type2 runtime
+        run: |
+          curl -fsSL --retry 3 --retry-all-errors \
+            -o "$RUNNER_TEMP/appimagetool" \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.appimage_arch }}.AppImage"
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          curl -fsSL --retry 3 --retry-all-errors \
+            -o "$RUNNER_TEMP/runtime-${{ matrix.appimage_arch }}" \
+            "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-${{ matrix.appimage_arch }}"
+          # record what actually shipped -- see the TODO above about pinning
+          sha256sum "$RUNNER_TEMP/appimagetool" "$RUNNER_TEMP/runtime-${{ matrix.appimage_arch }}"
+
+      # APPIMAGE_EXTRACT_AND_RUN=1: appimagetool is itself an AppImage and
+      # GitHub's runners have no libfuse2, so it cannot mount itself.
+      # UR_GLIBC_CEILING=2.39: the documented, deliberate floor decision for
+      # this artifact -- see the job header.
+      - name: Package the AppImage
+        env:
+          ARCH: ${{ matrix.arch }}
+          APPIMAGETOOL: ${{ runner.temp }}/appimagetool
+          UR_APPIMAGE_RUNTIME: ${{ runner.temp }}/runtime-${{ matrix.appimage_arch }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          UR_GLIBC_CEILING: "2.39"
+        run: |
+          export STAGING_DIR="$PWD/staging" OUT_DIR="$PWD/dist"
+          packaging/make-appimage.sh
+
+      # Same lesson as the daemon payload check. `--appimage-extract` is a
+      # builtin of the type2 runtime and needs no FUSE, so the contents can be
+      # asserted on the runner. Named files, not just a count: the Windows
+      # allowlist bug dropped Assets\Fonts while every count still looked fine.
+      - name: Verify the AppImage payload
+        working-directory: dist
+        run: |
+          appimage="URnetwork-${VERSION}-${{ matrix.arch }}.AppImage"
+          [ -f "$appimage" ] || { echo "::error::$appimage was not produced"; exit 1; }
+          [ -f "${appimage}.zsync" ] || { echo "::error::${appimage}.zsync was not produced -- the update channel needs it"; exit 1; }
+          chmod +x "$appimage"
+          ./"$appimage" --appimage-extract >/dev/null
+          root=squashfs-root
+          fail=0
+          for want in \
+            AppRun \
+            network.ur.urnetwork.desktop \
+            usr/bin/urnetwork-gui \
+            usr/bin/gdk-pixbuf-query-loaders \
+            usr/lib/urnetwork/libURnetworkSdk.so \
+            usr/share/urnetwork/world-110m.json \
+            usr/share/urnetwork/ReferralFrog.png \
+            usr/share/urnetwork/fonts/abcgravity_extended.otf \
+            usr/share/urnetwork/fonts/abcgravity_extra_condensed.otf \
+            usr/share/urnetwork/fonts/pp_neue_bit_bold.ttf \
+            usr/share/urnetwork/fonts/pp_neue_montreal_regular.ttf \
+            usr/share/glib-2.0/schemas/gschemas.compiled ; do
+            [ -e "$root/$want" ] || { echo "::error::$appimage is missing $want"; fail=1; }
+          done
+          # the bundled GTK4 stack, the tray art, the carousel and the catalogs
+          # are globs
+          [ -e "$root/usr/lib/libgtk-4.so.1" ] || { echo "::error::$appimage bundles no libgtk-4"; fail=1; }
+          [ -e "$root/usr/lib/libadwaita-1.so.0" ] || { echo "::error::$appimage bundles no libadwaita"; fail=1; }
+          [ -d "$root/usr/share/icons/Adwaita" ] || { echo "::error::$appimage bundles no Adwaita icon theme"; fail=1; }
+          ls "$root"/usr/share/urnetwork/icons/*.png >/dev/null 2>&1 \
+            || { echo "::error::$appimage carries no tray icons"; fail=1; }
+          ls "$root"/usr/share/urnetwork/carousel/*.jpg >/dev/null 2>&1 \
+            || { echo "::error::$appimage carries no login carousel art"; fail=1; }
+          ls "$root"/usr/share/locale/*/LC_MESSAGES/urnetwork.mo >/dev/null 2>&1 \
+            || { echo "::error::$appimage carries no gettext catalogs"; fail=1; }
+          # the no-webkit rule, asserted on the shipped binary and not just on
+          # the build host
+          if readelf -d "$root/usr/bin/urnetwork-gui" | grep -qi webkit; then
+            echo "::error::the bundled urnetwork-gui has a webkitgtk NEEDED entry"
+            fail=1
+          fi
+          rm -rf "$root"
+          exit $fail
+
+      - name: Upload the AppImage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: urnetwork-linux-appimage-${{ matrix.arch }}
+          path: |
+            dist/URnetwork-*.AppImage
+            dist/URnetwork-*.AppImage.zsync
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Every green push publishes a prerelease, the way the windows and android
+  # forks do: same tag grammar, same riding-the-numbering notes line. The
+  # in-app service installer and the GUI updater poll this repo's releases, so
+  # the asset names attached here are the contract stated at the top of this
+  # file. No checksums file is attached -- verification rides the per-asset
+  # sha256 digest GitHub computes on upload and serves in the same releases
+  # JSON the checker already fetches.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish the prerelease
+    # PRs build everything but must not publish: a PR that republished (and
+    # first DELETED) the day's release would be a footgun even before fork
+    # PRs' read-only tokens made it fail halfway.
+    if: github.event_name != 'pull_request'
+    needs: [build-sdk, build-daemon, build-appimage]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.build-sdk.outputs.version }}
+    steps:
+      # gh resolves which repo to release into from the checkout's remote
+      - name: Check out Linux repo
+        uses: actions/checkout@v4
+
+      - name: Download the daemon artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: urnetwork-linux-daemon-*
+          path: dist
+          merge-multiple: true
+
+      - name: Download the AppImage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: urnetwork-linux-appimage-*
+          path: dist
+          merge-multiple: true
+
+      # Assert the asset set BEFORE touching the existing release. The release
+      # job deletes first and creates second; discovering a missing asset after
+      # the delete would leave the tag with no release at all.
+      - name: Assert the asset-name contract
+        working-directory: dist
+        run: |
+          shopt -s nullglob
+          tarballs=(urnetwork-daemon-*.install.tar.gz)
+          debs=(urnetwork-daemon_*.deb)
+          appimages=(URnetwork-*.AppImage)
+          zsyncs=(URnetwork-*.AppImage.zsync)
+          fail=0
+          [ "${#tarballs[@]}"  -ge 1 ] || { echo "::error::no urnetwork-daemon-<version>-<arch>.install.tar.gz -- this is the asset the in-app service installer downloads"; fail=1; }
+          [ "${#debs[@]}"      -ge 1 ] || { echo "::error::no urnetwork-daemon_<version>_<arch>.deb"; fail=1; }
+          [ "${#appimages[@]}" -ge 1 ] || { echo "::error::no URnetwork-<version>-<arch>.AppImage"; fail=1; }
+          [ "${#zsyncs[@]}"    -ge 1 ] || { echo "::error::no URnetwork-<version>-<arch>.AppImage.zsync"; fail=1; }
+          # every asset must carry THIS run's version, or the in-app checker
+          # would rank a stale artifact under a fresh tag
+          for f in "${tarballs[@]}" "${debs[@]}" "${appimages[@]}" "${zsyncs[@]}"; do
+            case "$f" in
+              *"${VERSION}"*) ;;
+              *) echo "::error::$f does not carry version ${VERSION}"; fail=1 ;;
+            esac
+          done
+          # one AppImage per zsync, one deb per tarball -- an arch that built
+          # only half its pair must not reach a release
+          [ "${#appimages[@]}" -eq "${#zsyncs[@]}" ] || { echo "::error::AppImage/zsync count mismatch"; fail=1; }
+          [ "${#tarballs[@]}"  -eq "${#debs[@]}" ]   || { echo "::error::tarball/deb count mismatch"; fail=1; }
+          ls -la
+          exit $fail
+
+      - name: Publish the release
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${VERSION}"
+          # re-running a run (or a same-day rebuild racing the date math)
+          # must replace the tag's release, not collide with it
+          gh release delete "$tag" --yes || true
+          {
+            echo "Beta build (custom server fork) riding the official version numbering -- this is not an official URnetwork release."
+            echo
+            echo "**The service and the UI are separate downloads.** The AppImage (and the Flatpak) ship the UI only; the privileged service is the \`.install.tar.gz\` below, which the app itself downloads, verifies and installs behind a single polkit prompt."
+            echo
+            echo "| asset | what it is |"
+            echo "| --- | --- |"
+            echo "| \`urnetwork-daemon-<version>-<arch>.install.tar.gz\` | the privileged service; \`tar xz && sudo urnetwork-daemon/install.sh\` |"
+            echo "| \`urnetwork-daemon_<version>_<arch>.deb\` | the same service as a native package |"
+            echo "| \`URnetwork-<version>-<arch>.AppImage\` | the GUI, unprivileged |"
+            echo "| \`URnetwork-<version>-<arch>.AppImage.zsync\` | zsync control file (GitHub answers zsync's range requests with HTTP 501 -- the working mirror is get.ur.network) |"
+            echo
+            echo "Asset names are a contract: the in-app installer and updater parse them and verify each download against the sha256 digest GitHub publishes for that same asset. There is deliberately no SHA256SUMS file."
+            echo
+            echo "Daemon glibc floor: 2.35 (built on Ubuntu 22.04). AppImage glibc floor: 2.39 (built on Ubuntu 24.04)."
+            echo
+            echo "Unsigned. Detached signatures are not produced by CI yet."
+          } > notes.md
+          files=(
+            urnetwork-daemon-*.install.tar.gz
+            urnetwork-daemon_*.deb
+            URnetwork-*.AppImage
+            URnetwork-*.AppImage.zsync
+          )
+          # --target pins the tag to the commit this run built; without it a
+          # new tag would point wherever the default branch happens to be
+          gh release create "$tag" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "$tag" \
+            --notes-file notes.md \
+            "${files[@]}"
