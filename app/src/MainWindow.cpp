@@ -652,9 +652,21 @@ void MainWindow::size_allocate_vfunc(int width, int height, int baseline) {
 // A user sitting idle would keep a green "Connected" while the daemon had
 // already stopped the session and possibly armed the kill switch.
 bool MainWindow::PollDaemonHealth() {
-  if (!connected_) return true;  // nothing claimed; nothing to contradict
+  if (!connected_) {
+    // Nothing claimed, nothing to contradict — but the DNS verdict from the
+    // last session must not outlive it on screen.
+    if (drawer_) drawer_->SetTunnelDnsState(false, false, {});
+    return true;
+  }
   const auto status = host_.Control().Status();
   if (!status) return true;      // unreachable is StartTunnelUi's business
+  // Feed the drawer the daemon's own DNS verdict. Until this existed, the DNS
+  // card was drawn entirely from the SDK's resolver PREFERENCES and could sit
+  // green while dns_applied was false — the daemon knew, said so in
+  // dns_detail, and nothing on screen read it.
+  if (drawer_) {
+    drawer_->SetTunnelDnsState(true, status->dns_applied, status->dns_detail);
+  }
   if (status->tunnel_state != ctl::TunnelState::Error &&
       status->tunnel_state != ctl::TunnelState::Stopped) {
     return true;

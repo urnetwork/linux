@@ -1499,7 +1499,13 @@ bool ResolvConfHasNameserver(const std::string& content, const std::string& addr
   while (std::getline(in, line)) {
     const std::string t = Trim(line);
     if (t.rfind("nameserver", 0) != 0) continue;
-    if (Trim(t.substr(10)) == address) return true;
+    // The separator is REQUIRED. Without this check "nameserver10.0.0.1" — a
+    // line glibc ignores outright — satisfies the read-back verification that
+    // tiers 2 and 3 use to decide the resolver landed, so a malformed write
+    // would be reported as a successful DNS takeover.
+    const std::string rest = t.substr(10);
+    if (!rest.empty() && !std::isspace(static_cast<unsigned char>(rest.front()))) continue;
+    if (Trim(rest) == address) return true;
   }
   return false;
 }
@@ -2799,8 +2805,14 @@ DnsHostProbe ProbeDnsHost() {
       ResolvConfHasNameserver(content, kResolvedStubAddress)) {
     p.resolv_conf_points_at_resolved = true;
   }
-  const std::string resolvedPrefix = std::string(kResolvedRuntimeDir) + "/";
-  if (p.resolv_conf_realpath.rfind(resolvedPrefix, 0) == 0) {
+  // NOT every file under resolved's runtime dir means "queries go through the
+  // stub". resolved generates TWO: stub-resolv.conf (127.0.0.53, the stub, what
+  // we want) and resolv.conf (UPLINK MODE — the real upstream servers, listed
+  // directly, which deliberately BYPASSES resolved). Treating the second as
+  // "points at resolved" would let tier 1 claim a host where the per-link
+  // override it sets is not on the path any lookup takes.
+  const std::string stubPath = std::string(kResolvedRuntimeDir) + "/stub-resolv.conf";
+  if (p.resolv_conf_realpath == stubPath) {
     p.resolv_conf_points_at_resolved = true;
   }
 

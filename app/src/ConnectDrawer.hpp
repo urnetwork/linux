@@ -57,6 +57,11 @@ class ConnectDrawer : public Gtk::Box {
   void OnHostEvent(DrawerEvent event);
   // Full resync (device lifecycle changes, window re-shown).
   void RefreshAll();
+  // The daemon's real DNS verdict (StatusReply::dns_applied / dns_detail),
+  // pushed in by MainWindow's 5s daemon poll. The drawer cannot fetch this
+  // itself: ControlClient::Status() is a blocking socket round-trip and this
+  // widget refreshes off SDK change events.
+  void SetTunnelDnsState(bool connected, bool applied, const Glib::ustring& detail);
 
   // Balance store change feed (GTK main loop): plan card + banner + sheets.
   void OnBalanceChanged();
@@ -134,6 +139,9 @@ class ConnectDrawer : public Gtk::Box {
   };
   Gtk::Box* dnsRowsBox_ = nullptr;
   Gtk::Label* dnsUnavailable_ = nullptr;
+  // The daemon's ACTUAL DNS verdict, as opposed to the four preference rows
+  // above it. Fed by MainWindow's daemon poll; see SetTunnelDnsState.
+  Gtk::Label* dnsTunnelState_ = nullptr;
   Gtk::Box* dnsPill_ = nullptr;       // the recommendation nudge capsule (hidden when applied)
   Gtk::Label* dnsPillDot_ = nullptr;  // country-color dot (only for a regional recommendation)
   Gtk::Label* dnsPillText_ = nullptr;

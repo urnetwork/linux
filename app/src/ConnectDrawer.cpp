@@ -406,6 +406,20 @@ void ConnectDrawer::BuildDnsCard() {
   dnsUnavailable_->set_visible(false);
   card->append(*dnsUnavailable_);
 
+  // THE FOUR ROWS ABOVE DESCRIBE PREFERENCES, NOT REALITY. They render the
+  // SDK's device-side resolver settings (DoH on/off, fallback on/off), which
+  // have no relationship to whether the daemon actually managed to point this
+  // machine's DNS at the tunnel — so the card can sit fully green while every
+  // name is resolving outside it. That was the whole shape of the Arch leak:
+  // the daemon knew and said so in dns_detail, and no GUI surface read it.
+  // This line is that surface. MainWindow's 5s daemon poll feeds it.
+  dnsTunnelState_ = Gtk::make_managed<Gtk::Label>();
+  dnsTunnelState_->add_css_class("dim-label");
+  dnsTunnelState_->set_xalign(0);
+  dnsTunnelState_->set_wrap(true);
+  dnsTunnelState_->set_visible(false);
+  card->append(*dnsTunnelState_);
+
   MakeCardTappable(*card, [this] { dnsSheet_->Open(); });
   append(*card);
 }
@@ -741,6 +755,33 @@ void ConnectDrawer::RefreshDnsCard() {
   SetDnsRowState(dnsLocalRow_.dot, dnsLocalRow_.state,
                  settings->EnableLocalDoh || settings->EnableLocalDns);
   SetDnsRowState(dnsFallbackRow_.dot, dnsFallbackRow_.state, settings->EnableFallback);
+}
+
+void ConnectDrawer::SetTunnelDnsState(bool connected, bool applied,
+                                      const Glib::ustring& detail) {
+  if (!dnsTunnelState_) return;
+  if (!connected) {
+    dnsTunnelState_->set_visible(false);
+    dnsTunnelState_->remove_css_class("ur-error-text");
+    return;
+  }
+  dnsTunnelState_->set_visible(true);
+  if (applied) {
+    dnsTunnelState_->remove_css_class("ur-error-text");
+    // Naming the mechanism matters on a machine with no systemd-resolved: it is
+    // the difference between "DNS works" and "DNS works BECAUSE we took over
+    // /etc/resolv.conf", which is the thing a user may need to undo by hand.
+    dnsTunnelState_->set_text(detail.empty()
+                                  ? Glib::ustring(T_("dns_on_tunnel", "DNS is going through the tunnel"))
+                                  : detail);
+    return;
+  }
+  dnsTunnelState_->add_css_class("ur-error-text");
+  dnsTunnelState_->set_text(
+      Glib::ustring(T_("dns_not_on_tunnel",
+                       "DNS is NOT going through the tunnel — names you look up are "
+                       "resolving outside it.")) +
+      (detail.empty() ? Glib::ustring() : Glib::ustring(" ") + detail));
 }
 
 void ConnectDrawer::RefreshDnsPill(const std::optional<urnet::DnsResolverSettings>& current) {
