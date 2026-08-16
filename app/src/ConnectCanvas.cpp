@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "UrMotion.hpp"
+
 namespace urnw {
 namespace {
 
@@ -84,12 +86,11 @@ ConnectCanvas::ConnectCanvas() {
   ShuffleBlobs();
 }
 
-bool ConnectCanvas::AnimationsEnabled() {
-  if (auto settings = Gtk::Settings::get_default()) {
-    return settings->property_gtk_enable_animations().get_value();
-  }
-  return true;
-}
+// The ONE reduce-motion choke point (UrMotion.hpp): GNOME's
+// enable-animations, surfaced to GTK as gtk-enable-animations, true on any
+// read failure. Off means motion GONE, not slower — every gated path here
+// renders an instant, fully correct final state.
+bool ConnectCanvas::AnimationsEnabled() { return motion::ShouldAnimate(); }
 
 // width is the driven dimension; the canvas writes its own height
 void ConnectCanvas::measure_vfunc(Gtk::Orientation orientation, int for_size, int& minimum,
@@ -114,6 +115,11 @@ void ConnectCanvas::SetState(State state) {
   const bool enteringLive = (state == State::Connecting || state == State::Connected);
   if (leavingLive && !enteringLive) ClearPoints();
   state_ = state;
+  // Connected FREEZES the grid (§7.1): SetGrid stops taking pushes, so settle
+  // what is on the canvas — the connected state then costs nothing per tick,
+  // and the last frame before the circles slide over it is a complete grid
+  // rather than one caught half grown-in.
+  if (state == State::Connected) SettleDots();
 
   // fade targets (500ms ease-in-out crossfade)
   idleFadeFrom_ = idleOpacity_;
@@ -149,6 +155,7 @@ void ConnectCanvas::SetState(State state) {
     glyphOpacity_ = glyphShown_ ? 1.0 : 0.0;
     blobProgress_ = blobsIn_ ? 1.0 : 0.0;
     blobsVisible_ = blobsIn_;
+    SettleDots();  // the dot layer snaps with everything else
     queue_draw();
     return;
   }
@@ -161,6 +168,16 @@ void ConnectCanvas::SetGrid(const std::vector<urnet::ProviderGridPoint>& points,
   if (state_ != State::Connecting) return;
   gridWidth_ = gridWidth;
   gridHeight_ = gridHeight;
+
+  // The reduce-motion / not-presenting rule (§5's fade-helper semantics) as it
+  // applies to the dot layer. A dot is born at scale 0 and grown in by Tick()
+  // — and Tick() is the page's shared ~10 fps clock, which runs under EXACTLY
+  // the condition below (ConnectPage::UpdateClock drives Tick() and
+  // SetPresentationActive from one boolean). So off that condition the
+  // grow-in has nothing to advance it, and a fully populated grid draws as the
+  // BARE LATTICE, indefinitely — the reported "no provider dots at all".
+  // Snapping is also what motion-off means: an instant, fully correct state.
+  const bool animate = presenting_ && AnimationsEnabled();
 
   // the diff: key by ClientId else "x,y"
   std::map<std::string, const urnet::ProviderGridPoint*> incoming;
@@ -187,26 +204,46 @@ void ConnectCanvas::SetGrid(const std::vector<urnet::ProviderGridPoint>& points,
       dot.y = p->Y;
       dot.state = dot.previous = parseState(p->State);
       dot.colorProgress = 1.0;
-      dot.sizeProgress = 0.0;  // grow-in
+      dot.sizeProgress = animate ? 0.0 : 1.0;  // grow-in, or born settled
       dots_.emplace(key, dot);
     } else {
       it->second.x = p->X;
       it->second.y = p->Y;
       const PointState next = parseState(p->State);
       if (next != it->second.state) {
-        it->second.previous = it->second.state;
+        // unanimated, the blend has no frames to run through: land on the new
+        // colour outright rather than leaving a stranded previous state
+        it->second.previous = animate ? it->second.state : next;
         it->second.state = next;
-        it->second.colorProgress = 0.0;
+        it->second.colorProgress = animate ? 0.0 : 1.0;
       }
     }
   }
   // missing keys fade out through Removed rather than vanishing between frames
-  for (auto& [key, dot] : dots_) {
-    if (incoming.find(key) == incoming.end() && dot.state != PointState::Removed) {
+  for (auto it = dots_.begin(); it != dots_.end();) {
+    Dot& dot = it->second;
+    if (incoming.find(it->first) != incoming.end()) {
+      ++it;
+      continue;
+    }
+    if (!animate) {
+      // no frames to fade through, and nothing would ever delete it
+      it = dots_.erase(it);
+      continue;
+    }
+    if (dot.state != PointState::Removed) {
       dot.previous = dot.state;
       dot.state = PointState::Removed;
       dot.colorProgress = 0.0;
     }
+    ++it;
+  }
+  if (!animate) {
+    // the whole layer is already at its pose (and any transition left over
+    // from a presenting spell earlier is not going to be advanced either)
+    SettleDots();
+    queue_draw();
+    return;
   }
   dotsAnimating_ = false;
   for (const auto& [key, dot] : dots_) {
@@ -239,6 +276,26 @@ void ConnectCanvas::Tick() {
 
 void ConnectCanvas::ClearPoints() {
   dots_.clear();
+  dotsAnimating_ = false;
+}
+
+// Every dot at its settled pose, nothing left to animate. Used wherever a dot
+// transition would otherwise be stranded mid-flight with no clock to finish
+// it: motion off, the canvas not presenting, the window coming back from the
+// tray (settle, never replay — §8's rule for the circles, same doctrine), and
+// the Connected freeze, which §7.1 wants settling to zero per-tick work.
+void ConnectCanvas::SettleDots() {
+  for (auto it = dots_.begin(); it != dots_.end();) {
+    Dot& dot = it->second;
+    if (dot.state == PointState::Removed) {
+      it = dots_.erase(it);  // its entire transition WAS the fade-out
+      continue;
+    }
+    dot.previous = dot.state;
+    dot.colorProgress = 1.0;
+    dot.sizeProgress = 1.0;
+    ++it;
+  }
   dotsAnimating_ = false;
 }
 
@@ -275,6 +332,11 @@ void ConnectCanvas::SetPresentationActive(bool active) {
   if (!active) {
     pulseBurstsLeft_ = 0;
     pulseOpacity_ = 0.0;
+    // The page's clock stops with the presentation, so a dot left mid-flight
+    // here would still be mid-flight on the next frame anyone renders (a tray
+    // thumbnail, the frame before the re-show settle). Land it now: dots
+    // animate only while this canvas is presenting.
+    SettleDots();
     return;
   }
   // re-shown: settle (never replay the blob entrance), then re-arm the pulse
@@ -283,6 +345,7 @@ void ConnectCanvas::SetPresentationActive(bool active) {
   blobProgress_ = blobsIn_ ? 1.0 : 0.0;
   blobsVisible_ = blobsIn_;
   glyphOpacity_ = glyphShown_ ? 1.0 : 0.0;
+  SettleDots();  // a grid pushed while hidden is complete on return, not growing
   if (state_ == State::Disconnected) StartIdlePulse();
   EnsureAnimClock();
   queue_draw();

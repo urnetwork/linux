@@ -39,6 +39,19 @@ class ConnectCanvas : public Gtk::Widget {
   State state() const { return state_; }
   // The live provider grid (ignored unless state == Connecting — iOS freezes
   // the grid the instant the connection lands). Empty list = bare lattice.
+  //
+  // The dots are REAL SDK data or nothing: this is the only way a dot is ever
+  // created, and the empty push is a normal reading (no session, rpc-only
+  // session, a connection not carrying traffic yet) that renders as the bare
+  // lattice. Nothing here invents a point.
+  //
+  // Grow-in/colour-blend transitions are only armed when this canvas is
+  // presenting AND OS animations are on — the page's shared ~10 fps clock,
+  // the only thing that advances them, runs under exactly that same
+  // condition (ConnectPage::UpdateClock drives Tick() and
+  // SetPresentationActive from ONE boolean; do not split them). Off that
+  // condition a pushed grid is drawn settled on the very next frame instead
+  // of sitting at scale 0 forever.
   void SetGrid(const std::vector<urnet::ProviderGridPoint>& points, int64_t gridWidth,
                int64_t gridHeight);
   void SetHovered(bool hovered);
@@ -71,6 +84,10 @@ class ConnectCanvas : public Gtk::Widget {
   void RunBlobs(bool in);
   void ShuffleBlobs();
   void ClearPoints();
+  // Every dot at its settled pose with nothing left to animate (Removed dots
+  // are dropped — their whole transition WAS the fade-out). The dot layer's
+  // half of the reduce-motion rule, and the "frozen" half of Connected.
+  void SettleDots();
 
   void DrawCanvas(const Cairo::RefPtr<Cairo::Context>& cr, double width, double height);
   void AddGlobePath(const Cairo::RefPtr<Cairo::Context>& cr, double originX, double originY,
