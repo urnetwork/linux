@@ -168,6 +168,12 @@ bool TunnelHost::PersistKeyMaterial(const urnet::DeviceLocalKeyMaterial& km) con
 
 // ---- published status ------------------------------------------------------
 
+// ORDERING HAZARD, and it has bitten twice. This writes two fields that other
+// paths REPLACE or CLEAR: StopInternalLocked(<non-empty reason>) clears both,
+// and RunStart's catch block re-publishes its own. Calling it and then calling
+// anything that tears down therefore tells the user nothing. Publish LAST, or
+// keep a copy and re-publish after (RunStart's keptError/keptCode), or use
+// StopUnsafeSessionLocked, which owns the whole ordering.
 void TunnelHost::PublishError(const std::string& message, const std::string& code) {
   std::scoped_lock lock(statusMutex_);
   status_.error = message;
@@ -894,9 +900,146 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
     status_.up_since_millis = 0;
     if (!reason.empty()) {
       status_.stop_reason = reason;
+      // THIS CLEAR IS WHY THE PROTECTIVE PATH PASSES AN EMPTY REASON. A stop
+      // somebody asked for has no error to report, so the previous session's
+      // error must not outlive it. But it means any caller that publishes a
+      // reason and THEN calls this with a non-empty reason erases its own
+      // message one line later — which is exactly what the egress-witness
+      // teardown did. See StopUnsafeSessionLocked.
       status_.error.clear();
       status_.error_code.clear();
     }
+  }
+}
+
+// THE PROTECTIVE TEARDOWN — the sibling of StopInternalLocked, and the
+// difference between them is the whole point.
+//
+// B1, THE SAFETY INVERSION. StopInternalLocked(<non-empty reason>) means "the
+// user asked to stop": it ends in ApplyFilterLocked(FilterState::Off), and
+// FloorForTransition answers false for EVERY transition into Off ("a user
+// disconnect ALWAYS lifts, even with the toggle on" — Tunnel.cpp), so the
+// kill-switch floor comes down with the tunnel. That is right for a disconnect
+// and precisely backwards here: the guards that call this fire on PROOF that
+// traffic is leaving this machine unprotected, and the old code lifted the
+// floor at that exact instant. The protection was dropped by the discovery that
+// it was needed.
+//
+// So this does what the io-loop drop in Reap() has always done — tear down with
+// an EMPTY reason, which leaves the firewall untouched, and then choose the
+// landing state deliberately:
+//
+//   * the kill switch was asked for -> Armed. FAIL CLOSED. An involuntary
+//     teardown IS an unexpected drop, which is the one case Windows parity
+//     (docs/linux_agent_help.md §6.3) says arms rather than lifts, and this is
+//     the drop the switch was bought for: the user said "never let me out
+//     unprotected", and we have just measured unprotected.
+//   * it was not -> Off, the table removed. Blocking a machine whose owner
+//     never asked to be blocked would be inventing a kill switch on their
+//     behalf and stranding them offline behind a toggle that reads "off" — the
+//     failure mode this file's doctrine forbids. Stopping the tunnel IS the
+//     protection they asked for.
+//
+// Either way the user is TOLD, in the app: tunnel_state=Error, stop_reason,
+// kill_switch=Armed|Failed (so the UI can render the block without parsing
+// prose) and an `error` sentence that says in words whether this machine is now
+// blocked and what lifts it.
+void TunnelHost::StopUnsafeSessionLocked(const std::string& reason,
+                                         const std::string& message,
+                                         const std::string& code) {
+  // 1) TEAR DOWN, firewall untouched. The empty reason is load-bearing twice
+  //    over: it keeps ApplyFilterLocked(Off) — the floor lift — out of this
+  //    path, and it keeps the tail of StopInternalLocked from clearing the
+  //    error we are about to publish.
+  StopInternalLocked(std::string());
+
+  // 2) LAND THE FLOOR DELIBERATELY, before anything is published, so what we
+  //    publish describes the machine as it actually is now.
+  const bool wantKillSwitch = killSwitchRequested_.load();
+  std::string detail = message;
+  if (wantKillSwitch) {
+    std::string filterError;
+    // FloorForTransition returns true for Armed structurally ("an Armed state
+    // without the floor is not a state, it is an open machine with a label on
+    // it"), so this cannot come back floorless and succeed.
+    if (ApplyFilterLocked(FilterState::Armed, &filterError)) {
+      detail +=
+          " This machine is now blocked, because the kill switch is on and there is no tunnel "
+          "to carry traffic. Turn the kill switch off, or disconnect, in the app to lift it.";
+      DaemonLogf(
+          "[tunnel] the session was stopped as UNSAFE (%s) and this machine stays blocked "
+          "because the kill switch is armed. Turn it off in the app to lift it, or run: %s\n",
+          reason.c_str(), NetFilter::RecoveryCommand());
+    } else {
+      // Say the smaller, scarier truth rather than the reassuring one: the
+      // block we intended is not in force, and whatever is left behind is
+      // whatever the failed `nft -f` did not replace. InstallFilterLocked has
+      // already published kill_switch=Failed with the detail, so the UI cannot
+      // render this as "off".
+      detail += " The kill switch could not be armed after the tunnel was stopped (" +
+                filterError +
+                "), so this machine may not be blocked. If the network stays broken instead, "
+                "lift the leftover rules with: " +
+                NetFilter::RecoveryCommand() + ".";
+      DaemonLogf(
+          "[tunnel] ERROR: the session was stopped as UNSAFE (%s) and the kill switch could "
+          "NOT be armed: %s\n",
+          reason.c_str(), filterError.c_str());
+    }
+  } else {
+    // No floor was asked for, so none is invented. The table goes; a failure
+    // here is remembered in filterRemovalPending_ and retried by the reaper.
+    //
+    // BUT THE OUTCOME IS CHECKED, exactly as the armed branch above checks it.
+    // Asserting "this machine is not blocked" on the strength of having ASKED
+    // for the table to go is how a user ends up cut off while being told they
+    // are fine — the same class of false reassurance this whole change exists
+    // to remove.
+    std::string filterError;
+    if (ApplyFilterLocked(FilterState::Off, &filterError)) {
+      detail +=
+          " The kill switch is off, so this machine is not blocked and traffic is going out "
+          "unprotected until you connect again.";
+      DaemonLogf("[tunnel] the session was stopped as UNSAFE (%s); the kill switch is off, so "
+                 "this machine is not blocked\n",
+                 reason.c_str());
+    } else {
+      detail += " The leftover firewall rules could NOT be removed (" + filterError +
+                "), so this machine may still be blocked even though the kill switch is off. "
+                "Lift them with: " +
+                NetFilter::RecoveryCommand() + ".";
+      DaemonLogf(
+          "[tunnel] ERROR: the session was stopped as UNSAFE (%s), the kill switch is off, and "
+          "the leftover rules could NOT be removed: %s -- the machine may be blocked. "
+          "Recover with: %s\n",
+          reason.c_str(), filterError.c_str(), NetFilter::RecoveryCommand());
+    }
+  }
+
+  // 3) PUBLISH LAST, AND ON PURPOSE.
+  //
+  //    B2. This is the SECOND time in this project that a published error has
+  //    been erased by the very next line: PublishError(...) followed by
+  //    StopInternalLocked("egress_unprotected"), whose tail clears
+  //    status_.error/error_code for any non-empty reason. The user was told
+  //    nothing at all about a teardown that had just cut them off.
+  //
+  //    The ordering is therefore a rule, not an accident: EVERYTHING that tears
+  //    down, applies a filter, or otherwise mutates status_ goes ABOVE this
+  //    block, and this block is the last thing the function does. If a step
+  //    must run after it, that step may not touch status_.error/error_code/
+  //    stop_reason/tunnel_state. All four are set together, under one lock, so
+  //    a `status` answered between them cannot report an Error with no reason.
+  //    The accepted cost: for the length of one `nft -f` a poll sees the
+  //    Stopped that StopInternalLocked published, never Up, never a reasonless
+  //    Error — and kill_switch is already correct by then, because step 2 is
+  //    what set it.
+  {
+    std::scoped_lock lock(statusMutex_);
+    status_.tunnel_state = ctl::TunnelState::Error;
+    status_.stop_reason = reason;
+    status_.error = detail;
+    status_.error_code = code;
   }
 }
 
@@ -1085,12 +1228,17 @@ bool TunnelHost::CheckTunnelStormLocked() {
                "[tunnel] STOPPING: the tunnel is amplifying traffic rather than carrying it. "
                "This is what a failed egress exclusion looks like -- the daemon's own packets "
                "are being captured into the tunnel. Tearing it down to protect the network.\n");
-  PublishError(
+  stormStrikes_ = 0;
+  // The SAME defect pair as the egress witness had, in the same shape: the
+  // PublishError that used to sit here was erased by StopInternalLocked's tail
+  // one line later, and that teardown lifted the kill-switch floor for a
+  // machine whose tunnel had just been caught amplifying. A storm IS an egress
+  // exclusion failure seen from outside the SDK, so it lands the same way.
+  StopUnsafeSessionLocked(
+      "tunnel_storm",
       "The connection was stopped because it was sending traffic in a loop instead of "
       "carrying it. This is a bug; please report it.",
       ctl::kCodeTunnelStorm);
-  stormStrikes_ = 0;
-  StopInternalLocked("tunnel_storm");
   return true;
 }
 
@@ -1141,9 +1289,17 @@ bool TunnelHost::CheckEgressWitnessLocked() {
       "[tunnel] STOPPING: this daemon's own traffic is no longer demonstrably outside its own "
       "tunnel, twice running. %s\n",
       witnessError.message.c_str());
-  PublishError(witnessError.message, ctl::kCodeEgressUnprotected);
   egressWitnessFailures_ = 0;
-  StopInternalLocked("egress_unprotected");
+  // NOT StopInternalLocked("egress_unprotected"). That published nothing (its
+  // tail clears the error) and lifted the kill-switch floor on the strength of
+  // having PROVEN the traffic unprotected. StopUnsafeSessionLocked fails closed
+  // and explains itself; see its contract.
+  StopUnsafeSessionLocked(
+      "egress_unprotected",
+      "The connection was stopped because this app's own traffic was no longer going out "
+      "around the tunnel. Left running, that makes the tunnel send in a loop instead of "
+      "carrying your traffic. (" + witnessError.message + ")",
+      ctl::kCodeEgressUnprotected);
   return true;
 }
 
@@ -1177,17 +1333,27 @@ void TunnelHost::Reap() {
   }
 
   if (died) {
+    // A STALE FLAG IS NOT A DROP, and this guard is part of the B2 fix. The
+    // done callback runs on an SDK thread: it compares session generations and
+    // only then sets ioLoopDied_, so a callback that read the generation an
+    // instant before a teardown bumped it can still land here with no session
+    // left. When that happens the drop has ALREADY been accounted for — by
+    // StopUnsafeSessionLocked, say, which has just published "your own traffic
+    // was no longer outside your own tunnel" — and running the block below
+    // would tear down nothing, republish tunnel_state and overwrite that
+    // reason with the generic "the tunnel stopped unexpectedly". Whoever
+    // handled the drop owns the explanation.
+    const bool hadSession = device_.has_value() || tunnel_ != nullptr || ioLoop_.has_value();
+    ioLoopDied_.store(false);
+    if (!hadSession) {
+      MaintainFilterLocked();  // the floor it landed on is still ours to keep
+      return;
+    }
+
     // The tunnel went away under us. Before this, the done callback only
     // fprintf'd and the published state stayed Up forever.
     std::fprintf(stderr, "[tunnel] the io loop ended unexpectedly; tearing the session down\n");
     StopInternalLocked(std::string());
-    {
-      std::scoped_lock statusLock(statusMutex_);
-      status_.tunnel_state = ctl::TunnelState::Error;
-      status_.stop_reason = "io_loop";
-      status_.error = "the tunnel stopped unexpectedly";
-      status_.error_code = ctl::kCodeTunOpenFailed;
-    }
     // An UNEXPECTED drop is the one case that arms the kill switch.
     if (killSwitchRequested_.load()) {
       std::string error;
@@ -1199,6 +1365,21 @@ void TunnelHost::Reap() {
     } else {
       std::string ignored;
       ApplyFilterLocked(FilterState::Off, &ignored);
+    }
+    // PUBLISH LAST, by the same rule StopUnsafeSessionLocked spells out: the
+    // teardown and the filter apply both mutate status_, so the reason goes
+    // after them, never before. It used to sit above the apply and survive only
+    // because ApplyFilterLocked happens not to touch these four fields — an
+    // incidental ordering, which is precisely how the erasure this comment
+    // exists for got written twice. The cost is bounded and accepted: for the
+    // length of one `nft -f` a `status` poll sees Stopped rather than Error,
+    // never Up, and never an Error with no reason attached.
+    {
+      std::scoped_lock statusLock(statusMutex_);
+      status_.tunnel_state = ctl::TunnelState::Error;
+      status_.stop_reason = "io_loop";
+      status_.error = "the tunnel stopped unexpectedly";
+      status_.error_code = ctl::kCodeTunOpenFailed;
     }
     return;
   }

@@ -14,16 +14,25 @@
 // accepted for interactive runs and simply skips the readiness notification.
 //
 // SPDX-License-Identifier: MPL-2.0
+#include <fcntl.h>
+#include <netinet/in.h>  // IPPROTO_TCP/IPPROTO_UDP for the self-test probes
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/utsname.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
+#include <cerrno>
+#include <climits>  // PATH_MAX
 #include <csignal>
 #include <cstddef>  // offsetof
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <string>
+#include <vector>
 
 #include <glib-unix.h>
 #include <glib.h>
@@ -94,7 +103,20 @@ void NotifySystemdReady() {
 // their machine; a dev run from a build tree prints its own argv[0] instead.
 constexpr const char* kInstalledPath = "/usr/lib/urnetwork/urnetworkd";
 
+// /proc/self/exe FIRST, because "what you are told to run must exist where it
+// says". The tarball installer relocates the daemon on an immutable host
+// (/usr/local/lib/urnetwork/urnetworkd on Bazzite, ExecStart rewritten to
+// match), so kInstalledPath is a guess and argv[0] is whatever the caller
+// typed. The kernel link is the only one of the three that is always the truth.
 std::string SelfPath(const char* argv0) {
+  char buf[PATH_MAX];
+  const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  if (n > 0) {
+    buf[n] = '\0';
+    // A deleted-and-replaced binary reads back as "<path> (deleted)"; that is
+    // not a runnable path, so fall through to the weaker answers.
+    if (std::strstr(buf, " (deleted)") == nullptr) return buf;
+  }
   if (argv0 != nullptr && argv0[0] == '/') return argv0;
   return kInstalledPath;
 }
@@ -132,6 +154,569 @@ void PrintRecovery(const char* argv0) {
       "  app is the normal way to lift the kill switch, and it always works — the app talks\n"
       "  to the daemon over a unix socket, which no firewall rule here can block.\n",
       self.c_str(), urnw::NetFilter::RecoveryCommand());
+}
+
+// ============================================================================
+// --selftest-egress — DOES THE cgroup-BPF SOCKET MARKER WORK ON THIS KERNEL?
+// ============================================================================
+//
+// The change this daemon now depends on for R4 self-exclusion is a
+// four-instruction BPF_PROG_TYPE_CGROUP_SOCK program attached at
+// BPF_CGROUP_INET_SOCK_CREATE (Tunnel.cpp, EgressSocketMarker). Until this mode
+// existed, that program had never been loaded, attached or executed on any
+// kernel: the only way to find out was to bring a tunnel up, and the last time
+// this daemon's own packets went into its own tun it moved 3.38 Tb in forty
+// minutes on the owner's machine. "It should work" is exactly the kind of claim
+// that shipped the storm, so here is the way to turn it into a measurement.
+//
+// WHAT IT DOES
+//   1. resolves this process's own cgroup v2 directory
+//   2. mkdir()s ONE temporary cgroup underneath it, named urnw-selftest-<pid>
+//   3. fork()s, moves the child into that cgroup (write "0" to cgroup.procs),
+//      and re-exec()s /proc/self/exe with the internal child flag
+//   4. the child runs the REAL EgressSocketMarker::Attach() — the same load,
+//      the same attach, the same SO_MARK read-back the tunnel path uses — and
+//      then reads SO_MARK off fresh UDP/TCP, v4/v6 sockets of its own
+//   5. the child exits (which detaches the program), the parent reaps it and
+//      removes the temporary cgroup on EVERY path: success, failure, exception,
+//      SIGINT/SIGTERM/SIGHUP, and a 60 s watchdog alarm
+//
+// WHAT IT DOES NOT DO, and this is checkable by reading it: no tun device, no
+// `ip route`/`ip rule`, no nftables of any kind, no DNS change, no packet on
+// any wire (a socket is created and read with getsockopt, never connected and
+// never sent on), no SDK, no control socket, no change to the daemon's own
+// cgroup or to any cgroup this program did not create. The only kernel state it
+// creates is one empty cgroup directory that it removes again.
+//
+// WHY A CHILD IN A TEMPORARY CGROUP RATHER THAN THIS PROCESS IN ITS OWN. Two
+// reasons, both about blast radius: a program attached to the caller's real
+// cgroup would mark the sockets of every process in it (under `sudo` from a
+// terminal that is the login session's scope, which is the user's shell and
+// everything they launch from it), and a process that has been moved between
+// cgroups cannot be moved back to where systemd thinks it is. A child in a
+// disposable leaf cgroup can only ever affect itself, and it exits.
+//
+// The verdict is printed in plain words and is also the exit status, so it can
+// be used from a script: 0 = the mechanism works, 1 = it does not (and the
+// output says which of load/attach/mark failed), 2 = the test could not be run
+// at all (no answer either way — not root, no cgroup v2, mkdir refused).
+
+constexpr const char kSelftestChildFlag[] = "--selftest-egress-child";
+// Part of the contract, not decoration: the child refuses to attach anything to
+// a cgroup whose leaf name does not start with this, so the internal flag
+// cannot be turned into "attach a BPF program to an arbitrary cgroup".
+constexpr const char kSelftestPrefix[] = "urnw-selftest-";
+constexpr const char kCgroupRoot[] = "/sys/fs/cgroup/";
+
+enum SelftestCode : int {
+  kSelftestOk = 0,
+  kSelftestMechanismFailed = 1,
+  kSelftestNoAnswer = 2,        // the test could not run; nothing was proven
+  kSelftestChildBadArgs = 9,    // the child was handed a path it will not touch
+  kSelftestJoinFailed = 10,     // the child never made it into the test cgroup
+  kSelftestLoadFailed = 11,     // bpf(BPF_PROG_LOAD) refused the program
+  kSelftestAttachFailed = 12,   // bpf(BPF_PROG_ATTACH) refused the cgroup
+  kSelftestMarkFailed = 13,     // loaded and attached, but the mark never lands
+  kSelftestUnknownFailure = 19, // Attach() failed in a way not classified below
+  kSelftestExecFailed = 20,     // execv(/proc/self/exe) failed in the child
+};
+
+// Open a socket of the given kind and report the SO_MARK the kernel gave it.
+// NOTHING is sent: the socket is created, asked one question, and closed. This
+// is the same read-back EgressSocketMarker uses; it is repeated here across the
+// socket kinds the SDK actually opens, because a marker that covered UDP but
+// not TCP would be a fresh way to leak.
+bool ReadNewSocketMark(int domain, int type, int protocol, uint32_t* mark,
+                       std::string* error) {
+  const int fd = ::socket(domain, type | SOCK_CLOEXEC, protocol);
+  if (fd < 0) {
+    if (error != nullptr) *error = std::string("socket(): ") + std::strerror(errno);
+    return false;
+  }
+  int value = 0;
+  socklen_t len = sizeof(value);
+  const int rc = ::getsockopt(fd, SOL_SOCKET, SO_MARK, &value, &len);
+  const int saved = errno;
+  ::close(fd);
+  if (rc != 0) {
+    if (error != nullptr) *error = std::string("getsockopt(SO_MARK): ") + std::strerror(saved);
+    return false;
+  }
+  if (mark != nullptr) *mark = static_cast<uint32_t>(value);
+  return true;
+}
+
+// "label ......." padded to a fixed width, so every step's verdict lands in the
+// same column no matter how the labels are edited later. A report whose columns
+// wander is a report people skim instead of read.
+std::string Dotted(const std::string& label) {
+  constexpr size_t kWidth = 35;
+  std::string out = label + " ";
+  while (out.size() < kWidth) out += '.';
+  return out;
+}
+
+int CgroupLevel(const std::string& path) {
+  if (path.empty()) return 0;
+  int level = 1;
+  for (const char c : path) {
+    if (c == '/') ++level;
+  }
+  return level;
+}
+
+// WHICH STEP FAILED — the thing the owner actually needs from a failure.
+// EgressSocketMarker::Attach() reports one string for three syscalls, so this
+// maps its wording back onto the step. The raw text is ALWAYS printed as well,
+// so if these prefixes ever drift the user still sees the true error and only
+// the label is wrong.
+//
+// TODO(egress): give EgressSocketMarker::Attach() an out-parameter naming the
+// failed step (load/attach/prove) so this string matching can be deleted. That
+// is a Tunnel.hpp change and this file does not own it.
+int ClassifySelftestFailure(const std::string& detail) {
+  const auto has = [&](const char* needle) {
+    return detail.find(needle) != std::string::npos;
+  };
+  if (has("BPF_PROG_LOAD")) return kSelftestLoadFailed;
+  if (has("BPF_PROG_ATTACH") || has("could not open")) return kSelftestAttachFailed;
+  if (has("came back with mark") || has("could not be proven")) return kSelftestMarkFailed;
+  if (has("no usable cgroup v2")) return kSelftestJoinFailed;
+  return kSelftestUnknownFailure;
+}
+
+// ---- the child half: runs INSIDE the temporary cgroup ----------------------
+
+int RunSelftestEgressChild(const std::string& cgroupPath) {
+  // This process was re-exec()d after being moved into the cgroup named on the
+  // command line. Refuse anything that is not the kind of cgroup our own parent
+  // half creates: an internal flag that attaches BPF programs to arbitrary
+  // cgroups would be a worse thing to own than the bug it diagnoses.
+  const std::string::size_type slash = cgroupPath.rfind('/');
+  const std::string leaf =
+      slash == std::string::npos ? cgroupPath : cgroupPath.substr(slash + 1);
+  if (cgroupPath.empty() || cgroupPath.front() == '/' ||
+      cgroupPath.find("..") != std::string::npos ||
+      leaf.rfind(kSelftestPrefix, 0) != 0) {
+    std::fprintf(stderr,
+                 "urnetworkd %s: refusing '%s' — this flag is internal to "
+                 "--selftest-egress and only ever operates on a %s* cgroup it created\n",
+                 kSelftestChildFlag, cgroupPath.c_str(), kSelftestPrefix);
+    return kSelftestChildBadArgs;
+  }
+  if (!urnw::CgroupV2PathExists(cgroupPath)) {
+    std::fprintf(stderr, "urnetworkd %s: %s%s does not exist\n", kSelftestChildFlag,
+                 kCgroupRoot, cgroupPath.c_str());
+    return kSelftestChildBadArgs;
+  }
+
+  // STEP 3 — did the move actually take? Without this check a failed move would
+  // surface below as "the program did not mark my socket", i.e. as a false
+  // accusation against the kernel. /proc/self/cgroup is the kernel's own answer
+  // to "which cgroup am I in".
+  const urnw::CgroupRef mine = urnw::SelfCgroupV2();
+  if (!mine.valid || mine.path != cgroupPath) {
+    std::printf("  step 3  %s FAILED\n"
+                "          expected 0::/%s, /proc/self/cgroup says 0::/%s\n",
+                Dotted("child joined the test cgroup").c_str(), cgroupPath.c_str(),
+                mine.valid ? mine.path.c_str() : "<none>");
+    return kSelftestJoinFailed;
+  }
+  std::printf("  step 3  %s ok    pid %d is in 0::/%s\n",
+              Dotted("child joined the test cgroup").c_str(), static_cast<int>(::getpid()),
+              cgroupPath.c_str());
+
+  urnw::CgroupRef ref;
+  ref.valid = true;
+  ref.path = cgroupPath;
+  ref.level = CgroupLevel(cgroupPath);
+
+  // STEPS 4-6 — THE REAL THING. Not a copy of the program, not a re-derivation
+  // of the instructions: the same EgressSocketMarker::Attach() the tunnel path
+  // calls, which loads, attaches and then proves itself with a fresh socket.
+  // If this file held its own copy of those four instructions, a passing
+  // self-test would only prove that the copy works.
+  urnw::EgressSocketMarker marker;
+  std::string error;
+  if (!marker.Attach(ref, urnw::kEgressMark, &error)) {
+    const int code = ClassifySelftestFailure(error);
+    const char* step = code == kSelftestLoadFailed     ? "4  bpf(BPF_PROG_LOAD)"
+                       : code == kSelftestAttachFailed ? "5  bpf(BPF_PROG_ATTACH)"
+                       : code == kSelftestMarkFailed   ? "6  SO_MARK read-back"
+                                                       : "?  EgressSocketMarker::Attach";
+    std::printf("  step %s ... FAILED\n", step);
+    std::printf("          %s\n", error.c_str());
+    return code;
+  }
+  std::printf("  step 4  %s ok    the verifier accepted the 4-instruction program\n",
+              Dotted("bpf(BPF_PROG_LOAD)").c_str());
+  std::printf("  step 5  %s ok    BPF_CGROUP_INET_SOCK_CREATE, BPF_F_ALLOW_MULTI\n",
+              Dotted("bpf(BPF_PROG_ATTACH)").c_str());
+  std::printf("  step 6  %s ok    %s\n", Dotted("SO_MARK on a fresh socket").c_str(),
+              marker.detail().c_str());
+
+  // STEP 7 — the coverage question. The SDK opens TCP (platform API, DoH,
+  // TURN) and UDP (QUIC/WebRTC/STUN), over v4 and v6. sock_create runs for all
+  // of them, but a claim like that is exactly what this mode exists to stop
+  // making without evidence.
+  struct Probe {
+    int domain;
+    int type;
+    int proto;
+    const char* label;
+    bool required;
+  };
+  static const Probe kProbes[] = {
+      {AF_INET, SOCK_DGRAM, IPPROTO_UDP, "AF_INET  SOCK_DGRAM ", true},
+      {AF_INET, SOCK_STREAM, IPPROTO_TCP, "AF_INET  SOCK_STREAM", true},
+      {AF_INET6, SOCK_DGRAM, IPPROTO_UDP, "AF_INET6 SOCK_DGRAM ", false},
+      {AF_INET6, SOCK_STREAM, IPPROTO_TCP, "AF_INET6 SOCK_STREAM", false},
+  };
+  bool allRequiredMarked = true;
+  std::printf("  step 7  the same question, one socket kind at a time:\n");
+  for (const Probe& probe : kProbes) {
+    uint32_t got = 0;
+    std::string probeError;
+    if (!ReadNewSocketMark(probe.domain, probe.type, probe.proto, &got, &probeError)) {
+      std::printf("            %s  n/a   (%s)%s\n", probe.label, probeError.c_str(),
+                  probe.required ? "  <-- REQUIRED" : "");
+      if (probe.required) allRequiredMarked = false;
+      continue;
+    }
+    const bool marked = got == urnw::kEgressMark;
+    std::printf("            %s  0x%08x  %s\n", probe.label, got,
+                marked ? "marked" : "NOT MARKED  <-- the program did not run for this kind");
+    if (!marked && probe.required) allRequiredMarked = false;
+  }
+  if (!allRequiredMarked) return kSelftestMarkFailed;
+
+  // The destructor detaches and closes both fds; the cgroup the parent removes
+  // would drop the attachment anyway. Both, deliberately: this is the shape the
+  // daemon relies on when a tunnel stops.
+  return kSelftestOk;
+}
+
+// ---- the parent half: sets the stage and cleans up unconditionally ---------
+
+// Async-signal-safe cleanup state. The path is a fixed buffer because a signal
+// handler may not touch std::string.
+char g_selftestCgroupDir[PATH_MAX] = {0};
+volatile sig_atomic_t g_selftestChildPid = 0;
+
+// rmdir() on a cgroup that still holds a task returns EBUSY, and a just-reaped
+// task can linger for a moment, so this retries for up to half a second. An
+// empty cgroup directory is inert — it holds nothing and affects nothing — but
+// leaving one behind would still be litter in someone else's hierarchy.
+void RemoveSelftestCgroupVerbose() {
+  if (g_selftestCgroupDir[0] == '\0') return;
+  for (int attempt = 0; attempt < 50; ++attempt) {
+    if (::rmdir(g_selftestCgroupDir) == 0 || errno == ENOENT) {
+      g_selftestCgroupDir[0] = '\0';
+      return;
+    }
+    const timespec ts{0, 10 * 1000 * 1000};  // 10 ms
+    ::nanosleep(&ts, nullptr);
+  }
+  std::fprintf(stderr,
+               "urnetworkd --selftest-egress: could not remove the temporary cgroup %s (%s).\n"
+               "  It is empty and does nothing, but to be rid of it:  sudo rmdir %s\n",
+               g_selftestCgroupDir, std::strerror(errno), g_selftestCgroupDir);
+}
+
+// Destructor-driven cleanup for the ordinary paths (return, early return).
+struct SelftestCgroupGuard {
+  ~SelftestCgroupGuard() { RemoveSelftestCgroupVerbose(); }
+};
+
+// ...and for the ones a destructor never sees: ^C, SIGTERM, a closed terminal,
+// and the watchdog alarm that covers a child which never exits. Only
+// async-signal-safe calls here (kill, rmdir, nanosleep, write, _exit).
+void SelftestSignalCleanup(int) {
+  if (g_selftestChildPid > 0) ::kill(static_cast<pid_t>(g_selftestChildPid), SIGKILL);
+  for (int attempt = 0; attempt < 100 && g_selftestCgroupDir[0] != '\0'; ++attempt) {
+    if (::rmdir(g_selftestCgroupDir) == 0 || errno == ENOENT) break;
+    const timespec ts{0, 10 * 1000 * 1000};
+    ::nanosleep(&ts, nullptr);
+  }
+  static const char kMsg[] =
+      "\nurnetworkd --selftest-egress: aborted (signal or 60s timeout); the temporary cgroup "
+      "was removed. Nothing else was changed.\n";
+  const ssize_t ignored = ::write(STDERR_FILENO, kMsg, sizeof(kMsg) - 1);
+  static_cast<void>(ignored);
+  ::_exit(130);
+}
+
+int RunSelftestEgress(const char* argv0) {
+  utsname host{};
+  ::uname(&host);
+  std::printf(
+      "urnetworkd %s — egress socket-marker self-test\n"
+      "kernel %s %s\n"
+      "\n"
+      "Question: on THIS kernel, does a cgroup-BPF program attached at\n"
+      "BPF_CGROUP_INET_SOCK_CREATE actually put fwmark 0x%08x on a socket at the moment\n"
+      "it is created — before connect() chooses a route and a source address?\n"
+      "That is the whole mechanism the daemon now relies on to keep its own traffic out\n"
+      "of its own tunnel.\n"
+      "\n"
+      "This test starts NO tunnel and touches NO networking: no tun device, no routes,\n"
+      "no policy rules, no nftables, no DNS, and not one packet on any wire. It creates\n"
+      "one temporary cgroup, runs a child inside it, and removes it again.\n"
+      "\n",
+      UR_APP_VERSION, host.sysname, host.release, urnw::kEgressMark);
+
+  // STEP 1 — where are we? Everything below hangs off this.
+  const urnw::CgroupRef cgroup = urnw::SelfCgroupV2();
+  if (!cgroup.valid) {
+    std::printf(
+        "  step 1  %s FAILED\n"
+        "          /proc/self/cgroup gives this process no usable cgroup v2 path: either there\n"
+        "          is no unified (0::) hierarchy on this host at all, or the 0:: line is the\n"
+        "          bare root \"/\", which is what a container in its own cgroup NAMESPACE sees.\n"
+        "          Either way neither the BPF marker nor the nftables cgroup match can name\n"
+        "          this process here, and nothing about the program itself was measured.\n",
+        Dotted("this process's cgroup v2").c_str());
+    return kSelftestNoAnswer;
+  }
+  if (!urnw::CgroupV2PathExists(cgroup.path)) {
+    std::printf("  step 1  %s FAILED\n"
+                "          /proc/self/cgroup says 0::/%s but %s%s does not exist — a cgroup\n"
+                "          namespace is in the way (a container), so the path is relative to a\n"
+                "          root this process cannot see.\n",
+                Dotted("this process's cgroup v2").c_str(), cgroup.path.c_str(), kCgroupRoot,
+                cgroup.path.c_str());
+    return kSelftestNoAnswer;
+  }
+  std::printf("  step 1  %s ok    0::/%s (level %d)\n",
+              Dotted("this process's cgroup v2").c_str(), cgroup.path.c_str(), cgroup.level);
+
+  // STEP 2 — privilege. bpf(BPF_PROG_LOAD) needs CAP_BPF (CAP_SYS_ADMIN before
+  // 5.8), BPF_PROG_ATTACH on a cgroup needs CAP_NET_ADMIN, and mkdir under
+  // /sys/fs/cgroup needs write access to a directory root owns. There is no
+  // unprivileged version of this measurement, so say so precisely instead of
+  // failing three steps later with EPERM.
+  if (::geteuid() != 0) {
+    std::printf("  step 2  %s FAILED\n"
+                "          loading a BPF program needs CAP_BPF, attaching it to a cgroup needs\n"
+                "          CAP_NET_ADMIN, and creating the temporary cgroup needs write access\n"
+                "          to %s%s. This is a read-only measurement, but it is a privileged one.\n"
+                "\n"
+                "          Run:  sudo %s --selftest-egress\n"
+                "\n"
+                "          `%s --diagnose` needs no root and reports the host preflight, but it\n"
+                "          cannot answer this question: only loading the program can.\n",
+                Dotted("privileges").c_str(), kCgroupRoot, cgroup.path.c_str(),
+                SelfPath(argv0).c_str(), SelfPath(argv0).c_str());
+    return kSelftestNoAnswer;
+  }
+  std::printf("  step 2  %s ok    running as root\n", Dotted("privileges").c_str());
+
+  // THE CONTROL. This process is NOT in the test cgroup and never will be, so
+  // its sockets must come back unmarked — before the program is attached and
+  // after it is gone. Without this the child's 0x55524e57 would only prove that
+  // something on this machine sets that mark, not that our program did it.
+  uint32_t before = 0;
+  std::string controlError;
+  const bool haveBefore = urnw::EgressSocketMarker::SelfSocketMark(&before, &controlError);
+  if (haveBefore) {
+    std::printf("  control %s 0x%08x %s\n", Dotted("this process, outside the cgroup").c_str(),
+                before,
+                before == urnw::kEgressMark
+                    ? "(already marked! a marker is attached to an ancestor cgroup — the daemon's\n"
+                      "          own, if you are running this from inside urnetworkd.service)"
+                    : "(unmarked, as it should be)");
+  } else {
+    std::printf("  control %s unavailable (%s)\n",
+                Dotted("this process, outside the cgroup").c_str(), controlError.c_str());
+  }
+
+  // STEP 2b — the temporary cgroup. Under our own, so it inherits whatever
+  // limits and delegation already apply to us and creates no new top-level
+  // hierarchy.
+  const std::string relative =
+      cgroup.path + "/" + kSelftestPrefix + std::to_string(static_cast<long>(::getpid()));
+  const std::string full = std::string(kCgroupRoot) + relative;
+  if (full.size() >= sizeof(g_selftestCgroupDir)) {
+    std::printf("  step 2b %s FAILED\n"
+                "          the path would be %zu bytes, longer than this program's fixed\n"
+                "          cleanup buffer; refusing to create something it cannot promise to\n"
+                "          remove from a signal handler.\n",
+                Dotted("temporary cgroup").c_str(), full.size());
+    return kSelftestNoAnswer;
+  }
+  // The errno that matters is mkdir's own — checking with access() afterwards
+  // would report ENOENT for every cause and lose the EROFS/EACCES that tells
+  // the user WHY.
+  int created = ::mkdir(full.c_str(), 0755) == 0 ? 0 : errno;
+  if (created == EEXIST) {
+    // Ours by naming convention and by pid: a leftover from a run that was
+    // killed between mkdir and cleanup. An empty cgroup is safe to remove.
+    ::rmdir(full.c_str());
+    created = ::mkdir(full.c_str(), 0755) == 0 ? 0 : errno;
+  }
+  if (created != 0) {
+    const int saved = created;
+    std::printf("  step 2b %s FAILED\n"
+                "          mkdir %s: %s\n",
+                Dotted("temporary cgroup").c_str(), full.c_str(), std::strerror(saved));
+    if (saved == EROFS) {
+      std::printf("          /sys/fs/cgroup is mounted read-only here (a container, usually).\n");
+    } else if (saved == EACCES || saved == EPERM) {
+      std::printf("          the cgroup directory above is not writable even as root, which\n"
+                  "          usually means a cgroup v1 hybrid mount or a delegation boundary.\n");
+    }
+    return kSelftestNoAnswer;
+  }
+  std::memcpy(g_selftestCgroupDir, full.c_str(), full.size() + 1);
+  SelftestCgroupGuard guard;  // removes it on every ordinary return below
+  std::signal(SIGINT, &SelftestSignalCleanup);
+  std::signal(SIGTERM, &SelftestSignalCleanup);
+  std::signal(SIGHUP, &SelftestSignalCleanup);
+  std::signal(SIGALRM, &SelftestSignalCleanup);
+  std::printf("  step 2b %s ok    created %s\n", Dotted("temporary cgroup").c_str(),
+              full.c_str());
+
+  // STEP 3+ happen in a child, because a process that has been moved into
+  // another cgroup cannot be moved back to the one systemd believes it is in,
+  // and because a marked socket must never be able to belong to this process.
+  // Everything the child needs is built BEFORE the fork: between fork() and
+  // execv() only async-signal-safe calls are legal (this binary links a Go
+  // runtime, so a malloc in the forked child could deadlock outright).
+  const std::string procsPath = full + "/cgroup.procs";
+  std::string exePath = SelfPath(argv0);
+  std::string childFlag = kSelftestChildFlag;
+  std::string childArg = relative;
+  char* childArgv[] = {exePath.data(), childFlag.data(), childArg.data(), nullptr};
+
+  std::fflush(stdout);
+  std::fflush(stderr);
+  const pid_t child = ::fork();
+  if (child < 0) {
+    std::printf("  step 3  %s FAILED  %s\n", Dotted("fork()").c_str(), std::strerror(errno));
+    return kSelftestNoAnswer;
+  }
+  if (child == 0) {
+    // "0" means "the writing process" to cgroup_procs_write(), so this needs no
+    // formatting and no allocation.
+    const int fd = ::open(procsPath.c_str(), O_WRONLY | O_CLOEXEC);
+    if (fd < 0) ::_exit(kSelftestJoinFailed);
+    static const char kSelf[] = "0\n";
+    const ssize_t written = ::write(fd, kSelf, sizeof(kSelf) - 1);
+    ::close(fd);
+    if (written != static_cast<ssize_t>(sizeof(kSelf) - 1)) ::_exit(kSelftestJoinFailed);
+    // /proc/self/exe rather than a searched name: this must be THIS binary, not
+    // whatever else is called urnetworkd on this machine.
+    ::execv("/proc/self/exe", childArgv);
+    ::_exit(kSelftestExecFailed);
+  }
+  g_selftestChildPid = child;
+  ::alarm(60);  // a child that wedges must not wedge the cleanup
+
+  int status = 0;
+  while (::waitpid(child, &status, 0) < 0) {
+    if (errno == EINTR) continue;
+    std::printf("  step 3  %s FAILED  %s\n", Dotted("waitpid()").c_str(),
+                std::strerror(errno));
+    g_selftestChildPid = 0;
+    ::alarm(0);
+    return kSelftestNoAnswer;
+  }
+  g_selftestChildPid = 0;
+  ::alarm(0);
+
+  int code = kSelftestUnknownFailure;
+  if (WIFEXITED(status)) {
+    code = WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    std::printf("          the child was killed by signal %d\n", WTERMSIG(status));
+    code = kSelftestUnknownFailure;
+  }
+
+  // THE CONTROL, AGAIN, now that the program is gone with the child.
+  uint32_t after = 0;
+  if (urnw::EgressSocketMarker::SelfSocketMark(&after, nullptr)) {
+    std::printf("  control %s 0x%08x %s\n", Dotted("this process, after the test").c_str(),
+                after,
+                after == urnw::kEgressMark ? "(still marked — see the note above)"
+                                           : "(unmarked)");
+  }
+
+  std::printf("\n");
+  switch (code) {
+    case kSelftestOk:
+      std::printf(
+          "VERDICT: THE MECHANISM WORKS ON THIS KERNEL.\n"
+          "  A socket created inside the test cgroup came back carrying 0x%08x.\n"
+          "%s"
+          "  That is the claim R4 rests on, measured rather than assumed: the daemon's own\n"
+          "  sockets are marked BEFORE connect(), so their route lookup never reaches the\n"
+          "  capture table and never binds the tunnel's own source address.\n"
+          "  It does NOT prove the daemon has the program attached RIGHT NOW; that is a\n"
+          "  different question, and its answer is the `[tunnel] egress:` line the daemon\n"
+          "  logs when a tunnel comes up:  journalctl -u urnetworkd | grep 'egress'\n",
+          urnw::kEgressMark,
+          // Only claim the negative control when it actually came back negative:
+          // run from INSIDE urnetworkd.service with the daemon's own marker
+          // attached to an ancestor cgroup, this process's sockets are marked
+          // too, and saying otherwise would be the same kind of unearned green
+          // check this mode exists to replace.
+          (haveBefore && before != urnw::kEgressMark)
+              ? "  An identical socket created by this process, outside that cgroup, did not.\n"
+              : "  (This process's own sockets could not serve as a negative control here —\n"
+                "  see the control line above.)\n");
+      break;
+    case kSelftestJoinFailed:
+      std::printf("VERDICT: NO ANSWER — the child never got into the test cgroup, so nothing\n"
+                  "  about the BPF program was measured. The failure is cgroup plumbing, not\n"
+                  "  the marker.\n");
+      code = kSelftestNoAnswer;
+      break;
+    case kSelftestLoadFailed:
+      std::printf("VERDICT: THE MECHANISM DOES NOT WORK HERE — bpf(BPF_PROG_LOAD) FAILED.\n"
+                  "  The kernel would not accept the program at all. Usual causes, in order:\n"
+                  "  CONFIG_CGROUP_BPF=n or CONFIG_BPF_SYSCALL=n, an SELinux/AppArmor policy\n"
+                  "  denying bpf() to this domain (check `ausearch -m avc` for bpf), or a\n"
+                  "  seccomp filter on the unit. Any verifier text is printed above verbatim.\n"
+                  "  The daemon must NOT be run with a tunnel on this host until this passes:\n"
+                  "  the nftables cgroup rule alone cannot repair a source address connect()\n"
+                  "  has already chosen.\n");
+      break;
+    case kSelftestAttachFailed:
+      std::printf("VERDICT: THE MECHANISM DOES NOT WORK HERE — bpf(BPF_PROG_ATTACH) FAILED.\n"
+                  "  The program loaded, so bpf() itself is permitted; the kernel refused to\n"
+                  "  attach it to the cgroup. Usual causes: missing CAP_NET_ADMIN, a cgroup v1\n"
+                  "  hybrid hierarchy, or an attach-type restriction from another controller.\n");
+      break;
+    case kSelftestMarkFailed:
+      std::printf("VERDICT: THE MECHANISM DOES NOT WORK HERE — THE MARK NEVER LANDED.\n"
+                  "  This is the dangerous one: load and attach both SUCCEEDED, so every\n"
+                  "  green check short of an actual measurement would have said 'protected',\n"
+                  "  and the sockets would still have gone into the tunnel. Whatever the\n"
+                  "  cause (a struct bpf_sock layout the program's offsetof() did not match,\n"
+                  "  a kernel that ignores mark writes from sock_create, another cgroup\n"
+                  "  program overwriting sk_mark), the daemon must not be trusted to exclude\n"
+                  "  its own traffic on this host.\n");
+      break;
+    case kSelftestChildBadArgs:
+    case kSelftestExecFailed:
+      std::printf("VERDICT: NO ANSWER — the test child could not be started (%s).\n",
+                  code == kSelftestExecFailed ? "execv(/proc/self/exe) failed"
+                                              : "the child rejected its arguments");
+      code = kSelftestNoAnswer;
+      break;
+    default:
+      std::printf("VERDICT: NO ANSWER — the test child exited with status %d and no verdict.\n",
+                  code);
+      code = kSelftestNoAnswer;
+      break;
+  }
+  std::printf("\nNothing on this machine was changed: the temporary cgroup is removed, no\n"
+              "packet was sent, and no firewall, route or DNS state was touched.\n");
+  std::fflush(stdout);
+
+  if (code == kSelftestOk) return kSelftestOk;
+  if (code == kSelftestNoAnswer) return kSelftestNoAnswer;
+  return kSelftestMechanismFailed;
 }
 
 struct Daemon {
@@ -218,6 +803,28 @@ int main(int argc, char** argv) {
       foreground = true;
       continue;
     }
+    if (arg == "--selftest-egress") {
+      // Proves the cgroup-BPF socket marker on THIS kernel. No tunnel, no
+      // routes, no nftables, no packets — see the block comment above
+      // RunSelftestEgress for exactly what it does and does not touch.
+      const int rc = RunSelftestEgress(argv[0]);
+      std::fflush(stdout);
+      return rc;
+    }
+    if (arg == kSelftestChildFlag) {
+      // INTERNAL, and it is not a way to attach a BPF program anywhere you
+      // like: the child refuses any cgroup whose leaf name is not
+      // urnw-selftest-*, and it is only ever re-exec()d by the parent half
+      // above, already inside the cgroup it names.
+      if (i + 1 >= argc) {
+        std::fprintf(stderr, "urnetworkd: %s needs a cgroup path (internal flag)\n",
+                     kSelftestChildFlag);
+        return kSelftestChildBadArgs;
+      }
+      const int rc = RunSelftestEgressChild(argv[i + 1]);
+      std::fflush(stdout);
+      return rc;
+    }
     if (arg == "--diagnose") {
       // Print-and-exit field-support tool: everything the data plane needs
       // from the host, without touching the network or the control socket.
@@ -234,6 +841,15 @@ int main(int argc, char** argv) {
                   armed ? "ARMED — this machine is deliberately blocked" : "not armed",
                   urnw::NetFilter::ArmedMarkerPath());
       const int missing = ReportPreflight();
+      // The preflight can only say the cgroup EXISTS. Whether a program
+      // attached to it actually marks sockets on this kernel is a different
+      // question, it is the one this daemon's self-exclusion rests on, and
+      // there is exactly one honest way to answer it.
+      std::printf(
+          "\negress self-exclusion: this build marks the daemon's own sockets at creation with\n"
+          "a cgroup-BPF program. To prove that works on THIS kernel (no tunnel, no routes, no\n"
+          "nftables, no packets):\n\n    sudo %s --selftest-egress\n",
+          SelfPath(argv[0]).c_str());
       PrintRecovery(argv[0]);
       std::fflush(stdout);
       return missing == 0 ? 0 : 1;
@@ -271,7 +887,11 @@ int main(int argc, char** argv) {
           preserveArmed && ::access(urnw::NetFilter::ArmedMarkerPath(), F_OK) == 0;
       // Idempotent by construction (add-then-delete), so running it on a
       // machine with nothing installed is a successful no-op.
-      urnw::NetFilter::SweepStaleState(preserveArmed);
+      // The return (did it preserve an armed floor?) is deliberately unused
+      // here: keepsArmedFloor above already decided that from the marker, before
+      // the sweep could clear it, and the message below has to describe the
+      // INTENT of this invocation.
+      static_cast<void>(urnw::NetFilter::SweepStaleState(preserveArmed));
       // CONFIRM IT. SweepStaleState() returns void and only logs, and this is
       // the command a cut-off user is told to trust: reporting a failed sweep
       // as a completed one would send them away from the one thing that was
@@ -293,11 +913,18 @@ int main(int argc, char** argv) {
     }
     if (arg == "--help" || arg == "-h") {
       std::printf(
-          "usage: urnetworkd [--foreground] [--diagnose] [--revert] [--version]\n"
+          "usage: urnetworkd [--foreground] [--diagnose] [--selftest-egress] [--revert]\n"
+          "                  [--version]\n"
           "URnetwork privileged daemon: control socket at %s,\n"
           "device RPC on 127.0.0.1:%d while the tunnel is up.\n"
           "  --diagnose             print the host preflight (ip/nft/resolvectl, cgroup, tun),\n"
           "                         the kill-switch state and the recovery steps, then exit\n"
+          "  --selftest-egress      prove, on this kernel, that the cgroup-BPF socket marker\n"
+          "                         that keeps the daemon's own traffic out of its own tunnel\n"
+          "                         actually marks sockets at creation. Starts no tunnel and\n"
+          "                         touches no routes, no nftables and no DNS; sends no packet.\n"
+          "                         Needs root (bpf() does). Exit 0 = works, 1 = does not,\n"
+          "                         2 = could not be measured\n"
           "  --revert               lift the URnetwork firewall table, policy rules and capture\n"
           "                         routes, and clear the armed marker; then exit. Run this when\n"
           "                         a machine is stuck blocked. Requires root.\n"

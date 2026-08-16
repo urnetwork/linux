@@ -31,10 +31,17 @@ namespace urnw {
 namespace {
 
 // Reserved for documentation (RFC 5737 TEST-NET-1) and inside the capture set
-// (192.0.0.0/9), so both the `ip route get` capture check and the packet
-// witness exercise exactly the policy we installed without naming anyone's
-// real host. Nothing is routed there and nothing can listen there.
+// (192.0.0.0/9), so the witness's two sockets resolve exactly the policy we
+// installed without naming anyone's real host. Nothing is routed there and
+// nothing can listen there — and since the witness only ever connect()s, which
+// sends no packet, nothing is ever addressed to it on the wire either.
 constexpr const char* kEgressProbeAddress = "192.0.2.1";
+
+// Byte-identical to ctl::kCodeEgressUnprotected / ctl::kCodeRouteInstallFailed.
+// Literals and not an include, exactly like kFilterCode* in the header: this
+// file stays free of ControlProtocol.hpp (and of nlohmann).
+constexpr const char* kCodeEgressUnprotected = "egress_unprotected";
+constexpr const char* kCodeRouteInstallFailed = "route_install_failed";
 
 std::string Trim(std::string s) {
   while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ' ||
@@ -62,20 +69,14 @@ void SleepMillis(int millis) {
   ::nanosleep(&ts, nullptr);
 }
 
-// `ip route get` prints one line beginning with the destination; the outgoing
-// interface is the token after " dev ". Returns "" when the answer has none
-// (unreachable, or an error line).
-std::string DeviceFromRouteGet(const std::string& output) {
-  const size_t nl = output.find('\n');
-  const std::string line = output.substr(0, nl == std::string::npos ? output.size() : nl);
-  const size_t pos = line.find(" dev ");
-  if (pos == std::string::npos) return {};
-  const size_t start = pos + 5;
-  size_t end = line.find(' ', start);
-  if (end == std::string::npos) end = line.size();
-  return line.substr(start, end - start);
-}
-
+// RETIRED WITH THE LAST `ip route get` IN THIS FILE. It parsed the outgoing
+// interface out of `ip route get`'s answer, which is how both halves of the old
+// egress gate were read. `ip route get` asks the kernel where a HYPOTHETICAL
+// packet, belonging to no socket, would go; the two questions this file
+// actually needs — "does ordinary traffic land in the tun" and "does this
+// daemon's own socket escape it" — are now answered by connect()ing two real
+// sockets and reading the source addresses the kernel bound to them
+// (BindWitnessSocket). Nothing here parses routing prose any more.
 bool ValidInterfaceName(const std::string& name) {
   if (name.empty() || name.size() >= IFNAMSIZ) return false;
   for (const char c : name) {
@@ -203,17 +204,47 @@ bool ParseNamedCounter(const std::string& listing, const char* name, uint64_t* p
   return true;
 }
 
-// One `nft list counters` for the whole table, so the witness reads both of
-// its counters from the SAME snapshot and cannot straddle a packet.
-bool ReadTableCounters(std::string* listing, std::string* error) {
+// The body of one chain out of `nft list table`, between its opening brace and
+// the closing "\n\t}". "" when the chain is absent — which is itself an answer
+// and never an inconvenience to be worked around.
+std::string ChainBodyFromListing(const std::string& listing, const char* chain) {
+  const std::string needle = std::string("chain ") + chain + " {";
+  const size_t at = listing.find(needle);
+  if (at == std::string::npos) return {};
+  const size_t from = at + needle.size();
+  const size_t end = listing.find("\n\t}", from);
+  // A MISSING TERMINATOR IS A PARSE FAILURE, NOT "the rest of the file".
+  // Returning the remainder used to hand the aim guards a body containing every
+  // OTHER chain's rules, so a witness could confirm it was pointed at the right
+  // interface and the right mark by finding those strings in a NEIGHBOUR's
+  // chain — a green check produced by a broken parse, which is precisely the
+  // false-confidence class that let the amplification storm ship.
+  if (end == std::string::npos) return {};
+  return listing.substr(from, end - from);
+}
+
+// ONE `nft list table` for the whole table, so every reader gets its counters
+// AND the rules that feed them from the SAME snapshot and cannot straddle a
+// packet or a table swap.
+//
+// `list table` and not `list counters table`: the witness has to check that the
+// instrument it is about to read is still pointed at the interface it thinks it
+// is, and a counters-only listing carries the numbers with none of the rules
+// that produce them. Reading a counter without reading its rule is how a green
+// check on the wrong question gets shipped.
+bool ReadTableListing(std::string* listing, std::string* error) {
   const auto fail = [error](std::string message) {
     if (error != nullptr) *error = std::move(message);
     return false;
   };
   const std::string nft = FindTool("nft");
   if (nft.empty()) return fail("nftables (nft) is not installed");
-  const CommandResult r = RunCommand({nft, "list", "counters", "table", "inet", kNftTableName});
-  if (!r.ok()) return fail(std::string("nft list counters: ") + r.Describe());
+  const CommandResult r = RunCommand({nft, "list", "table", "inet", kNftTableName});
+  if (!r.ok()) {
+    return fail(std::string("nft list table inet ") + kNftTableName + ": " + r.Describe() +
+                ". The capture policy this daemon installed is not in the kernel, so nothing "
+                "here can be measured");
+  }
   if (listing != nullptr) *listing = r.output;
   return true;
 }
@@ -222,7 +253,7 @@ bool ReadTableCounters(std::string* listing, std::string* error) {
 // counters mean the cgroup rule was never emitted, which is itself the answer.
 bool ReadMarkChainCounters(uint64_t* daemonPackets, uint64_t* totalPackets, std::string* error) {
   std::string listing;
-  if (!ReadTableCounters(&listing, error)) return false;
+  if (!ReadTableListing(&listing, error)) return false;
   if (!ParseNamedCounter(listing, kNftMarkDaemonCounter, daemonPackets, nullptr)) {
     if (error != nullptr) {
       *error = std::string("the table carries no ") + kNftMarkDaemonCounter +
@@ -904,24 +935,45 @@ std::string BuildNftRuleset(const FilterConfig& cfg) {
   line("\t}");
   line("");
 
-  // -- 0b. THE PACKET WITNESS. Counts only: policy accept, no verdict on any
-  //    rule, so this chain cannot change the fate of a single packet. It is
-  //    the instrument Tunnel::VerifyEgressWitness reads, and it is at
-  //    POSTROUTING on purpose — nf_hook_state.out is captured from
-  //    skb_dst(skb)->dev before the output hooks run, so at the output hook a
-  //    packet the mark chain successfully re-routed STILL reports the tun.
-  //    Counting the interface at the output hook would have rebuilt the
-  //    original false-confidence check in a new place.
+  // -- 0b. THE INSTRUMENT. Counts only: policy accept, no verdict on any rule,
+  //    so this chain cannot change the fate of a single packet.
+  //
+  //    IT MATCHES THE MARK, NOT A PROBE DESTINATION, AND THAT IS THE WHOLE
+  //    REASON THE FLOOR NO LONGER CARRIES A HOLE. The previous cut matched
+  //    `ip daddr 192.0.2.1 udp dport 9`, which meant the witness had to EMIT
+  //    datagrams to that address, which in turn meant urnw_out needed a
+  //    standing `accept` for them — a permanent hole in the kill-switch floor,
+  //    installed for as long as the table existed, so that a measurement could
+  //    be taken twice a minute. These two rules watch the daemon's OWN REAL
+  //    TRAFFIC instead (every packet leaving a socket that carries kEgressMark,
+  //    whether the mark came from the sock_create program or from the belt
+  //    chain above), so the witness reads a counter the kernel is already
+  //    keeping and sends nothing at all. No emission, therefore no permit.
+  //
+  //    urnw_probe_tun IS THE STORM SIGNATURE, EXACTLY. A marked daemon packet
+  //    leaving through our own tun is the packet the SDK's IoLoop reads back
+  //    out and re-sends: on 2026-08-15 that loop ran forty minutes at 1.34 Gbps
+  //    with 0 in. It must be zero for the life of the ruleset, and one is the
+  //    whole defect.
+  //
+  //    POSTROUTING, NOT OUTPUT, AND THIS IS LOAD-BEARING. nf_hook_state.out is
+  //    captured from skb_dst(skb)->dev before the output hooks run, so at the
+  //    output hook a packet the mark chain successfully re-routed STILL reports
+  //    the tun. Counting the interface at the output hook would have rebuilt
+  //    the original false-confidence check in a new place.
+  //
+  //    `lo` is excluded from the physical leg on purpose: the daemon's own
+  //    device RPC on 127.0.0.1 is marked like everything else it opens, and
+  //    counting it would inflate "left the machine properly" with traffic that
+  //    never left the machine.
   if (d.tun_named) {
     line(std::string("\tchain ") + kNftProbeChainName + " {");
     line("\t\ttype filter hook postrouting priority " + std::to_string(kMarkChainPriority) +
          "; policy accept;");
-    line(std::string("\t\tip daddr ") + kEgressProbeAddress + " udp dport " +
-         std::to_string(kEgressProbePort) + " oifname \"" + cfg.tun_name +
-         "\" counter name \"" + kNftProbeTunCounter + "\"");
-    line(std::string("\t\tip daddr ") + kEgressProbeAddress + " udp dport " +
-         std::to_string(kEgressProbePort) + " oifname != \"" + cfg.tun_name +
-         "\" counter name \"" + kNftProbePhyCounter + "\"");
+    line("\t\tmeta mark " + mark + " oifname \"" + cfg.tun_name + "\" counter name \"" +
+         kNftProbeTunCounter + "\"");
+    line("\t\tmeta mark " + mark + " oifname != \"" + cfg.tun_name +
+         "\" oifname != \"lo\" counter name \"" + kNftProbePhyCounter + "\"");
     line("\t}");
     line("");
   }
@@ -945,18 +997,14 @@ std::string BuildNftRuleset(const FilterConfig& cfg) {
   // the exact analogue of matching FWP_CONDITION_FLAG_IS_LOOPBACK rather than
   // 127/8.
   line("\t\toifname \"lo\" counter accept");
-  // THE WITNESS PERMIT, and it is a deliberate hole in the floor: exactly one
-  // RFC 5737 documentation address on the RFC 863 discard port. It is here so
-  // that the witness measures ROUTING and not filter policy — without it a
-  // floor drop at priority 0 (which is BELOW the mark chain but ABOVE
-  // postrouting) would stop the probe before it could be counted, and
-  // "nothing reached either interface" would be indistinguishable from a
-  // mechanism failure. 192.0.2.0/24 is routed nowhere, nothing can listen
-  // there, and the daemon is the only thing on the machine that sends there.
-  // It is still a hole, it is permanent while the table is installed, and the
-  // leak inventory in Tunnel.hpp names it.
-  line(std::string("\t\tip daddr ") + kEgressProbeAddress + " udp dport " +
-       std::to_string(kEgressProbePort) + " counter accept");
+  // THE WITNESS PERMIT IS GONE, AND NOTHING REPLACED IT. Builds before this one
+  // carried `ip daddr 192.0.2.1 udp dport 9 counter accept` here — a standing
+  // accept in the kill-switch floor, present for as long as the table was
+  // installed, whose only purpose was to let a synthetic probe reach a counter.
+  // The witness no longer sends anything (Tunnel::VerifyEgressWitness measures
+  // two connect() calls and reads the mark counters above), so there is no
+  // packet left to permit. A hole that exists only to make a measurement
+  // possible is a hole the measurement should not have needed.
   line("");
   // The cloud metadata service: never, in any state, on any interface. The
   // capture set routes 169.254/16 into the tunnel on purpose, so permitting
@@ -1774,16 +1822,23 @@ bool Tunnel::Configure(const TunnelConfig& cfg, TunnelError* err) {
   // anybody calls this tunnel up, that (a) ordinary traffic now leaves through
   // the tun and (b) the daemon's own traffic demonstrably does not.
   //
-  // (b) IS NOW MEASURED WITH REAL PACKETS AND IS FATAL. It runs HERE, which is
-  // before TunnelHost hands the tun fd to newIoLoop: nothing is reading the
-  // tun at this moment, so even in the failure case a captured probe datagram
-  // cannot be read back out and re-sent. Zero bytes can be amplified by the
-  // check that detects amplification. Failing it returns false, ~Tunnel drops
-  // the policy rule and closes the fd, and the capture routes go with the
-  // interface — the machine is back to where it started before any user
-  // traffic could touch it.
+  // ONE CALL, AND ON PURPOSE. (a) used to live in a separate VerifyCaptureTook
+  // that ran ONLY here, at bring-up, and asked `ip route get` — so the live
+  // re-check thirty seconds later re-proved (b) against a capture policy it
+  // never re-checked was still there, and could report green with the whole
+  // ruleset gone. Both halves now live inside VerifyEgressWitness as legs 1 and
+  // 0, which means the bring-up gate, the post-connect gate and the reaper's
+  // re-check are the same four measurements in the same order, every time. A
+  // check that only one caller runs is a check the other callers are quietly
+  // assuming.
+  //
+  // IT IS FATAL, AND IT RUNS HERE, before TunnelHost hands the tun fd to
+  // newIoLoop: nothing is reading the tun at this moment, and the witness sends
+  // nothing at all, so no failure mode of this check can put a packet anywhere.
+  // Failing it returns false, ~Tunnel drops the policy rule and closes the fd,
+  // and the capture routes go with the interface — the machine is back to where
+  // it started before any user traffic could touch it.
   if (cfg.require_egress_protection) {
-    if (!VerifyCaptureTook(err)) return false;
     if (!VerifyEgressWitness("bring-up", err)) return false;
   } else {
     std::fprintf(stderr,
@@ -1921,49 +1976,148 @@ bool Tunnel::InstallRoutes(TunnelError* err) {
   return true;
 }
 
-bool Tunnel::VerifyCaptureTook(TunnelError* err) {
-  const std::string ip = FindTool("ip");
-  const CommandResult captured = RunCommand({ip, "-4", "route", "get", kEgressProbeAddress});
-  const std::string capturedDev = DeviceFromRouteGet(captured.output);
-  if (capturedDev != name_) {
-    if (err != nullptr) {
-      err->code = "route_install_failed";
-      err->message = "the capture routes did not take: traffic for " +
-                     std::string(kEgressProbeAddress) + " still leaves via '" +
-                     (capturedDev.empty() ? std::string("(no route)") : capturedDev) + "'";
-    }
+namespace {
+
+// ---- the witness's two instruments -----------------------------------------
+//
+// BOTH OF THEM FAIL WHEN THEY CANNOT RUN. That inversion is the entire lesson
+// of 2026-08-15: the gate that shipped rested on two `ip route get` answers
+// that are true whenever an `ip rule` exists, and on a counter with no failing
+// branch, so "I could not measure this" and "I measured this and it is fine"
+// were the same green.
+
+// What one `nft list table` snapshot says about the mark counters — AND about
+// the rules that feed them, because a number read out of an instrument nobody
+// checked the aim of is not a measurement.
+struct MarkCounters {
+  uint64_t tun = 0;  // marked daemon packets that left through OUR OWN tun
+  uint64_t phy = 0;  // marked daemon packets that left via a real interface
+};
+
+// The instrument must (a) be installed, (b) still be watching THIS interface,
+// (c) still be matching THIS mark, and only then are its numbers worth reading.
+// (b) is not paranoia: the ruleset is built with the PLANNED tun name before
+// the tun exists, so a chain aimed at a name the kernel did not give us would
+// count nothing at all — and "counted nothing" is exactly the shape of answer
+// that got read as reassurance last time.
+bool ReadMarkCounters(const std::string& tunName, uint32_t mark, MarkCounters* out,
+                      std::string* error) {
+  const auto fail = [error](std::string message) {
+    if (error != nullptr) *error = std::move(message);
     return false;
+  };
+  std::string listing;
+  if (!ReadTableListing(&listing, error)) return false;
+
+  const std::string body = ChainBodyFromListing(listing, kNftProbeChainName);
+  if (body.empty()) {
+    return fail(std::string("the ") + kNftProbeChainName +
+                " chain is not in the kernel, so nothing is watching where this daemon's own "
+                "packets go");
   }
-  // THE SECOND `ip route get` IS GONE ON PURPOSE. It asked the kernel where a
-  // packet carrying kEgressMark WOULD go, which is true whenever the `ip rule`
-  // exists — a hypothetical about a mark on no socket at all. It was the only
-  // gate on R4, it was green throughout the 2026-08-15 incident, and reading
-  // it as "the daemon's own sockets are excluded" is what let that ship.
-  // VerifyEgressWitness answers the real question with real packets.
+  // MATCHED LOOSELY ON PURPOSE, IN BOTH DIRECTIONS. These two guards ask "is
+  // the instrument still aimed at us", and the cost of getting the ANSWER wrong
+  // is asymmetric: a false negative refuses a tunnel the user wanted, a false
+  // positive is the class of bug this whole change exists to delete. So the
+  // guards are strict about the thing that matters (the name and the mark must
+  // BE there) and deliberately indifferent to how `nft` chose to render them —
+  // quoting, an anonymous set, zero padding. Neither substring can appear in a
+  // chain aimed somewhere else, and neither can go missing in a chain aimed
+  // here, whatever nft's output style does between releases.
+  if (body.find(tunName) == std::string::npos) {
+    return fail(std::string("the ") + kNftProbeChainName + " chain is not watching " + tunName +
+                ", so its counters describe some other interface");
+  }
+  // nft renders `meta mark` in hex; the decimal form is carried too so a
+  // rendering change cannot turn a working host into a refused one.
+  if (body.find(MarkHex(mark)) == std::string::npos &&
+      body.find(std::to_string(static_cast<unsigned long long>(mark))) == std::string::npos) {
+    return fail(std::string("the ") + kNftProbeChainName + " chain does not match mark " +
+                MarkHex(mark) + ", so it is not counting this daemon's packets");
+  }
+  MarkCounters c;
+  if (!ParseNamedCounter(listing, kNftProbeTunCounter, &c.tun, nullptr) ||
+      !ParseNamedCounter(listing, kNftProbePhyCounter, &c.phy, nullptr)) {
+    return fail(std::string("the ") + kNftProbeChainName +
+                " counters are not installed, so nothing can weigh the daemon's own packets");
+  }
+  *out = c;
   return true;
 }
 
-namespace {
-
-// The witness's own reading of the two probe counters, from ONE snapshot.
-struct ProbeCounters {
-  uint64_t tun = 0;
-  uint64_t phy = 0;
+// ---- the differential socket probe ------------------------------------------
+//
+// ONE committed routing decision, taken by the kernel, for a real socket in
+// this daemon's own cgroup. connect() on a datagram socket SENDS NOTHING: it
+// runs the FIB lookup, commits the result to the socket and binds the source
+// address — which is the precise moment R4 is won or lost, and the precise
+// question `ip route get` cannot ask, because `ip route get` probes a
+// hypothetical mark on no socket at all.
+struct SocketBinding {
+  std::string source;   // getsockname() after connect()
+  uint32_t mark = 0;    // SO_MARK as the socket was born with it
+  bool mark_known = false;
 };
 
-bool ReadProbeCounters(ProbeCounters* out, std::string* error) {
-  std::string listing;
-  if (!ReadTableCounters(&listing, error)) return false;
-  ProbeCounters c;
-  if (!ParseNamedCounter(listing, kNftProbeTunCounter, &c.tun, nullptr) ||
-      !ParseNamedCounter(listing, kNftProbePhyCounter, &c.phy, nullptr)) {
-    if (error != nullptr) {
-      *error = std::string("the ") + kNftProbeChainName +
-               " counters are not installed, so nothing can weigh the daemon's own packets";
-    }
+// clearMark=false: exactly the socket the SDK's dialer gets — created by this
+//                  process, in this cgroup, marked (or not) by whatever layer
+//                  is actually in force. THE TREATMENT.
+// clearMark=true:  the same socket with the exemption taken away. THE CONTROL.
+//                  Its binding is what the capture policy does to ordinary
+//                  traffic, measured rather than assumed.
+bool BindWitnessSocket(bool clearMark, SocketBinding* out, std::string* error) {
+  const auto fail = [error](std::string message) {
+    if (error != nullptr) *error = std::move(message);
     return false;
+  };
+  const int sock = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP);
+  if (sock < 0) return fail(std::string("socket(): ") + std::strerror(errno));
+  struct SockGuard {
+    int fd;
+    ~SockGuard() { if (fd >= 0) ::close(fd); }
+  } guard{sock};
+
+  if (clearMark) {
+    const int zero = 0;
+    if (::setsockopt(sock, SOL_SOCKET, SO_MARK, &zero, sizeof(zero)) != 0) {
+      // SO_MARK needs CAP_NET_ADMIN or CAP_NET_RAW even to clear it. A daemon
+      // that cannot clear it also cannot have installed the routes, the policy
+      // rule or the table, so this is a diagnosis and not a puzzle.
+      return fail(std::string("setsockopt(SO_MARK, 0) — needs CAP_NET_ADMIN or CAP_NET_RAW: ") +
+                  std::strerror(errno));
+    }
   }
-  *out = c;
+
+  int markValue = 0;
+  socklen_t marklen = sizeof(markValue);
+  out->mark_known = ::getsockopt(sock, SOL_SOCKET, SO_MARK, &markValue, &marklen) == 0;
+  out->mark = out->mark_known ? static_cast<uint32_t>(markValue) : 0u;
+  // PROVE THE CONTROL IS A CONTROL. If the clear silently did not take, the two
+  // legs are the same socket twice and the differential means nothing.
+  if (clearMark && (!out->mark_known || out->mark != 0u)) {
+    return fail("the control socket kept a mark after it was cleared, so it is not a control");
+  }
+
+  sockaddr_in dst{};
+  dst.sin_family = AF_INET;
+  dst.sin_port = htons(static_cast<uint16_t>(kEgressProbePort));
+  if (::inet_pton(AF_INET, kEgressProbeAddress, &dst.sin_addr) != 1) {
+    return fail("the witness address is unparseable");
+  }
+  if (::connect(sock, reinterpret_cast<sockaddr*>(&dst), sizeof(dst)) != 0) {
+    return fail(std::string("connect(): ") + std::strerror(errno));
+  }
+
+  sockaddr_in local{};
+  socklen_t locallen = sizeof(local);
+  if (::getsockname(sock, reinterpret_cast<sockaddr*>(&local), &locallen) != 0) {
+    return fail(std::string("getsockname(): ") + std::strerror(errno));
+  }
+  char srcbuf[INET_ADDRSTRLEN] = {0};
+  if (::inet_ntop(AF_INET, &local.sin_addr, srcbuf, sizeof(srcbuf)) == nullptr) {
+    return fail(std::string("inet_ntop(): ") + std::strerror(errno));
+  }
+  out->source = srcbuf;
   return true;
 }
 
@@ -1972,175 +2126,181 @@ bool ReadProbeCounters(ProbeCounters* out, std::string* error) {
 bool Tunnel::VerifyEgressWitness(const char* when, TunnelError* err) {
   const std::string tag = std::string("[tun] egress witness (") + (when == nullptr ? "" : when) +
                           ")";
-  const auto fail = [&](std::string message) {
+  // `code` is the machine-readable half, and the two values are NOT
+  // interchangeable: route_install_failed says the tunnel is not capturing
+  // anything (leg 1), egress_unprotected says it is capturing US (legs 0, 2, 3).
+  const auto fail = [&](const char* code, std::string message) {
     report_.egress_protected = false;
     report_.egress_detail = message;
     if (err != nullptr) {
-      err->code = "egress_unprotected";
+      err->code = code;
+      // POINTS AT SOMETHING THAT IS ACTUALLY ON THE MACHINE. This used to send
+      // the reader to `packaging/diagnose-egress.sh`, a relative path inside a
+      // source tree that nothing installs — an instruction that cannot be
+      // followed by the only person who ever sees it. `urnetworkd` is installed
+      // by definition, since it is what printed this.
       err->message =
           "this daemon cannot prove its own traffic stays out of its own tunnel, so the "
-          "tunnel was not started: " +
+          "tunnel is not being run: " +
           message +
-          ". The read-only diagnostic packaging/diagnose-egress.sh, run as root, says why. "
-          "The last time this went unproven the daemon looped 3.38 Tb of its own traffic "
-          "through its own tunnel before a human noticed.";
+          ". `urnetworkd --diagnose` needs no root and reports the host preflight; "
+          "packaging/diagnose-egress.sh in the source tree goes deeper. The last time this "
+          "went unproven the daemon looped 3.38 Tb of its own traffic through its own tunnel "
+          "before a human noticed.";
     }
     std::fprintf(stderr, "%s FAILED: %s\n", tag.c_str(), message.c_str());
     return false;
   };
 
-  // ---- the probe socket. Created by THIS daemon, in this daemon's cgroup,
-  // with this daemon's uid, so it is subject to exactly the same exclusion as
-  // the SDK's sockets. That equivalence is the reason a synthetic probe can
-  // speak for the SDK at all.
-  const int sock = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, IPPROTO_UDP);
-  if (sock < 0) {
-    return fail(std::string("could not open the probe socket: ") + std::strerror(errno));
-  }
-  struct SockGuard {
-    int fd;
-    ~SockGuard() { if (fd >= 0) ::close(fd); }
-  } guard{sock};
-
-  sockaddr_in dst{};
-  dst.sin_family = AF_INET;
-  dst.sin_port = htons(static_cast<uint16_t>(kEgressProbePort));
-  if (::inet_pton(AF_INET, kEgressProbeAddress, &dst.sin_addr) != 1) {
-    return fail("the probe address is unparseable");
-  }
-  if (::connect(sock, reinterpret_cast<sockaddr*>(&dst), sizeof(dst)) != 0) {
-    return fail(std::string("the probe socket could not be routed at all: ") +
-                std::strerror(errno));
+  // The tun's own address is the yardstick BOTH socket legs are measured
+  // against. Without it there is no measurement, and a witness that cannot
+  // measure must not return true.
+  if (localAddr_.empty()) {
+    return fail(kCodeEgressUnprotected,
+                "the tunnel's own address was never recorded, so neither leg of the witness "
+                "can be interpreted");
   }
 
-  // ---- LEG A: the source address the kernel chose for us. -------------------
-  // This is the leg `ip route get` structurally cannot run, and the one no
-  // output-hook mark can repair: ip_route_me_harder() re-runs the ROUTE lookup
-  // when the mark chain fires, but for an RTN_LOCAL source it sets
-  // FLOWI_FLAG_ANYSRC and REUSES the address connect() already bound. A daemon
-  // socket that picked the tunnel's own address leaves the physical NIC
-  // sourced from 169.254.x.x and is never answered — the control plane starves
-  // just as surely as if the packet had gone into the tun.
-  sockaddr_in local{};
-  socklen_t locallen = sizeof(local);
-  if (::getsockname(sock, reinterpret_cast<sockaddr*>(&local), &locallen) != 0) {
-    return fail(std::string("getsockname on the probe socket: ") + std::strerror(errno));
-  }
-  char srcbuf[INET_ADDRSTRLEN] = {0};
-  ::inet_ntop(AF_INET, &local.sin_addr, srcbuf, sizeof(srcbuf));
-  const std::string src = srcbuf;
-  if (!localAddr_.empty() && src == localAddr_) {
-    return fail("a socket this daemon just opened was bound to the tunnel's own address (" +
-                src +
-                "), so its replies can never come back. The socket resolved the capture table "
-                "before anything could steer it away, which means the mark is not reaching "
-                "this process's sockets at creation time");
+  // ---- LEG 0: IS THE INSTRUMENT THERE, AND IS IT AIMED AT US? --------------
+  // This leg is the answer to the third blocking defect: before it existed the
+  // live re-check could return green while the ENTIRE capture policy had been
+  // removed from the kernel (`nft flush ruleset`, which is the first line of
+  // Fedora's shipped /etc/sysconfig/nftables.conf, destroys our table silently).
+  // Reading the counters through ReadMarkCounters means the table, the chain,
+  // the interface it names and the mark it matches are all re-proven on every
+  // single call — bring-up, post-connect and 30-second re-check alike, because
+  // all three now run THIS function and nothing else.
+  MarkCounters counters;
+  std::string instrumentError;
+  if (!ReadMarkCounters(name_, kEgressMark, &counters, &instrumentError)) {
+    return fail(kCodeEgressUnprotected, instrumentError);
   }
 
-  // ---- LEG C: did the mark actually land on a real socket? -----------------
-  // Read before the sends so it is reported even when leg B fails.
-  uint32_t sockMark = 0;
-  std::string markError;
-  const bool haveMark = EgressSocketMarker::SelfSocketMark(&sockMark, &markError);
-
-  // ---- LEG B: counted packets. THE VERDICT. --------------------------------
-  ProbeCounters before{};
-  std::string counterError;
-  if (!ReadProbeCounters(&before, &counterError)) return fail(counterError);
-
-  int sent = 0;
-  for (int i = 0; i < kEgressProbePackets; ++i) {
-    // A one-byte datagram to a discard port on documentation space. If an ICMP
-    // error from an earlier send has landed on this connected socket a later
-    // send can fail; that is why `sent` is counted rather than assumed.
-    const ssize_t n = ::send(sock, "", 1, MSG_NOSIGNAL | MSG_DONTWAIT);
-    if (n >= 0) ++sent;
-  }
-  if (sent == 0) {
-    return fail(std::string("not one probe datagram could be sent: ") + std::strerror(errno));
-  }
-
-  // Both hooks run in send()'s own syscall context, before the qdisc, so the
-  // counters are already updated by the time send() returns. The retry is for
-  // the `nft` fork, not for the kernel.
+  // ---- LEG 1: IS THE CAPTURE POLICY ACTUALLY IN FORCE? ---------------------
+  // THE CONTROL. A socket identical to the daemon's own in every way except
+  // that its mark has been cleared. connect() commits the kernel's real routing
+  // decision for ordinary traffic, and the source address it binds says which
+  // device won: only the tun holds the tun's address.
   //
-  // A COUNTER THAT WENT BACKWARDS IS NOT A DELTA. Every Apply() destroys and
-  // recreates the table, so a concurrent state change (the kill-switch toggle,
-  // the resolved-restart re-apply, the reaper's tamper repair) can reset these
-  // to zero between the two reads. Subtracting unsigned would wrap to ~1e19,
-  // sail past the `phy < sent` test and report a PASS — the same shape of bug
-  // as the one this whole function replaces. It is refused instead.
-  ProbeCounters after{};
-  uint64_t tun = 0;
-  uint64_t phy = 0;
-  bool settled = false;
-  for (int attempt = 0; attempt < 3 && !settled; ++attempt) {
-    if (!ReadProbeCounters(&after, &counterError)) return fail(counterError);
-    if (after.tun < before.tun || after.phy < before.phy) {
-      return fail("the nftables counters were reset while the probe was in flight (the table "
-                  "was re-applied under us), so this measurement means nothing and is not "
-                  "being treated as a pass");
-    }
-    tun = after.tun - before.tun;
-    phy = after.phy - before.phy;
-    if (tun > 0) break;                                  // already decided
-    if (phy >= static_cast<uint64_t>(sent)) break;        // all accounted for
-    settled = (attempt == 2);
-    if (!settled) SleepMillis(20);
+  // WITHOUT THIS LEG "EGRESS IS PROTECTED" IS VACUOUS. Every other leg is
+  // trivially green on a machine with no capture routes at all — of course the
+  // daemon's packets are not in the tunnel if nothing is. That is precisely the
+  // shape of the check that shipped the storm, and it is why this leg is first
+  // among the measurements rather than a separate bring-up-only function.
+  SocketBinding control;
+  std::string bindError;
+  if (!BindWitnessSocket(/*clearMark=*/true, &control, &bindError)) {
+    return fail(kCodeRouteInstallFailed,
+                "the control socket could not be established or routed, so it is not possible "
+                "to say whether this tunnel captures anything at all: " +
+                    bindError);
+  }
+  if (control.source != localAddr_) {
+    return fail(kCodeRouteInstallFailed,
+                "the capture policy is NOT in force: an unmarked socket this daemon just "
+                "opened was bound to " +
+                    control.source + ", not to the tunnel's own address " + localAddr_ +
+                    ", so ordinary traffic is leaving around this tunnel and calling the "
+                    "daemon's egress 'protected' would mean nothing");
   }
 
-  if (tun > 0) {
-    // The defect itself, named exactly. One captured packet IS the failure:
-    // this is the packet that, once the IoLoop is reading the tun, would be
-    // read back out, re-sent, and captured again.
-    char buf[256];
-    std::snprintf(buf, sizeof(buf),
-                  "%llu of %d datagrams this daemon sent were routed into this daemon's own "
-                  "tunnel (%s). That is the amplification loop, caught before the io loop "
-                  "existed to feed it",
-                  static_cast<unsigned long long>(tun), sent, name_.c_str());
-    return fail(buf);
+  // ---- LEG 2: DO THE DAEMON'S OWN SOCKETS ESCAPE IT? -----------------------
+  // THE TREATMENT, taken with the SAME code, the SAME destination, the SAME
+  // cgroup and the SAME syscall sequence one line later — differing only in the
+  // mark. Legs 1 and 2 must come out OPPOSITE. Two greens that agree are a
+  // broken instrument, not a passing tunnel.
+  SocketBinding daemon;
+  if (!BindWitnessSocket(/*clearMark=*/false, &daemon, &bindError)) {
+    return fail(kCodeEgressUnprotected,
+                "a socket created exactly as the SDK's are could not be established or routed, "
+                "so this daemon's own egress path cannot be characterised at all: " +
+                    bindError);
   }
-  if (phy < static_cast<uint64_t>(sent)) {
-    // ZERO EVIDENCE IS A FAILURE, NOT A PASS. The shipped build's counter
-    // check inverted exactly this and warned instead of refusing.
-    char buf[256];
+  if (daemon.source == localAddr_) {
+    // THE ROOT CAUSE OF 2026-08-15, CAUGHT AT THE LAYER IT HAPPENS ON. No
+    // output-hook mark can repair this: ip_route_me_harder() re-runs the route
+    // lookup but sets FLOWI_FLAG_ANYSRC for an RTN_LOCAL source and REUSES the
+    // address connect() already bound. Whether the packet then goes into the
+    // tun (the amplification loop) or leaves the NIC sourced from the tunnel's
+    // address (a socket that can never be answered), the daemon is broken.
+    return fail(kCodeEgressUnprotected,
+                "a socket this daemon just opened was bound to the tunnel's own address (" +
+                    daemon.source +
+                    "), so it resolved the capture table before anything could steer it away. "
+                    "The mark is not reaching this process's sockets at creation time, and no "
+                    "mark applied after connect() can undo it");
+  }
+  if (!daemon.mark_known || daemon.mark != kEgressMark) {
+    // CONTRADICTORY EVIDENCE IS A FAILURE, NOT A PASS, AND THIS IS WHERE THE
+    // OLD "belt only" GREEN LIVED. The previous cut passed here with a warning
+    // whenever the socket carried no mark but had escaped the capture table
+    // anyway — a combination that has no honest explanation. If the mark is
+    // absent, the `ip rule` cannot have steered this socket, so something else
+    // did, and the next socket the SDK dials has no reason to be as lucky. The
+    // nftables belt cannot fill this gap: it acts at NF_INET_LOCAL_OUT, after
+    // the source address is bound.
+    char buf[320];
     std::snprintf(buf, sizeof(buf),
-                  "only %llu of %d datagrams this daemon sent were seen leaving any interface. "
-                  "Nothing was captured, but nothing was proven either, and an unproven "
-                  "exclusion is not an exclusion",
-                  static_cast<unsigned long long>(phy), sent);
-    return fail(buf);
+                  "a socket this daemon just opened escaped the capture table WITHOUT carrying "
+                  "mark 0x%08x (it reads 0x%08x%s). Nothing this daemon installed explains "
+                  "that, so the next connection the SDK dials cannot be assumed to escape too",
+                  kEgressMark, daemon.mark, daemon.mark_known ? "" : ", unreadable");
+    return fail(kCodeEgressUnprotected, buf);
   }
 
-  // ---- PASS. Say WHICH layer carried it, so the answer is on a surface a
-  // human reads instead of inferred from silence.
-  const bool markedAtCreation = haveMark && sockMark == kEgressMark;
+  // ---- LEG 3: HAS ANY REAL DAEMON PACKET ENTERED OUR OWN TUN? --------------
+  // The counters the kernel has been keeping since this ruleset was installed,
+  // over the SDK's actual traffic — not over a synthetic sample, and not over a
+  // window whose length nobody recorded. urnw_probe_tun counts marked packets
+  // that left through our own tun, which is the storm signature exactly, and
+  // ONE is the whole defect.
+  //
+  // It is a cumulative counter created at zero by the atomic table swap, so
+  // there is no delta to compute, nothing to straddle, and no unsigned
+  // subtraction that could wrap past a test and report a pass. It can only be
+  // read one way.
+  //
+  // WHICH ALSO MEANS IT SAYS NOTHING IN THE INSTANT AFTER AN APPLY — at
+  // bring-up, and again at the post-connect gate, this counter is zero by
+  // construction and the honest verdict is carried entirely by legs 0-2. That
+  // is the point of having four: this leg is the one that keeps watching for
+  // the next thirty seconds and the next thirty after that, over traffic
+  // nobody had to manufacture, and the others are the ones that can answer
+  // right now.
+  //
+  // WHY LEG 2 IS NOT REDUNDANT WITH IT: a packet from a socket that is neither
+  // marked at creation nor matched by the cgroup rule at the output hook enters
+  // the tun UNCOUNTED. Leg 2 is what makes that state unreachable — the
+  // sock_create program marks every socket in this process tree or none, so a
+  // fresh socket reading back the mark is the proof that the instrument's
+  // match condition holds for the SDK's sockets too.
+  if (counters.tun != 0) {
+    char buf[320];
+    std::snprintf(buf, sizeof(buf),
+                  "%llu packet(s) this daemon sent have left through this daemon's own tunnel "
+                  "(%s). That is the amplification loop: every one of them is read back out of "
+                  "the tun by the SDK's io loop, re-sent, and captured again",
+                  static_cast<unsigned long long>(counters.tun), name_.c_str());
+    return fail(kCodeEgressUnprotected, buf);
+  }
+
+  // ---- PASS. Four legs, none of them a routing hypothetical, none of them
+  // capable of being green while the capture policy is absent. Say what was
+  // measured, so the answer is on a surface a human reads instead of inferred
+  // from silence.
   report_.egress_mechanism =
-      markedAtCreation ? "socket mark set at creation (cgroup-bpf sock_create)"
-                       : "nftables cgroup mark chain (belt only: sockets are NOT marked at "
-                         "creation, so newly dialled SDK connections remain at risk)";
-  char detail[320];
+      "socket mark set at creation (cgroup-bpf sock_create), proven differentially against an "
+      "unmarked control socket";
+  char detail[400];
   std::snprintf(detail, sizeof(detail),
-                "%d/%d datagrams left via a physical interface, 0 entered %s; probe source %s; "
-                "probe socket mark 0x%08x",
-                static_cast<int>(phy), sent, name_.c_str(), src.c_str(),
-                haveMark ? sockMark : 0u);
+                "control socket (mark 0) bound %s = the tunnel, so capture is in force; daemon "
+                "socket bound %s with mark 0x%08x, so it is steered around it; 0 marked daemon "
+                "packets have entered %s and %llu have left via a physical interface",
+                control.source.c_str(), daemon.source.c_str(), daemon.mark, name_.c_str(),
+                static_cast<unsigned long long>(counters.phy));
   report_.egress_detail = detail;
   report_.egress_protected = true;
-  std::fprintf(stderr, "%s passed: %s [%s]\n", tag.c_str(), detail,
-               report_.egress_mechanism.c_str());
-  if (!markedAtCreation) {
-    // Not fatal — the belt demonstrably carried these packets — but it is the
-    // configuration in which a connection dialled LATER can still be bound to
-    // the tunnel's own source address, so it must never be silent.
-    std::fprintf(stderr,
-                 "%s WARNING: this daemon's sockets are not marked at creation (%s). The "
-                 "nftables chain is re-routing them per packet, which cannot repair a source "
-                 "address connect() already chose, so a connection dialled LATER can still be "
-                 "born unanswerable. Run packaging/diagnose-egress.sh as root.\n",
-                 tag.c_str(), haveMark ? "mark read back as 0" : markError.c_str());
-  }
+  std::fprintf(stderr, "%s passed: %s\n", tag.c_str(), detail);
   return true;
 }
 

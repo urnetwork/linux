@@ -76,6 +76,13 @@ class MainWindow : public Gtk::ApplicationWindow {
   // out to every destination so their pane folds actually fire (each page owns
   // its own thresholds; the window only measures).
   void ApplyPageBreakpoint(int widthDip);
+  // Poll the daemon's own view of the tunnel. Nothing else does: the app learns
+  // about the daemon only when the user presses something, so a session the
+  // daemon tore down PROTECTIVELY (proven-unprotected traffic, or an
+  // amplification storm) never reached the user while they sat idle — they kept
+  // a green "Connected" while blocked or unprotected. This is the consumer for
+  // that state.
+  bool PollDaemonHealth();
 
  protected:
   // GTK4 has no size-allocate signal; the window's own vfunc is the only place

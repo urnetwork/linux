@@ -52,9 +52,12 @@
 //               still saves sockets that were created before the marker
 //               attached, and it is the only layer at all on a host without
 //               CONFIG_CGROUP_BPF.
-//          Neither layer is trusted. Tunnel::VerifyEgressWitness sends real
-//          datagrams from a real socket and COUNTS THEM in nftables; the tunnel
-//          does not come up unless zero of them entered our own tun.
+//          Neither layer is trusted. Tunnel::VerifyEgressWitness connect()s two
+//          real sockets that differ only in the mark and compares the source
+//          addresses the kernel binds to them, then reads nftables counters
+//          kept over the daemon's REAL traffic. It sends nothing, it needs no
+//          hole in the floor, and the tunnel does not come up — or stay up —
+//          unless all four of its legs pass.
 //        * LEAK PREVENTION — off-tunnel :53/:853/mDNS/LLMNR/NetBIOS, the cloud
 //          metadata address, and all globally routable IPv6 — which per
 //          docs/linux_agent_help.md §6.3 is NOT a preference: it applies
@@ -193,27 +196,51 @@ std::vector<CgroupRef> DnsHelperCgroupsV2();
 //     SDK's own connections — which is the intent — but the mechanism is not
 //     capable of being narrower than "this process tree".
 //
-//  3. THE WITNESS PERMIT IS A PERMANENT HOLE IN THE FLOOR. urnw_out carries
-//     `ip daddr 192.0.2.1 udp dport 9 counter accept` for as long as the table
-//     is installed, so the kill switch does not block that one RFC 5737
-//     documentation address on the RFC 863 discard port. 192.0.2.0/24 is
-//     routed nowhere and nothing can listen there. It is still a hole.
+//  3. THE WITNESS NEEDS NO HOLE IN THE FLOOR, AND NO LONGER HAS ONE. Builds
+//     before this one carried `ip daddr 192.0.2.1 udp dport 9 counter accept`
+//     in urnw_out for as long as the table was installed — a standing accept in
+//     the kill-switch floor whose entire purpose was to let a synthetic probe
+//     reach a counter. It is deleted. The two designs were weighed:
+//       (a) OPEN THE PERMIT FOR THE INSTANT THE WITNESS RUNS, CLOSE IT AFTER.
+//           REJECTED, and not on taste. Opening and closing a rule means two
+//           extra `nft -f` transactions per witness run, i.e. FOUR MORE ATOMIC
+//           TABLE REPLACES A MINUTE at the 30 s re-check — and every table
+//           replace destroys and recreates every counter in the table, which is
+//           the exact defect that made the shipped measurement meaningless
+//           ("the generation it measured is DESTROYED before any traffic
+//           flows"). It would also leave the floor holed if the daemon died
+//           between the open and the close, in the one state — armed, no
+//           tunnel — where the floor is all the user has.
+//       (b) A WITNESS THAT NEEDS NO PERMIT. TAKEN. It needs no permit because
+//           it sends no packet: two connect() calls (which perform the route
+//           lookup and bind a source address without putting anything on the
+//           wire) plus two nftables counters that watch the daemon's own REAL
+//           traffic by MARK rather than by probe destination. Nothing to
+//           permit, nothing to open, nothing to close, and the instrument now
+//           watches the SDK's actual packets for the whole life of the ruleset
+//           instead of four synthetic ones per half-minute.
 //
-//  4. THE WITNESS EMITS PACKETS. Four one-byte datagrams per bring-up and per
-//     30 s recheck, to 192.0.2.1:9, leaving the physical NIC with the host's
-//     real source address. They reach no host and disclose nothing beyond the
-//     fact that this machine sent them, but they are a deliberate, bounded
-//     emission and are documented rather than discovered later.
+//  4. THE WITNESS EMITS NOTHING. connect() on a datagram socket performs the
+//     FIB lookup and binds the source address; it transmits no packet. The
+//     daemon therefore no longer sends anything to 192.0.2.1, or anywhere else,
+//     on account of being measured. The address survives only as a destination
+//     to resolve — chosen because it is routed nowhere and sits inside the
+//     capture set.
 //
-//  5. AVAILABILITY, TRADED ON PURPOSE. On a host where neither layer can be
-//     established — no CONFIG_CGROUP_BPF and a cgroup match that does not
-//     hold, an SELinux policy that denies bpf(), a cgroup v1 net_cls hierarchy
-//     that suppresses socket-to-cgroup association — the witness fails and the
-//     tunnel REFUSES TO START. That is the trade, stated plainly: availability
-//     on exotic hosts, in exchange for never again reporting a protected
-//     tunnel that is not one. URNETWORK_ALLOW_UNPROTECTED_EGRESS=1 is the
-//     documented development escape and skips the witness entirely rather than
-//     running it and ignoring the answer.
+//  5. AVAILABILITY, TRADED ON PURPOSE, AND THE TRADE JUST GOT STRICTER. On a
+//     host where the socket mark cannot be established at CREATION time — no
+//     CONFIG_CGROUP_BPF, an SELinux policy that denies bpf(), a cgroup v1
+//     net_cls hierarchy that suppresses socket-to-cgroup association — the
+//     witness fails and the tunnel REFUSES TO START OR IS TORN DOWN. The
+//     nftables belt alone is NOT accepted as a pass any more: it acts at
+//     NF_INET_LOCAL_OUT, after connect() has bound the source address, so a
+//     "belt only" green was a green on a daemon whose next dialled connection
+//     is born unanswerable. That was the last false-confidence branch in this
+//     file and it is gone. The trade, stated plainly: availability on exotic
+//     hosts, in exchange for never again reporting a protected tunnel that is
+//     not one. URNETWORK_ALLOW_UNPROTECTED_EGRESS=1 is the documented
+//     development escape and skips the witness entirely rather than running it
+//     and ignoring the answer.
 //
 //  6. THE DNS HELPER PERMIT IS UNCHANGED AND IS STILL A LEAK. On a
 //     systemd-resolved host the SDK's wire query leaves RESOLVED's cgroup, not
@@ -302,9 +329,16 @@ class EgressSocketMarker {
   // One line for the journal and for TunnelReport::egress_mechanism.
   const std::string& detail() const { return detail_; }
 
-  // Does a socket created RIGHT NOW by this process carry `mark`? The
-  // read-back Attach() uses, exposed because VerifyEgressWitness asks the same
-  // question of its own probe socket and both must ask it the same way.
+  // Does a socket created RIGHT NOW by this process carry `mark`? This is the
+  // read-back Attach() proves itself with, exposed so the daemon can answer
+  // "is the marker actually working" with no tunnel in existence (--diagnose,
+  // the preflight, a log line at attach time).
+  //
+  // THE WITNESS DELIBERATELY DOES NOT CALL IT. Tunnel::VerifyEgressWitness
+  // reads SO_MARK off the VERY SOCKET whose routing decision it is measuring,
+  // because a mark read from one throwaway socket and a source address read
+  // from a different one are two facts about two objects — and joining them
+  // costs an assumption that nothing checks. One socket, one mark, one binding.
   static bool SelfSocketMark(uint32_t* mark, std::string* error);
 
  private:
@@ -360,9 +394,15 @@ inline constexpr const char* kNftInChainName = "urnw_in";
 inline constexpr const char* kNftFwdChainName = "urnw_fwd";
 // The FIFTH chain, and the only one that decides nothing: every rule in it is
 // a bare `counter name`, its policy is accept and it carries no verdict, so it
-// cannot change the fate of any packet. It exists to answer, with real
-// packets, the question `ip route get` cannot ask — did a datagram this daemon
-// actually sent leave through the tunnel or around it.
+// cannot change the fate of any packet. It exists to answer, over the daemon's
+// REAL traffic, the question `ip route get` cannot ask — did a packet this
+// daemon actually sent leave through the tunnel or around it.
+//
+// IT MATCHES kEgressMark, NOT A PROBE DESTINATION, AND THAT IS WHY THE FLOOR
+// HAS NO HOLE IN IT. Matching a synthetic probe's destination forced the
+// witness to emit datagrams, which forced a standing `accept` for them in the
+// kill-switch floor. Matching the mark instead means the counters are fed by
+// every packet the SDK sends anyway, so the witness reads and never writes.
 //
 // POSTROUTING, NOT OUTPUT, AND THIS IS LOAD-BEARING. nf_hook_state.out is
 // captured from skb_dst(skb)->dev BEFORE any output hook runs, so
@@ -381,25 +421,36 @@ inline constexpr const char* kNftProbeChainName = "urnw_probe";
 //                     nothing to compare them against, so "2 packets" was
 //                     equally consistent with a working rule and a dead one).
 //   urnw_out_daemon — the packets the cgroup match claimed.
-//   urnw_probe_tun  — witness datagrams that left through OUR OWN TUN. One is
-//                     the whole defect.
-//   urnw_probe_phy  — witness datagrams that left around it, as they must.
+//   urnw_probe_tun  — MARKED DAEMON PACKETS that left through OUR OWN TUN.
+//                     This is the 2026-08-15 storm signature exactly: the
+//                     packet the SDK's io loop reads back out of the tun and
+//                     re-sends. It is created at zero by every atomic table
+//                     swap and only ever increments, so there is no delta to
+//                     compute and nothing to straddle. ONE IS THE WHOLE DEFECT.
+//   urnw_probe_phy  — marked daemon packets that left via a real interface, as
+//                     they must. `lo` is excluded: the daemon's own device RPC
+//                     on 127.0.0.1 carries the mark like everything else it
+//                     opens, and counting it would inflate "left the machine"
+//                     with traffic that never left the machine.
 inline constexpr const char* kNftMarkTotalCounter = "urnw_out_total";
 inline constexpr const char* kNftMarkDaemonCounter = "urnw_out_daemon";
 inline constexpr const char* kNftProbeTunCounter = "urnw_probe_tun";
 inline constexpr const char* kNftProbePhyCounter = "urnw_probe_phy";
 
-// The witness target. 192.0.2.1 is RFC 5737 TEST-NET-1 — reserved for
-// documentation, routed nowhere, and inside the capture set (192.0.0.0/9), so
-// the probe exercises exactly the policy we installed without naming anyone's
-// real host. Port 9 is RFC 863 discard. Nothing listens, nothing answers, and
-// the datagrams disclose nothing beyond the fact that this machine sent them.
+// The address the witness's two sockets RESOLVE — never an address it sends
+// to. 192.0.2.1 is RFC 5737 TEST-NET-1: reserved for documentation, routed
+// nowhere, and inside the capture set (192.0.0.0/9), so a connect() to it
+// exercises exactly the policy we installed without naming anyone's real host.
+// Port 9 is RFC 863 discard, and is now only the port half of a sockaddr that
+// no datagram is ever handed to.
+//
+// kEgressProbePackets IS GONE, WITH THE PACKETS. It said "send four datagrams
+// per bring-up and per 30 s re-check", and those datagrams are what required a
+// permanent accept for 192.0.2.1:9 in the kill-switch floor. The witness now
+// measures two connect() calls (which transmit nothing) and reads counters the
+// kernel keeps over the SDK's own traffic, so there is no sample size left to
+// choose and no hole left to open.
 inline constexpr int kEgressProbePort = 9;
-// Four is a sample, not a timing guess: we control exactly how many we send,
-// so the verdict is deterministic and needs no calibration delay. (Calibrating
-// a delay is precisely what TODO(egress-counter) was blocked on, and why the
-// only real measurement in the shipped build stayed a warning.)
-inline constexpr int kEgressProbePackets = 4;
 
 // NF_IP_PRI_MANGLE. The mark chain must run BEFORE the routing re-lookup the
 // `ip rule` performs, and > NF_IP_PRI_CONNTRACK (-200) so `ct state` is
@@ -577,8 +628,10 @@ class NetFilter {
   // THIS IS DIAGNOSTIC ONLY AND IS NOT A GATE. It is a CUMULATIVE counter, so
   // once two packets have ever matched it can never fall back to zero; and
   // every Apply() destroys and recreates the table, which resets it. The gate
-  // is Tunnel::VerifyEgressWitness, which sends its own packets and counts
-  // those.
+  // is Tunnel::VerifyEgressWitness, whose four legs include the one counter
+  // that IS unforgiving in this direction (urnw_probe_tun must be exactly
+  // zero) and two live sockets whose bindings cannot be green while the
+  // capture policy is absent.
   bool MarkChainCounters(uint64_t* daemonPackets, uint64_t* totalPackets,
                          std::string* error) const;
 
@@ -678,11 +731,13 @@ struct TunnelConfig {
 struct TunnelReport {
   std::string interface;
   bool routes_installed = false;
-  // PROVEN BY COUNTING REAL PACKETS (Tunnel::VerifyEgressWitness), never by a
-  // routing hypothetical. The previous field meant "`ip route get` says a
-  // marked packet WOULD leave via the NIC", which is true whenever the `ip
-  // rule` exists and stayed true through 3.38 Tb of the daemon looping its own
-  // traffic through its own tunnel.
+  // PROVEN BY MEASUREMENT (Tunnel::VerifyEgressWitness: two real sockets whose
+  // committed source bindings must disagree, plus a counter over the daemon's
+  // real traffic that must be zero), never by a routing hypothetical. The
+  // previous field meant "`ip route get` says a marked packet WOULD leave via
+  // the NIC", which is true whenever the `ip rule` exists and stayed true
+  // through 3.38 Tb of the daemon looping its own traffic through its own
+  // tunnel. Every path that sets this to true runs the same four legs.
   bool egress_protected = false;
   // Which layer actually carried the exclusion, and the witness's numbers.
   // Published so the answer is on a surface a user can read, not only in a
@@ -726,33 +781,55 @@ class Tunnel {
   // our `~.` default-route domain — docs/linux_agent_help.md R5).
   bool ApplyDns();
 
-  // THE GATE. Sends kEgressProbePackets real datagrams from a socket this
-  // daemon creates and counts, in nftables, how many left through our own tun
-  // and how many left around it. Three legs, all on real packets and real
-  // sockets, none of them a routing hypothetical:
+  // THE GATE, AND THE ONLY ONE. Every surface that says "egress is protected"
+  // — the bring-up refusal, the post-connect gate TunnelHost runs after the
+  // Connected ruleset replaces the Connecting one, and the reaper's live
+  // re-check — calls THIS function and nothing else. There is deliberately no
+  // second, weaker check that some callers run and others assume: a gate only
+  // one caller passes through is a gate the other callers are trusting blind,
+  // which is how a 30-second re-check came to re-prove self-exclusion against a
+  // capture policy it never re-checked was still installed.
   //
-  //   A. SOURCE ADDRESS. connect() the probe socket, then getsockname(). If
-  //      the kernel chose the TUNNEL'S OWN address for a socket this daemon
-  //      opened, the daemon's routing decision fell into its own tunnel — and
-  //      no output-hook mark can repair it, because ip_route_me_harder() keeps
-  //      an already-chosen RTN_LOCAL source. This is the question `ip route
-  //      get` structurally cannot ask: it probes a hypothetical mark on no
-  //      socket at all.
-  //   B. COUNTED PACKETS (the verdict). urnw_probe_tun must be ZERO and
-  //      urnw_probe_phy must have seen everything we actually sent. ONE
-  //      captured packet is the whole defect, so the tun leg is exact and
-  //      unforgiving.
-  //   C. SO_MARK READ-BACK. getsockopt(SOL_SOCKET, SO_MARK) on the probe
-  //      socket — the one-line answer to "did the mark reach a real socket",
-  //      which is the question nothing in the shipped build ever asked.
+  // FOUR LEGS. None is a routing hypothetical, and NONE OF THEM CAN BE GREEN
+  // WHILE THE CAPTURE POLICY IS ABSENT — which is the property the check that
+  // shipped the storm did not have, because `ip route get` answers the same way
+  // whenever an `ip rule` exists, whether or not anything is captured.
   //
-  // ZERO EVIDENCE IS A FAILURE, NOT A PASS (tun == 0 && phy == 0 fails). That
-  // inversion is the entire lesson of the incident this exists to prevent.
+  //   0. THE INSTRUMENT EXISTS AND IS AIMED AT US. One `nft list table`: the
+  //      table must be in the kernel, the urnw_probe chain must be in it, that
+  //      chain must name THIS interface (the ruleset is built with the PLANNED
+  //      tun name, before the tun exists) and must match THIS mark. A root
+  //      `nft flush ruleset` — the first line of Fedora's shipped
+  //      /etc/sysconfig/nftables.conf — makes this leg fail, where before it
+  //      would have left the re-check reporting green over an empty kernel.
+  //   1. THE CAPTURE POLICY IS IN FORCE (the control). A socket identical to
+  //      the SDK's with its mark CLEARED must connect() to a source address of
+  //      the TUN. If ordinary traffic is not landing in the tunnel, "the daemon
+  //      is excluded from the tunnel" is vacuously true and means nothing.
+  //   2. THE DAEMON'S OWN SOCKETS ESCAPE IT (the treatment). The same call one
+  //      line later, mark left as created, must NOT bind the tun's address, and
+  //      must read back kEgressMark. Legs 1 and 2 differ in exactly one bit and
+  //      must come out OPPOSITE; agreeing greens are a broken instrument. This
+  //      is the question `ip route get` structurally cannot ask — it probes a
+  //      hypothetical mark on no socket at all — and it is asked at connect(),
+  //      the one moment at which the answer can still change, because
+  //      ip_route_me_harder() keeps an already-chosen RTN_LOCAL source.
+  //   3. NO REAL DAEMON PACKET HAS ENTERED OUR TUN. urnw_probe_tun must be
+  //      exactly zero, over the SDK's actual traffic, for the whole life of the
+  //      ruleset. Cumulative from an atomic swap, so no delta, no wrap, no
+  //      window whose length nobody wrote down.
+  //
+  // A LEG THAT CANNOT RUN FAILS. Not warns, not returns true: the whole
+  // incident is what "I could not measure this" looks like when it renders the
+  // same as "I measured this and it is fine".
+  //
+  // IT SENDS NOTHING. connect() performs the route lookup and binds a source
+  // address without putting a packet on the wire, so the witness needs no
+  // permit anywhere in the kill-switch floor and cannot itself leak.
   //
   // `when` is a short tag for the message ("bring-up", "connected", "recheck").
-  // Safe and cheap enough to run on the reaper tick: two `nft` reads, one
-  // socket, four datagrams, no name resolution, no network round trip, nothing
-  // that can block.
+  // Cheap enough for the reaper tick: one `nft` read, two sockets, no name
+  // resolution, no network round trip, nothing that can block.
   bool VerifyEgressWitness(const char* when, TunnelError* err);
 
  private:
@@ -761,14 +838,14 @@ class Tunnel {
   bool InstallRoutes(TunnelError* err);
   bool InstallPolicyRules(TunnelError* err);
   void RemovePolicyRules();
-  // Did the CAPTURE half take — does ordinary traffic now leave via the tun?
-  // This is the one half of the retired VerifyEgressSplit that was asking a
-  // question `ip route get` can legitimately answer, so it survives. The other
-  // half (a second `ip route get` carrying the mark by hand) is deleted: it
-  // proved only that the `ip rule` exists, which is not the same claim as "the
-  // daemon's sockets carry the mark", and reading it as the latter is exactly
-  // what shipped this.
-  bool VerifyCaptureTook(TunnelError* err);
+  // VerifyCaptureTook IS GONE, FOLDED IN AS LEG 1 OF THE WITNESS. It asked "did
+  // the capture half take" with `ip route get`, and — fatally — it had exactly
+  // one caller: the bring-up. So the live re-check thirty seconds later
+  // re-proved the daemon's self-exclusion against a capture policy nobody was
+  // re-checking still existed, and could report green with the routes, the
+  // rule and the table all gone. Its question is now leg 1 of
+  // VerifyEgressWitness, asked of a real socket instead of a hypothetical, and
+  // every caller asks it every time.
 
   int fd_ = -1;
   std::string name_;

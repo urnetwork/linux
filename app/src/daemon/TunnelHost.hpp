@@ -164,12 +164,38 @@ class TunnelHost {
 
   // The whole bring-up. Runs either inline (async=false) or on worker_.
   void RunStart(ctl::StartTunnelRequest config);
-  // Requires opMutex_.
+  // Requires opMutex_. A reason means "somebody asked for this stop": it lifts
+  // the nftables policy on the way out (ApplyFilterLocked(Off)) and REPLACES
+  // status_.error/error_code with the reason. An EMPTY reason means "the caller
+  // owns what happens next": the firewall is left exactly as it is and the
+  // published error is left exactly as it is, for the caller to set.
   void StopInternalLocked(const std::string& reason);
+
+  // THE PROTECTIVE TEARDOWN. The session is being destroyed because it has been
+  // PROVEN unsafe — the daemon's own traffic is no longer outside its own
+  // tunnel, or the tun is amplifying instead of carrying — and not because
+  // anybody asked it to stop. It exists because the landing state is the
+  // OPPOSITE of a user stop's:
+  //   * StopInternalLocked(<non-empty reason>) is a user disconnect and LIFTS
+  //     the kill-switch floor (FloorForTransition answers false for every
+  //     transition into Off — Tunnel.cpp).
+  //   * this FAILS CLOSED: Armed, floor holding, whenever the user asked for
+  //     the kill switch — an involuntary teardown is an unexpected drop, which
+  //     is the one case that arms rather than lifts (§6.3) — and it publishes,
+  //     LAST of all, whether this machine is now blocked and how to unblock it.
+  // A guard must never reach for StopInternalLocked(<reason>): doing so lifted
+  // the floor at the exact instant we had four datagrams of proof that traffic
+  // was leaving unprotected, and erased the explanation on the same line.
+  // Requires opMutex_.
+  void StopUnsafeSessionLocked(const std::string& reason, const std::string& message,
+                               const std::string& code);
+
   void ReapRetiredLoopsLocked();
   // RUNAWAY GUARD. Samples the tun's own byte counters and tears the tunnel
   // down if it is transmitting hard while receiving nothing — the signature of
-  // a capture loop. Returns true when it stopped the tunnel.
+  // a capture loop. Tears down through StopUnsafeSessionLocked, so a machine
+  // whose owner asked for the kill switch stays blocked. Returns true when it
+  // stopped the tunnel.
   bool CheckTunnelStormLocked();
   uint64_t stormLastTx_ = 0;
   uint64_t stormLastRx_ = 0;
@@ -197,6 +223,11 @@ class TunnelHost {
   // change is real, and tearing a healthy tunnel down on a single sample would
   // make the guard the outage. Two samples caps exposure at ~60s against the
   // 40 minutes that actually happened.
+  //
+  // The teardown goes through StopUnsafeSessionLocked and lands FAIL-CLOSED
+  // (Armed, floor holding) when the kill switch was asked for: this guard fires
+  // on PROVEN-UNPROTECTED traffic, so it is the last moment at which the floor
+  // may come down.
   bool CheckEgressWitnessLocked();
   int egressWitnessTicks_ = 0;
   int egressWitnessFailures_ = 0;
