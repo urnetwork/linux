@@ -857,6 +857,50 @@ int main(int argc, char** argv) {
       std::printf("control socket: %s\n", urnw::ControlServer::SocketPath().c_str());
       std::printf("state dir:      %s\n", StateDir().c_str());
       std::printf("log dir:        %s\n", LogDir().c_str());
+      // WHICH AUTHORITY WOULD BE IN FORCE, and therefore which remediation a
+      // refused user should be given. Under polkit there is no group to join
+      // and nothing to log out of; under the fallback there is, and telling
+      // someone to log out and back in when it would change nothing is exactly
+      // the confusion this design set out to remove. Read-only: one access(2).
+      {
+        // TWO FACTS, REPORTED SEPARATELY. The latch needs both, and saying
+        // only "MISSING" when the action file is sitting right there — because
+        // it is polkit that is absent — sends the reader to look for the wrong
+        // thing entirely.
+        const bool polkit = urnw::ControlServer::PolkitPolicyPresent();
+        const bool actionFile = ::access(urnw::ControlServer::PolicyPath().c_str(), F_OK) == 0;
+        const bool runtime = urnw::ControlServer::PolkitRuntimePresent();
+        std::printf("authorization:  %s (action file %s, polkit %s)\n",
+                    polkit ? urnw::ctl::kAuthModePolkit : urnw::ctl::kAuthModeGroup,
+                    actionFile ? "installed" : "MISSING",
+                    runtime ? "installed" : "NOT INSTALLED");
+        std::printf("                %s\n", urnw::ControlServer::PolicyPath().c_str());
+        if (polkit) {
+          std::printf("                the person signed in at this device's screen is "
+                      "authorized in their current session:\n"
+                      "                no group membership and no log out / log back in.\n");
+        } else {
+          if (actionFile && !runtime) {
+            // The case that used to fail SHUT: the file promises polkit can
+            // answer, and nothing on this machine can.
+            std::printf("                the polkit action file is installed but polkit ITSELF "
+                        "is not on this\n"
+                        "                machine, so there is nothing to answer an "
+                        "authorization check. Falling\n"
+                        "                back to the '%s' group rather than refusing every "
+                        "request.\n"
+                        "                Install polkit to remove the group requirement.\n",
+                        urnw::ctl::kControlGroupName);
+          } else {
+            std::printf("                no polkit action file, so urnetworkd falls back to the "
+                        "'%s' group.\n",
+                        urnw::ctl::kControlGroupName);
+          }
+          std::printf("                Members of that group, plus root, may control the "
+                      "tunnel — and group\n"
+                      "                membership only applies to NEW login sessions.\n");
+        }
+      }
       // Read-only, no subprocess: the marker is a tmpfs file. A user reading
       // this while blocked needs to know WHICH of the two situations they are
       // in before they are told what to type.
@@ -946,7 +990,8 @@ int main(int argc, char** argv) {
           "URnetwork privileged daemon: control socket at %s,\n"
           "device RPC on 127.0.0.1:%d while the tunnel is up.\n"
           "  --diagnose             print the host preflight (ip/nft/resolvectl, cgroup, tun),\n"
-          "                         the kill-switch state and the recovery steps, then exit\n"
+          "                         the authorization mode, the kill-switch state and the\n"
+          "                         recovery steps, then exit\n"
           "  --selftest-egress      prove, on this kernel, that the cgroup-BPF socket marker\n"
           "                         that keeps the daemon's own traffic out of its own tunnel\n"
           "                         actually marks sockets at creation. Starts no tunnel and\n"
@@ -1071,11 +1116,16 @@ int main(int argc, char** argv) {
   // the GUI's log tail shows, and this is the line that has to be in front of a
   // user whose machine is blocked. Cheap insurance against the one failure mode
   // that has no other way out.
+  // auth=… is in the READY line, not only in ControlServer's own start
+  // breadcrumb, because it is the first thing to look at when a user reports
+  // "it asked me for a password" or "it says I am not allowed": the answer is
+  // always which authority this daemon latched at start, and the log ring is
+  // the surface the GUI can show them.
   urnw::DaemonLogf(
-      "[daemon] urnetworkd %s ready (state=%s). If this machine ends up blocked with no way "
-      "to reach the daemon: stop the service, then run `%s --revert` (firewall half alone: "
-      "%s)\n",
-      UR_APP_VERSION, stateDir.c_str(), SelfPath(argv[0]).c_str(),
+      "[daemon] urnetworkd %s ready (state=%s, auth=%s). If this machine ends up blocked with "
+      "no way to reach the daemon: stop the service, then run `%s --revert` (firewall half "
+      "alone: %s)\n",
+      UR_APP_VERSION, stateDir.c_str(), server.AuthModeName(), SelfPath(argv[0]).c_str(),
       urnw::NetFilter::RecoveryCommand());
   g_main_loop_run(loop);
   g_main_loop_unref(loop);

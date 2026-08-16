@@ -52,6 +52,14 @@ constexpr time_t kReceiveTimeoutSeconds = 30;
 // was not a generous bound for that, it was a restart-loop trigger. Clients
 // that ask for async never wait this long — they get `starting` and poll.
 constexpr time_t kStartTunnelReceiveTimeoutSeconds = 180;
+// MUST EXCEED THE DAEMON'S INTERACTIVE POLKIT GUARD (kPolkitInteractiveGuardMillis
+// = 120s in daemon/ControlServer.cpp). A polkit check that puts a dialog on the
+// screen is answered at human speed, and the daemon deliberately waits. With the
+// 30s default the client gave up first, closed the socket and re-sent -- so the
+// user watched the password dialog vanish and reappear, and no interactive verb
+// except start_tunnel (which already had 180s) could ever be answered. The two
+// numbers are a pair: raise the daemon guard and this has to follow.
+constexpr time_t kPolkitInteractiveReceiveTimeoutSeconds = 150;
 constexpr time_t kSendTimeoutSeconds = 10;
 constexpr size_t kMaxFrameBytes = 1 << 20;  // a reply line beyond 1 MiB is a protocol error
 
@@ -61,7 +69,38 @@ void SetTimeout(int fd, int kind, time_t seconds) {
   ::setsockopt(fd, SOL_SOCKET, kind, &tv, sizeof(tv));
 }
 
+// Tolerant reads off a raw reply frame, for the additive fields this half of
+// the change cannot add to ControlProtocol.hpp (see the TODO on authz::). An
+// absent or wrongly-typed field leaves the default, exactly like
+// ctl::detail::Get — a daemon that never learned to send them must parse as
+// "said nothing", never as a false verdict.
+std::string FrameString(const nlohmann::json& j, const char* key) {
+  if (auto it = j.find(key); it != j.end() && it->is_string()) return it->get<std::string>();
+  return {};
+}
+
+bool FrameBool(const nlohmann::json& j, const char* key) {
+  if (auto it = j.find(key); it != j.end() && it->is_boolean()) return it->get<bool>();
+  return false;
+}
+
 }  // namespace
+
+DaemonAuthOutcome AuthOutcomeFromCode(const std::string& code) {
+  if (code.empty()) return DaemonAuthOutcome::None;
+  if (code == authz::kCodeAuthDenied) return DaemonAuthOutcome::Denied;
+  if (code == authz::kCodeAuthRequired || code == authz::kCodeAuthChallengeRequired) {
+    return DaemonAuthOutcome::ChallengeRequired;
+  }
+  if (code == authz::kCodeAuthDismissed) return DaemonAuthOutcome::Dismissed;
+  if (code == authz::kCodeAuthUnavailable) return DaemonAuthOutcome::Unavailable;
+  if (code == authz::kCodeAuthCheckFailed) return DaemonAuthOutcome::CheckFailed;
+  if (code == authz::kCodeAuthTimeout) return DaemonAuthOutcome::TimedOut;
+  if (code == authz::kCodeAuthNotTunnelOwner) return DaemonAuthOutcome::NotTunnelOwner;
+  // Every pre-existing kCode* lands here: not an authorization verdict, so the
+  // tun/route/dns/pinning failures keep rendering their own copy.
+  return DaemonAuthOutcome::None;
+}
 
 ControlClient::~ControlClient() { Close(); }
 
@@ -269,6 +308,19 @@ DaemonSessionState ControlClient::HelloLocked(std::string* error) {
     CloseLocked();
     return DaemonSessionState::Unreachable;
   }
+  // WHICH authority this daemon gates with, read off the raw frame because the
+  // field is additive within protocol v1 and ControlProtocol.hpp is not this
+  // change's to edit (see the TODO on authz::). Read on BOTH the accepting and
+  // the rejecting path: a daemon that refuses our protocol has still told us
+  // what it would have gated with, and the remediation copy differs.
+  //
+  // Absent => Group. That is not a guess, it is what a daemon predating polkit
+  // gating IS, and it is the only mode whose remediation may mention groups and
+  // signing out.
+  {
+    const std::string mode = FrameString(*reply, "auth_mode");
+    lastAuthMode_ = mode == "polkit" ? DaemonAuthMode::Polkit : DaemonAuthMode::Group;
+  }
   if (!ctl::ReplyOk(*reply)) {
     // Rejection direction 1: the daemon dropped support for our protocol, or
     // its SDK build differs from ours (the device RPC has no version field of
@@ -364,10 +416,76 @@ std::string ControlClient::LastSocketPath() {
   return lastSocketPath_.empty() ? SocketPath() : lastSocketPath_;
 }
 
+DaemonAuthOutcome ControlClient::LastAuthOutcome() {
+  std::scoped_lock lock(mutex_);
+  return lastAuth_;
+}
+
+std::string ControlClient::LastPolkitResult() {
+  std::scoped_lock lock(mutex_);
+  return lastPolkitResult_;
+}
+
+DaemonAuthMode ControlClient::LastAuthMode() {
+  std::scoped_lock lock(mutex_);
+  return lastAuthMode_;
+}
+
+void ControlClient::ResetAuthLocked() {
+  lastAuth_ = DaemonAuthOutcome::None;
+  lastPolkitResult_.clear();
+}
+
+void ControlClient::NoteReplyLocked(ctl::Verb verb, const nlohmann::json& reply) {
+  // The serial moves for EVERY reply, refusal or not. That is what lets a
+  // caller tell "this attempt produced a verdict" from "this attempt never
+  // reached the daemon and you are looking at the last one's".
+  ++replySerial_;
+  lastPolkitResult_ = FrameString(reply, "polkit_result");
+  if (ctl::ReplyOk(reply)) {
+    // A gated verb that succeeded IS an authorization: polkit said yes, or the
+    // caller is uid 0, or the daemon is on the group fallback and we are a
+    // member. An ungated verb (status/hello) says nothing either way.
+    lastAuth_ = VerbNeedsAuthorization(verb) ? DaemonAuthOutcome::Authorized
+                                             : DaemonAuthOutcome::None;
+    return;
+  }
+  lastAuth_ = AuthOutcomeFromCode(ctl::ReplyCode(reply));
+  // A dismissal is a refusal the user MADE, and it must stay silent even if the
+  // daemon spells it as a plain challenge/denial with a flag rather than as its
+  // own code. Only honoured on a reply that is already an authorization
+  // verdict, so an unrelated failure cannot mute itself.
+  if (lastAuth_ != DaemonAuthOutcome::None && FrameBool(reply, "dismissed")) {
+    lastAuth_ = DaemonAuthOutcome::Dismissed;
+  }
+  if (lastAuth_ != DaemonAuthOutcome::None) {
+    std::fprintf(stderr, "[control] %s refused on authorization (code=%s%s%s)\n",
+                 ctl::ToString(verb), ctl::ReplyCode(reply).c_str(),
+                 lastPolkitResult_.empty() ? "" : ", polkit_result=",
+                 lastPolkitResult_.c_str());
+  }
+}
+
+// The receive timeout for a verb that polkit may put a DIALOG behind. Only the
+// mutating verbs use it: Status is polled at ~4 Hz and is answered without
+// interaction, so giving it a 150s window would make a wedged daemon freeze the
+// GUI for two and a half minutes instead of failing in thirty.
+//
+// In group mode nothing can prompt, so nothing changes there — this returns 0
+// and CallLocked keeps the 30s default.
+long ControlClient::PolkitAwareTimeoutLocked() const {
+  return lastAuthMode_ == DaemonAuthMode::Polkit ? kPolkitInteractiveReceiveTimeoutSeconds : 0;
+}
+
 std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann::json payload,
                                                         std::string* error, bool allowRetry,
                                                         long receiveTimeoutSeconds) {
   constexpr int kMaxAttempts = 2;
+  // The previous request's verdict describes the previous request. Clearing it
+  // here — before EnsureSession, so it is gone even when we never get a socket —
+  // is what stops a polkit denial from one Connect being rendered under an
+  // unrelated failure of the next.
+  ResetAuthLocked();
   for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
     if (EnsureSessionLocked(error) != DaemonSessionState::Ok) return std::nullopt;
     SetReceiveTimeoutLocked(receiveTimeoutSeconds);
@@ -375,6 +493,7 @@ std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann
     bool frameDelivered = false;
     if (auto reply =
             RoundTripLocked(ctl::MakeRequest(verb, id, payload), id, &frameDelivered)) {
+      NoteReplyLocked(verb, *reply);
       return reply;
     }
     // Dead socket. Whether we may send it again turns on ONE question: did any
@@ -411,6 +530,12 @@ std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann
 ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
     const StartTunnelOptions& options) {
   std::scoped_lock lock(mutex_);
+  // The local fail-closed validator below can refuse before a byte is sent, and
+  // that path never reaches CallLocked's own reset. Without this, a refusal
+  // that has nothing to do with authorization would inherit the last one's
+  // verdict. The SERIAL is deliberately not bumped: no reply happened, so a
+  // caller comparing it correctly concludes "no verdict from this attempt".
+  ResetAuthLocked();
   StartTunnelOutcome outcome;
   ctl::StartTunnelRequest req;
   req.by_jwt = options.by_jwt;
@@ -492,12 +617,21 @@ ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
     // Leaving a running tunnel whose ROOT rpc listener is unauthenticated is
     // worse than no tunnel: any local process that can open a TCP socket to it
     // could drive the daemon's DeviceLocal. Tear it down on the way out.
+    //
+    // That teardown is a SECOND round trip, and NoteReplyLocked would leave the
+    // authorization verdict describing the stop rather than the start — which
+    // is how a refused stop_tunnel could displace this security refusal with an
+    // authorization sentence and hide the reason the tunnel was torn down.
+    // The start's verdict (Authorized: the daemon accepted it) is what the UI
+    // must keep seeing, so it is restored afterwards.
+    const DaemonAuthOutcome startAuth = lastAuth_;
     std::string stopError;
     if (!StopTunnelLocked(&stopError)) {
       std::fprintf(stderr,
                    "[control] could not stop the unpinned tunnel after refusing it: %s\n",
                    stopError.c_str());
     }
+    lastAuth_ = startAuth;
     lastState_ = DaemonSessionState::Error;
     outcome.session = lastState_;
     return outcome;
@@ -510,7 +644,8 @@ bool ControlClient::SetKillSwitch(bool enabled, ctl::StatusReply* out, std::stri
   std::scoped_lock lock(mutex_);
   ctl::SetKillSwitchRequest req;
   req.enabled = enabled;
-  const auto reply = CallLocked(ctl::Verb::SetKillSwitch, nlohmann::json(req), error);
+  const auto reply = CallLocked(ctl::Verb::SetKillSwitch, nlohmann::json(req), error,
+                                /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   if (!reply) return false;
   // The status rides on BOTH the success and the failure reply: a kill switch
   // that could not be installed reports kill_switch=failed, which the UI must
@@ -524,7 +659,8 @@ bool ControlClient::SetKillSwitch(bool enabled, ctl::StatusReply* out, std::stri
 }
 
 bool ControlClient::StopTunnelLocked(std::string* error) {
-  const auto reply = CallLocked(ctl::Verb::StopTunnel, nlohmann::json::object(), error);
+  const auto reply = CallLocked(ctl::Verb::StopTunnel, nlohmann::json::object(), error,
+                                /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   if (!reply) return false;
   if (!ctl::ReplyOk(*reply)) {
     if (error) *error = ctl::ReplyError(*reply);
@@ -542,7 +678,8 @@ bool ControlClient::SetProvide(const std::string& mode, std::string* error) {
   std::scoped_lock lock(mutex_);
   ctl::SetProvideRequest req;
   req.mode = mode;
-  const auto reply = CallLocked(ctl::Verb::SetProvide, nlohmann::json(req), error);
+  const auto reply = CallLocked(ctl::Verb::SetProvide, nlohmann::json(req), error,
+                                /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   if (!reply) return false;
   if (!ctl::ReplyOk(*reply)) {
     if (error) *error = ctl::ReplyError(*reply);
@@ -584,7 +721,8 @@ bool ControlClient::LocationOverrideWrite(double lat, double lon, double accurac
   req.lon = lon;
   req.accuracy_m = accuracyM;
   std::string error;
-  const auto reply = CallLocked(ctl::Verb::LocationOverrideWrite, nlohmann::json(req), &error);
+  const auto reply = CallLocked(ctl::Verb::LocationOverrideWrite, nlohmann::json(req), &error,
+                                /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   return reply && ctl::ReplyOk(*reply);
 }
 
@@ -592,7 +730,8 @@ bool ControlClient::LocationOverrideClear() {
   std::scoped_lock lock(mutex_);
   std::string error;
   const auto reply =
-      CallLocked(ctl::Verb::LocationOverrideClear, nlohmann::json::object(), &error);
+      CallLocked(ctl::Verb::LocationOverrideClear, nlohmann::json::object(), &error,
+                 /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   return reply && ctl::ReplyOk(*reply);
 }
 

@@ -39,6 +39,69 @@ static_assert(WindowPresentationShouldRun(true, true));
 static_assert(!WindowPresentationShouldRun(true, false));
 static_assert(!WindowPresentationShouldRun(false, true));
 
+// The copy for a daemon that ANSWERED and refused on authorization grounds.
+//
+// THE POINT OF THIS FUNCTION: none of these may ever reach the user as "The
+// URnetwork system service is not running. Install or start it, then try
+// again." The service is running — it is running well enough to have made a
+// policy decision about this account and told us so. Sending the user to
+// `systemctl start` for a polkit denial is the single worst outcome available
+// here, which is why the authorization verdict is checked BEFORE the generic
+// failure copy and why it is carried on its own enum rather than folded into
+// DaemonUnreachableReason (ControlClient.hpp says why at length).
+//
+// `detail` is the daemon's own message, appended only where it adds a fact the
+// sentence cannot carry.
+Glib::ustring DaemonAuthRefusalCopy(DaemonAuthOutcome outcome, const std::string& detail) {
+  switch (outcome) {
+    case DaemonAuthOutcome::Denied:
+      return T_("daemon_auth_denied",
+                "This device's policy does not allow this account to connect through "
+                "URnetwork. An administrator can change that.");
+    case DaemonAuthOutcome::ChallengeRequired:
+      return T_("daemon_auth_required",
+                "Connecting from this session needs administrator permission. Press "
+                "Connect again to be asked, or use the session at this device's screen.");
+    case DaemonAuthOutcome::Dismissed:
+      // DELIBERATELY EMPTY, and this is the whole behaviour, not an omission.
+      // The user was shown the polkit dialog and closed it: they changed their
+      // mind. Rendering a banner (or emitting a g_warning) for a decision the
+      // user just made is the product's own documented mistake —
+      // docs/parity/settings.md:130, "User-declined elevation = SILENCE (the
+      // user changed their mind), not an error." Any copy here is a bug.
+      return {};
+    case DaemonAuthOutcome::Unavailable:
+      return T_("daemon_auth_unavailable",
+                "This device has no polkit authorization service, so the URnetwork "
+                "system service falls back to the 'urnetwork' group. Add your user to "
+                "it and sign out and back in.");
+    case DaemonAuthOutcome::CheckFailed: {
+      Glib::ustring notice =
+          T_("daemon_auth_check_failed",
+             "The URnetwork system service could not check whether this account is "
+             "allowed to connect, so it did not connect. Try again.");
+      // The daemon's detail names the actual failure (bus error, polkitd gone,
+      // an unreadable /proc entry) and there is no way to guess it from here.
+      if (!detail.empty()) notice += " (" + detail + ")";
+      return notice;
+    }
+    case DaemonAuthOutcome::TimedOut:
+      return T_("daemon_auth_timeout",
+                "The permission request was not answered, so nothing was connected. "
+                "Press Connect to try again.");
+    case DaemonAuthOutcome::NotTunnelOwner:
+      return T_("daemon_tunnel_owned_by_other_user",
+                "Another user on this device is connected through URnetwork. Disconnect "
+                "it from their session, or take it over with administrator permission.");
+    case DaemonAuthOutcome::None:
+    case DaemonAuthOutcome::Authorized:
+      // Not a refusal: the caller must not have asked (IsAuthRefusal gates it)
+      // and falls through to the ordinary failure copy.
+      break;
+  }
+  return {};
+}
+
 }  // namespace
 
 MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
@@ -272,8 +335,24 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
 // problems with different fixes, and none of them may render as a blank or a
 // zero — the same doctrine as the gray "discovery disabled" the RPC-hosted
 // stats use.
+//
+// A REFUSAL IS NOT AN ABSENCE. "The service is not running" and "the service
+// ran your request and said no" are opposite facts, and the second one arrives
+// through TunnelStartResult::Failed with an authorization verdict on the
+// control client (DaemonAuthOutcome). It is rendered from its own copy table
+// below and never through the DaemonUnreachable arm.
 TunnelStartResult MainWindow::StartTunnelUi() {
+  // Snapshot the reply counter BEFORE the attempt. LastAuthOutcome() describes
+  // the last reply this client processed, and StartTunnel() has failure paths
+  // that never send anything (not signed in; unusable device-rpc key material).
+  // Without this guard a polkit denial from an earlier Connect would be
+  // rendered under an unrelated failure — a confidently wrong sentence, which
+  // is worse than the generic one. Only a verdict this attempt produced counts.
+  const uint64_t replySerialBefore = host_.Control().ReplySerial();
   const TunnelStartResult result = host_.StartTunnel();
+  const DaemonAuthOutcome authOutcome = host_.Control().ReplySerial() != replySerialBefore
+                                            ? host_.Control().LastAuthOutcome()
+                                            : DaemonAuthOutcome::None;
   // ONE text, TWO sinks. These strings used to be written only to
   // daemonStatusLabel_, which lives in the legacy single-column home that the
   // nav shell never shows — so every daemon failure was invisible and pressing
@@ -286,10 +365,12 @@ TunnelStartResult MainWindow::StartTunnelUi() {
       break;  // empty notice clears both
     case TunnelStartResult::DaemonUnreachable:
       // "Unreachable" is three different problems with three different fixes.
-      // Collapsing them into "not running" actively misleads: on a fresh
-      // install the service IS running and the user simply is not in the
-      // urnetwork group yet, and telling them to start a running service sends
-      // them nowhere.
+      // Collapsing them into "not running" actively misleads: against a
+      // group-gated daemon the service IS running and the user simply is not
+      // in the urnetwork group, and telling them to start a running service
+      // sends them nowhere. Every arm here is a transport failure — the daemon
+      // was never reached — which is what separates them from the
+      // authorization refusals under Failed.
       switch (host_.Control().LastUnreachableReason()) {
         case DaemonUnreachableReason::StaleSandboxMount:
           notice = T_("daemon_stale_sandbox_mount",
@@ -297,10 +378,24 @@ TunnelStartResult MainWindow::StartTunnelUi() {
                       "Close the app and open it again to reconnect to it.");
           break;
         case DaemonUnreachableReason::PermissionDenied:
-          notice = T_("daemon_permission_denied",
-                      "The URnetwork system service is running, but this account is not "
-                      "allowed to use it. Add yourself to the 'urnetwork' group, then log "
-                      "out and back in.");
+          // EACCES at connect(2) NARROWED to one cause. A polkit-gated daemon
+          // makes the socket world-connectable and refuses per action with a
+          // reason on a live connection, so it can never produce this; only a
+          // group-gated daemon can (an old build, or a machine with no polkit
+          // where it re-tightens the socket to 0660 root:urnetwork). That is
+          // the one and only case where telling the user to join a group and
+          // sign out again is still true.
+          //
+          // NOTE: the key id changed (daemon_permission_denied ->
+          // daemon_legacy_group_auth) because that id was in use at TWO sites
+          // with two DIFFERENT English strings — here and KillSwitchCopy.hpp:82
+          // — and appears zero times in app/po/en.po, so both rendered fallback
+          // English and contradicted each other. KillSwitchCopy.hpp is outside
+          // this change; it must adopt this key and this exact string.
+          notice = T_("daemon_legacy_group_auth",
+                      "The URnetwork system service on this device is an older version "
+                      "that still requires group membership. Update the service, or add "
+                      "your user to the 'urnetwork' group and sign out and back in.");
           break;
         case DaemonUnreachableReason::Other: {
           // LastTunnelError() is EnsureSession's own out-param, which already
@@ -335,12 +430,27 @@ TunnelStartResult MainWindow::StartTunnelUi() {
       break;
     case TunnelStartResult::Failed: {
       const std::string error = host_.LastTunnelError();
+      // AUTHORIZATION FIRST. A refusal arrives here — the daemon was reached,
+      // hello succeeded, and it answered a verb with a code — so without this
+      // branch a polkit denial would render as the daemon's raw diagnostic, and
+      // a daemon that omitted one would render as "Could not start the
+      // connection", which says nothing about the only thing the user can act
+      // on. TunnelStartResult has no enumerator for these (SdkHost.hpp is
+      // outside this change), so the verdict is read from the control client
+      // instead; see the serial guard at the top of this function.
+      if (IsAuthRefusal(authOutcome)) {
+        notice = DaemonAuthRefusalCopy(authOutcome, error);
+        break;
+      }
       notice = error.empty() ? Glib::ustring(T_("tunnel_start_failed",
                                                 "Could not start the connection"))
                              : Glib::ustring(error);
       break;
     }
   }
+  // Empty means "say nothing", and for DaemonAuthOutcome::Dismissed that is the
+  // required behaviour, not an accident: no banner AND no g_warning for a user
+  // who closed the password dialog themselves.
   if (!notice.empty()) g_warning("connect: %s", notice.c_str());
   daemonStatusLabel_.set_text(notice);
   daemonStatusLabel_.set_visible(!notice.empty());

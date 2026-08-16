@@ -47,17 +47,28 @@ enum class DaemonSessionState {
 // DaemonSessionState enumerators: the existing switches over that enum are
 // exhaustive and live in files this change does not own.
 //
-// The one that matters in practice is PermissionDenied. The installers create
-// the `urnetwork` system group EMPTY and never add the desktop user to it, so
-// a fresh install lands on connect(2) = EACCES — which the GUI currently
-// renders as "The URnetwork system service is not running. Install or start
-// it, then try again.": false, and unactionable. The fix is
-// `sudo usermod -aG urnetwork $USER` plus a re-login, and the UI has to be
-// able to say so.
+// PermissionDenied used to be the state a FRESH INSTALL landed in: the
+// installers created the `urnetwork` system group empty, so connect(2)
+// returned EACCES at a socket that was right there, served by a healthy
+// daemon, and the only fix was `usermod -aG urnetwork $USER` plus a re-login.
+// A polkit-gated daemon makes the socket world-connectable and decides per
+// action instead, so EACCES can no longer happen against one — which NARROWS
+// this reason to "the daemon on the other end is still group-gated" and keeps
+// the log-out-and-back-in copy correct for exactly that case and no other.
+//
+// A daemon that reaches us and then REFUSES is not this. It is
+// DaemonAuthOutcome below, and the two must never render the same sentence.
 enum class DaemonUnreachableReason {
   None,              // not in an Unreachable state
   SocketMissing,     // ENOENT/ECONNREFUSED: not installed, or not running
-  PermissionDenied,  // EACCES/EPERM: the socket is there and we may not use it
+  PermissionDenied,  // EACCES/EPERM: the socket is there and we may not use it.
+                     // Under a polkit-gated daemon the socket is world-
+                     // connectable and this CANNOT happen, so it now means
+                     // exactly one thing: the daemon on the other end is still
+                     // group-gated (an old build, or a machine with no polkit,
+                     // where it re-tightens the socket to 0660 root:urnetwork).
+                     // That is the ONE case where the log-out-and-back-in
+                     // remediation is still the correct advice.
   StaleSandboxMount, // EACCES inside a Flatpak whose bind mount of the socket
                      // directory has gone stale: the daemon restarted, systemd
                      // recreated /run/urnetwork, and this sandbox still holds
@@ -65,6 +76,119 @@ enum class DaemonUnreachableReason {
                      // the user's groups — only relaunching the app fixes it.
   Other,             // something else; LastUnreachableError() carries strerror
 };
+
+// ---- authorization (polkit) -------------------------------------------------
+// WHY THIS IS NOT A DaemonUnreachableReason, and not a DaemonSessionState.
+// A polkit refusal is the OPPOSITE of unreachable: the socket opened, `hello`
+// succeeded, and the daemon answered a verb with a reason. Folding it into
+// either of those enums is how "your administrator has not allowed this" would
+// end up rendering through a SocketMissing/default arm as "The URnetwork system
+// service is not running" — false, unactionable, and the exact failure this
+// whole change exists to remove. So it is an ORTHOGONAL third axis: session
+// state says whether we have a daemon, unreachable reason says why we do not,
+// and this says what the daemon decided about *us*.
+//
+// It is also why the existing exhaustive switches over the other two enums (in
+// KillSwitchCopy.hpp and files this change does not own) keep compiling
+// untouched.
+enum class DaemonAuthOutcome {
+  None,               // the last reply carried no authorization verdict
+  Authorized,         // a privileged verb was accepted (polkit said yes, or uid 0)
+  Denied,             // a hard no: site policy refuses this subject outright
+  ChallengeRequired,  // authentication is needed and none was obtained (no agent:
+                      // typically an ssh/session-less caller), or the check was
+                      // made non-interactively
+  Dismissed,          // the user closed the polkit dialog. RENDER NOTHING for
+                      // this: a user who changed their mind did not hit an error
+                      // (docs/parity/settings.md:130).
+  Unavailable,        // no polkit on this machine; the daemon fell back to the
+                      // `urnetwork` group and that group refused us
+  CheckFailed,        // the check itself could not be made (bus error, polkitd
+                      // gone, peer /proc unreadable). Fail closed, say so.
+  TimedOut,           // the prompt went unanswered inside the daemon's bound
+  NotTunnelOwner,     // a DIFFERENT uid owns the running tunnel and take-over
+                      // was not granted
+};
+
+// Which authority the daemon told us it is gating with, from `hello`. Absent on
+// the wire (any daemon predating polkit) parses as Group, which is what such a
+// daemon is — the safe direction, because Group is the only mode whose
+// remediation mentions groups and re-login.
+enum class DaemonAuthMode {
+  Group,   // ctl::AuthorizeControlPeer: uid 0 or the `urnetwork` group
+  Polkit,  // org.freedesktop.PolicyKit1 per-action checks
+};
+
+// The reply `code` strings the daemon uses for the verdicts above.
+//
+// TODO(polkit): these belong in ControlProtocol.hpp next to the other kCode*
+// constants, so the two halves cannot drift. They are declared here only
+// because this change owns ControlClient.{hpp,cpp} and MainWindow.cpp and
+// nothing else; the daemon half must define the SAME strings, and whoever moves
+// them should delete this block rather than leave two sources of truth.
+namespace authz {
+inline constexpr const char* kCodeAuthDenied = "auth_denied";
+// Two accepted spellings for the same verdict: the daemon design calls it
+// `auth_required`, the authorization-model design calls it
+// `auth_challenge_required`. Accepting both costs one string compare and means
+// a client and a daemon written from different halves of the same design still
+// render the right sentence instead of falling through to a raw diagnostic.
+inline constexpr const char* kCodeAuthRequired = "auth_required";
+inline constexpr const char* kCodeAuthChallengeRequired = "auth_challenge_required";
+inline constexpr const char* kCodeAuthDismissed = "auth_dismissed";
+inline constexpr const char* kCodeAuthUnavailable = "auth_unavailable";
+inline constexpr const char* kCodeAuthCheckFailed = "auth_check_failed";
+inline constexpr const char* kCodeAuthTimeout = "auth_timeout";
+inline constexpr const char* kCodeAuthNotTunnelOwner = "auth_not_tunnel_owner";
+}  // namespace authz
+
+// Pure, so it can be unit-tested without a daemon. Anything unrecognised —
+// including every pre-existing kCode* — is None, i.e. "not an authorization
+// verdict", which is what keeps the tun/route/dns failure codes rendering their
+// own copy.
+DaemonAuthOutcome AuthOutcomeFromCode(const std::string& code);
+
+// True for the outcomes that mean "the daemon answered and refused". Dismissed
+// is deliberately INCLUDED: it is a refusal the UI must own (by saying nothing),
+// not something to fall through to a generic "could not start" line.
+inline bool IsAuthRefusal(DaemonAuthOutcome outcome) {
+  switch (outcome) {
+    case DaemonAuthOutcome::Denied:
+    case DaemonAuthOutcome::ChallengeRequired:
+    case DaemonAuthOutcome::Dismissed:
+    case DaemonAuthOutcome::Unavailable:
+    case DaemonAuthOutcome::CheckFailed:
+    case DaemonAuthOutcome::TimedOut:
+    case DaemonAuthOutcome::NotTunnelOwner:
+      return true;
+    case DaemonAuthOutcome::None:
+    case DaemonAuthOutcome::Authorized:
+      return false;
+  }
+  return false;
+}
+
+// Which verbs the daemon gates. Used only to decide whether a SUCCESSFUL reply
+// means "we were authorized" (Authorized) or "nothing was asked" (None) —
+// `status` and `hello` stay unauthenticated so the UI can render service state
+// before any grant exists.
+inline bool VerbNeedsAuthorization(ctl::Verb verb) {
+  switch (verb) {
+    case ctl::Verb::StartTunnel:
+    case ctl::Verb::StopTunnel:
+    case ctl::Verb::SetProvide:
+    case ctl::Verb::SetKillSwitch:
+    case ctl::Verb::LocationOverrideWrite:
+    case ctl::Verb::LocationOverrideClear:
+      return true;
+    case ctl::Verb::Hello:
+    case ctl::Verb::Status:
+    case ctl::Verb::LocationOverrideAvailable:
+    case ctl::Verb::Unknown:
+      return false;
+  }
+  return false;
+}
 
 class ControlClient {
  public:
@@ -97,6 +221,27 @@ class ControlClient {
   DaemonUnreachableReason LastUnreachableReason();
   // The socket path the last attempt used, for the remediation copy.
   std::string LastSocketPath();
+
+  // ---- authorization verdict of the LAST daemon reply -----------------------
+  // Meaningful only in combination with ReplySerial(): this describes the most
+  // recent reply this client processed, and a caller's own failure path may not
+  // have produced one (SdkHost::StartTunnel refuses "not signed in" and a bad
+  // rpc key material without sending anything). Snapshot ReplySerial() before
+  // the call, compare after, and believe LastAuthOutcome() only when it moved —
+  // otherwise it is a verdict about an EARLIER request and rendering it would
+  // put a stale "an administrator can change that" under an unrelated failure.
+  DaemonAuthOutcome LastAuthOutcome();
+  // polkit's own result string ("auth_admin_keep", "auth_self", …) when the
+  // daemon passed it back, "" otherwise. For labelling the affordance BEFORE
+  // the user presses the button; never rendered raw.
+  std::string LastPolkitResult();
+  // What `hello` said the daemon gates with. Group until a hello reports
+  // otherwise — an old daemon says nothing and IS group-gated.
+  DaemonAuthMode LastAuthMode();
+  // Monotonic count of daemon replies processed. See LastAuthOutcome(). Atomic
+  // and lock-free, like SessionGeneration(), so the GTK main loop can read it
+  // either side of a blocking call without contending on mutex_.
+  uint64_t ReplySerial() const { return replySerial_.load(); }
 
   // WHICH daemon connection we are on. Incremented on every completed hello,
   // i.e. every time a NEW connection is established — so a change means the
@@ -235,6 +380,14 @@ class ControlClient {
   // mutex_ (std::mutex is not recursive: calling StopTunnel() there would
   // deadlock the GUI on its own control client).
   bool StopTunnelLocked(std::string* error);
+  // Records the authorization verdict carried by one completed reply and bumps
+  // replySerial_. Called for EVERY verb reply, including the ones that carry no
+  // verdict, because "this reply said nothing about authorization" has to
+  // overwrite the previous reply's verdict — a stale Denied is worse than none.
+  void NoteReplyLocked(ctl::Verb verb, const nlohmann::json& reply);
+  // Clears the verdict WITHOUT bumping the serial, for the paths that refuse
+  // locally and never reach the daemon at all.
+  void ResetAuthLocked();
   void SetReceiveTimeoutLocked(long seconds);
   // `sent` (optional) receives the number of bytes that reached the peer,
   // valid on the failure path too, where it is the difference between "the
@@ -250,13 +403,24 @@ class ControlClient {
   std::string recvBuffer_;
   DaemonSessionState lastState_ = DaemonSessionState::Unreachable;
   DaemonUnreachableReason lastUnreachable_ = DaemonUnreachableReason::None;
+  DaemonAuthOutcome lastAuth_ = DaemonAuthOutcome::None;
+  std::string lastPolkitResult_;
+  // Group, not Polkit, when nothing has told us: a daemon that says nothing
+  // about auth_mode is a daemon that predates polkit gating.
+  DaemonAuthMode lastAuthMode_ = DaemonAuthMode::Group;
   std::string lastSocketPath_;
   std::string daemonVersion_;
   std::string localSdkVersion_;
+  // 150s when this daemon latched polkit, 0 (=default 30s) otherwise. See the
+  // definition: only mutating verbs use it.
+  long PolkitAwareTimeoutLocked() const;
   long receiveTimeoutSeconds_ = 0;  // what is currently set on fd_
   // Bumped by HelloLocked on success. Atomic because SessionGeneration() is
   // read without mutex_ (from the GTK main loop, on every hasDevice()).
   std::atomic<uint64_t> sessionGeneration_{0};
+  // Bumped by NoteReplyLocked. Atomic for the same reason as
+  // sessionGeneration_: read from the GTK main loop without mutex_.
+  std::atomic<uint64_t> replySerial_{0};
 };
 
 }  // namespace urnw

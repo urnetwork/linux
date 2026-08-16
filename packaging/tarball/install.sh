@@ -146,6 +146,24 @@ MISSING_PKGS=''
 # not been reported.
 DNS_WARNING=''
 
+# ---------------------------------------------------------------------------
+# polkit: the authorizer that replaced "join a group and log out"
+# ---------------------------------------------------------------------------
+# urnetworkd decides which authority it runs under from an INSTALL FACT -- the
+# presence of our action file at ControlProtocol.hpp's kPolkitPolicyPath --
+# never from whether polkitd answered a call. Keying on the answer would make
+# `kill polkitd` a policy-downgrade attack; an install fact cannot be induced
+# at runtime by an unprivileged process.
+#
+# That makes this file's presence a PROMISE the installer is making on the
+# daemon's behalf: "a polkit check on this machine can be completed". A daemon
+# that believes it and finds otherwise fails CLOSED, so the promise must not be
+# made on a machine with no polkit -- there, the file is withheld and the
+# legacy `urnetwork` group check stays in force.
+POLKIT_PRESENT=0
+POLKIT_VERSION=''
+POLICY_REL='/usr/share/polkit-1/actions/network.ur.urnetwork.policy'
+
 log()  { printf '%s\n' "$*"; }
 note() { printf -- '- %s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
@@ -186,6 +204,30 @@ if printf '1\n2\n' | sort -V >/dev/null 2>&1; then HAVE_SORT_V=1; fi
 ver_ge() {
     [ "${HAVE_SORT_V}" = 1 ] || return 0   # cannot compare: do not block
     [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
+# detect_polkit -> 0 if this machine has polkit itself.
+#
+# LOOKS FOR POLKIT, NEVER FOR OUR OWN ACTION FILE. `install -D` creates
+# /usr/share/polkit-1/actions on the way in, so after one run both that
+# directory and our .policy exist on a box that has never had polkit -- testing
+# either would latch polkit mode on a machine where no check can ever be
+# answered, and under the daemon's fail-closed rule that machine could never
+# connect again. The three probes below are, in order: the CLI tools every
+# packaging of polkit ships, the daemon binary itself (libexecdir varies by
+# distro), and polkit's own action file, which it has shipped since 0.105.
+detect_polkit() {
+    if command -v pkaction >/dev/null 2>&1; then return 0; fi
+    if command -v pkcheck >/dev/null 2>&1; then return 0; fi
+    local d
+    for d in /usr/lib/polkit-1 /usr/libexec/polkit-1 /usr/lib64/polkit-1 \
+             /usr/lib/x86_64-linux-gnu/polkit-1 /usr/lib/aarch64-linux-gnu/polkit-1 \
+             /usr/local/lib/polkit-1 /usr/local/libexec/polkit-1; do
+        if [ -x "${d}/polkitd" ]; then return 0; fi
+    done
+    if [ -f /usr/share/polkit-1/actions/org.freedesktop.policykit.policy ]; then return 0; fi
+    if [ -f /usr/local/share/polkit-1/actions/org.freedesktop.policykit.policy ]; then return 0; fi
+    return 1
 }
 
 elf_arch() {
@@ -910,6 +952,23 @@ if [ -n "${DNS_WARNING}" ]; then
     log "  =========================================================================="
 fi
 
+# polkit -- OPTIONAL, like GeoClue: state the outcome plainly, never fail. Its
+# absence costs the no-log-out first run, not the product.
+if detect_polkit; then
+    POLKIT_PRESENT=1
+    POLKIT_VERSION="$( (pkaction --version 2>/dev/null || true) | sed -n 's/.*version[[:space:]]*//p' | tr -d '[:space:]')"
+    note "polkit: ${POLKIT_VERSION:-present} -- permission is granted to whoever is signed in at this screen, in the session they are already in (no group, no log-out)"
+    # polkit gained multi-directory action lookup in 124. Before that it reads
+    # /usr/share/polkit-1/actions ONLY -- and on an immutable host that is a
+    # read-only image mount, so this installer maps the action file to
+    # /usr/local/share and an older polkit would never see it.
+    if [ "${LAYOUT}" = 'immutable' ] && [ -n "${POLKIT_VERSION}" ] && ! ver_ge "${POLKIT_VERSION}" '124'; then
+        warn "polkit ${POLKIT_VERSION} predates multi-directory action lookup (124) and this host's /usr is read-only, so the action file must go to /usr/local/share/polkit-1/actions where this polkit will not read it. urnetworkd will keep asking for an administrator password; upgrade polkit, or use the 'urnetwork' group path."
+    fi
+else
+    note "polkit: not found -- urnetworkd falls back to the 'urnetwork' group, which DOES still need a log-out (instructions at the end of this run)"
+fi
+
 # ---------------------------------------------------------------------------
 # Build the file plan from the payload
 # ---------------------------------------------------------------------------
@@ -941,19 +1000,27 @@ if [ "${DRY_RUN}" = 1 ]; then
     log "Plan (${MODE}):"
     [ -n "${PREFIX}" ] && log "  file layout rooted at prefix: ${PREFIX}"
     if [ -z "${PREFIX}" ]; then
-        note "create system group 'urnetwork' (if missing)"
-        note "add the invoking user to the urnetwork group (the control socket is root:urnetwork 0750)"
+        note "create system group 'urnetwork' if missing (FALLBACK authorizer only -- consulted where polkit is absent; nobody is added to it and no member is removed)"
         note "stop ${UNIT} if running (it may hold a live tun fd)"
         note "back up currently installed files for rollback-on-failure"
     fi
     echo "${INSTALL_LIST}" | while IFS= read -r rel; do
         dst="$(map_path "${rel}")"
+        if [ "${rel}" = "${POLICY_REL}" ] && [ "${POLKIT_PRESENT}" = 0 ]; then
+            note "SKIP ${PREFIX}${dst} -- no polkit here; installing it would promise the daemon a check it cannot complete, and the daemon fails closed on that promise"
+            continue
+        fi
         if is_config "${rel}" && [ -e "${PREFIX}${dst}" ]; then
             note "keep existing ${PREFIX}${dst} (admin-owned config)"
         else
             note "install ${PREFIX}${dst} ($(file_mode "${rel}"))"
         fi
     done
+    if [ "${POLKIT_PRESENT}" = 1 ]; then
+        note "force $(map_path "${POLICY_REL}") to 0644 root:root and check that $(dirname "$(map_path "${POLICY_REL}")") is root-owned and not group/world writable (polkit silently ignores a writable action file)"
+    else
+        note "remove any previously installed $(map_path "${POLICY_REL}") (polkit is gone; the daemon must fall back to the group)"
+    fi
     [ "${LAYOUT}" = 'immutable' ] && \
         note "rewrite ExecStart in the unit to $(map_path '/usr/lib/urnetwork/urnetworkd')"
     note "install ${PREFIX}${LIB_DIR}/uninstall.sh, ${PREFIX}${MANIFEST_REL}, ${PREFIX}${VERSION_REL}"
@@ -1016,72 +1083,106 @@ on_error() {
 }
 trap on_error ERR
 
-# Group first: the unit's Group=urnetwork needs it before first start.
+# The `urnetwork` system group: STILL CREATED, AND NOBODY IS PUT IN IT.
+#
+# It is now only the FALLBACK authorizer. On a machine with no polkit,
+# urnetworkd binds the control socket 0660 root:urnetwork and authorizes uid 0
+# plus members of this group, byte-for-byte as before. Where polkit is present
+# -- every desktop this app targets -- membership is INERT: the socket is 0666
+# root:root and every privileged verb is authorized per-action against the
+# peer's SO_PEERCRED uid.
+#
+# WHAT IS GONE, DELIBERATELY: `usermod -aG urnetwork "$SUDO_USER"` and the
+# "log out and back in" banner that had to follow it. Supplementary groups are
+# applied at LOGIN, so that pair made a correct install unusable until the user
+# ended their session -- which is the exact first-run experience this change
+# exists to remove, and which no shipping VPN asks for.
+#
+# The group is NOT deleted and existing members are NOT removed on upgrade:
+# `gpasswd -d` would be a surprise with no upside, the gid still owns
+# /run/urnetwork on a group-mode box, and a downgrade to an older daemon has to
+# keep working. On a machine that already carries members, this upgrade simply
+# makes their membership stop mattering -- see the closing message.
 if [ -z "${PREFIX}" ]; then
     if ! getent group urnetwork >/dev/null 2>&1; then
-        log "creating system group 'urnetwork'"
+        log "creating system group 'urnetwork' (fallback authorizer; used only where polkit is absent)"
         if command -v groupadd >/dev/null 2>&1; then
             run groupadd --system urnetwork
         else
             run addgroup --system urnetwork
         fi
     fi
-
-    # ...AND PUT THE HUMAN IN IT. The control socket is 0750 root:urnetwork, so
-    # a user who is not a member gets EACCES on connect(2) and the app can only
-    # report "the service is not running" — which is false and unfixable from
-    # the UI. Creating the group without ever adding anyone to it is the single
-    # most likely way a correct install still cannot connect.
+    # ...AND PUT THE HUMAN IN IT -- BUT ONLY WHEN POLKIT IS NOT THE AUTHORITY.
+    # This is the whole point of the polkit path: group membership is applied
+    # by the LOGIN, so gating on it forces a log-out/reboot before a fresh
+    # install can connect. Under polkit the person at the screen is authorized
+    # in the session they are already in, so adding them to a group would be
+    # pure ceremony -- and would print a log-out instruction they do not need.
     #
-    # sudo/pkexec keep the invoking user in SUDO_USER/PKEXEC_UID; a plain root
-    # shell has neither, and root does not need the group.
-    #
-    # `sudo -i`, `su -` and a root console have neither variable, and that is
-    # not a rare corner: it is how a lot of people install things. Two more
-    # answers are tried before giving up, both of which name a real human and
-    # neither of which guesses: logname(1) reports the owner of the login
-    # session this process descends from, and a machine with exactly ONE
-    # non-system user logged in has no ambiguity to resolve. Anything less
-    # certain than that is left to the human.
-    TARGET_USER=""
-    if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != 'root' ]; then
-        TARGET_USER="${SUDO_USER}"
-    elif [ -n "${PKEXEC_UID:-}" ]; then
-        TARGET_USER="$(getent passwd "${PKEXEC_UID}" 2>/dev/null | cut -d: -f1)"
+    # The group is still CREATED above unconditionally, because the socket
+    # falls back to 0660 root:urnetwork if polkit ever goes away, and a group
+    # that exists costs nothing.
+    if [ "${POLKIT_PRESENT}" = 1 ]; then
+        note "skipping group membership: polkit authorizes you in your current session, so no log-out is needed"
     else
-        CANDIDATE="$(logname 2>/dev/null || true)"
-        if [ -z "${CANDIDATE}" ] || [ "${CANDIDATE}" = 'root' ]; then
-            CANDIDATE=''
-            if command -v loginctl >/dev/null 2>&1; then
-                SESSION_USERS="$(loginctl list-users --no-legend 2>/dev/null \
-                    | awk '$1 >= 1000 { print $2 }' | LC_ALL=C sort -u || true)"
-                if [ "$(printf '%s' "${SESSION_USERS}" | grep -c . || true)" = 1 ]; then
-                    CANDIDATE="${SESSION_USERS}"
+
+        # ...AND PUT THE HUMAN IN IT. The control socket is 0750 root:urnetwork, so
+        # a user who is not a member gets EACCES on connect(2) and the app can only
+        # report "the service is not running" — which is false and unfixable from
+        # the UI. Creating the group without ever adding anyone to it is the single
+        # most likely way a correct install still cannot connect.
+        #
+        # sudo/pkexec keep the invoking user in SUDO_USER/PKEXEC_UID; a plain root
+        # shell has neither, and root does not need the group.
+        #
+        # `sudo -i`, `su -` and a root console have neither variable, and that is
+        # not a rare corner: it is how a lot of people install things. Two more
+        # answers are tried before giving up, both of which name a real human and
+        # neither of which guesses: logname(1) reports the owner of the login
+        # session this process descends from, and a machine with exactly ONE
+        # non-system user logged in has no ambiguity to resolve. Anything less
+        # certain than that is left to the human.
+        TARGET_USER=""
+        if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != 'root' ]; then
+            TARGET_USER="${SUDO_USER}"
+        elif [ -n "${PKEXEC_UID:-}" ]; then
+            TARGET_USER="$(getent passwd "${PKEXEC_UID}" 2>/dev/null | cut -d: -f1)"
+        else
+            CANDIDATE="$(logname 2>/dev/null || true)"
+            if [ -z "${CANDIDATE}" ] || [ "${CANDIDATE}" = 'root' ]; then
+                CANDIDATE=''
+                if command -v loginctl >/dev/null 2>&1; then
+                    SESSION_USERS="$(loginctl list-users --no-legend 2>/dev/null \
+                        | awk '$1 >= 1000 { print $2 }' | LC_ALL=C sort -u || true)"
+                    if [ "$(printf '%s' "${SESSION_USERS}" | grep -c . || true)" = 1 ]; then
+                        CANDIDATE="${SESSION_USERS}"
+                    fi
                 fi
             fi
+            # Only accept a name the password database actually knows.
+            if [ -n "${CANDIDATE}" ] && getent passwd "${CANDIDATE}" >/dev/null 2>&1; then
+                TARGET_USER="${CANDIDATE}"
+                note "no SUDO_USER/PKEXEC_UID; using the login session's owner: ${TARGET_USER}"
+            fi
         fi
-        # Only accept a name the password database actually knows.
-        if [ -n "${CANDIDATE}" ] && getent passwd "${CANDIDATE}" >/dev/null 2>&1; then
-            TARGET_USER="${CANDIDATE}"
-            note "no SUDO_USER/PKEXEC_UID; using the login session's owner: ${TARGET_USER}"
-        fi
-    fi
-    if [ -n "${TARGET_USER}" ]; then
-        if id -nG "${TARGET_USER}" 2>/dev/null | tr ' ' '\n' | grep -qx urnetwork; then
-            note "${TARGET_USER} is already in the urnetwork group"
-        elif command -v usermod >/dev/null 2>&1; then
-            log "adding ${TARGET_USER} to the urnetwork group"
-            run usermod -aG urnetwork "${TARGET_USER}"
-            GROUP_ADDED=1
-        elif command -v gpasswd >/dev/null 2>&1; then
-            log "adding ${TARGET_USER} to the urnetwork group"
-            run gpasswd -a "${TARGET_USER}" urnetwork
-            GROUP_ADDED=1
+        if [ -n "${TARGET_USER}" ]; then
+            if id -nG "${TARGET_USER}" 2>/dev/null | tr ' ' '\n' | grep -qx urnetwork; then
+                note "${TARGET_USER} is already in the urnetwork group"
+            elif command -v usermod >/dev/null 2>&1; then
+                log "adding ${TARGET_USER} to the urnetwork group"
+                run usermod -aG urnetwork "${TARGET_USER}"
+                GROUP_ADDED=1
+            elif command -v gpasswd >/dev/null 2>&1; then
+                log "adding ${TARGET_USER} to the urnetwork group"
+                run gpasswd -a "${TARGET_USER}" urnetwork
+                GROUP_ADDED=1
+            else
+                warn "could not add ${TARGET_USER} to the urnetwork group (no usermod/gpasswd): run 'sudo usermod -aG urnetwork ${TARGET_USER}' or the app cannot reach the service"
+            fi
         else
-            warn "could not add ${TARGET_USER} to the urnetwork group (no usermod/gpasswd): run 'sudo usermod -aG urnetwork ${TARGET_USER}' or the app cannot reach the service"
+            warn "could not tell which user to add to the urnetwork group (no SUDO_USER/PKEXEC_UID). Run: sudo usermod -aG urnetwork <you>"
         fi
-    else
-        warn "could not tell which user to add to the urnetwork group (no SUDO_USER/PKEXEC_UID). Run: sudo usermod -aG urnetwork <you>"
+
     fi
 fi
 
@@ -1131,6 +1232,14 @@ install_one() {
 log "installing files..."
 while IFS= read -r rel; do
     [ -n "${rel}" ] || continue
+    # The polkit action file is the ONE payload file whose installation is
+    # conditional (see POLKIT_PRESENT at the top): installing it on a machine
+    # with no polkit tells the daemon a check can be completed there, and the
+    # daemon fails closed on that promise rather than downgrading silently.
+    if [ "${rel}" = "${POLICY_REL}" ] && [ "${POLKIT_PRESENT}" = 0 ]; then
+        log "  skipping ${PREFIX}$(map_path "${rel}") (no polkit on this system; the 'urnetwork' group stays the authorizer)"
+        continue
+    fi
     # is_config asks about the PAYLOAD path on purpose: the systemd unit maps
     # into /etc/systemd/system on an immutable host, and treating it as an
     # admin-owned conffile there would mean an upgrade never replaces the unit.
@@ -1182,6 +1291,62 @@ if [ -n "${OLD_MANIFEST}" ]; then
     done <<< "${OLD_MANIFEST}"
 fi
 
+# ---------------------------------------------------------------------------
+# The polkit action file: mode, ownership, and the stale-copy sweep
+# ---------------------------------------------------------------------------
+# polkit's rejection of a group- or world-writable .policy file is SILENT -- it
+# logs and skips the file, every action reverts to its built-in default, and
+# the only symptom is that Connect starts asking for an administrator password
+# on a machine where it never did. So the two things polkit actually inspects
+# are set here explicitly rather than inherited from the payload's modes, and
+# the DIRECTORY is checked too: polkit does not police the directory, and
+# anyone who can write it can drop in a file that redefines our defaults.
+POLICY_MAPPED="$(map_path "${POLICY_REL}")"
+POLICY_DIR="$(dirname "${POLICY_MAPPED}")"
+if [ "${POLKIT_PRESENT}" = 1 ]; then
+    if [ -f "${PREFIX}${POLICY_MAPPED}" ]; then
+        chmod 0644 "${PREFIX}${POLICY_MAPPED}"
+        if [ -z "${PREFIX}" ]; then
+            chown root:root "${PREFIX}${POLICY_MAPPED}" || \
+                warn "could not chown ${POLICY_MAPPED} to root:root"
+        fi
+        POLICY_DIR_MODE="$(stat -c '%a' "${PREFIX}${POLICY_DIR}" 2>/dev/null || printf '')"
+        POLICY_DIR_UID="$(stat -c '%u' "${PREFIX}${POLICY_DIR}" 2>/dev/null || printf '')"
+        case "${POLICY_DIR_MODE}" in
+            '') : ;;
+            *[2367]|*[2367]?)
+                warn "${POLICY_DIR} is group- or world-writable (mode ${POLICY_DIR_MODE}). Anyone who can write there can redefine URnetwork's polkit defaults -- fix with: sudo chmod 0755 ${POLICY_DIR}" ;;
+        esac
+        if [ -n "${POLICY_DIR_UID}" ] && [ "${POLICY_DIR_UID}" != 0 ] && [ -z "${PREFIX}" ]; then
+            warn "${POLICY_DIR} is owned by uid ${POLICY_DIR_UID}, not root -- that account can redefine URnetwork's polkit defaults"
+        fi
+        note "polkit action file: ${PREFIX}${POLICY_MAPPED} (0644 root:root)"
+        # On an ostree/bootc host the file CANNOT go to /usr/share -- that is a
+        # read-only image mount -- so it lands under /usr/local/share like
+        # everything else this installer remaps. polkit itself reads it there
+        # (124+ scans /etc, /run, /usr/local/share and /usr/share), but the
+        # daemon decides which authority it runs under by stat()ing this file,
+        # and if it looks only at /usr/share it will silently fall back to the
+        # `urnetwork` group -- which nobody is added to any more. State it.
+        if [ "${LAYOUT}" = 'immutable' ]; then
+            note "this host's /usr is read-only, so the action file is at ${POLICY_MAPPED} rather than /usr/share/polkit-1/actions. polkit reads both. If the app still reports a permission problem after this install, the daemon looked for the file in the wrong one of them."
+        fi
+    else
+        warn "polkit was detected but ${PREFIX}${POLICY_MAPPED} was not installed -- the daemon will fall back to the 'urnetwork' group, which needs a log-out"
+    fi
+elif [ -f "${PREFIX}${POLICY_MAPPED}" ]; then
+    # An earlier install put it there while this machine still had polkit.
+    # Leaving it behind would tell the daemon that a check can be completed
+    # here; it would then refuse every privileged verb with no way back except
+    # reinstalling polkit. Removing it restores the group path instead.
+    log "  removing ${PREFIX}${POLICY_MAPPED} (polkit is no longer installed; the 'urnetwork' group becomes the authorizer again)"
+    mkdir -p "${BACKUP_DIR}${POLICY_DIR}"
+    cp -p "${PREFIX}${POLICY_MAPPED}" "${BACKUP_DIR}${POLICY_MAPPED}"
+    WRITTEN_LOG="${WRITTEN_LOG}${POLICY_MAPPED}
+"
+    rm -f "${PREFIX}${POLICY_MAPPED}"
+fi
+
 # Bookkeeping: uninstaller + manifest + version marker.
 install -D -m 0755 "${SELF_DIR}/uninstall.sh" "${PREFIX}${LIB_DIR}/uninstall.sh"
 mkdir -p "${PREFIX}${LIB_DIR}"
@@ -1196,9 +1361,17 @@ printf '%s\n' "${NEW_VERSION}" > "${PREFIX}${VERSION_REL}"
 # System integration (skipped under --prefix)
 # ---------------------------------------------------------------------------
 if [ -z "${PREFIX}" ]; then
-    # /run/urnetwork: the unit's RuntimeDirectory= owns this; pre-create so
-    # the control path exists before the first start.
-    run install -d -m 0750 -o root -g urnetwork /run/urnetwork
+    # /run/urnetwork: the unit's RuntimeDirectory= owns this (0755 root:root)
+    # and re-applies its mode on every start; pre-create so the control path
+    # exists before the first start. The mode encodes which authority is in
+    # force -- 0755 root:root under polkit, 0750 root:urnetwork on the group
+    # fallback -- so pre-create it the way this machine will actually run, and
+    # let urnetworkd settle it authoritatively when it binds the socket.
+    if [ "${POLKIT_PRESENT}" = 1 ]; then
+        run install -d -m 0755 -o root -g root /run/urnetwork
+    else
+        run install -d -m 0750 -o root -g urnetwork /run/urnetwork
+    fi
 
     if [ -d /run/systemd/system ]; then
         run systemctl daemon-reload
@@ -1355,7 +1528,21 @@ log "urnetwork-daemon ${NEW_VERSION} ${MODE} complete."
 if [ -z "${PREFIX}" ]; then
     log "The daemon is running idle; nothing connects until you sign in from the app."
     log "Unit installed at: $(map_path "/lib/systemd/system/${UNIT}")"
-    if [ "${GROUP_ADDED}" = 1 ]; then
+    if [ "${POLKIT_PRESENT}" = 1 ]; then
+        log ""
+        log "No group change and no log-out are required: polkit grants permission to"
+        log "whoever is signed in at this device's screen the moment they press Connect."
+        # A machine upgraded from a group-based install still has members. Say
+        # plainly that nothing has to be undone -- the silent alternative is a
+        # user who assumes the old instructions still apply and logs out for
+        # nothing, or worse, tries to "clean up" a gid that owns files.
+        if [ -n "$(getent group urnetwork 2>/dev/null | cut -d: -f4)" ]; then
+            log ""
+            log "Permission is now granted by polkit, not by the 'urnetwork' group. Existing"
+            log "members are left as they are -- nothing to undo, and no log-out is needed. The"
+            log "group is now used only on systems without polkit."
+        fi
+    elif [ "${GROUP_ADDED}" = 1 ]; then
         log ""
         log "IMPORTANT: you were added to the 'urnetwork' group, and group membership"
         log "only applies to NEW login sessions. Log out and back in (or reboot) before"
@@ -1364,7 +1551,18 @@ if [ -z "${PREFIX}" ]; then
         log "'newgrp urnetwork' only affects that one shell, not the session the app"
         log "is launched from. After logging back in, confirm with:"
         log "    id -nG | tr ' ' '\\n' | grep -x urnetwork"
+        log ""
+        log "Installing polkit and re-running this installer removes that requirement"
+        log "entirely -- it is what lets other VPN clients skip this step."
+    else
+        log ""
+        warn "no polkit authorization service was found on this system."
+        log "urnetworkd will fall back to the 'urnetwork' group. Add the user who runs the app:"
+        log "    sudo usermod -aG urnetwork <user>"
+        log "Group membership only applies to NEW login sessions, so log out and back in after."
+        log "Installing polkit and re-running this installer removes that requirement."
     fi
+    log ""
     log "Next: install the URnetwork GUI AppImage to ~/.local/lib/urnetwork/URnetwork.AppImage"
     log "and run 'urnetwork' (https://ur.io/download)."
     log ""
