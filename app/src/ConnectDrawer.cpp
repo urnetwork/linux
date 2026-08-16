@@ -270,11 +270,11 @@ void ConnectDrawer::BuildControlsCard() {
     content->append(*title);
 
     auto* body = Gtk::make_managed<Gtk::Label>(T_(
-        "kill_switch_smtp_exception",
-        "While the VPN is connected, outbound SMTP on TCP port 25 bypasses the VPN and uses "
-        "your local network, even when the kill switch is on. This may expose your local "
-        "public IP to the mail server. SMTP on ports 465 and 587 stays in the VPN and must "
-        "establish TLS."));
+        "kill_switch_exception_detail",
+        "While the VPN is connected, IPv6 is not routed through URnetwork and may use your "
+        "local network, even when the kill switch is on. Outbound SMTP on TCP port 25 also "
+        "bypasses the VPN. These exceptions may expose your local public IP to those "
+        "destinations. SMTP on ports 465 and 587 stays in the VPN and must establish TLS."));
     body->set_xalign(0);
     body->set_wrap(true);
     content->append(*body);

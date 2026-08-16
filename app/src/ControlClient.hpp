@@ -69,14 +69,18 @@ class ControlClient {
   std::string DaemonVersion();
 
   // ---- verbs (each ensures a session first) --------------------------------
-  // start_tunnel: on success fills rpcPort (informational — the DeviceRemote
-  // dials the SDK default). On failure `error` carries the daemon's message
-  // (e.g. another client owns the tunnel). networkSpaceJson is the GUI's
-  // active space, so the daemon's DeviceLocal lives in the same network
-  // ("" = the compiled-in default).
-  bool StartTunnel(const std::string& byJwt, const std::string& instanceId,
-                   const std::string& appVersion, const std::string& networkSpaceJson,
-                   int* rpcPort, std::string* error);
+  // start_tunnel: on success fills `result` (the daemon's rpc_port plus the
+  // instance/session identity the GUI verifies before dialing). On failure
+  // `error` carries the daemon's message (e.g. another client owns the
+  // tunnel). The request carries the GUI's active space
+  // (network_space_json), so the daemon's DeviceLocal lives in the same
+  // network ("" = the compiled-in default).
+  bool StartTunnel(const ctl::StartTunnelRequest& request,
+                   ctl::StartTunnelReply* result, std::string* error);
+  // Claims an already-running tunnel without restarting it. The daemon only
+  // transfers ownership when both live identifiers match exactly.
+  bool AttachTunnel(const ctl::AttachTunnelRequest& request,
+                    ctl::StartTunnelReply* result, std::string* error);
   bool StopTunnel(std::string* error = nullptr);
   bool SetProvide(const std::string& mode, std::string* error = nullptr);
   std::optional<ctl::StatusReply> Status(std::string* error = nullptr);

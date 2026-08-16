@@ -64,7 +64,8 @@ UR_TEST(controlFrameUnknownVerbAndMissingIdAreExplicit) {
 UR_TEST(controlVerbNamesRoundTrip) {
   const ctl::Verb verbs[] = {
       ctl::Verb::Hello,          ctl::Verb::Status,
-      ctl::Verb::StartTunnel,    ctl::Verb::StopTunnel,
+      ctl::Verb::StartTunnel,    ctl::Verb::AttachTunnel,
+      ctl::Verb::StopTunnel,
       ctl::Verb::SetProvide,     ctl::Verb::LocationOverrideAvailable,
       ctl::Verb::LocationOverrideWrite, ctl::Verb::LocationOverrideClear,
   };
@@ -75,6 +76,7 @@ UR_TEST(controlVerbNamesRoundTrip) {
   UR_EXPECT_TRUE(ctl::VerbFromString("hello") == ctl::Verb::Hello);
   UR_EXPECT_TRUE(ctl::VerbFromString("status") == ctl::Verb::Status);
   UR_EXPECT_TRUE(ctl::VerbFromString("start_tunnel") == ctl::Verb::StartTunnel);
+  UR_EXPECT_TRUE(ctl::VerbFromString("attach_tunnel") == ctl::Verb::AttachTunnel);
   UR_EXPECT_TRUE(ctl::VerbFromString("stop_tunnel") == ctl::Verb::StopTunnel);
   UR_EXPECT_TRUE(ctl::VerbFromString("set_provide") == ctl::Verb::SetProvide);
   UR_EXPECT_TRUE(ctl::VerbFromString("location_override_available") ==
@@ -154,6 +156,9 @@ UR_TEST(controlStartTunnelRoundTrip) {
   req.by_jwt = "jwt-abc";
   req.instance_id = "0f0f-1234";
   req.app_version = "2.3.4";
+  req.rpc_session_id = "rpc-session-1";
+  req.rpc_server_pem = "server-private";
+  req.rpc_client_cert_pem = "client-public";
   const auto back = ctl::DecodeFrame(ctl::EncodeFrame(
       ctl::MakeRequest(ctl::Verb::StartTunnel, 9, nlohmann::json(req))));
   UR_EXPECT_TRUE(ctl::RequestVerb(*back) == ctl::Verb::StartTunnel);
@@ -161,12 +166,19 @@ UR_TEST(controlStartTunnelRoundTrip) {
   UR_EXPECT_TRUE(parsed.by_jwt == "jwt-abc");
   UR_EXPECT_TRUE(parsed.instance_id == "0f0f-1234");
   UR_EXPECT_TRUE(parsed.app_version == "2.3.4");
+  UR_EXPECT_TRUE(parsed.rpc_session_id == "rpc-session-1");
+  UR_EXPECT_TRUE(parsed.rpc_server_pem == "server-private");
+  UR_EXPECT_TRUE(parsed.rpc_client_cert_pem == "client-public");
 
   ctl::StartTunnelReply reply;
   reply.rpc_port = ctl::kDeviceRpcPort;
+  reply.instance_id = req.instance_id;
+  reply.rpc_session_id = req.rpc_session_id;
   const auto replyBack = ctl::DecodeFrame(ctl::EncodeFrame(
       ctl::MakeReply(9, true, nlohmann::json(reply))))->get<ctl::StartTunnelReply>();
   UR_EXPECT_EQ(12025, replyBack.rpc_port);
+  UR_EXPECT_TRUE(replyBack.instance_id == req.instance_id);
+  UR_EXPECT_TRUE(replyBack.rpc_session_id == req.rpc_session_id);
 }
 
 // instance_id is the DEVICE PAIRING KEY between the two processes: the GUI
@@ -181,6 +193,9 @@ UR_TEST(controlStartTunnelInstanceIdIsThePairingContract) {
   sent.by_jwt = "jwt";
   sent.instance_id = "3f2a8c1e-instance";
   sent.app_version = "1.0.0";
+  sent.rpc_session_id = "rpc-session";
+  sent.rpc_server_pem = "server-private";
+  sent.rpc_client_cert_pem = "client-public";
   // what the daemon's ControlServer parses and TunnelHost constructs with
   const auto received = ctl::DecodeFrame(ctl::EncodeFrame(
       ctl::MakeRequest(ctl::Verb::StartTunnel, 1, nlohmann::json(sent))))
@@ -201,6 +216,26 @@ UR_TEST(controlStartTunnelInstanceIdIsThePairingContract) {
   const auto jwtError = ctl::ValidateStartTunnelRequest(noJwt);
   UR_EXPECT_TRUE(jwtError.has_value());
   UR_EXPECT_TRUE(jwtError->find("by_jwt") != std::string::npos);
+
+  ctl::StartTunnelRequest noRpc = sent;
+  noRpc.rpc_session_id.clear();
+  UR_EXPECT_TRUE(ctl::ValidateStartTunnelRequest(noRpc)->find("rpc_session_id") !=
+                 std::string::npos);
+}
+
+UR_TEST(controlAttachTunnelRequiresBothLiveIdentifiers) {
+  ctl::AttachTunnelRequest sent;
+  sent.instance_id = "instance-1";
+  sent.rpc_session_id = "session-1";
+  auto back = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeRequest(ctl::Verb::AttachTunnel, 3, nlohmann::json(sent))))
+                        ->get<ctl::AttachTunnelRequest>();
+  UR_EXPECT_TRUE(back.instance_id == sent.instance_id);
+  UR_EXPECT_TRUE(back.rpc_session_id == sent.rpc_session_id);
+  UR_EXPECT_FALSE(ctl::ValidateAttachTunnelRequest(back).has_value());
+
+  back.rpc_session_id.clear();
+  UR_EXPECT_TRUE(ctl::ValidateAttachTunnelRequest(back).has_value());
 }
 
 UR_TEST(controlStatusReplyRoundTrip) {
@@ -208,12 +243,16 @@ UR_TEST(controlStatusReplyRoundTrip) {
   status.tunnel_state = ctl::TunnelState::Up;
   status.rpc_port = ctl::kDeviceRpcPort;
   status.client_id = "client-1";
+  status.instance_id = "instance-1";
+  status.rpc_session_id = "session-1";
   status.error = "";
   const auto back = ctl::DecodeFrame(ctl::EncodeFrame(
       ctl::MakeReply(4, true, nlohmann::json(status))))->get<ctl::StatusReply>();
   UR_EXPECT_TRUE(back.tunnel_state == ctl::TunnelState::Up);
   UR_EXPECT_EQ(12025, back.rpc_port);
   UR_EXPECT_TRUE(back.client_id == "client-1");
+  UR_EXPECT_TRUE(back.instance_id == "instance-1");
+  UR_EXPECT_TRUE(back.rpc_session_id == "session-1");
   UR_EXPECT_TRUE(back.error.empty());
 }
 

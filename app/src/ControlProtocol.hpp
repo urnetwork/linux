@@ -35,11 +35,11 @@ namespace urnw::ctl {
 
 // Bump ONLY on incompatible wire-format changes, decoupled from the app
 // version (hello negotiates it; see the enforcement note above).
-inline constexpr int kControlProtocolVersion = 1;
+inline constexpr int kControlProtocolVersion = 2;
 // The daemon refuses a client hello carrying a protocol_version below this.
-inline constexpr int kMinSupportedClientProtocol = 1;
+inline constexpr int kMinSupportedClientProtocol = 2;
 // The GUI refuses a daemon hello reply carrying a protocol_version below this.
-inline constexpr int kMinSupportedDaemonProtocol = 1;
+inline constexpr int kMinSupportedDaemonProtocol = 2;
 
 // Socket location (MIGRATION.md table): dir 0750 root:urnetwork, sock 0660.
 // Never abstract — permissions are meaningless in the abstract namespace.
@@ -49,10 +49,10 @@ inline constexpr const char* kControlSocketPath = "/run/urnetwork/control.sock";
 inline constexpr const char* kControlGroupName = "urnetwork";
 
 // The device RPC the GUI's DeviceRemote dials once start_tunnel succeeds.
-// Loopback TCP + mTLS, the SDK's built-in default (sdk/device_rpc.go:109,
-// deviceRpcDefaultAddress = "127.0.0.1:12025") — deliberately NOT a unix
-// socket yet; the control socket is the authorization boundary (MIGRATION.md
-// "Decision"). Surfaced in status/start_tunnel replies as rpc_port.
+// The address matches the SDK default, but both peers explicitly replace that
+// default transport with fresh per-tunnel mTLS material. Deliberately not a
+// unix socket yet; the control socket authorizes lifecycle requests while mTLS
+// independently authenticates RPC clients. Surfaced in status/start replies.
 inline constexpr int kDeviceRpcPort = 12025;
 
 // ---- version negotiation (pure, unit-tested) -------------------------------
@@ -118,6 +118,7 @@ enum class Verb {
   Hello,
   Status,
   StartTunnel,
+  AttachTunnel,
   StopTunnel,
   SetProvide,
   LocationOverrideAvailable,
@@ -131,6 +132,7 @@ inline const char* ToString(Verb v) {
     case Verb::Hello: return "hello";
     case Verb::Status: return "status";
     case Verb::StartTunnel: return "start_tunnel";
+    case Verb::AttachTunnel: return "attach_tunnel";
     case Verb::StopTunnel: return "stop_tunnel";
     case Verb::SetProvide: return "set_provide";
     case Verb::LocationOverrideAvailable: return "location_override_available";
@@ -145,6 +147,7 @@ inline Verb VerbFromString(const std::string& s) {
   if (s == "hello") return Verb::Hello;
   if (s == "status") return Verb::Status;
   if (s == "start_tunnel") return Verb::StartTunnel;
+  if (s == "attach_tunnel") return Verb::AttachTunnel;
   if (s == "stop_tunnel") return Verb::StopTunnel;
   if (s == "set_provide") return Verb::SetProvide;
   if (s == "location_override_available") return Verb::LocationOverrideAvailable;
@@ -238,21 +241,32 @@ struct StartTunnelRequest {
   // custom-server session never syncs against a device registered on
   // production. Empty = the compiled-in default space (BuildUrNetworkSpace) —
   // the safe direction: silence means production, never a surprise server.
-  // Additive within protocol v1: both halves ship from one pipeline and the
-  // hello sdk_version exact-match already refuses mismatched pairs.
+  // Additive within the protocol version: both halves ship from one pipeline
+  // and the hello sdk_version exact-match already refuses mismatched pairs.
   std::string network_space_json;
+  // Per-tunnel RPC identity. The daemon receives only the server private key
+  // and the public client certificate; the GUI retains the client private key.
+  std::string rpc_session_id;
+  std::string rpc_server_pem;
+  std::string rpc_client_cert_pem;
 };
 inline void to_json(nlohmann::json& j, const StartTunnelRequest& v) {
   j["by_jwt"] = v.by_jwt;
   j["instance_id"] = v.instance_id;
   j["app_version"] = v.app_version;
   if (!v.network_space_json.empty()) j["network_space_json"] = v.network_space_json;
+  j["rpc_session_id"] = v.rpc_session_id;
+  j["rpc_server_pem"] = v.rpc_server_pem;
+  j["rpc_client_cert_pem"] = v.rpc_client_cert_pem;
 }
 inline void from_json(const nlohmann::json& j, StartTunnelRequest& v) {
   detail::Get(j, "by_jwt", v.by_jwt);
   detail::Get(j, "instance_id", v.instance_id);
   detail::Get(j, "app_version", v.app_version);
   detail::Get(j, "network_space_json", v.network_space_json);
+  detail::Get(j, "rpc_session_id", v.rpc_session_id);
+  detail::Get(j, "rpc_server_pem", v.rpc_server_pem);
+  detail::Get(j, "rpc_client_cert_pem", v.rpc_client_cert_pem);
 }
 
 // Validation the daemon applies before constructing anything. Pure so the
@@ -266,17 +280,45 @@ inline void from_json(const nlohmann::json& j, StartTunnelRequest& v) {
 inline std::optional<std::string> ValidateStartTunnelRequest(const StartTunnelRequest& req) {
   if (req.by_jwt.empty()) return "by_jwt is required";
   if (req.instance_id.empty()) return "instance_id is required";
+  if (req.rpc_session_id.empty()) return "rpc_session_id is required";
+  if (req.rpc_server_pem.empty()) return "rpc_server_pem is required";
+  if (req.rpc_client_cert_pem.empty()) return "rpc_client_cert_pem is required";
+  return std::nullopt;
+}
+
+struct AttachTunnelRequest {
+  std::string instance_id;
+  std::string rpc_session_id;
+};
+inline void to_json(nlohmann::json& j, const AttachTunnelRequest& v) {
+  j["instance_id"] = v.instance_id;
+  j["rpc_session_id"] = v.rpc_session_id;
+}
+inline void from_json(const nlohmann::json& j, AttachTunnelRequest& v) {
+  detail::Get(j, "instance_id", v.instance_id);
+  detail::Get(j, "rpc_session_id", v.rpc_session_id);
+}
+inline std::optional<std::string> ValidateAttachTunnelRequest(
+    const AttachTunnelRequest& req) {
+  if (req.instance_id.empty()) return "instance_id is required";
+  if (req.rpc_session_id.empty()) return "rpc_session_id is required";
   return std::nullopt;
 }
 
 struct StartTunnelReply {
   int rpc_port = 0;
+  std::string instance_id;
+  std::string rpc_session_id;
 };
 inline void to_json(nlohmann::json& j, const StartTunnelReply& v) {
   j["rpc_port"] = v.rpc_port;
+  j["instance_id"] = v.instance_id;
+  j["rpc_session_id"] = v.rpc_session_id;
 }
 inline void from_json(const nlohmann::json& j, StartTunnelReply& v) {
   detail::Get(j, "rpc_port", v.rpc_port);
+  detail::Get(j, "instance_id", v.instance_id);
+  detail::Get(j, "rpc_session_id", v.rpc_session_id);
 }
 
 struct SetProvideRequest {
@@ -291,12 +333,16 @@ struct StatusReply {
   TunnelState tunnel_state = TunnelState::Stopped;
   int rpc_port = 0;          // 0 while the tunnel is down
   std::string client_id;     // the DeviceLocal's client id ("" while down)
+  std::string instance_id;   // exact live DeviceLocal identity ("" while down)
+  std::string rpc_session_id; // opaque per-tunnel RPC credential generation
   std::string error;         // last start error ("" when none)
 };
 inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["tunnel_state"] = ToString(v.tunnel_state);
   j["rpc_port"] = v.rpc_port;
   j["client_id"] = v.client_id;
+  j["instance_id"] = v.instance_id;
+  j["rpc_session_id"] = v.rpc_session_id;
   j["error"] = v.error;
 }
 inline void from_json(const nlohmann::json& j, StatusReply& v) {
@@ -305,6 +351,8 @@ inline void from_json(const nlohmann::json& j, StatusReply& v) {
   v.tunnel_state = TunnelStateFromString(state);
   detail::Get(j, "rpc_port", v.rpc_port);
   detail::Get(j, "client_id", v.client_id);
+  detail::Get(j, "instance_id", v.instance_id);
+  detail::Get(j, "rpc_session_id", v.rpc_session_id);
   detail::Get(j, "error", v.error);
 }
 
@@ -346,6 +394,8 @@ inline constexpr const char* kCodeClientProtocolTooOld = "client_protocol_too_ol
 inline constexpr const char* kCodeSdkVersionMismatch = "sdk_version_mismatch";
 inline constexpr const char* kCodeHelloRequired = "hello_required";
 inline constexpr const char* kCodeTunnelOwnedByOtherClient = "tunnel_owned_by_other_client";
+inline constexpr const char* kCodeTunnelAlreadyRunning = "tunnel_already_running";
+inline constexpr const char* kCodeRpcSessionMismatch = "rpc_session_mismatch";
 
 // {"verb":…,"id":N,…payload}
 inline nlohmann::json MakeRequest(Verb verb, int64_t id,

@@ -2,9 +2,13 @@
 #include "SdkHost.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <string>
+#include <thread>
 
 #include "AppPrefs.hpp"
 #include "NetworkSpaceConfig.hpp"
@@ -31,6 +35,11 @@ constexpr const char* kWalletSignInMessage = "Welcome to URnetwork";
 // AuthLogin{wallet_auth} blockchain ids. The server matches case-insensitively:
 // "solana" -> ed25519, urnet::TAO ("TAO") -> sr25519 (bittensor).
 constexpr const char* kSolanaBlockchain = "solana";
+constexpr const char* kRpcSessionFile = "rpc-session.json";
+
+std::string RpcSessionPath(const std::string& storageDir) {
+  return storageDir + "/" + kRpcSessionFile;
+}
 }  // namespace
 
 bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDir) {
@@ -38,6 +47,7 @@ bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDi
   try {
     urnet::setLogDir(logDir);
     urnet::setMemoryLimit(kMemoryLimit);
+    storageDir_ = storageDir;
     spaceManager_ = urnet::newNetworkSpaceManager(storageDir);
     networkSpace_ = BuildUrNetworkSpace(*spaceManager_);
     api_ = networkSpace_->getApi();
@@ -363,7 +373,10 @@ bool SdkHost::ApplyNetworkServer(const std::string& hostName, const std::string&
     // A different space is a different LocalState and so a different stored
     // jwt: a running session belongs to the OLD server and cannot survive it.
     TeardownDeviceLocked();
-    control_.StopTunnel();  // best effort — signed-out screens have none
+    // best effort — signed-out screens have none
+    if (control_.StopTunnel()) {
+      RemoveRpcSessionRecord(RpcSessionPath(storageDir_), rpcSecretStore_);
+    }
     pendingWalletAuth_.reset();
     pendingInstantJwt_.reset();
 
@@ -724,7 +737,9 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
     std::scoped_lock lock(mutex_);
     if (device_) {
       TeardownDeviceLocked();
-      control_.StopTunnel();
+      if (control_.StopTunnel()) {
+        RemoveRpcSessionRecord(RpcSessionPath(storageDir_), rpcSecretStore_);
+      }
       EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
     }
   }
@@ -783,6 +798,10 @@ TunnelStartResult SdkHost::StartTunnel() {
     return TunnelStartResult::Failed;
   }
   const std::string instanceId = localState_->getInstanceId();
+  if (instanceId.empty()) {
+    lastTunnelError_ = "local device instance is missing";
+    return TunnelStartResult::Failed;
+  }
 
   // 1) daemon session: connect + hello. The protocol version is enforced in
   //    BOTH directions here (APPIMAGE.md §11b) — each failure mode is a
@@ -808,44 +827,160 @@ TunnelStartResult SdkHost::StartTunnel() {
       return TunnelStartResult::Failed;
   }
 
-  // 2) start_tunnel: the daemon builds the DeviceLocal (rpc enabled), opens
-  //    the tun and wires the IoLoop. First authenticated client wins; a
-  //    tunnel owned by another live client comes back as a plain error.
-  //    The active network space rides along (windows StartTunnel's
-  //    network_space_json): the daemon must build its DeviceLocal in the SAME
-  //    space, or a custom-server session would sync against a device
-  //    registered on production. (mutex_ is held: read the space directly.)
-  std::string spaceJson;
-  try {
-    if (networkSpace_) spaceJson = networkSpace_->toJson();
-  } catch (const std::exception& e) {
-    std::fprintf(stderr, "[sdk] network space toJson failed: %s\n", e.what());
+  // 2) Read the daemon's level state before choosing a lifecycle operation.
+  //    An Up tunnel is adopted with exact identities; start_tunnel is never
+  //    used as an adoption shortcut because TunnelHost::Start is destructive.
+  const auto daemonStatus = control_.Status(&error);
+  if (!daemonStatus) {
+    lastTunnelError_ = error.empty() ? "could not read daemon tunnel status" : error;
+    return TunnelStartResult::Failed;
   }
-  int rpcPort = 0;
-  if (!control_.StartTunnel(clientJwt, instanceId, kAppVersion, spaceJson, &rpcPort,
-                            &error)) {
-    lastTunnelError_ = error;
-    switch (control_.LastSessionState()) {
-      case DaemonSessionState::Unreachable:
-        return TunnelStartResult::DaemonUnreachable;
-      case DaemonSessionState::DaemonTooOld:
-        return TunnelStartResult::DaemonTooOld;
-      case DaemonSessionState::ClientTooOld:
-        return TunnelStartResult::AppTooOld;
-      case DaemonSessionState::SdkMismatch:
-        return TunnelStartResult::SdkMismatch;
-      default:
-        return TunnelStartResult::Failed;
+
+  const std::string sessionPath = RpcSessionPath(storageDir_);
+  std::string sessionDiagnostic;
+  auto savedSession =
+      LoadRpcSessionRecord(sessionPath, rpcSecretStore_, &sessionDiagnostic);
+  RpcSessionRecord rpcSession;
+  ctl::StartTunnelReply rpcReply;
+  bool startedFresh = false;
+
+  if (daemonStatus->tunnel_state == ctl::TunnelState::Up) {
+    if (!savedSession || savedSession->instance_id != instanceId ||
+        !RpcSessionMatchesStatus(*savedSession, *daemonStatus)) {
+      lastTunnelError_ =
+          "the running tunnel could not be safely adopted (RPC session " +
+          sessionDiagnostic + "); its identity was left untouched";
+      return TunnelStartResult::Failed;
     }
+    rpcSession = *savedSession;
+    ctl::AttachTunnelRequest attach;
+    attach.instance_id = rpcSession.instance_id;
+    attach.rpc_session_id = rpcSession.rpc_session_id;
+    if (!control_.AttachTunnel(attach, &rpcReply, &error)) {
+      lastTunnelError_ = error.empty() ? "daemon refused tunnel adoption" : error;
+      return TunnelStartResult::Failed;
+    }
+  } else if (daemonStatus->tunnel_state == ctl::TunnelState::Starting ||
+             daemonStatus->tunnel_state == ctl::TunnelState::Stopping) {
+    lastTunnelError_ = "the daemon tunnel is changing state; try again";
+    return TunnelStartResult::Failed;
+  } else {
+    // Fresh session: write PENDING material before asking the daemon to start.
+    // A process death after the daemon commits can then be recovered on the
+    // next launch. Only the public client cert crosses the control socket.
+    urnet::DeviceRpcKeyMaterial km;
+    try {
+      km = urnet::generateDeviceRpcKeyMaterial();
+      rpcSession.state = "pending";
+      rpcSession.instance_id = instanceId;
+      rpcSession.rpc_session_id = urnet::generateNonce();
+      rpcSession.client_pem = km.getClientPem();
+      rpcSession.server_cert_pem = km.getServerCertPem();
+      rpcSession.host_port =
+          "127.0.0.1:" + std::to_string(ctl::kDeviceRpcPort);
+    } catch (const std::exception& e) {
+      lastTunnelError_ = std::string("could not generate RPC credentials: ") + e.what();
+      return TunnelStartResult::Failed;
+    }
+    if (!SaveRpcSessionRecord(sessionPath, rpcSession, rpcSecretStore_,
+                              &sessionDiagnostic)) {
+      lastTunnelError_ = "could not securely persist pending RPC credentials (" +
+                         sessionDiagnostic + ")";
+      return TunnelStartResult::Failed;
+    }
+
+    // The active network space rides along (windows StartTunnel's
+    // network_space_json): the daemon must build its DeviceLocal in the SAME
+    // space, or a custom-server session would sync against a device
+    // registered on production. (mutex_ is held: read the space directly.)
+    std::string spaceJson;
+    try {
+      if (networkSpace_) spaceJson = networkSpace_->toJson();
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] network space toJson failed: %s\n", e.what());
+    }
+
+    ctl::StartTunnelRequest start;
+    start.by_jwt = clientJwt;
+    start.instance_id = instanceId;
+    start.app_version = kAppVersion;
+    start.network_space_json = spaceJson;
+    start.rpc_session_id = rpcSession.rpc_session_id;
+    start.rpc_server_pem = km.getServerPem();
+    start.rpc_client_cert_pem = km.getClientCertPem();
+    if (!control_.StartTunnel(start, &rpcReply, &error)) {
+      // Keep the pending record. A transport failure can happen after the
+      // daemon committed the tunnel but before its reply reached this process;
+      // deleting the only client key here would make that live session
+      // permanently unadoptable. Stale pending records are harmless because a
+      // later adoption requires an exact instance/session/port match, and a
+      // fresh start atomically replaces the record.
+      lastTunnelError_ = error;
+      switch (control_.LastSessionState()) {
+        case DaemonSessionState::Unreachable:
+          return TunnelStartResult::DaemonUnreachable;
+        case DaemonSessionState::DaemonTooOld:
+          return TunnelStartResult::DaemonTooOld;
+        case DaemonSessionState::ClientTooOld:
+          return TunnelStartResult::AppTooOld;
+        case DaemonSessionState::SdkMismatch:
+          return TunnelStartResult::SdkMismatch;
+        default:
+          return TunnelStartResult::Failed;
+      }
+    }
+    startedFresh = true;
+  }
+
+  if (rpcReply.instance_id != rpcSession.instance_id ||
+      rpcReply.rpc_session_id != rpcSession.rpc_session_id || rpcReply.rpc_port <= 0 ||
+      rpcSession.host_port != "127.0.0.1:" + std::to_string(rpcReply.rpc_port)) {
+    lastTunnelError_ = "daemon returned a different RPC session identity";
+    if (startedFresh && control_.StopTunnel()) {
+      RemoveRpcSessionRecord(sessionPath, rpcSecretStore_);
+    }
+    else control_.Close();
+    return TunnelStartResult::Failed;
   }
 
   try {
-    // 3) the remote face of the daemon's device. Uses the SDK's default
-    //    loopback rpc address — the same one the daemon's DeviceLocal
-    //    (enable_rpc=true) listens on; rpcPort from the reply is
-    //    informational. Same instanceId on both sides: the rpc sync pairs on
-    //    it and the daemon side rejects a mismatch.
+    // 3) Construct the remote, register its listener FIRST, then point it at
+    //    the exact per-session mTLS transport. The constructor's default
+    //    unencrypted dialer cannot authenticate to the daemon's TLS listener.
     device_ = urnet::newDeviceRemoteWithDefaults(*networkSpace_, clientJwt, instanceId);
+    auto remoteConnected = std::make_shared<std::atomic<bool>>(false);
+    subs_.push_back(device_->addRemoteChangeListener(
+        [remoteConnected](bool connected) { remoteConnected->store(connected); }));
+    device_->setRpcServer(rpcSession.client_pem, rpcSession.server_cert_pem,
+                          rpcSession.host_port);
+    remoteConnected->store(device_->getRemoteConnected());  // level check after listener
+    device_->sync();
+
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!remoteConnected->load() && std::chrono::steady_clock::now() < deadline) {
+      const std::string syncError = device_->getSyncError();
+      if (!syncError.empty()) {
+        throw std::runtime_error("device RPC sync refused: " + syncError);
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    const std::string syncError = device_->getSyncError();
+    if (!syncError.empty()) {
+      throw std::runtime_error("device RPC sync refused: " + syncError);
+    }
+    if (!remoteConnected->load() && !device_->getRemoteConnected()) {
+      throw std::runtime_error("timed out waiting for the device RPC session");
+    }
+
+    rpcSession.state = "confirmed";
+    if (!SaveRpcSessionRecord(sessionPath, rpcSession, rpcSecretStore_,
+                              &sessionDiagnostic)) {
+      // The pre-start pending record is still complete and safely adoptable;
+      // retain the live session but make the diagnostic visible in logs.
+      std::fprintf(stderr, "[sdk] could not mark RPC session confirmed: %s\n",
+                   sessionDiagnostic.c_str());
+    }
 
     // The jwt refresh (which runs immediately at device creation) tells us
     // when the stored client no longer exists on the server. Only marshal from
@@ -905,9 +1040,17 @@ TunnelStartResult SdkHost::StartTunnel() {
     // StartTunnel is retryable. Tear down every partially-created resource and
     // listener so a failed attempt cannot leave a subscription or
     // manager-owned controller behind for the next attempt, and stop the
-    // daemon-side tunnel we just started but cannot bind to.
+    // daemon-side tunnel we just started but cannot bind to. When this was an
+    // adoption attempt, never destroy the existing tunnel: close our control
+    // connection so another launch can reclaim it.
     TeardownDeviceLocked();
-    control_.StopTunnel();
+    if (startedFresh) {
+      if (control_.StopTunnel()) {
+        RemoveRpcSessionRecord(sessionPath, rpcSecretStore_);
+      }
+    } else {
+      control_.Close();
+    }
     return TunnelStartResult::Failed;
   }
 }
@@ -1525,7 +1668,9 @@ void SdkHost::Shutdown() {
   // quit brings the daemon's tunnel down like Logout does, but leaves the
   // stored auth untouched: next launch signs straight back in. see the
   // header comment — quit-as-logout destroyed guest accounts.
-  control_.StopTunnel();
+  if (control_.StopTunnel()) {
+    RemoveRpcSessionRecord(RpcSessionPath(storageDir_), rpcSecretStore_);
+  }
 }
 
 void SdkHost::Logout() {
@@ -1533,7 +1678,9 @@ void SdkHost::Logout() {
   TeardownDeviceLocked();
   // the session is over: bring the daemon's tunnel down too (best effort — an
   // unreachable daemon has nothing running for us anyway)
-  control_.StopTunnel();
+  if (control_.StopTunnel()) {
+    RemoveRpcSessionRecord(RpcSessionPath(storageDir_), rpcSecretStore_);
+  }
   pendingWalletAuth_.reset();
   if (asyncLocalState_) asyncLocalState_->logout([](bool) {});
   if (onAuth_) onAuth_(false);

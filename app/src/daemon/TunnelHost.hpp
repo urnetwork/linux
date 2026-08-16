@@ -39,7 +39,8 @@ class TunnelHost {
   TunnelHost(const TunnelHost&) = delete;
   TunnelHost& operator=(const TunnelHost&) = delete;
 
-  // Builds the DeviceLocal (rpc enabled), opens the tun, wires the IoLoop.
+  // Builds the DeviceLocal, installs the caller's per-session mTLS RPC
+  // listener, opens the tun, and wires the IoLoop.
   // Idempotent restart: an existing session is torn down first (the control
   // server gates WHO may call this; see its ownership rules).
   ctl::StatusReply Start(const ctl::StartTunnelRequest& config);
@@ -66,6 +67,8 @@ class TunnelHost {
 
   ctl::TunnelState state_ = ctl::TunnelState::Stopped;
   std::string error_;              // last start error ("" when none)
+  std::string instanceId_;         // exact live DeviceLocal pairing identity
+  std::string rpcSessionId_;       // opaque generation for safe GUI adoption
   std::string pendingProvideMode_; // set_provide received while down
 };
 

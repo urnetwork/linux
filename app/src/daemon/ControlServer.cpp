@@ -329,6 +329,9 @@ nlohmann::json ControlServer::Dispatch(Connection* conn, const nlohmann::json& r
       case ctl::Verb::StartTunnel:
         return HandleStartTunnel(conn, id, request);
 
+      case ctl::Verb::AttachTunnel:
+        return HandleAttachTunnel(conn, id, request);
+
       case ctl::Verb::StopTunnel: {
         nlohmann::json denied;
         if (!CheckTunnelOwner(conn, id, &denied)) return denied;
@@ -445,6 +448,10 @@ nlohmann::json ControlServer::HandleStartTunnel(Connection* conn, int64_t id,
   if (auto invalid = ctl::ValidateStartTunnelRequest(req)) {
     return ctl::MakeErrorReply(id, *invalid);
   }
+  if (tunnel_.TunnelUp()) {
+    return ctl::MakeErrorReply(id, "a tunnel is already running; attach with its live identity",
+                               ctl::kCodeTunnelAlreadyRunning);
+  }
 
   const ctl::StatusReply status = tunnel_.Start(req);
   if (status.tunnel_state != ctl::TunnelState::Up) {
@@ -454,6 +461,33 @@ nlohmann::json ControlServer::HandleStartTunnel(Connection* conn, int64_t id,
   tunnelOwner_ = conn;
   ctl::StartTunnelReply payload;
   payload.rpc_port = status.rpc_port;
+  payload.instance_id = status.instance_id;
+  payload.rpc_session_id = status.rpc_session_id;
+  return ctl::MakeReply(id, true, nlohmann::json(payload));
+}
+
+nlohmann::json ControlServer::HandleAttachTunnel(Connection* conn, int64_t id,
+                                                 const nlohmann::json& request) {
+  nlohmann::json denied;
+  if (!CheckTunnelOwner(conn, id, &denied)) return denied;
+
+  const auto req = request.get<ctl::AttachTunnelRequest>();
+  if (auto invalid = ctl::ValidateAttachTunnelRequest(req)) {
+    return ctl::MakeErrorReply(id, *invalid);
+  }
+  const ctl::StatusReply status = tunnel_.Status();
+  if (status.tunnel_state != ctl::TunnelState::Up ||
+      status.instance_id != req.instance_id ||
+      status.rpc_session_id != req.rpc_session_id) {
+    return ctl::MakeErrorReply(id, "running tunnel identity or RPC session does not match",
+                               ctl::kCodeRpcSessionMismatch);
+  }
+
+  tunnelOwner_ = conn;
+  ctl::StartTunnelReply payload;
+  payload.rpc_port = status.rpc_port;
+  payload.instance_id = status.instance_id;
+  payload.rpc_session_id = status.rpc_session_id;
   return ctl::MakeReply(id, true, nlohmann::json(payload));
 }
 

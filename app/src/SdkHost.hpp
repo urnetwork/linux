@@ -26,6 +26,7 @@
 #include <urnetwork_sdk.hpp>
 
 #include "ControlClient.hpp"
+#include "SecretServiceRpcSessionStore.hpp"
 #include "WalletConnect.hpp"
 
 namespace urnw {
@@ -464,8 +465,12 @@ class SdkHost {
   std::optional<urnet::PostQuantumIdentityViewController> pqiVc_;
   // the provider globe's selection + scroll wheel, shared across every app
   std::optional<urnet::ProviderLocationsViewController> providerLocationsVc_;
+  // GUI-only system keyring backend. Private RPC credentials never enter the
+  // metadata file or the privileged daemon.
+  SecretServiceRpcSessionStore rpcSecretStore_;
   // control channel to urnetworkd (tunnel lifecycle + location override)
   ControlClient control_;
+  std::string storageDir_;
   std::string lastTunnelError_;
   // The network-provide-key bit, cached off addProvideSecretKeysListener:
   // DeviceRemote has no getProvideSecretKeys getter (it is DeviceLocal-only),

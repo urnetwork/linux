@@ -89,8 +89,10 @@ ctl::StatusReply TunnelHost::Start(const ctl::StartTunnelRequest& config) {
     }
     if (!networkSpace_) networkSpace_ = BuildUrNetworkSpace(*spaceManager_);
 
-    // --- DeviceLocal, rpc enabled: the SDK starts the loopback mTLS RPC
-    //     listener (127.0.0.1:12025) the GUI's DeviceRemote dials. Stable
+    // --- DeviceLocal with the built-in (unencrypted) listener disabled.
+    //     The caller generated a fresh mTLS identity for this tunnel; the
+    //     daemon receives the server key and public client certificate only.
+    //     Stable
     //     provider identity via the persisted key material; unusable stored
     //     material falls back to a fresh identity, which is persisted
     //     immediately (nothing event-driven re-saves it). ---
@@ -100,7 +102,7 @@ ctl::StatusReply TunnelHost::Start(const ctl::StartTunnelRequest& config) {
       try {
         device_ = urnet::newDeviceLocalWithKeyMaterial(
             *networkSpace_, config.by_jwt, UrDeviceDescription(), UrDeviceSpec(), appVersion,
-            config.instance_id, /*enable_rpc=*/true, *km);
+            config.instance_id, /*enable_rpc=*/false, *km);
       } catch (const std::exception& e) {
         std::fprintf(stderr, "[tunnel] restore device key material failed: %s\n", e.what());
       }
@@ -109,13 +111,20 @@ ctl::StatusReply TunnelHost::Start(const ctl::StartTunnelRequest& config) {
       device_ = urnet::newDeviceLocalWithDefaults(*networkSpace_, config.by_jwt,
                                                   UrDeviceDescription(), UrDeviceSpec(),
                                                   appVersion, config.instance_id,
-                                                  /*enable_rpc=*/true);
+                                                  /*enable_rpc=*/false);
       try {
         if (auto km = device_->getKeyMaterial(); km && !km.isEmpty()) PersistKeyMaterial(km);
       } catch (const std::exception& e) {
         std::fprintf(stderr, "[tunnel] persist device key material failed: %s\n", e.what());
       }
     }
+
+    const std::string rpcHostPort =
+        "127.0.0.1:" + std::to_string(ctl::kDeviceRpcPort);
+    device_->setRpcServer(config.rpc_server_pem, config.rpc_client_cert_pem,
+                          rpcHostPort);
+    instanceId_ = config.instance_id;
+    rpcSessionId_ = config.rpc_session_id;
 
     // A set_provide that arrived while the tunnel was down applies now. (The
     // GUI also restores its persisted mode over the device RPC right after
@@ -126,18 +135,18 @@ ctl::StatusReply TunnelHost::Start(const ctl::StartTunnelRequest& config) {
 
     // --- tun (address/dns from the device, exactly the GUI's old logic) ---
     TunnelConfig cfg;
-    cfg.local_addr = device_->tunnelLocalAddress();
-    if (cfg.local_addr.empty()) cfg.local_addr = "169.254.2.1";
+    cfg.local_addr_v4 = device_->tunnelLocalAddress();
+    if (cfg.local_addr_v4.empty()) cfg.local_addr_v4 = "169.254.2.1";
     // dns from the device: the dns settings' unencrypted local servers when
     // set, otherwise the distinct plain-DNS UpgradeMux mask. Always plain :53,
     // never OS-level encrypted DNS: the mux performs the unencrypted-DNS ->
     // DoH upgrade in-tunnel. The tunnel is ipv4-only.
     if (auto dns = device_->tunnelDnsAddressesIpv4(); dns && !dns->empty()) {
-      cfg.dns_servers = *dns;
+      cfg.dns_servers_v4 = *dns;
     } else {
       // Keep the exceptional fallback coupled to the SDK's separately tested
       // URnetwork-owned UpgradeMux identity.
-      cfg.dns_servers = {urnet::getDefaultTunnelDnsAddressIpv4()};
+      cfg.dns_servers_v4 = {urnet::getDefaultTunnelDnsAddressIpv4()};
     }
 
     tunnel_ = Tunnel::Open(cfg);
@@ -181,6 +190,8 @@ void TunnelHost::StopInternal() {
     device_->close();
     device_.reset();
   }
+  instanceId_.clear();
+  rpcSessionId_.clear();
   // spaceManager_/networkSpace_ persist across sessions (Windows parity).
   state_ = ctl::TunnelState::Stopped;
 }
@@ -202,6 +213,10 @@ ctl::StatusReply TunnelHost::Status() const {
   ctl::StatusReply s;
   s.tunnel_state = state_;
   s.rpc_port = (state_ == ctl::TunnelState::Up) ? ctl::kDeviceRpcPort : 0;
+  if (state_ == ctl::TunnelState::Up) {
+    s.instance_id = instanceId_;
+    s.rpc_session_id = rpcSessionId_;
+  }
   if (device_) {
     try {
       s.client_id = device_->getClientId();

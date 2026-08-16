@@ -10,17 +10,10 @@
 
 #include <memory>
 #include <string>
-#include <vector>
+
+#include "TunnelPolicy.hpp"
 
 namespace urnw {
-
-struct TunnelConfig {
-  std::string name = "urnet0";
-  std::string local_addr = "169.254.2.1";
-  int prefix = 24;
-  int mtu = 1440;
-  std::vector<std::string> dns_servers;
-};
 
 // RAII tun device. Closing removes the (non-persistent) interface + its routes.
 class Tunnel {

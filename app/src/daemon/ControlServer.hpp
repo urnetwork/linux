@@ -91,6 +91,8 @@ class ControlServer {
   nlohmann::json Dispatch(Connection* conn, const nlohmann::json& request);
   nlohmann::json HandleHello(Connection* conn, int64_t id, const nlohmann::json& request);
   nlohmann::json HandleStartTunnel(Connection* conn, int64_t id, const nlohmann::json& request);
+  nlohmann::json HandleAttachTunnel(Connection* conn, int64_t id,
+                                    const nlohmann::json& request);
 
   // owner gate for tunnel-lifecycle verbs; fills *denied with the error reply
   bool CheckTunnelOwner(Connection* conn, int64_t id, nlohmann::json* denied);

@@ -29,6 +29,15 @@ bool Run(const std::vector<std::string>& args) {
 }  // namespace
 
 std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg) {
+  if (!IsIpv4OnlyTunnelConfig(cfg)) {
+    std::fprintf(stderr,
+                 "[tun] refusing non-IPv4 tunnel configuration "
+                 "(addr=%s/%d, dns-count=%zu)\n",
+                 cfg.local_addr_v4.c_str(), cfg.prefix_v4,
+                 cfg.dns_servers_v4.size());
+    return nullptr;
+  }
+
   int fd = ::open("/dev/net/tun", O_RDWR | O_CLOEXEC);
   if (fd < 0) {
     std::perror("[tun] open /dev/net/tun (need CAP_NET_ADMIN)");
@@ -53,17 +62,17 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg) {
     return nullptr;  // dtor closes the fd + tears down
   }
   std::string dnsList;
-  for (const auto& dns : cfg.dns_servers) {
+  for (const auto& dns : cfg.dns_servers_v4) {
     if (!dnsList.empty()) dnsList += ',';
     dnsList += dns;
   }
   std::fprintf(stderr, "[tun] up %s addr=%s/%d mtu=%d dns=%s\n", t->name_.c_str(),
-               cfg.local_addr.c_str(), cfg.prefix, cfg.mtu, dnsList.c_str());
+               cfg.local_addr_v4.c_str(), cfg.prefix_v4, cfg.mtu, dnsList.c_str());
   return t;
 }
 
 bool Tunnel::Configure(const TunnelConfig& cfg) {
-  const std::string addr = cfg.local_addr + "/" + std::to_string(cfg.prefix);
+  const std::string addr = cfg.local_addr_v4 + "/" + std::to_string(cfg.prefix_v4);
   // Order matters (wg-quick order: mtu/addr first, up second): NetworkManager
   // only protects an externally-created tun WHILE THE LINK IS DOWN
   // (APPIMAGE.md §10c), so do every link-down configuration before `up`. The
@@ -71,7 +80,12 @@ bool Tunnel::Configure(const TunnelConfig& cfg) {
   // + udev rule; this ordering just avoids ever showing NM a bare up link.
   std::vector<std::vector<std::string>> steps = {
       {"ip", "link", "set", "dev", name_, "mtu", std::to_string(cfg.mtu)},
-      {"ip", "address", "add", addr, "dev", name_},
+      // Keep IPv6 absent from this TUN without changing host IPv6. Setting the
+      // mode while the link is down prevents the kernel from synthesizing a
+      // link-local address when it comes up; no IPv6 route or blackhole is
+      // installed, so the physical interface retains its normal IPv6 policy.
+      {"ip", "link", "set", "dev", name_, "addrgenmode", "none"},
+      {"ip", "-4", "address", "add", addr, "dev", name_},
       {"ip", "link", "set", "dev", name_, "up"},
   };
   // Split-default capture that EXCLUDES the local network, matching Android
@@ -92,16 +106,16 @@ bool Tunnel::Configure(const TunnelConfig& cfg) {
       "196.0.0.0/6", "200.0.0.0/5", "208.0.0.0/4", "224.0.0.0/3",
   };
   for (const char* prefix : kIncludedV4Prefixes) {
-    steps.push_back({"ip", "route", "add", prefix, "dev", name_});
+    steps.push_back({"ip", "-4", "route", "add", prefix, "dev", name_});
   }
   for (const auto& s : steps) {
     if (!Run(s)) return false;
   }
   // DNS via systemd-resolved: this link's resolvers + route all queries through
   // it (~. is resolved's "default route" domain). Best-effort (no resolved -> skip).
-  if (!cfg.dns_servers.empty()) {
+  if (!cfg.dns_servers_v4.empty()) {
     std::vector<std::string> dnsCmd = {"resolvectl", "dns", name_};
-    dnsCmd.insert(dnsCmd.end(), cfg.dns_servers.begin(), cfg.dns_servers.end());
+    dnsCmd.insert(dnsCmd.end(), cfg.dns_servers_v4.begin(), cfg.dns_servers_v4.end());
     Run(dnsCmd);
     Run({"resolvectl", "domain", name_, "~."});
     // force plain :53 on this link: never OS-level encrypted DNS for the tunnel.
