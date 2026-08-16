@@ -45,6 +45,13 @@ elf_arch() {
     esac
 }
 
+# _file_mode_octal <file> -> e.g. 644
+# GNU stat and BSD stat (this macOS build server) spell it differently, and the
+# build must not depend on which one is present.
+_file_mode_octal() {
+    stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1" 2>/dev/null || printf 'unknown'
+}
+
 # require_staged <staging> <relative-path>...
 # Fails with one clear, actionable message listing everything missing --
 # workstream A may not have wired a given install target yet, and "file not
@@ -151,11 +158,42 @@ assemble_daemon_root() {
     install -d "${root}/etc/udev/rules.d"
     cp "${src}/85-urnetwork-unmanaged.rules" "${root}/etc/udev/rules.d/"
 
+    # polkit action file -- the authority urnetworkd gates its privileged verbs
+    # with, and the reason no user has to join a group or log out again.
+    #
+    # The ONE integration file sourced from linux/packaging/ rather than
+    # linux/app/packaging/: its presence on disk IS the daemon's fallback
+    # discriminator (ControlProtocol.hpp kPolkitPolicyPath -- present means
+    # polkit is the sole authority, absent means the legacy `urnetwork` group
+    # check), so it belongs next to install.sh, which is the thing that decides
+    # whether a given machine gets it. app/meson.build installs the same file
+    # for `meson install --destdir` consumers; this copy is what the .deb and
+    # the tarball payload actually ship.
+    #
+    # 0644 root:root is not decoration: polkit IGNORES a group- or
+    # world-writable .policy file, so a wrong mode here does not fail loudly,
+    # it silently drops every action back to its built-in default. The mode
+    # normalization below sets it; the assertion after it proves it.
+    [ -f "${PACKAGING_DIR}/polkit/network.ur.urnetwork.policy" ] || \
+        die "packaging source missing: ${PACKAGING_DIR}/polkit/network.ur.urnetwork.policy"
+    install -d "${root}/usr/share/polkit-1/actions"
+    cp "${PACKAGING_DIR}/polkit/network.ur.urnetwork.policy" \
+        "${root}/usr/share/polkit-1/actions/network.ur.urnetwork.policy"
+
     # Normalize modes: directories 0755; everything except the two
     # executables 0644 (shared libraries ship 0644 on Debian).
     find "${root}" -type d -exec chmod 0755 {} +
     find "${root}" -type f ! -path '*/usr/bin/*' ! -name 'urnetworkd' -exec chmod 0644 {} +
     chmod 0755 "${root}/usr/bin/urnetwork" "${root}/usr/lib/urnetwork/urnetworkd"
+
+    # Prove the polkit action file is exactly 0644 before it goes into a
+    # package. polkit's rejection of a writable action file is SILENT (it logs
+    # and skips the file), and the visible symptom would be "every Connect asks
+    # for an admin password" long after the build.
+    local policy_mode
+    policy_mode="$(_file_mode_octal "${root}/usr/share/polkit-1/actions/network.ur.urnetwork.policy")"
+    [ "${policy_mode}" = '644' ] || \
+        die "polkit action file is mode ${policy_mode}, must be 644 (polkit ignores a group- or world-writable .policy)"
 }
 
 # check_payload_arch <root> <arch>

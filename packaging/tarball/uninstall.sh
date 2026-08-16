@@ -113,6 +113,11 @@ else
     # /lib/systemd/system, the immutable one to /etc/systemd/system. Removing
     # a path that does not exist is a no-op, and leaving a stale unit behind
     # would keep a dead service in systemctl's list forever.
+    #
+    # The polkit action file follows ${SHARE_DIR}, so it is covered in both
+    # layouts. It must go with the daemon: while it is on disk, any urnetworkd
+    # that comes back (a downgrade, a reinstall) reads its presence as "polkit
+    # is the authority here" -- see kPolkitPolicyPath in ControlProtocol.hpp.
     MANIFEST="${LIB_DIR}/urnetworkd
 ${LIB_DIR}/libURnetworkSdk.so
 ${BIN_DIR}/urnetwork
@@ -122,6 +127,7 @@ ${SHARE_DIR}/applications/network.ur.urnetwork.desktop
 ${SHARE_DIR}/metainfo/network.ur.urnetwork.metainfo.xml
 ${SHARE_DIR}/icons/hicolor/48x48/apps/urnetwork.png
 ${SHARE_DIR}/icons/hicolor/256x256/apps/urnetwork.png
+${SHARE_DIR}/polkit-1/actions/network.ur.urnetwork.policy
 /etc/urnetwork/autostart/network.ur.urnetwork.desktop
 /etc/NetworkManager/conf.d/95-urnetwork.conf
 /etc/udev/rules.d/85-urnetwork-unmanaged.rules"

@@ -60,3 +60,38 @@ allow init_t self:rawip_socket { create setopt bind read write };
 # Outbound HTTPS to the control plane. Without this the tunnel can come up and
 # still have nothing to talk to.
 allow init_t http_port_t:tcp_socket name_connect;
+
+#============= polkit (NOT GRANTED HERE -- READ THIS BEFORE SHIPPING) =========
+# urnetworkd now authorizes every privileged control-socket verb by calling
+# org.freedesktop.PolicyKit1.Authority.CheckAuthorization on the SYSTEM BUS,
+# and it reads /proc/<peer-pid>/stat to pin the subject's start time. Both are
+# new syscall surfaces for a daemon running in init_t.
+#
+# NOT ADDED, because it was NOT MEASURED. systemd itself is init_t and both
+# talks to the system bus and reads other processes' /proc entries routinely,
+# so refpolicy is expected to allow this already and adding blanket dbus allows
+# to init_t "just in case" would widen the system policy for nothing. This
+# module's whole justification is that it grants exactly what the kernel was
+# observed to deny.
+#
+# THE FAILURE MODE IF THAT EXPECTATION IS WRONG IS TOTAL AND SILENT-ISH: the
+# authorization design fails CLOSED, so every Connect returns "auth
+# unavailable" on an Enforcing host and the product looks broken rather than
+# denied. Before this reaches a user, watch the audit log across a first
+# Connect on Fedora/Bazzite/RHEL:
+#
+#   sudo ausearch -m avc -ts recent | grep -Ei 'polkit|dbus'
+#
+# and if the denials below appear, uncomment the matching rules, rebuild
+# (checkmodule + semodule_package + semodule -i) and re-measure:
+#
+#   require { type system_dbusd_t; type policykit_t;
+#             class unix_stream_socket connectto; class dbus send_msg; }
+#   allow init_t system_dbusd_t:unix_stream_socket connectto;
+#   allow init_t system_dbusd_t:dbus send_msg;
+#   allow init_t policykit_t:dbus send_msg;
+#   allow policykit_t init_t:dbus send_msg;
+#
+# Keep them commented until an AVC justifies each one: an unmeasured allow is
+# indistinguishable from a guess, and this file is the one place in the product
+# where a guess widens the whole system's policy.

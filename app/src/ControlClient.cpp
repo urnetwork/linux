@@ -61,7 +61,38 @@ void SetTimeout(int fd, int kind, time_t seconds) {
   ::setsockopt(fd, SOL_SOCKET, kind, &tv, sizeof(tv));
 }
 
+// Tolerant reads off a raw reply frame, for the additive fields this half of
+// the change cannot add to ControlProtocol.hpp (see the TODO on authz::). An
+// absent or wrongly-typed field leaves the default, exactly like
+// ctl::detail::Get — a daemon that never learned to send them must parse as
+// "said nothing", never as a false verdict.
+std::string FrameString(const nlohmann::json& j, const char* key) {
+  if (auto it = j.find(key); it != j.end() && it->is_string()) return it->get<std::string>();
+  return {};
+}
+
+bool FrameBool(const nlohmann::json& j, const char* key) {
+  if (auto it = j.find(key); it != j.end() && it->is_boolean()) return it->get<bool>();
+  return false;
+}
+
 }  // namespace
+
+DaemonAuthOutcome AuthOutcomeFromCode(const std::string& code) {
+  if (code.empty()) return DaemonAuthOutcome::None;
+  if (code == authz::kCodeAuthDenied) return DaemonAuthOutcome::Denied;
+  if (code == authz::kCodeAuthRequired || code == authz::kCodeAuthChallengeRequired) {
+    return DaemonAuthOutcome::ChallengeRequired;
+  }
+  if (code == authz::kCodeAuthDismissed) return DaemonAuthOutcome::Dismissed;
+  if (code == authz::kCodeAuthUnavailable) return DaemonAuthOutcome::Unavailable;
+  if (code == authz::kCodeAuthCheckFailed) return DaemonAuthOutcome::CheckFailed;
+  if (code == authz::kCodeAuthTimeout) return DaemonAuthOutcome::TimedOut;
+  if (code == authz::kCodeAuthNotTunnelOwner) return DaemonAuthOutcome::NotTunnelOwner;
+  // Every pre-existing kCode* lands here: not an authorization verdict, so the
+  // tun/route/dns/pinning failures keep rendering their own copy.
+  return DaemonAuthOutcome::None;
+}
 
 ControlClient::~ControlClient() { Close(); }
 
@@ -269,6 +300,19 @@ DaemonSessionState ControlClient::HelloLocked(std::string* error) {
     CloseLocked();
     return DaemonSessionState::Unreachable;
   }
+  // WHICH authority this daemon gates with, read off the raw frame because the
+  // field is additive within protocol v1 and ControlProtocol.hpp is not this
+  // change's to edit (see the TODO on authz::). Read on BOTH the accepting and
+  // the rejecting path: a daemon that refuses our protocol has still told us
+  // what it would have gated with, and the remediation copy differs.
+  //
+  // Absent => Group. That is not a guess, it is what a daemon predating polkit
+  // gating IS, and it is the only mode whose remediation may mention groups and
+  // signing out.
+  {
+    const std::string mode = FrameString(*reply, "auth_mode");
+    lastAuthMode_ = mode == "polkit" ? DaemonAuthMode::Polkit : DaemonAuthMode::Group;
+  }
   if (!ctl::ReplyOk(*reply)) {
     // Rejection direction 1: the daemon dropped support for our protocol, or
     // its SDK build differs from ours (the device RPC has no version field of
@@ -364,10 +408,65 @@ std::string ControlClient::LastSocketPath() {
   return lastSocketPath_.empty() ? SocketPath() : lastSocketPath_;
 }
 
+DaemonAuthOutcome ControlClient::LastAuthOutcome() {
+  std::scoped_lock lock(mutex_);
+  return lastAuth_;
+}
+
+std::string ControlClient::LastPolkitResult() {
+  std::scoped_lock lock(mutex_);
+  return lastPolkitResult_;
+}
+
+DaemonAuthMode ControlClient::LastAuthMode() {
+  std::scoped_lock lock(mutex_);
+  return lastAuthMode_;
+}
+
+void ControlClient::ResetAuthLocked() {
+  lastAuth_ = DaemonAuthOutcome::None;
+  lastPolkitResult_.clear();
+}
+
+void ControlClient::NoteReplyLocked(ctl::Verb verb, const nlohmann::json& reply) {
+  // The serial moves for EVERY reply, refusal or not. That is what lets a
+  // caller tell "this attempt produced a verdict" from "this attempt never
+  // reached the daemon and you are looking at the last one's".
+  ++replySerial_;
+  lastPolkitResult_ = FrameString(reply, "polkit_result");
+  if (ctl::ReplyOk(reply)) {
+    // A gated verb that succeeded IS an authorization: polkit said yes, or the
+    // caller is uid 0, or the daemon is on the group fallback and we are a
+    // member. An ungated verb (status/hello) says nothing either way.
+    lastAuth_ = VerbNeedsAuthorization(verb) ? DaemonAuthOutcome::Authorized
+                                             : DaemonAuthOutcome::None;
+    return;
+  }
+  lastAuth_ = AuthOutcomeFromCode(ctl::ReplyCode(reply));
+  // A dismissal is a refusal the user MADE, and it must stay silent even if the
+  // daemon spells it as a plain challenge/denial with a flag rather than as its
+  // own code. Only honoured on a reply that is already an authorization
+  // verdict, so an unrelated failure cannot mute itself.
+  if (lastAuth_ != DaemonAuthOutcome::None && FrameBool(reply, "dismissed")) {
+    lastAuth_ = DaemonAuthOutcome::Dismissed;
+  }
+  if (lastAuth_ != DaemonAuthOutcome::None) {
+    std::fprintf(stderr, "[control] %s refused on authorization (code=%s%s%s)\n",
+                 ctl::ToString(verb), ctl::ReplyCode(reply).c_str(),
+                 lastPolkitResult_.empty() ? "" : ", polkit_result=",
+                 lastPolkitResult_.c_str());
+  }
+}
+
 std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann::json payload,
                                                         std::string* error, bool allowRetry,
                                                         long receiveTimeoutSeconds) {
   constexpr int kMaxAttempts = 2;
+  // The previous request's verdict describes the previous request. Clearing it
+  // here — before EnsureSession, so it is gone even when we never get a socket —
+  // is what stops a polkit denial from one Connect being rendered under an
+  // unrelated failure of the next.
+  ResetAuthLocked();
   for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
     if (EnsureSessionLocked(error) != DaemonSessionState::Ok) return std::nullopt;
     SetReceiveTimeoutLocked(receiveTimeoutSeconds);
@@ -375,6 +474,7 @@ std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann
     bool frameDelivered = false;
     if (auto reply =
             RoundTripLocked(ctl::MakeRequest(verb, id, payload), id, &frameDelivered)) {
+      NoteReplyLocked(verb, *reply);
       return reply;
     }
     // Dead socket. Whether we may send it again turns on ONE question: did any
@@ -411,6 +511,12 @@ std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann
 ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
     const StartTunnelOptions& options) {
   std::scoped_lock lock(mutex_);
+  // The local fail-closed validator below can refuse before a byte is sent, and
+  // that path never reaches CallLocked's own reset. Without this, a refusal
+  // that has nothing to do with authorization would inherit the last one's
+  // verdict. The SERIAL is deliberately not bumped: no reply happened, so a
+  // caller comparing it correctly concludes "no verdict from this attempt".
+  ResetAuthLocked();
   StartTunnelOutcome outcome;
   ctl::StartTunnelRequest req;
   req.by_jwt = options.by_jwt;
@@ -492,12 +598,21 @@ ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
     // Leaving a running tunnel whose ROOT rpc listener is unauthenticated is
     // worse than no tunnel: any local process that can open a TCP socket to it
     // could drive the daemon's DeviceLocal. Tear it down on the way out.
+    //
+    // That teardown is a SECOND round trip, and NoteReplyLocked would leave the
+    // authorization verdict describing the stop rather than the start — which
+    // is how a refused stop_tunnel could displace this security refusal with an
+    // authorization sentence and hide the reason the tunnel was torn down.
+    // The start's verdict (Authorized: the daemon accepted it) is what the UI
+    // must keep seeing, so it is restored afterwards.
+    const DaemonAuthOutcome startAuth = lastAuth_;
     std::string stopError;
     if (!StopTunnelLocked(&stopError)) {
       std::fprintf(stderr,
                    "[control] could not stop the unpinned tunnel after refusing it: %s\n",
                    stopError.c_str());
     }
+    lastAuth_ = startAuth;
     lastState_ = DaemonSessionState::Error;
     outcome.session = lastState_;
     return outcome;

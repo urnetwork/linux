@@ -75,13 +75,37 @@ ExecStart=/usr/lib/urnetwork/urnetworkd
 
 # /run/urnetwork: control socket dir. systemd creates it before start and
 # removes it on stop; maintainer scripts pre-create it only as a convenience.
-# The daemon itself chowns the dir root:urnetwork and binds the socket 0660,
-# so systemd.socket(5)'s 0666 default never applies (we never declare a
-# .socket unit). Deliberately NOT Group=urnetwork: that would change the
-# daemon's primary gid for every file it creates, which is a wider blast
-# radius than the one directory we actually want grouped.
+# Deliberately NOT Group=urnetwork: that would change the daemon's primary gid
+# for every file it creates, which is a wider blast radius than the one
+# directory we actually want grouped.
+#
+# 0755, NOT 0750, AND THE DAEMON RE-TIGHTENS IT WHEN POLKIT IS ABSENT.
+# This mode is the OUTER half of a gate whose real decision is made elsewhere:
+#
+#   polkit mode  dir 0755 root:root       sock 0666 root:root
+#   group mode   dir 0750 root:urnetwork  sock 0660 root:urnetwork
+#
+# Under polkit the socket is deliberately world-connectable, because you cannot
+# render a legible refusal from a socket you were not allowed to open: EACCES
+# at connect(2) is a bare errno with no reason and no remedy, and it is exactly
+# what made the old design report a healthy daemon as "not running". Every
+# privileged verb is authorized by polkit against the peer's SO_PEERCRED uid,
+# so DAC is no longer the boundary here -- which is why widening it is not a
+# weakening. What it buys is the thing the owner asked for: no group to join,
+# so no logging out and back in.
+#
+# This unit therefore states the PERMISSIVE mode, and urnetworkd narrows it to
+# 0750 root:urnetwork itself at start when it finds no polkit action file
+# (ControlProtocol.hpp kPolkitPolicyPath). Doing it in this direction is the
+# safe one: systemd applies this mode before the daemon has run, and an empty
+# directory with no socket in it is not a surface. The reverse -- declaring
+# 0750 and having the daemon widen it -- would leave a polkit-authorized user
+# unable to connect for as long as the daemon took to start.
+#
+# Never restore 0750 here without also changing kPolkitPolicyPath handling in
+# the daemon: the two are one decision written in two files.
 RuntimeDirectory=urnetwork
-RuntimeDirectoryMode=0750
+RuntimeDirectoryMode=0755
 # LOAD-BEARING for the kill switch. /run/urnetwork/kill-switch-armed is the
 # marker that says "this machine was armed when the daemon died", and it is
 # what makes a crash-restart come back ARMED (one atomic nft -f, no open
