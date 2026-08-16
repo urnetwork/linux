@@ -707,6 +707,13 @@ jobs:
       # protect.
       - name: Verify the .rpm payload
         working-directory: dist
+        # REQUIRED, and the only step in this job that needs it. This job runs
+        # in `container: ubuntu:22.04`, where the default shell resolves to
+        # `sh -e` (dash) rather than the `bash -e` a runner-hosted job gets --
+        # so `shopt -s nullglob` below died with "shopt: not found", exit 127,
+        # and took the whole daemon job with it. Every other step in this job
+        # is POSIX-clean, which is why this never showed up before.
+        shell: bash
         run: |
           shopt -s nullglob
           # Binary rpms only. rpmbuild -ba (as opposed to -bb) also drops a
@@ -1173,10 +1180,19 @@ jobs:
       - name: Install flatpak + flatpak-builder
         run: |
           sudo apt-get update
+          # elfutils is NOT optional despite nothing naming it: flatpak-builder
+          # strips every module it builds by shelling out to `eu-strip`, which
+          # ships in elfutils and is NOT pulled in by the flatpak-builder
+          # package. Without it the build dies partway through the dependency
+          # stack -- "module libsigc++: Failed to execute child process
+          # eu-strip (No such file or directory)" -- after several minutes of
+          # apparently healthy compiling, which reads like a compiler problem
+          # rather than a missing tool. binutils alone does not provide it.
           sudo apt-get install -y --no-install-recommends \
-            flatpak flatpak-builder binutils
+            flatpak flatpak-builder binutils elfutils
           flatpak --version
           flatpak-builder --version
+          command -v eu-strip >/dev/null || { echo "::error::eu-strip missing after installing elfutils"; exit 1; }
 
       # Pre-warmed here rather than left to make-flatpak.sh so the download is
       # a step that can retry and that shows its own timing, instead of silence
