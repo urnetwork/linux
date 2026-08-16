@@ -58,6 +58,11 @@ enum class DaemonUnreachableReason {
   None,              // not in an Unreachable state
   SocketMissing,     // ENOENT/ECONNREFUSED: not installed, or not running
   PermissionDenied,  // EACCES/EPERM: the socket is there and we may not use it
+  StaleSandboxMount, // EACCES inside a Flatpak whose bind mount of the socket
+                     // directory has gone stale: the daemon restarted, systemd
+                     // recreated /run/urnetwork, and this sandbox still holds
+                     // the DELETED inode. Nothing is wrong with the daemon or
+                     // the user's groups — only relaunching the app fixes it.
   Other,             // something else; LastUnreachableError() carries strerror
 };
 

@@ -92,7 +92,16 @@ RuntimeDirectoryMode=0750
 # clears it with the rest of /run, which is deliberate (nothing comes up
 # blocked before a user has asked for anything). The control socket surviving
 # a restart is harmless: ControlServer unlinks a stale socket before bind.
-RuntimeDirectoryPreserve=restart
+# YES, not `restart`. `restart` preserves /run/urnetwork across a restart but
+# systemd still DELETES it when the unit fully stops or fails — and a Flatpak
+# GUI bind-mounts this directory when its sandbox starts. Once the directory is
+# recreated the sandbox is left holding a mount of the dead inode, which shows
+# up in its mountinfo as `/urnetwork//deleted` and makes every connect() to the
+# control socket fail with EACCES. Measured exactly that way: the app could not
+# reach a perfectly healthy daemon, and reported it as a group-membership
+# problem, until it was relaunched. Preserving the directory keeps the inode
+# stable so a running sandbox survives a daemon upgrade.
+RuntimeDirectoryPreserve=yes
 
 # /var/lib/urnetwork: device identity (key material) + SDK storage. Root-only.
 StateDirectory=urnetwork

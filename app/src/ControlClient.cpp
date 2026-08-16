@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "ControlClient.hpp"
 
+#include <fstream>
+#include <sstream>
+
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -14,6 +17,30 @@
 #include <cstring>
 
 namespace urnw {
+
+namespace {
+
+// True when THIS process's mount of the control socket's directory refers to a
+// deleted inode. Flatpak binds /run/urnetwork into the sandbox at startup; when
+// systemd recreates the directory the mount is left dangling and every access
+// under it returns EACCES. The kernel marks such a mount with a "//deleted"
+// root in /proc/self/mountinfo, which is a fact we can read rather than infer.
+bool SocketMountIsStale() {
+  std::ifstream mounts("/proc/self/mountinfo");
+  if (!mounts) return false;
+  std::string line;
+  while (std::getline(mounts, line)) {
+    // field 4 is the root within the filesystem, field 5 the mount point
+    std::istringstream fields(line);
+    std::string ignore, root, mountPoint;
+    fields >> ignore >> ignore >> ignore >> root >> mountPoint;
+    if (mountPoint.rfind("/run/urnetwork", 0) != 0) continue;
+    if (root.find("//deleted") != std::string::npos) return true;
+  }
+  return false;
+}
+
+}  // namespace
 namespace {
 
 // Every verb except start_tunnel answers off a published snapshot and returns
@@ -89,14 +116,25 @@ bool ControlClient::ConnectLocked(std::string* error) {
 
   if (::connect(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) != 0) {
     const int e = errno;
-    // The three Unreachable causes are three different problems. EACCES in
-    // particular is "the daemon IS running and you are not in the `urnetwork`
-    // group" — the state a fresh install lands in, because the installers
-    // create the group empty.
+    // The Unreachable causes are different problems with different fixes, and
+    // EACCES is ambiguous between two of them, so it is DISAMBIGUATED by
+    // measurement rather than assumed:
+    //
+    //   * a stale sandbox mount — inside a Flatpak, /run/urnetwork is a bind
+    //     mount taken when the sandbox started. A daemon restart makes systemd
+    //     recreate that directory, and this process is left holding the DELETED
+    //     inode, which the kernel reports as EACCES. mountinfo says so in as
+    //     many words ("/urnetwork//deleted"), so we read it instead of guessing.
+    //     Measured: a perfectly healthy daemon, correct group membership, and
+    //     the app still could not connect until it was relaunched — and it told
+    //     the user to fix their groups, which was simply false.
+    //
+    //   * genuinely not permitted — the group case a fresh install lands in.
     switch (e) {
       case EACCES:
       case EPERM:
-        lastUnreachable_ = DaemonUnreachableReason::PermissionDenied;
+        lastUnreachable_ = SocketMountIsStale() ? DaemonUnreachableReason::StaleSandboxMount
+                                                : DaemonUnreachableReason::PermissionDenied;
         break;
       case ENOENT:
       case ECONNREFUSED:

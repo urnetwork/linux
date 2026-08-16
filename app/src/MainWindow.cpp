@@ -291,6 +291,11 @@ TunnelStartResult MainWindow::StartTunnelUi() {
       // urnetwork group yet, and telling them to start a running service sends
       // them nowhere.
       switch (host_.Control().LastUnreachableReason()) {
+        case DaemonUnreachableReason::StaleSandboxMount:
+          notice = T_("daemon_stale_sandbox_mount",
+                      "The URnetwork system service restarted while this app was open. "
+                      "Close the app and open it again to reconnect to it.");
+          break;
         case DaemonUnreachableReason::PermissionDenied:
           notice = T_("daemon_permission_denied",
                       "The URnetwork system service is running, but this account is not "
