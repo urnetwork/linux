@@ -167,6 +167,13 @@ class TunnelHost {
   // Requires opMutex_.
   void StopInternalLocked(const std::string& reason);
   void ReapRetiredLoopsLocked();
+  // RUNAWAY GUARD. Samples the tun's own byte counters and tears the tunnel
+  // down if it is transmitting hard while receiving nothing — the signature of
+  // a capture loop. Returns true when it stopped the tunnel.
+  bool CheckTunnelStormLocked();
+  uint64_t stormLastTx_ = 0;
+  uint64_t stormLastRx_ = 0;
+  int stormStrikes_ = 0;
 
   // ---- the nftables floor: ONE decision site --------------------------------
   //

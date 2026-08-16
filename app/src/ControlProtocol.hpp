@@ -696,6 +696,12 @@ inline constexpr const char* kCodeTunPermissionDenied = "tun_permission_denied";
 inline constexpr const char* kCodeTunBusy = "tun_busy";
 // open()/TUNSETIFF failed for some other reason (message carries strerror).
 inline constexpr const char* kCodeTunOpenFailed = "tun_open_failed";
+// The tunnel was torn down because it was AMPLIFYING: the tun's transmit
+// counter ran away while nothing came back, which is what an egress-exclusion
+// failure looks like from the outside (the daemon's own packets get captured
+// into the tunnel, re-sent, re-captured). Measured once on a real machine at
+// 1.34 Gbps out / 0 in, 3.38 Tb sent before a human noticed and killed it.
+inline constexpr const char* kCodeTunnelStorm = "tunnel_storm";
 // The device handed back an address/mtu/prefix that is not usable.
 inline constexpr const char* kCodeTunConfigInvalid = "tun_config_invalid";
 // `ip`, `nft` or `resolvectl` is not installed.

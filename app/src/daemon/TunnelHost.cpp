@@ -957,10 +957,78 @@ void TunnelHost::MaintainFilterLocked() {
              ToString(filter_.state()));
 }
 
+namespace {
+
+// Read one of the tun's kernel byte counters. Absent/unreadable -> 0, which the
+// guard treats as "no evidence", never as a reason to tear a tunnel down.
+uint64_t ReadIfaceCounter(const std::string& iface, const char* which) {
+  const std::string path = "/sys/class/net/" + iface + "/statistics/" + which;
+  std::ifstream in(path);
+  uint64_t v = 0;
+  if (in >> v) return v;
+  return 0;
+}
+
+}  // namespace
+
+// A tunnel that transmits megabytes while receiving essentially nothing is not
+// carrying traffic — it is AMPLIFYING it. That is what an egress-exclusion
+// failure looks like from outside the SDK: the daemon's own packets fall into
+// the tun, are read back out, re-sent, and captured again. Measured once on a
+// real machine: 1.34 Gbps out, 0 in, 3.38 Tb sent before a human killed it.
+//
+// The guard is deliberately dumb and slow to fire — three consecutive strikes,
+// each needing a large TX delta AND a negligible RX delta — so a genuinely
+// upload-heavy session (a backup, a big send) cannot trip it: real uploads still
+// draw ACKs, which move rx_bytes.
+bool TunnelHost::CheckTunnelStormLocked() {
+  if (!tunnel_) { stormStrikes_ = 0; stormLastTx_ = stormLastRx_ = 0; return false; }
+  const std::string iface = tunnel_->name();
+  if (iface.empty()) return false;
+
+  const uint64_t tx = ReadIfaceCounter(iface, "tx_bytes");
+  const uint64_t rx = ReadIfaceCounter(iface, "rx_bytes");
+  if (tx == 0 && rx == 0) return false;  // counters unreadable: no evidence
+
+  const uint64_t dtx = tx > stormLastTx_ ? tx - stormLastTx_ : 0;
+  const uint64_t drx = rx > stormLastRx_ ? rx - stormLastRx_ : 0;
+  stormLastTx_ = tx;
+  stormLastRx_ = rx;
+
+  // Per tick: >64 MiB out with <1 MiB back. At the reaper's cadence that is an
+  // order of magnitude above any plausible real session.
+  constexpr uint64_t kStormTxDelta = 64ull * 1024 * 1024;
+  constexpr uint64_t kStormRxCeiling = 1ull * 1024 * 1024;
+  if (dtx >= kStormTxDelta && drx < kStormRxCeiling) {
+    ++stormStrikes_;
+    std::fprintf(stderr,
+                 "[tunnel] runaway: %llu MiB out and %llu KiB back since the last tick "
+                 "(strike %d of 3)\n",
+                 static_cast<unsigned long long>(dtx / (1024 * 1024)),
+                 static_cast<unsigned long long>(drx / 1024), stormStrikes_);
+  } else {
+    stormStrikes_ = 0;
+  }
+  if (stormStrikes_ < 3) return false;
+
+  std::fprintf(stderr,
+               "[tunnel] STOPPING: the tunnel is amplifying traffic rather than carrying it. "
+               "This is what a failed egress exclusion looks like -- the daemon's own packets "
+               "are being captured into the tunnel. Tearing it down to protect the network.\n");
+  PublishError(
+      "The connection was stopped because it was sending traffic in a loop instead of "
+      "carrying it. This is a bug; please report it.",
+      ctl::kCodeTunnelStorm);
+  stormStrikes_ = 0;
+  StopInternalLocked("tunnel_storm");
+  return true;
+}
+
 void TunnelHost::Reap() {
   {
     std::scoped_lock lock(opMutex_);
     ReapRetiredLoopsLocked();
+    if (CheckTunnelStormLocked()) return;  // the tunnel is gone; nothing else to reap
   }
   if (busy_.load()) return;  // a bring-up owns the session AND the filter
 
