@@ -273,6 +273,34 @@ install_data('packaging/urnetworkd.service',
              install_dir : '/lib/systemd/system')
 endif
 
+# polkit action file: the AUTHORITY the daemon gates its privileged verbs with,
+# and the reason there is no longer a group to join or a session to log out of.
+#
+# SOURCED FROM ../packaging/polkit/, the only integration file that does NOT
+# live under app/packaging/. It is owned by the packaging workstream because
+# its *presence on disk* is a packaging-level decision, not a build one:
+# ControlProtocol.hpp's kPolkitPolicyPath makes the installed file the fallback
+# discriminator (present -> polkit is the sole authority; absent -> the legacy
+# `urnetwork` group check), so packaging/tarball/install.sh must be free to
+# withhold it on a machine that has no polkit at all. Keeping the single source
+# next to install.sh and packaging/lib/common.sh is what keeps that decision in
+# one place. Referencing it from here still installs it for `meson install
+# --destdir` consumers, so the meson tree and the packaged tree agree.
+#
+# datadir-relative, NOT the absolute '/usr/share/...' the unit above uses:
+# polkit 124+ scans /usr/share, /usr/local/share, /etc and /run action
+# directories (measured: `strings` on polkit 127's polkitd), so a --prefix
+# /usr/local install landing in /usr/local/share/polkit-1/actions is read
+# correctly rather than being wrong. 0644 root:root is enforced by packaging;
+# polkit ignores a group- or world-writable action file.
+#
+# host_integration=false (Flatpak) drops it with the rest: the GUI never calls
+# polkit — the daemon does, against a subject the GUI cannot influence.
+if host_integration
+install_data('..' / 'packaging' / 'polkit' / 'network.ur.urnetwork.policy',
+             install_dir : get_option('datadir') / 'polkit-1' / 'actions')
+endif
+
 # desktop file: the filename MUST match main.cpp's app id network.ur.urnetwork
 # (D-Bus activation requires it; APPIMAGE.md §11d)
 install_data('packaging/network.ur.urnetwork.desktop',

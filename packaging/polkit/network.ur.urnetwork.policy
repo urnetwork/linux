@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+<!--
+  URnetwork polkit actions. Installed to
+  /usr/share/polkit-1/actions/network.ur.urnetwork.policy, 0644 root:root
+  (polkit ignores group- or world-writable .policy files).
+
+  These are checked by urnetworkd, never by the GUI. The subject is derived
+  from SO_PEERCRED on the control-socket connection, so a client cannot
+  nominate its own subject and cannot skip the check by not asking.
+
+  DEFAULTS ARE MODELLED ON NetworkManager's network-control, which is the
+  incumbent for "let the person at this screen change how this machine
+  reaches the network":
+      org.freedesktop.NetworkManager.network-control
+      allow_active=yes  allow_inactive=yes  allow_any=auth_admin
+  We are STRICTER on allow_inactive: NetworkManager says `yes`, we require an
+  administrator. Routing every packet on the box and installing an nftables
+  floor is not something a switched-away or SSH session should do silently.
+
+  <message> is the only text the user ever sees in the polkit agent dialog, so
+  each one has to stand alone with no app context around it.
+
+  NOT gettext-domain="urnetwork": polkit translates <message> with a bare
+  dgettext(), and this product's catalog is keyed by msgctxt (I18n.hpp: "every
+  lookup here is a context (pgettext) lookup, never a bare gettext"). A
+  context-free msgid would be a second, parallel catalog the localization store
+  cannot currently emit. English-only until the store can, with per-language
+  <message xml:lang="..."> generated from it.
+
+  ===========================================================================
+  WHERE THIS FILE LANDS, AND WHY THE DAEMON MUST NOT ASSUME ONE PATH.
+  This file's PRESENCE is the daemon's fallback discriminator (ControlProtocol
+  .hpp, kPolkitPolicyPath): present -> polkit is the sole authority; absent ->
+  the legacy `urnetwork` group check. So where it lands decides which
+  authority a machine runs under, and packaging cannot always put it in
+  /usr/share.
+
+  Measured on this host (polkit 127, `strings` on /usr/lib/polkit-1/polkitd),
+  polkit scans FOUR action directories:
+      /etc/polkit-1/actions
+      /run/polkit-1/actions
+      /usr/local/share/polkit-1/actions
+      /usr/share/polkit-1/actions
+  On an ostree/bootc host (Fedora Silverblue, Bazzite, Kinoite, MicroOS) /usr
+  is a READ-ONLY image mount, so packaging/tarball/install.sh remaps
+  /usr/share -> /usr/local/share exactly as it does for every other file, and
+  this action file installs to /usr/local/share/polkit-1/actions/. polkit
+  reads it there; a daemon that stats only /usr/share does not, and silently
+  falls back to the group check on precisely the machines the maintainer
+  develops on. kPolkitPolicyPath must therefore be a CANDIDATE LIST covering
+  at least /usr/share and /usr/local/share (multi-directory action lookup
+  landed in polkit 124; 0.105-era polkit reads /usr/share only, which is also
+  the only layout those distributions ship).
+  ===========================================================================
+-->
+<policyconfig>
+  <vendor>URnetwork</vendor>
+  <vendor_url>https://ur.io</vendor_url>
+  <icon_name>urnetwork</icon_name>
+
+  <!-- start_tunnel / stop_tunnel / set_provide / location_override_*.
+       The everyday action. allow_active=yes is the whole point: the person
+       at the screen presses Connect and nothing is asked. -->
+  <action id="network.ur.urnetwork.control-tunnel">
+    <description>Connect or disconnect the URnetwork VPN</description>
+    <message>Authentication is required to route this device's traffic through URnetwork.</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <!-- set_kill_switch on its own connection-independent action. Same defaults
+       as control-tunnel, so no extra prompt in the normal case; separate id so
+       a site can require a password for THIS and not for Connect. The kill
+       switch can cut every user on the box off the network, which is why it is
+       worth its own knob. -->
+  <action id="network.ur.urnetwork.manage-kill-switch">
+    <description>Change the URnetwork kill switch</description>
+    <message>Authentication is required to change whether this device's traffic is blocked when the URnetwork connection drops.</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <!-- Adopting, stopping or reconfiguring a tunnel that a DIFFERENT uid
+       started. This is the action that replaces "everyone in the urnetwork
+       group is interchangeable": any active local user may run their own
+       tunnel, nobody takes over someone else's without proving admin. -->
+  <action id="network.ur.urnetwork.take-over-tunnel">
+    <description>Take over a URnetwork connection started by another user</description>
+    <message>Authentication is required to take over the URnetwork connection another user started on this device.</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- log_tail. The daemon log carries the client id, provider ids, route and
+       DNS detail. Under the old design the socket mode kept non-members out of
+       it; the socket is now world-connectable, so this needs a real gate of its
+       own. Same default trust as control-tunnel (if you can silently start a
+       tunnel you can read its log), separate id so it can be tightened alone.
+       The daemon ALSO refuses it across uids: see kCodeAuthNotTunnelOwner. -->
+  <action id="network.ur.urnetwork.read-log">
+    <description>Read the URnetwork service log</description>
+    <message>Authentication is required to read the URnetwork service log.</message>
+    <defaults>
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

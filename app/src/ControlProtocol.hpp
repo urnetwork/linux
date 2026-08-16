@@ -42,12 +42,74 @@ inline constexpr int kMinSupportedClientProtocol = 1;
 // The GUI refuses a daemon hello reply carrying a protocol_version below this.
 inline constexpr int kMinSupportedDaemonProtocol = 1;
 
-// Socket location (MIGRATION.md table): dir 0750 root:urnetwork, sock 0660.
-// Never abstract — permissions are meaningless in the abstract namespace.
+// Socket location (MIGRATION.md table). Never abstract — permissions are
+// meaningless in the abstract namespace.
+//
+// The MODE is no longer fixed, because it now encodes WHICH AUTHORITY is in
+// force (see the polkit block below):
+//   polkit mode  dir 0755 root:root,      sock 0666 root:root
+//   group mode   dir 0750 root:urnetwork, sock 0660 root:urnetwork  (as before)
+// Under polkit the socket is deliberately world-connectable: you cannot render
+// a legible refusal from a socket you were not allowed to open. EACCES at
+// connect(2) is a bare errno with no reason and no remedy; a refusal that
+// arrives as a protocol frame carries a code, a sentence and an action id.
+// DAC stops being the boundary there — SO_PEERCRED plus polkit is.
 inline constexpr const char* kControlSocketDir = "/run/urnetwork";
 inline constexpr const char* kControlSocketPath = "/run/urnetwork/control.sock";
-// The unix group whose members (plus uid 0) may use the control socket.
+// The unix group whose members (plus uid 0) may use the control socket — ONLY
+// on the fallback path now. See AuthorizeControlPeer below.
 inline constexpr const char* kControlGroupName = "urnetwork";
+
+// ---- authorization: polkit first, the unix group only as a fallback --------
+//
+// The re-login requirement is gone. Supplementary groups are applied at LOGIN,
+// so a user the installer had just added to `urnetwork` could not talk to the
+// daemon AT ALL until they logged out and back in — a first-run experience no
+// shipping VPN asks for. polkit authorizes a SUBJECT for an ACTION, with
+// allow_any / allow_inactive / allow_active, so the person at this machine's
+// screen is authorized in their CURRENT session with no group change. This is
+// what NetworkManager (org.freedesktop.NetworkManager.network-control),
+// firewalld and rpm-ostree all do; it is not a novel arrangement.
+//
+// THE FALLBACK DISCRIMINATOR IS AN INSTALL FACT, NOT A RUNTIME PROBE: the
+// presence of OUR OWN action file at kPolkitPolicyPath. Keying on "polkitd
+// answered" would make `kill polkitd` a policy-downgrade attack — kill the
+// service, fall back to the differently-shaped group check. An install fact
+// cannot be induced at runtime by an unprivileged local process.
+//
+//   policy file present  -> polkit is the sole authority. A check that cannot
+//                           be completed is a DENY (fail closed), never a
+//                           silent downgrade to the group.
+//   policy file absent   -> byte-for-byte today's behaviour: 0660
+//                           root:urnetwork and AuthorizeControlPeer.
+inline constexpr const char* kPolkitPolicyPath =
+    "/usr/share/polkit-1/actions/network.ur.urnetwork.policy";
+// The immutable-host twin. ostree/bootc machines mount /usr read-only, so the
+// tarball installer maps its whole payload under /usr/local — and polkit has
+// read both directories since 124. ControlServer::PolicyPath() probes this one
+// FIRST; without it the daemon looks in the one place the file cannot be on
+// Bazzite/Silverblue/Kinoite/SteamOS and silently falls back to the group.
+inline constexpr const char* kPolkitPolicyPathLocal =
+    "/usr/local/share/polkit-1/actions/network.ur.urnetwork.policy";
+
+// HelloReply::auth_mode — which authority this daemon actually latched at
+// start. The GUI needs it because the "add yourself to the urnetwork group,
+// then log out and back in" remediation is correct under `group` and WRONG
+// under `polkit`.
+inline constexpr const char* kAuthModePolkit = "polkit";
+inline constexpr const char* kAuthModeGroup = "group";
+
+// The four polkit action ids, namespaced to the app id. Shipped in
+// packaging/polkit/network.ur.urnetwork.policy (0644 root:root — polkit
+// ignores group- or world-writable action files). They are checked by
+// urnetworkd, never by the GUI: the subject is built from SO_PEERCRED on the
+// connection being served, so a client can neither nominate its own subject
+// nor skip the check by not asking.
+inline constexpr const char* kActionControlTunnel = "network.ur.urnetwork.control-tunnel";
+inline constexpr const char* kActionManageKillSwitch =
+    "network.ur.urnetwork.manage-kill-switch";
+inline constexpr const char* kActionTakeOverTunnel = "network.ur.urnetwork.take-over-tunnel";
+inline constexpr const char* kActionReadLog = "network.ur.urnetwork.read-log";
 
 // The SDK's built-in default device-RPC address (sdk/device_rpc.go:109,
 // deviceRpcDefaultAddress = "127.0.0.1:12025"). Kept as a NAMED CONSTANT ONLY,
@@ -106,12 +168,26 @@ inline bool SdkVersionsAgree(const std::string& local_sdk, const std::string& pe
 }
 
 // ---- peer-credential authorization (pure, unit-tested) ---------------------
-// The socket-facing code resolves SO_PEERCRED on every accept(), BEFORE
-// parsing any frame, then resolves the peer's group list via getpwuid +
-// getgrouplist and the control group's gid via getgrnam — and hands the plain
-// numbers here. Policy (MIGRATION.md): allow uid 0 and members of the
-// `urnetwork` group. NEVER authorize on pid (CVE-2019-6133), never attempt
-// peer-binary attestation (root cannot read an AppImage's FUSE mount —
+// UNCHANGED, still unit-tested, and now THE FALLBACK PREDICATE rather than the
+// primary gate: it decides only on machines with no kPolkitPolicyPath (minimal
+// images, a tarball install that skipped the actions dir). Where polkit is
+// present this function is not consulted at all and group membership is inert.
+//
+// SO_PEERCRED IS NOT REPLACED — it changes job from POLICY to IDENTITY. It is
+// still resolved on every accept(), BEFORE parsing any frame, and it remains
+// the source of: the uid-0 fast path (root recovery must work with the system
+// bus down), the uid and gids in the polkit subject (polkitd cross-checks the
+// uid — that is the CVE-2019-6133 "slowfork" defence), the identity for this
+// fallback predicate, the per-uid connection accounting, the tunnel-ownership
+// uid, and every authorization audit line.
+//
+// The socket-facing code resolves SO_PEERCRED, then resolves the peer's group
+// list via getpwuid + getgrouplist and the control group's gid via getgrnam —
+// and hands the plain numbers here. Policy (MIGRATION.md): allow uid 0 and
+// members of the `urnetwork` group. NEVER authorize on pid (CVE-2019-6133) —
+// under polkit the pid is a LOCATOR handed to polkitd beside the uid, never an
+// identity, and it is pinned by SO_PEERPIDFD where the kernel offers it. Never
+// attempt peer-binary attestation (root cannot read an AppImage's FUSE mount —
 // APPIMAGE.md §11c: uid is the only identity a unix socket can authenticate).
 //
 // peer_group_ids: every gid the peer uid belongs to (primary + supplementary).
@@ -260,6 +336,65 @@ inline Verb VerbFromString(const std::string& s) {
   return Verb::Unknown;
 }
 
+// ---- which polkit action gates which verb (pure, unit-testable) ------------
+// nullptr means "no polkit check": hello (which MUST stay pre-authorization so
+// version/SDK skew still renders — a peer that cannot authorize must still be
+// TOLD WHY rather than dropped), status (polled at ~4 Hz during async bring-up;
+// a round trip there would be intolerable, and it is redacted for a foreign uid
+// instead — see RedactStatusForForeignUid) and location_override_available,
+// which is a capability query that changes nothing.
+//
+// cross_uid: a tunnel is live or starting and is owned by a DIFFERENT uid than
+// the caller. That is the case the `urnetwork` group could not express at all —
+// every member was interchangeable, and one member could silently displace
+// another's tunnel. It now costs kActionTakeOverTunnel, which is
+// auth_admin_keep in all three slots.
+inline const char* ActionIdForVerb(Verb verb, bool is_log_tail, bool cross_uid) {
+  if (is_log_tail) return kActionReadLog;
+  switch (verb) {
+    case Verb::StartTunnel:
+    case Verb::StopTunnel:
+    case Verb::SetProvide:
+    case Verb::LocationOverrideWrite:
+    case Verb::LocationOverrideClear:
+      return cross_uid ? kActionTakeOverTunnel : kActionControlTunnel;
+    case Verb::SetKillSwitch:
+      // Its own id so a site can require a password for the kill switch and
+      // not for Connect. Same defaults as control-tunnel, so it costs no extra
+      // prompt on the normal path.
+      return cross_uid ? kActionTakeOverTunnel : kActionManageKillSwitch;
+    case Verb::Hello:
+    case Verb::Status:
+    case Verb::LocationOverrideAvailable:
+    case Verb::Unknown:
+      break;
+  }
+  return nullptr;
+}
+
+// Interactive == polkit may raise the session's agent dialog. Only for verbs a
+// human just pressed. log_tail is polled every few seconds and status at ~4 Hz,
+// so an interactive check there would carpet the screen with password dialogs;
+// a polled verb gets a non-interactive check and a challenge code instead.
+inline bool VerbWantsInteraction(Verb verb, bool is_log_tail) {
+  if (is_log_tail) return false;
+  switch (verb) {
+    case Verb::StartTunnel:
+    case Verb::StopTunnel:
+    case Verb::SetProvide:
+    case Verb::SetKillSwitch:
+    case Verb::LocationOverrideWrite:
+    case Verb::LocationOverrideClear:
+      return true;
+    case Verb::Hello:
+    case Verb::Status:
+    case Verb::LocationOverrideAvailable:
+    case Verb::Unknown:
+      break;
+  }
+  return false;
+}
+
 // ---- tunnel lifecycle state (status.tunnel_state) --------------------------
 
 enum class TunnelState {
@@ -355,17 +490,28 @@ struct HelloReply {
   std::string daemon_version;
   // the daemon's urnet::version(); exact-match enforced (SdkVersionsAgree)
   std::string sdk_version;
+
+  // kAuthModePolkit | kAuthModeGroup — which authority this daemon latched at
+  // start. ADDITIVE within protocol v1, and ABSENT PARSES AS "group", which is
+  // exactly what a daemon predating this field is. The GUI branches on it for
+  // one reason: "add yourself to the `urnetwork` group, then log out and back
+  // in" is the correct remediation under `group` and is actively wrong under
+  // `polkit`, where no group and no re-login are involved.
+  std::string auth_mode = kAuthModeGroup;
 };
 inline void to_json(nlohmann::json& j, const HelloReply& v) {
   j["protocol_version"] = v.protocol_version;
   j["daemon_version"] = v.daemon_version;
   j["sdk_version"] = v.sdk_version;
+  j["auth_mode"] = v.auth_mode;
 }
 inline void from_json(const nlohmann::json& j, HelloReply& v) {
   v.protocol_version = 0;
   detail::Get(j, "protocol_version", v.protocol_version);
   detail::Get(j, "daemon_version", v.daemon_version);
   detail::Get(j, "sdk_version", v.sdk_version);
+  v.auth_mode = kAuthModeGroup;  // absent = a daemon predating polkit
+  detail::Get(j, "auth_mode", v.auth_mode);
 }
 
 struct StartTunnelRequest {
@@ -595,6 +741,18 @@ struct StatusReply {
   // transition to Up must gate on this field exactly as the synchronous path
   // gates on the start reply. Absent parses false — fail closed.
   bool rpc_pinned = false;
+
+  // This status was cut down because the caller is neither root nor the uid
+  // that owns the running tunnel. ADDITIVE within v1; absent parses false.
+  //
+  // Only tunnel_state, kill_switch, owner_connected and this flag are
+  // meaningful when it is true. It exists because the socket is
+  // world-connectable under polkit: the full status names the provider, the
+  // location, the client id, the loopback rpc port and the byte counters, and
+  // none of that is another local user's business. Shipping kill_switch to
+  // everyone anyway is deliberate and pro-user — a person whose network is
+  // dead deserves to learn why.
+  bool redacted = false;
 };
 inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["tunnel_state"] = ToString(v.tunnel_state);
@@ -614,6 +772,7 @@ inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["up_since_millis"] = v.up_since_millis;
   j["owner_connected"] = v.owner_connected;
   j["rpc_pinned"] = v.rpc_pinned;
+  j["redacted"] = v.redacted;
 }
 inline void from_json(const nlohmann::json& j, StatusReply& v) {
   std::string state;
@@ -637,6 +796,30 @@ inline void from_json(const nlohmann::json& j, StatusReply& v) {
   detail::Get(j, "up_since_millis", v.up_since_millis);
   detail::Get(j, "owner_connected", v.owner_connected);
   detail::Get(j, "rpc_pinned", v.rpc_pinned);  // absent = false = fails closed
+  detail::Get(j, "redacted", v.redacted);      // absent = false = a full status
+}
+
+// The non-owner, non-root view of a tunnel somebody else on this machine
+// started. Pure, so the exact set of fields that survive is unit-testable and
+// cannot drift silently as StatusReply grows: this is a whitelist, not a
+// blacklist — a field added to StatusReply is redacted by DEFAULT because it is
+// simply never copied here.
+//
+// KEPT:    tunnel_state, kill_switch, kill_switch_detail, owner_connected
+//          (a person whose machine is captured or blocked must be able to see
+//          THAT, and the tray's "stop the tunnel" recovery needs it)
+// STRIPPED: client_id, rpc_port, rpc_pinned, tunnel_interface, error,
+//          error_code, dns_detail, stop_reason, up_since_millis and every
+//          "what is in force" flag — provider identity, location and the
+//          session's own plumbing.
+inline StatusReply RedactStatusForForeignUid(const StatusReply& full) {
+  StatusReply out;
+  out.tunnel_state = full.tunnel_state;
+  out.kill_switch = full.kill_switch;
+  out.kill_switch_detail = full.kill_switch_detail;
+  out.owner_connected = full.owner_connected;
+  out.redacted = true;
+  return out;
 }
 
 struct LocationOverrideAvailableReply {
@@ -677,6 +860,56 @@ inline constexpr const char* kCodeClientProtocolTooOld = "client_protocol_too_ol
 inline constexpr const char* kCodeSdkVersionMismatch = "sdk_version_mismatch";
 inline constexpr const char* kCodeHelloRequired = "hello_required";
 inline constexpr const char* kCodeTunnelOwnedByOtherClient = "tunnel_owned_by_other_client";
+
+// ---- authorization refusals ------------------------------------------------
+// These arrive over a SUCCESSFUL connection, from a daemon that answered. They
+// are verb errors, NOT transport failures, and that separation is the point:
+// DaemonUnreachableReason (SocketMissing / PermissionDenied / StaleSandboxMount
+// / Other) keeps every one of its meanings and gains no enumerator, so
+// "refused" and "the service is not running" stay visibly distinct — which they
+// could not be under the old design, where a refusal was an EACCES at
+// connect(2) with no reason attached to it.
+//
+// Every one of them is logged daemon-side with the peer uid, the pid, the
+// action id and the reason before it goes on the wire.
+
+// polkit answered (is_authorized=false, is_challenge=false): a site rule or an
+// explicit `no` default refuses this subject. Retrying will not help.
+inline constexpr const char* kCodeAuthDenied = "auth_denied";
+// polkit answered is_challenge=true. Either we asked non-interactively (a
+// polled verb), or an interactive check found no authentication agent — which
+// is what a remote/ssh or session-less caller looks like, since polkit's
+// "local" means "has a seat" and sshd sessions are seatless.
+inline constexpr const char* kCodeAuthRequired = "auth_required";
+// The spelling the other half of the design review used for the same refusal.
+// ACCEPTED, NEVER EMITTED: this daemon always sends kCodeAuthRequired. It is
+// declared so a client written against the other half of the design still has
+// the symbol and can branch on both, which is exactly what ControlClient.hpp
+// does — one extra string compare, and no refusal ever falls through to a raw
+// diagnostic because two halves picked different words for one verdict.
+inline constexpr const char* kCodeAuthChallengeRequired = "auth_challenge_required";
+// The agent dialog was raised and the user closed it. The client MUST render
+// NOTHING for this — a declined elevation is the user changing their mind, not
+// an error (docs/parity/settings.md:130).
+inline constexpr const char* kCodeAuthDismissed = "auth_dismissed";
+// A tunnel owned by a DIFFERENT uid, and kActionTakeOverTunnel was not granted.
+// The refusal the `urnetwork` group could not express: under it, any member
+// could silently tear down and replace another member's tunnel.
+inline constexpr const char* kCodeAuthNotTunnelOwner = "auth_not_tunnel_owner";
+// polkit was NOT expected on this machine (no kPolkitPolicyPath) and the
+// fallback group check refused this peer. This is the ONE code under which
+// "add your user to the `urnetwork` group, then log out and back in" is still
+// the right advice.
+inline constexpr const char* kCodeAuthUnavailable = "auth_unavailable";
+// polkit WAS expected and the check could not be completed: no system bus,
+// polkitd unreachable or gone, an unreadable peer start-time, a malformed
+// reply. FAIL CLOSED — never a downgrade to the group check, or "stop polkitd"
+// becomes a way to pick the weaker policy.
+inline constexpr const char* kCodeAuthCheckFailed = "auth_check_failed";
+// Nobody answered the agent dialog inside the daemon's own bound and
+// CancelCheckAuthorization was issued. Distinct from Dismissed on purpose: an
+// unanswered prompt is worth saying out loud, a declined one is not.
+inline constexpr const char* kCodeAuthTimeout = "auth_timeout";
 
 // ---- start_tunnel failure codes -------------------------------------------
 // Each one is a DIFFERENT problem with a DIFFERENT fix, and the whole point of

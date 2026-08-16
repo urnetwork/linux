@@ -29,9 +29,24 @@ UNIT='urnetworkd.service'
 
 case "$1" in
     configure)
-        # System group gating the control socket (SO_PEERCRED: uid 0 or
-        # members of `urnetwork`; MIGRATION.md). Created before the unit
-        # starts; removed only on purge.
+        # The `urnetwork` system group: STILL CREATED, AND NOBODY IS PUT IN IT.
+        #
+        # It is now only the FALLBACK authorizer, for machines with no polkit:
+        # there urnetworkd binds the socket 0660 root:urnetwork and authorizes
+        # uid 0 plus members of this group, exactly as before. Where polkit is
+        # present, membership is inert -- the socket is 0666 root:root and every
+        # privileged verb is authorized per-action by polkit against the peer's
+        # SO_PEERCRED uid, in the session the user is already in.
+        #
+        # Created before the unit starts; removed only on purge. Existing
+        # members are never removed: the gid owns /run/urnetwork on a group-mode
+        # box and a downgrade to an older daemon has to keep working.
+        #
+        # WHAT IS GONE, DELIBERATELY: `usermod -aG urnetwork "$SUDO_USER"` and
+        # the "log out and back in" line that had to follow it. Supplementary
+        # groups are applied at LOGIN, so that pair made a correct install
+        # unusable until the user ended their session. That is the first-run
+        # experience this change exists to remove.
         if ! getent group urnetwork >/dev/null 2>&1; then
             if command -v addgroup >/dev/null 2>&1; then
                 addgroup --system urnetwork >/dev/null 2>&1 || groupadd --system urnetwork
@@ -39,40 +54,61 @@ case "$1" in
                 groupadd --system urnetwork
             fi
         fi
-        # ...and put the human in it. The socket is 0750 root:urnetwork, so a
-        # user who is not a member gets EACCES on connect(2) and the app can
-        # only report "the service is not running" -- false, and unfixable from
-        # the UI. Creating the group and adding nobody to it is the most likely
-        # way a correct install still cannot connect.
+        # Which authority this machine will run under, said out loud.
         #
-        # `apt install` runs as root with SUDO_USER set when invoked via sudo;
-        # a plain root shell has none, and root needs no membership. Membership
-        # applies to NEW login sessions only, so say so.
-        DEB_TARGET_USER=""
-        if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != root ]; then
-            DEB_TARGET_USER="${SUDO_USER}"
-        elif [ -n "${PKEXEC_UID:-}" ]; then
-            DEB_TARGET_USER="$(getent passwd "${PKEXEC_UID}" 2>/dev/null | cut -d: -f1)"
+        # DETECTED BY LOOKING FOR POLKIT, NOT FOR OUR OWN ACTION FILE: dpkg has
+        # already unpacked /usr/share/polkit-1/actions/network.ur.urnetwork
+        # .policy by the time this runs (and created that directory on the way),
+        # so testing the file or the directory would report "polkit" on a box
+        # that has never had it. polkitd is a Recommends, so apt pulls it in by
+        # default and this branch is the normal one.
+        UR_HAS_POLKIT=0
+        if command -v pkaction >/dev/null 2>&1 || command -v pkcheck >/dev/null 2>&1; then
+            UR_HAS_POLKIT=1
+        elif [ -f /usr/share/polkit-1/actions/org.freedesktop.policykit.policy ]; then
+            UR_HAS_POLKIT=1
+        else
+            for d in /usr/lib/polkit-1 /usr/libexec/polkit-1 /usr/lib64/polkit-1 \
+                     /usr/lib/x86_64-linux-gnu/polkit-1 /usr/lib/aarch64-linux-gnu/polkit-1; do
+                if [ -x "${d}/polkitd" ]; then UR_HAS_POLKIT=1; break; fi
+            done
         fi
-        if [ -n "${DEB_TARGET_USER}" ]; then
-            if id -nG "${DEB_TARGET_USER}" 2>/dev/null | tr ' ' '\n' | grep -qx urnetwork; then
-                :
-            elif command -v usermod >/dev/null 2>&1; then
-                usermod -aG urnetwork "${DEB_TARGET_USER}" || true
-                echo "urnetwork: added ${DEB_TARGET_USER} to the 'urnetwork' group -- log out and back in before starting the app."
-            elif command -v gpasswd >/dev/null 2>&1; then
-                gpasswd -a "${DEB_TARGET_USER}" urnetwork || true
-                echo "urnetwork: added ${DEB_TARGET_USER} to the 'urnetwork' group -- log out and back in before starting the app."
+        if [ "${UR_HAS_POLKIT}" = 1 ]; then
+            echo "urnetwork: permission is granted through polkit -- no group change and no log-out are needed."
+            if [ -n "$(getent group urnetwork 2>/dev/null | cut -d: -f4)" ]; then
+                echo "urnetwork: the 'urnetwork' group still has members from an earlier version. Nothing to undo -- membership is simply no longer consulted where polkit is present."
             fi
         else
-            echo "urnetwork: could not tell which user to add to the 'urnetwork' group. Run: sudo usermod -aG urnetwork <you>"
+            echo "urnetwork: no polkit found; urnetworkd falls back to the 'urnetwork' group."
+            echo "urnetwork: run 'sudo usermod -aG urnetwork <user>', then log out and back in. Installing polkitd and reinstalling this package removes that requirement."
         fi
-        # The unit's RuntimeDirectory=urnetwork (0750 root:urnetwork) is the
-        # real owner of /run/urnetwork -- systemd creates it on start and
-        # cleans it on stop. Pre-create it so the control path exists even
-        # before the first start.
+        # polkit IGNORES a group- or world-writable .policy file, silently: the
+        # actions revert to their built-in defaults and the only symptom is an
+        # administrator prompt on every Connect. dpkg ships ours 0644 root:root
+        # from the package tree; assert it rather than assume it, and check the
+        # directory too (polkit does not police the directory, and whoever can
+        # write it can drop in a file that redefines our defaults).
+        UR_POLICY=/usr/share/polkit-1/actions/network.ur.urnetwork.policy
+        if [ -f "${UR_POLICY}" ]; then
+            chmod 0644 "${UR_POLICY}" 2>/dev/null || true
+            chown root:root "${UR_POLICY}" 2>/dev/null || true
+            UR_POLICY_DIR_MODE="$(stat -c '%a' /usr/share/polkit-1/actions 2>/dev/null || echo '')"
+            case "${UR_POLICY_DIR_MODE}" in
+                '') : ;;
+                *[2367]|*[2367]?)
+                    echo "urnetwork: WARNING /usr/share/polkit-1/actions is group- or world-writable (mode ${UR_POLICY_DIR_MODE}); anyone who can write there can redefine URnetwork's polkit defaults." >&2 ;;
+            esac
+        fi
+        # /run/urnetwork is really owned by the unit's RuntimeDirectory=
+        # (0755 root:root, re-applied on every start); pre-create it so the
+        # control path exists even before the first start. The daemon narrows
+        # it to 0750 root:urnetwork itself when it finds no polkit action file.
         if [ -d /run ]; then
-            install -d -m 0750 -o root -g urnetwork /run/urnetwork 2>/dev/null || true
+            if [ "${UR_HAS_POLKIT}" = 1 ]; then
+                install -d -m 0755 -o root -g root /run/urnetwork 2>/dev/null || true
+            else
+                install -d -m 0750 -o root -g urnetwork /run/urnetwork 2>/dev/null || true
+            fi
         fi
         # The NetworkManager conf.d marking must be live before the first
         # tunnel comes up; `nmcli general reload conf` re-reads configuration
