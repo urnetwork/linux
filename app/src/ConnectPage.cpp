@@ -1056,6 +1056,20 @@ void ConnectPage::ClearDisconnectIntent() {
 void ConnectPage::RelayConnectPress() {
   const bool disconnect = actionIsDisconnect_;
   disconnectRequestedAtUs_ = disconnect ? g_get_monotonic_time() : 0;
+  if (disconnect) {
+    // DROP THE STALE PUSH. connectStatus_ has exactly one writer — the SDK's
+    // status callback — and nothing ever cleared it. On a teardown the SDK
+    // simply stops pushing, so a session that last reported CONNECTING left
+    // that word latched forever: `connecting` stayed true, so isDisconnect
+    // stayed true, so the button read Disconnect and EVERY subsequent press
+    // ran the disconnect path. The user could not reconnect without
+    // restarting the app. Measured: three presses at 06:26:49, 06:27:13 and
+    // 06:27:38, all logging action=disconnect with connected=no.
+    //
+    // The teardown's own display does not depend on this: the 8s disconnect
+    // intent owns "Disconnecting…" and the tick re-renders while it is live.
+    connectStatus_.clear();
+  }
   ApplyConnectStatus();  // answer the press NOW, before the SDK says anything
   if (on_connect_action) {
     on_connect_action(disconnect);
@@ -1070,7 +1084,15 @@ void ConnectPage::ApplyConnectStatus() {
   // RenderHealth reconciliation: the button label and the status line must
   // derive from ONE reading, so the hero can never lag the line above it.
   const std::string status = UpperCopy(connectStatus_);
-  const bool connecting = (status == "CONNECTING" || status == "DESTINATION_SET");
+  // REALITY OUTRANKS THE STRING. connectStatus_ is a push from the SDK and is
+  // the ONLY input that used to decide "connecting" — so a session that
+  // reported CONNECTING and then started carrying traffic without sending
+  // another status kept the hero on "Connecting to providers" while the graph
+  // showed 191 KiB/s. Measured on the owner's machine with 41 hosts attached.
+  // A reading that says we are connected settles the question by itself.
+  const bool reallyConnected = connected_ || stats_.connected;
+  const bool connecting =
+      !reallyConnected && (status == "CONNECTING" || status == "DESTINATION_SET");
   const bool failed = (status == "CONNECT_FAILED");
   // Asked once, here, because it SETTLES the intent as a side effect and the
   // label branch below has to see the same answer the status branch did.
@@ -1141,7 +1163,7 @@ void ConnectPage::ApplyConnectStatus() {
   // (ConnectActionIsDisconnect, and the action RelayConnectPress hands to
   // MainWindow). Deriving the action anywhere else is what let a button
   // labelled Disconnect run the connect path.
-  const bool isDisconnect = connected_ || stats_.connected || connecting;
+  const bool isDisconnect = reallyConnected || connecting;
   actionIsDisconnect_ = isDisconnect;
   connectBtn_->set_label(isDisconnect ? T_("disconnect", "Disconnect")
                                       : T_("connect", "Connect"));
