@@ -673,36 +673,11 @@ if [ -z "${PREFIX}" ]; then
         nmcli general reload conf >/dev/null 2>&1 || true
     fi
 
-    if [ -d /run/systemd/system ]; then
-        if [ "${MODE}" = 'install' ]; then
-            # Enable+start on install is Debian Policy 9.3.3.1-correct only
-            # because urnetworkd starts idle: no tunnel until a client
-            # authenticates over the control socket.
-            run systemctl enable "${UNIT}"
-            run systemctl start "${UNIT}"
-        else
-            # Upgrade: never undo an admin's enable/disable choice; start
-            # only what was running before we stopped it.
-            if [ "${WAS_ACTIVE}" = 'active' ]; then
-                run systemctl start "${UNIT}"
-            else
-                log "${UNIT} was not running before the upgrade; leaving it stopped"
-            fi
-        fi
-    fi
-
-    # What dpkg file triggers would have done (APPIMAGE.md section 5 callout):
-    # update-desktop-database rebuilds mimeinfo.cache -- the thing
-    # x-scheme-handler/urnetwork lookups consult. Without it the launcher
-    # still appears in menus (so the breakage is invisible on a dev box) but
-    # urnetwork:// SSO callbacks and wallet deep links silently fail, and any
-    # later `apt install` of anything repairs it -- so it escapes testing.
-    # SELinux (Fedora Silverblue / Bazzite / Kinoite): files written outside a
-    # package manager keep whatever label the parent dir gave them. The daemon
-    # is started by systemd and the launcher is exec'd from a desktop file, so
-    # a wrong label costs an AVC denial that looks like a mystery failure.
-    # restorecon applies the policy's own contexts; a system without SELinux
-    # simply has no such command.
+    # ORDER IS LOAD-BEARING: this must happen BEFORE the unit is started. A
+    # process keeps the SELinux context it was exec'd with, so relabelling
+    # after `systemctl start` fixes the FILE and leaves the RUNNING daemon in
+    # init_t — the tunnel still cannot open /dev/net/tun, and only a restart
+    # (which nothing prompts for) would apply it. Measured exactly that way.
     # SELINUX DOMAIN FOR THE DAEMON. A binary we install ourselves carries no
     # policy of its own, so systemd runs it in `init_t` — and init_t is
     # deliberately forbidden the three things this daemon exists to do.
@@ -743,6 +718,37 @@ if [ -z "${PREFIX}" ]; then
         fi
     fi
 
+
+    if [ -d /run/systemd/system ]; then
+        if [ "${MODE}" = 'install' ]; then
+            # Enable+start on install is Debian Policy 9.3.3.1-correct only
+            # because urnetworkd starts idle: no tunnel until a client
+            # authenticates over the control socket.
+            run systemctl enable "${UNIT}"
+            run systemctl start "${UNIT}"
+        else
+            # Upgrade: never undo an admin's enable/disable choice; start
+            # only what was running before we stopped it.
+            if [ "${WAS_ACTIVE}" = 'active' ]; then
+                run systemctl start "${UNIT}"
+            else
+                log "${UNIT} was not running before the upgrade; leaving it stopped"
+            fi
+        fi
+    fi
+
+    # What dpkg file triggers would have done (APPIMAGE.md section 5 callout):
+    # update-desktop-database rebuilds mimeinfo.cache -- the thing
+    # x-scheme-handler/urnetwork lookups consult. Without it the launcher
+    # still appears in menus (so the breakage is invisible on a dev box) but
+    # urnetwork:// SSO callbacks and wallet deep links silently fail, and any
+    # later `apt install` of anything repairs it -- so it escapes testing.
+    # SELinux (Fedora Silverblue / Bazzite / Kinoite): files written outside a
+    # package manager keep whatever label the parent dir gave them. The daemon
+    # is started by systemd and the launcher is exec'd from a desktop file, so
+    # a wrong label costs an AVC denial that looks like a mystery failure.
+    # restorecon applies the policy's own contexts; a system without SELinux
+    # simply has no such command.
     if [ "${LAYOUT}" = 'immutable' ] && command -v restorecon >/dev/null 2>&1; then
         restorecon -R "$(map_path '/usr/lib/urnetwork')" \
                       "$(map_path '/usr/bin')/urnetwork" \
