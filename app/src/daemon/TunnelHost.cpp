@@ -615,9 +615,18 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       if (stopRequested_.load()) throw std::runtime_error("start cancelled");
 
       // --- 6) hand the tun fd to the SDK's fd loop --------------------------
-      ioLoop_ = urnet::newIoLoop(*device_, tunnel_->fd(), [this, generation] {
+      // The flag the callback sets is OWNED BY A shared_ptr the callback holds,
+      // not by this object: the callback can outlive both the loop's handle and
+      // (on shutdown) this TunnelHost, and it must never write through a
+      // dangling pointer. Retirement below waits on exactly this flag.
+      ioLoopFinished_ = std::make_shared<std::atomic<bool>>(false);
+      ioLoop_ = urnet::newIoLoop(*device_, tunnel_->fd(),
+                                 [this, generation, finished = ioLoopFinished_] {
         // SDK THREAD. Publish only: the teardown (and arming the kill switch
         // on an unexpected drop) happens on the reaper, on the main loop.
+        finished->store(true);  // FIRST, and unconditionally: this is what
+                                // makes retiring the handle safe, and it must
+                                // happen even for our own Stop.
         if (sessionGeneration_.load() != generation) return;  // our own Stop
         ioLoopDied_.store(true);
         std::fprintf(stderr, "[tunnel] io loop finished\n");
@@ -744,6 +753,21 @@ void TunnelHost::Stop(const std::string& reason) {
   StopInternalLocked(reason);
 }
 
+// Release retired IoLoops whose done callback has actually fired. Called from
+// the stop path and from the reaper tick, so a loop that takes a moment to wind
+// down is collected shortly after rather than held for the life of the process.
+void TunnelHost::ReapRetiredLoopsLocked() {
+  const size_t before = retiredLoops_.size();
+  retiredLoops_.erase(std::remove_if(retiredLoops_.begin(), retiredLoops_.end(),
+                                     [](const RetiredIoLoop& r) {
+                                       return r.finished && r.finished->load();
+                                     }),
+                      retiredLoops_.end());
+  if (before != retiredLoops_.size() && !retiredLoops_.empty()) {
+    std::fprintf(stderr, "[tunnel] %zu io loop(s) still winding down\n", retiredLoops_.size());
+  }
+}
+
 void TunnelHost::StopInternalLocked(const std::string& reason) {
   const bool hadSession = device_.has_value() || tunnel_ || ioLoop_.has_value();
   if (hadSession) {
@@ -761,8 +785,15 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
   // Reverse dependency order. close() actually stops the SDK goroutines and
   // the IoLoop; releasing the handle alone would leak them.
   if (device_) device_->setTunnelStarted(false);
-  if (ioLoop_) ioLoop_->close();
-  ioLoop_.reset();
+  if (ioLoop_) {
+    ioLoop_->close();  // ASYNCHRONOUS: asks the Go loop to stop, returns now
+    // RETIRE, do not destroy. Destroying here frees the done callback that Go
+    // still holds a raw pointer to, and the deferred call segfaults the daemon.
+    retiredLoops_.push_back(RetiredIoLoop{std::move(*ioLoop_), ioLoopFinished_});
+    ioLoop_.reset();
+  }
+  ioLoopFinished_.reset();
+  ReapRetiredLoopsLocked();
   tunnel_.reset();  // closes the fd: the tun, its routes and the policy rules go
   if (device_) {
     device_->close();
@@ -927,6 +958,10 @@ void TunnelHost::MaintainFilterLocked() {
 }
 
 void TunnelHost::Reap() {
+  {
+    std::scoped_lock lock(opMutex_);
+    ReapRetiredLoopsLocked();
+  }
   if (busy_.load()) return;  // a bring-up owns the session AND the filter
 
   std::unique_lock<std::mutex> lock(opMutex_, std::try_to_lock);

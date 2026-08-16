@@ -2279,8 +2279,25 @@ void SdkHost::Disconnect() {
 
 bool SdkHost::Connected() {
   std::scoped_lock lock(mutex_);
-  if (connectVc_) return connectVc_->getConnected();
-  return device_ && device_->getConnectLocation().has_value();
+  // A VPN may only say "connected" when TRAFFIC IS ACTUALLY CARRIED. The SDK's
+  // own connected flag is an APPLICATION-level fact — it is true as soon as
+  // there are provider sessions, with or without a tun — so on its own it will
+  // happily report a green, protected-looking state while every packet is still
+  // going out in the clear.
+  //
+  // Measured: the daemon crashed three seconds after the tunnel came up, taking
+  // urnet0, the routes and the DNS override with it, and the app kept saying
+  // "Connected" with a green dot and a live host list. That is the worst UI lie
+  // this product can tell.
+  //
+  // hasDevice() is the honest half: it is true only while a DeviceRemote is
+  // bound over the CURRENT control session, so a daemon that died, restarted or
+  // dropped us makes it false with no round trip.
+  const bool sdkConnected = connectVc_ ? connectVc_->getConnected()
+                                       : (device_ && device_->getConnectLocation().has_value());
+  const bool tunnelBound = device_.has_value() &&
+                           deviceControlGeneration_ == control_.SessionGeneration();
+  return sdkConnected && tunnelBound;
 }
 
 void SdkHost::SetProvideControlMode(const std::string& mode) {

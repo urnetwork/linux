@@ -39,6 +39,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <vector>
 #include <string>
 #include <thread>
 
@@ -165,6 +166,7 @@ class TunnelHost {
   void RunStart(ctl::StartTunnelRequest config);
   // Requires opMutex_.
   void StopInternalLocked(const std::string& reason);
+  void ReapRetiredLoopsLocked();
 
   // ---- the nftables floor: ONE decision site --------------------------------
   //
@@ -206,6 +208,33 @@ class TunnelHost {
   std::optional<urnet::NetworkSpace> networkSpace_;
   std::optional<urnet::DeviceLocal> device_;
   std::optional<urnet::IoLoop> ioLoop_;
+  // Set by the LIVE loop's done callback; a retired loop carries its own copy
+  // (see retiredLoops_) so the two can never be confused.
+  std::shared_ptr<std::atomic<bool>> ioLoopFinished_;
+
+  // RETIRED IoLoops, kept alive until their done callback has actually fired.
+  //
+  // urnet::newIoLoop stores the done callback in a shared_ptr, hands GO A RAW
+  // POINTER to it, and keeps it alive by retaining that shared_ptr INSIDE the
+  // IoLoop object. IoLoop exposes only close(), which is asynchronous: it asks
+  // the Go loop to stop and returns immediately. Destroying the IoLoop right
+  // after close() therefore frees the callback while the loop is still winding
+  // down, and the deferred done callback then fires through a dangling pointer.
+  //
+  // Measured, on the first working tunnel: pressing Disconnect three seconds
+  // after connecting killed the daemon with
+  //   SIGSEGV ... addr=0x0, signal arrived during cgo execution
+  //   _Cfunc_urnet_invoke_io_loop_done <- (*IoLoop).run.deferwrap2
+  // and systemd restarted it, taking the tunnel with it.
+  //
+  // So a stopped loop is RETIRED, not destroyed, and released only once its own
+  // callback has run. Leaking a handful of handles on a pathological loop that
+  // never finishes is strictly better than a root daemon core-dumping.
+  struct RetiredIoLoop {
+    urnet::IoLoop loop;
+    std::shared_ptr<std::atomic<bool>> finished;
+  };
+  std::vector<RetiredIoLoop> retiredLoops_;
   std::unique_ptr<Tunnel> tunnel_;
   NetFilter filter_;
   // Resolved once at construction: whose sockets the nftables mark chain
