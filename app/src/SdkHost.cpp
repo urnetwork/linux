@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -63,21 +64,39 @@ T ReadGuarded(const char* what, Fn&& fn, T fallback) {
 }
 
 // ---- the device-rpc reattach blob ------------------------------------------
-// $XDG_STATE_HOME/urnetwork/rpc_session.json — the STATE dir, not the config
-// dir AppPrefs.hpp uses: this is an ephemeral session credential, not a
+// $XDG_STATE_HOME/urnetwork/rpc/rpc_session.json — the STATE dir, not the
+// config dir AppPrefs.hpp uses: this is an ephemeral session credential, not a
 // preference, and it must not end up in a synced/backed-up config tree.
-// Directory 0700, file 0600, and the file is created with that mode rather
-// than chmod'ed afterwards so it is never briefly world-readable.
+//
+// And its OWN subdirectory inside the state dir, NOT $XDG_STATE_HOME/urnetwork
+// itself: main.cpp hands that exact directory to the SDK as its log dir, and
+// the SDK prunes it ("Found 5 log files in ...", "Removed old log file ...").
+// A file holding two private keys does not belong in a directory another
+// component enumerates and deletes from — or that a "send us your logs" flow
+// would collect wholesale.
+//
+// Directory 0700, file 0600, created with that mode rather than chmod'ed
+// afterwards so it is never briefly world-readable.
+constexpr size_t kMaxRpcSessionBytes = 128 * 1024;  // a real blob is ~3 KB
+
 std::string RpcSessionPath() {
-  std::string dir = std::string(g_get_user_state_dir()) + "/urnetwork";
+  std::string dir = std::string(g_get_user_state_dir()) + "/urnetwork/rpc";
   g_mkdir_with_parents(dir.c_str(), 0700);
   return dir + "/rpc_session.json";
 }
 
+// Where the blob used to live, before it was moved out of the SDK's log dir.
+// Only ever deleted, never read: adopting one costs nothing to skip, and
+// leaving private keys behind in a directory that gets collected does.
+std::string LegacyRpcSessionPath() {
+  return std::string(g_get_user_state_dir()) + "/urnetwork/rpc_session.json";
+}
+
 void ClearRpcSession() {
-  const std::string path = RpcSessionPath();
-  if (g_unlink(path.c_str()) != 0 && errno != ENOENT) {
-    g_warning("sdkhost: could not remove the rpc session blob: %s", g_strerror(errno));
+  for (const std::string& path : {RpcSessionPath(), LegacyRpcSessionPath()}) {
+    if (g_unlink(path.c_str()) != 0 && errno != ENOENT) {
+      g_warning("sdkhost: could not remove the rpc session blob: %s", g_strerror(errno));
+    }
   }
 }
 
@@ -92,31 +111,83 @@ void SaveRpcSession(const rpcsession::Blob& blob) {
     return;
   }
   const std::string path = RpcSessionPath();
+  // WRITE THEN RENAME. The old in-place O_TRUNC write contradicted the
+  // contract two lines above: it truncated the live file first, so a short
+  // write or a crash left a partial blob on disk that IsUsable had never seen.
+  // rename(2) within one directory is atomic, so a reader sees the old blob or
+  // the new one and never half of either.
+  const std::string tmp = path + ".tmp";
   const std::string text = rpcsession::Serialize(blob);
-  const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+  const int fd =
+      ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0600);
   if (fd < 0) {
     g_warning("sdkhost: could not write the rpc session blob: %s", g_strerror(errno));
     return;
   }
+  bool ok = true;
   size_t written = 0;
   while (written < text.size()) {
     const ssize_t n = ::write(fd, text.data() + written, text.size() - written);
     if (n <= 0) {
       if (errno == EINTR) continue;
       g_warning("sdkhost: short write of the rpc session blob: %s", g_strerror(errno));
+      ok = false;
       break;
     }
     written += static_cast<size_t>(n);
   }
+  if (ok && ::fsync(fd) != 0) {
+    g_warning("sdkhost: could not flush the rpc session blob: %s", g_strerror(errno));
+    ok = false;
+  }
   ::close(fd);
+  if (!ok || ::rename(tmp.c_str(), path.c_str()) != 0) {
+    if (ok) {
+      g_warning("sdkhost: could not commit the rpc session blob: %s", g_strerror(errno));
+    }
+    g_unlink(tmp.c_str());
+  }
 }
 
 std::optional<rpcsession::Blob> LoadRpcSession() {
-  std::ifstream in(RpcSessionPath(), std::ios::binary);
-  if (!in.good()) return std::nullopt;
-  std::ostringstream buffer;
-  buffer << in.rdbuf();
-  return rpcsession::Parse(buffer.str());
+  const std::string path = RpcSessionPath();
+  const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+  if (fd < 0) {
+    if (errno != ENOENT) {
+      g_warning("sdkhost: could not open the rpc session blob: %s", g_strerror(errno));
+    }
+    return std::nullopt;
+  }
+  // BOUNDED BEFORE IT IS READ. This runs on the GTK main loop, under mutex_,
+  // on the connect path; the 64 KiB-per-PEM cap inside the validator only
+  // applies after the whole file has been slurped and parsed, so an absurd
+  // file there used to be a UI freeze rather than an O(1) rejection.
+  struct stat st {};
+  if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size <= 0 ||
+      static_cast<uint64_t>(st.st_size) > kMaxRpcSessionBytes) {
+    g_warning("sdkhost: ignoring an implausible rpc session blob (%lld bytes); the service "
+              "will rebuild the tunnel instead of adopting it",
+              static_cast<long long>(st.st_size));
+    ::close(fd);
+    return std::nullopt;
+  }
+  std::string text(static_cast<size_t>(st.st_size), '\0');
+  size_t got = 0;
+  while (got < text.size()) {
+    const ssize_t n = ::read(fd, text.data() + got, text.size() - got);
+    if (n <= 0) {
+      if (n < 0 && errno == EINTR) continue;
+      break;
+    }
+    got += static_cast<size_t>(n);
+  }
+  ::close(fd);
+  if (got != text.size()) {
+    g_warning("sdkhost: short read of the rpc session blob (%zu of %zu bytes)", got,
+              text.size());
+    return std::nullopt;
+  }
+  return rpcsession::Parse(text);
 }
 
 // A fresh loopback listener per session, drawn from [kRpcPortMin, kRpcPortMax]
@@ -937,11 +1008,20 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
 
 TunnelStartResult SdkHost::StartTunnel() {
   std::scoped_lock lock(mutex_);
+  return StartTunnelLocked();
+}
+
+TunnelStartResult SdkHost::StartTunnelLocked() {
   lastTunnelError_.clear();
-  if (device_) return TunnelStartResult::Started;
+  // EVERY outcome of this function is logged. It used to be silent on all of
+  // them, so a Connect that failed here left NOTHING to read: not in the app,
+  // not in the journal, not in the daemon (which is never reached on most of
+  // these paths). "Pressing Connect does nothing" was unanswerable as a result.
+  g_message("connect: start_tunnel requested");
   const std::string clientJwt = localState_->getByClientJwt();
   if (clientJwt.empty()) {
     lastTunnelError_ = "not signed in";
+    g_warning("connect: refused — no client jwt (not signed in)");
     return TunnelStartResult::Failed;
   }
   const std::string instanceId = localState_->getInstanceId();
@@ -955,18 +1035,23 @@ TunnelStartResult SdkHost::StartTunnel() {
       break;
     case DaemonSessionState::Unreachable:
       lastTunnelError_ = error;
+      g_warning("connect: daemon unreachable: %s", error.c_str());
       return TunnelStartResult::DaemonUnreachable;
     case DaemonSessionState::DaemonTooOld:
       lastTunnelError_ = error;
+      g_warning("connect: daemon too old: %s", error.c_str());
       return TunnelStartResult::DaemonTooOld;
     case DaemonSessionState::ClientTooOld:
       lastTunnelError_ = error;
+      g_warning("connect: app too old for this daemon: %s", error.c_str());
       return TunnelStartResult::AppTooOld;
     case DaemonSessionState::SdkMismatch:
       lastTunnelError_ = error;
+      g_warning("connect: app/daemon SDK build mismatch: %s", error.c_str());
       return TunnelStartResult::SdkMismatch;
     case DaemonSessionState::Error:
       lastTunnelError_ = error;
+      g_warning("connect: control session error: %s", error.c_str());
       return TunnelStartResult::Failed;
   }
 
@@ -986,13 +1071,57 @@ TunnelStartResult SdkHost::StartTunnel() {
   //    server_pem, travelling UP to a peer that has already authenticated us
   //    via SO_PEERCRED — and the same request already carries by_jwt, which is
   //    strictly more valuable than a per-session loopback server key.
+  //    ONE status read serves both decisions below (is our bound device still
+  //    real, and can this start be adopted instead of rebuilt) — it used to be
+  //    two round trips on the same lock.
+  std::string statusError;
+  const std::optional<ctl::StatusReply> status = control_.Status(&statusError);
+  if (!status) {
+    // Not fatal here: the start below reports the transport failure with a
+    // mapped, renderable state. But it must not pass unremarked, because every
+    // decision that follows is now being made on no information.
+    g_warning("connect: the daemon did not answer `status` (%s); continuing with a fresh start",
+              statusError.empty() ? "no detail" : statusError.c_str());
+  }
+  const bool daemonTunnelUp = status && status->tunnel_state == ctl::TunnelState::Up;
+
+  // 2a) IS THE DEVICE WE ALREADY HOLD STILL REAL?
+  //
+  //     A urnet::DeviceRemote handle is NOT proof of a live tunnel. The handle
+  //     belongs to this process and NOTHING invalidates it when the
+  //     daemon-side half disappears — a service restart or reinstall, another
+  //     client's stop_tunnel, the IoLoop ending. This function used to
+  //     `return Started` on `device_` alone, without one byte of daemon
+  //     traffic, which stranded the GUI permanently: the caller then drove
+  //     ConnectBestAvailable into a dead rpc, no start_tunnel was ever sent,
+  //     and no error was ever produced. "Press Connect, nothing happens", with
+  //     an empty daemon journal to match.
+  if (device_) {
+    const bool sameSession = deviceControlGeneration_ == control_.SessionGeneration();
+    if (daemonTunnelUp && status->rpc_pinned && sameSession) {
+      g_message("connect: the daemon still holds our tunnel (rpc pinned, same control "
+                "session); reusing the bound device");
+      return TunnelStartResult::Started;
+    }
+    g_warning("connect: the bound device is STALE (daemon tunnel_state=%s, rpc_pinned=%s, "
+              "same control session=%s); dropping it and starting a new session",
+              status ? ctl::ToString(status->tunnel_state) : "unknown",
+              status && status->rpc_pinned ? "yes" : "no", sameSession ? "yes" : "no");
+    // Drop it before anything else can use it, and tell the UI, so the pages
+    // that fold on hasDevice() stop rendering a session that does not exist.
+    TeardownDeviceLocked();
+    EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+    if (onStatus_) onStatus_("DISCONNECTED");
+  }
+
   rpcsession::Blob rpc;
   bool reattaching = false;
-  if (const auto status = control_.Status();
-      status && status->tunnel_state == ctl::TunnelState::Up) {
+  if (daemonTunnelUp) {
     if (auto blob = LoadRpcSession()) {
       rpc = std::move(*blob);
       reattaching = true;
+      g_message("connect: a tunnel is already up and we remember its rpc session; "
+                "asking the service to adopt it");
     } else {
       // Honest and logged rather than papered over: the daemon will rebuild
       // instead of adopting, which costs a reconnect, not correctness.
@@ -1013,6 +1142,9 @@ TunnelStartResult SdkHost::StartTunnel() {
       // thing standing between that and a root rpc listener anyone can drive.
       if (!km) {
         lastTunnelError_ = "the device rpc key material could not be generated";
+        g_warning("connect: refused — %s (the SDK returned a null key-material handle "
+                  "with no error)",
+                  lastTunnelError_.c_str());
         return TunnelStartResult::Failed;
       }
       rpc.server_pem = km.getServerPem();
@@ -1022,6 +1154,7 @@ TunnelStartResult SdkHost::StartTunnel() {
     } catch (const std::exception& e) {
       lastTunnelError_ = std::string("the device rpc key material could not be generated: ") +
                          e.what();
+      g_warning("connect: refused — %s", lastTunnelError_.c_str());
       return TunnelStartResult::Failed;
     }
     rpc.host_port = RandomLoopbackRpcHostPort();
@@ -1029,6 +1162,13 @@ TunnelStartResult SdkHost::StartTunnel() {
     if (!ctl::LooksLikePem(rpc.server_pem) || !ctl::LooksLikePem(rpc.client_cert_pem) ||
         !ctl::LooksLikePem(rpc.client_pem) || !ctl::LooksLikePem(rpc.server_cert_pem)) {
       lastTunnelError_ = "the device rpc key material is not usable";
+      // The four lengths are the whole diagnosis (a handle-0 generate yields
+      // four zeroes; a truncated one yields a short odd man out) and they leak
+      // nothing — never log the PEMs themselves, two of them are private keys.
+      g_warning("connect: refused — %s (server=%zu client_cert=%zu client=%zu "
+                "server_cert=%zu bytes)",
+                lastTunnelError_.c_str(), rpc.server_pem.size(), rpc.client_cert_pem.size(),
+                rpc.client_pem.size(), rpc.server_cert_pem.size());
       return TunnelStartResult::Failed;
     }
   }
@@ -1069,9 +1209,19 @@ TunnelStartResult SdkHost::StartTunnel() {
   // otherwise it fails the outcome and stops the daemon-side tunnel, because a
   // running tunnel whose ROOT rpc listener is unauthenticated is worse than no
   // tunnel. So there is no plaintext fallback to write here.
+  g_message("connect: sending start_tunnel (%s, rpc %s, kill switch %s)",
+            reattaching ? "adopting the running session" : "fresh session",
+            rpc.host_port.c_str(), options.kill_switch ? "on" : "off");
   const ControlClient::StartTunnelOutcome outcome = control_.StartTunnelEx(options);
   if (!outcome.ok) {
     lastTunnelError_ = outcome.error;
+    // Whether the refusal was local (the fail-closed validator, before a byte
+    // was sent) or the daemon's own answer, it is named here — this return
+    // used to carry the reason no further than a notice the user may not have
+    // been looking at.
+    g_warning("connect: start_tunnel failed (code=%s): %s",
+              outcome.code.empty() ? "none" : outcome.code.c_str(),
+              outcome.error.empty() ? "no detail" : outcome.error.c_str());
     // The material never bound to anything: do not keep it for a reattach that
     // could only mismatch.
     ClearRpcSession();
@@ -1133,6 +1283,13 @@ TunnelStartResult SdkHost::StartTunnel() {
     const uint64_t rpcGeneration = ++rpcSessionGeneration_;
     device_->setRpcServer(rpc.client_pem, rpc.server_cert_pem, rpc.host_port);
     rpcHostPort_ = rpc.host_port;
+    // WHICH daemon connection this device belongs to. The daemon's DeviceLocal
+    // — the only thing on the other end of the rpc we just pinned — dies with
+    // the daemon process, so a control session that has been rebuilt since
+    // this moment means the handle below is a handle to nothing. Recorded
+    // here, checked by hasDevice() and by the revalidation at the top of this
+    // function, so nobody has to take a device handle on faith.
+    deviceControlGeneration_ = control_.SessionGeneration();
 
     // The watchdog's cancel edge. Preferred over polling: the first
     // remote_connected=true is proof the pinned pair agreed, and it usually
@@ -2020,12 +2177,74 @@ std::vector<uint8_t> SdkHost::PublicIdentityKey() {
 
 void SdkHost::ConnectBestAvailable() {
   std::scoped_lock lock(mutex_);
+  // THE CALLER GOT HERE BELIEVING THERE IS A SESSION. Verify that with the
+  // daemon before driving anything: if the service restarted (or another
+  // client stopped the tunnel), the DeviceLocal on the other end of our pinned
+  // rpc is gone, and both branches below would write into an address with
+  // nothing behind it — no traffic, no error, no journal entry, which is
+  // precisely the "I press Connect and nothing happens" this path caused.
+  //
+  // A `status` round trip, not just the cached session generation: nothing has
+  // necessarily touched the control socket since the daemon died, so the
+  // generation can still look current. The verb answers off a published
+  // snapshot, and the read is what discovers the closed socket.
+  if (device_) {
+    std::string statusError;
+    const std::optional<ctl::StatusReply> status = control_.Status(&statusError);
+    const bool live = status && status->tunnel_state == ctl::TunnelState::Up &&
+                      status->rpc_pinned &&
+                      deviceControlGeneration_ == control_.SessionGeneration();
+    if (!live) {
+      g_warning("connect: the bound device is stale "
+                "(tunnel_state=%s, rpc_pinned=%s, same control session=%s%s%s); dropping it "
+                "and starting a new session for this press",
+                status ? ctl::ToString(status->tunnel_state) : "unknown",
+                status && status->rpc_pinned ? "yes" : "no",
+                deviceControlGeneration_ == control_.SessionGeneration() ? "yes" : "no",
+                statusError.empty() ? "" : "; ", statusError.c_str());
+      TeardownDeviceLocked();
+      EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+      if (onStatus_) onStatus_("DISCONNECTED");
+      // AND THEN DO WHAT THE PRESS ASKED FOR. The caller skipped the start
+      // path because hasDevice() was still true when it looked (nothing had
+      // touched the control socket since the daemon died, so the cached
+      // session generation still looked current) — we are the first code to
+      // learn otherwise, and returning here would spend the user's press on
+      // discovering it. One press, one connection attempt.
+      const TunnelStartResult restarted = StartTunnelLocked();
+      if (restarted != TunnelStartResult::Started) {
+        // StartTunnelLocked has already named the reason in lastTunnelError_
+        // and in the journal; only fill in when it somehow did not.
+        if (lastTunnelError_.empty()) {
+          lastTunnelError_ =
+              "The URnetwork system service is no longer running the tunnel this app was "
+              "attached to, and a new session could not be started.";
+        }
+        g_warning("connect: could not rebuild the session after dropping the stale device: "
+                  "%s", lastTunnelError_.c_str());
+        return;
+      }
+      g_message("connect: rebuilt the session after a stale device; continuing");
+    }
+  }
   if (connectVc_) {
+    g_message("connect: connectBestAvailable via the view controller");
     connectVc_->connectBestAvailable();
   } else if (device_) {
+    g_message("connect: connectBestAvailable via the device");
     auto controller = device_->openConnectViewController();
     controller.connectBestAvailable();
     device_->closeConnectViewController(controller);
+  } else {
+    // THE SILENT NO-OP. With no view controller and no device there is nothing
+    // to ask, and this returned without a trace — the caller had already
+    // decided the tunnel was up, so the UI showed no error either.
+    if (lastTunnelError_.empty()) {
+      lastTunnelError_ =
+          "There is no connection to work with yet. Press Connect to start one.";
+    }
+    g_warning("connect: nothing to connect with (no view controller, no device) "
+              "— the tunnel is not up");
   }
 }
 

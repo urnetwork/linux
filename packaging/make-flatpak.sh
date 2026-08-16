@@ -83,6 +83,23 @@ if [[ "$DO_BUNDLE" == 1 ]]; then
 fi
 
 if [[ "$DO_INSTALL" == 1 ]]; then
+  # STOP ANY RUNNING INSTANCE. flatpak never restarts a running app on update,
+  # and this GUI registers a UNIQUE GTK application id — so relaunching from the
+  # menu finds the OLD process still owning the bus name, hands it the click and
+  # re-presents ITS window. The user then tests the previous build while
+  # believing they are testing this one. That cost a full debugging cycle once:
+  # a Connect press went to a pre-update process whose control socket had been
+  # closed by a daemon restart, and the new build never even built a window
+  # (106ms CPU, no output past font loading).
+  if pgrep -x urnetwork-gui >/dev/null 2>&1; then
+    echo "==> stopping the running URnetwork instance so the new build is what launches"
+    flatpak kill "$APP_ID" >/dev/null 2>&1 || true
+    for _ in 1 2 3 4 5; do
+      pgrep -x urnetwork-gui >/dev/null 2>&1 || break
+      sleep 1
+    done
+    pgrep -x urnetwork-gui >/dev/null 2>&1 && pkill -x urnetwork-gui || true
+  fi
   echo "==> installed. The GUI needs the HOST daemon to connect:"
   echo "    sudo systemctl status urnetworkd    # install it from the .deb/.rpm"
 fi

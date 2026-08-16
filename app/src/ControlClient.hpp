@@ -18,6 +18,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -92,23 +93,26 @@ class ControlClient {
   // The socket path the last attempt used, for the remediation copy.
   std::string LastSocketPath();
 
-  // ---- verbs (each ensures a session first) --------------------------------
-  // DEAD PATH, kept only so its one remaining caller (SdkHost.cpp:853) still
-  // compiles while it migrates to StartTunnelEx. It carries NO device-RPC
-  // pinning material, and pinning is now mandatory in both directions, so this
-  // overload can only ever fail: it is refused locally, before a frame reaches
-  // the socket, with ctl::kCodeRpcPinRequired in `error`. Falling back to an
-  // unpinned root rpc listener is exactly what this change removes, so there is
-  // no "compatible" behaviour left to give it. DELETE IT once SdkHost calls
-  // StartTunnelEx.
-  [[deprecated(
-      "device-rpc mTLS pinning is mandatory: call StartTunnelEx with "
-      "rpc_server_pem/rpc_client_cert_pem/rpc_listen_hostport")]]
-  bool StartTunnel(const std::string& byJwt, const std::string& instanceId,
-                   const std::string& appVersion, const std::string& networkSpaceJson,
-                   int* rpcPort, std::string* error);
+  // WHICH daemon connection we are on. Incremented on every completed hello,
+  // i.e. every time a NEW connection is established — so a change means the
+  // previous connection died and was rebuilt, which for this daemon means the
+  // service restarted and every session object it held (the DeviceLocal, its
+  // pinned rpc listener, the tunnel ownership) is gone.
+  //
+  // This exists because a live `urnet::DeviceRemote` handle is NOT proof of a
+  // live tunnel: the handle is owned by this process and nothing invalidates
+  // it when the daemon-side half disappears. Callers that cache a device
+  // record the generation they bound it on and compare it here — an O(1),
+  // lock-free read they can do on the GTK main loop — instead of believing a
+  // handle forever. See SdkHost::hasDevice().
+  uint64_t SessionGeneration() const { return sessionGeneration_.load(); }
 
-  // The full start_tunnel surface — the ONLY working start path.
+  // ---- verbs (each ensures a session first) --------------------------------
+  // The full start_tunnel surface — the ONLY start path. (The unpinned
+  // convenience overload that used to sit here is gone: it carried no
+  // device-rpc material, so ValidateStartTunnelRequest refused every call
+  // locally, and leaving it declared only made it available to be called by
+  // mistake.)
   struct StartTunnelOptions {
     std::string by_jwt;
     std::string instance_id;
@@ -186,16 +190,35 @@ class ControlClient {
   DaemonSessionState HelloLocked(std::string* error);
   DaemonSessionState EnsureSessionLocked(std::string* error);
   void CloseLocked();
-  // One request/reply round-trip; nullopt on transport failure (socket closed).
-  std::optional<nlohmann::json> RoundTripLocked(const nlohmann::json& request, int64_t id);
+  // Is the CACHED connection still there? A cached fd is not evidence of a
+  // live daemon — a service restart (or a reinstall) closes every connection
+  // and nothing tells this process until the next write fails. Cheap: one
+  // non-blocking poll(), plus a MSG_PEEK only when something is readable.
+  // Errs toward "alive" when it cannot tell, so it can never invent a
+  // disconnect. Requires mutex_.
+  bool SessionAliveLocked();
+  // One request/reply round-trip; nullopt on transport failure (socket
+  // closed). `frameDelivered` (optional) reports whether the COMPLETE request
+  // frame reached the daemon — a frame is one newline-terminated line, so a
+  // short write cannot have been decoded, let alone acted on. That is the
+  // difference between "the daemon may have acted on this" and "this request
+  // never happened", which is what decides whether a non-idempotent verb may
+  // be sent again.
+  std::optional<nlohmann::json> RoundTripLocked(const nlohmann::json& request, int64_t id,
+                                                bool* frameDelivered = nullptr);
   // EnsureSession + round-trip.
   //
-  // allowRetry: reconnect once on a dead socket. FALSE for start_tunnel. The
+  // allowRetry: re-SEND once on a dead socket. FALSE for start_tunnel. The
   // old unconditional retry is how a slow bring-up turned into a restart loop:
   // past the receive timeout the client closed the socket and re-sent
   // start_tunnel, the daemon dropped the old owner, accepted the retry, and
   // TunnelHost::Start tore the half-built session down and began again — on
   // exactly the slow networks where the timeout fires.
+  //
+  // It does NOT mean "one attempt". A request whose bytes never left this
+  // process cannot have been acted on by anybody, so it is reconnected and
+  // sent once regardless of allowRetry; only a request that was actually
+  // written and then went unanswered is abandoned. Both decisions are logged.
   //
   // receiveTimeoutSeconds: per-verb. A synchronous start_tunnel legitimately
   // outlives the bound that fits every other verb.
@@ -208,7 +231,10 @@ class ControlClient {
   // deadlock the GUI on its own control client).
   bool StopTunnelLocked(std::string* error);
   void SetReceiveTimeoutLocked(long seconds);
-  bool SendAllLocked(const std::string& data);
+  // `sent` (optional) receives the number of bytes that reached the peer,
+  // valid on the failure path too, where it is the difference between "the
+  // socket was already dead" and "it died mid-frame".
+  bool SendAllLocked(const std::string& data, size_t* sent = nullptr);
   // Reads one full line (frame) into `line`, false on EOF/error/timeout.
   bool ReadLineLocked(std::string& line);
 
@@ -223,6 +249,9 @@ class ControlClient {
   std::string daemonVersion_;
   std::string localSdkVersion_;
   long receiveTimeoutSeconds_ = 0;  // what is currently set on fd_
+  // Bumped by HelloLocked on success. Atomic because SessionGeneration() is
+  // read without mutex_ (from the GTK main loop, on every hasDevice()).
+  std::atomic<uint64_t> sessionGeneration_{0};
 };
 
 }  // namespace urnw

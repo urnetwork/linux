@@ -636,7 +636,23 @@ class SdkHost {
 
   // Exposed so the (full-parity) UI/view models can drive the SDK directly.
   urnet::Api& api() { return *api_; }
-  bool hasDevice() { return device_.has_value(); }
+  // "There is a session I can drive", NOT "I am holding a handle".
+  //
+  // A urnet::DeviceRemote handle belongs to this process and nothing
+  // invalidates it when the daemon-side DeviceLocal disappears (a service
+  // restart or reinstall, another client's stop_tunnel, the IoLoop ending).
+  // Reporting the handle alone is what let MainWindow::ToggleConnect skip the
+  // start path entirely and drive a dead rpc: no start_tunnel was ever sent,
+  // no error was ever produced, and the daemon journal stayed empty.
+  //
+  // So it is also gated on the control session being the SAME one the device
+  // was bound over. That is an O(1) atomic read — no daemon round trip — so
+  // this stays callable from the GTK main loop and from every page that folds
+  // on it. False from here means "ask StartTunnel", and StartTunnel does the
+  // authoritative check (a `status` round trip) before it rebuilds anything.
+  bool hasDevice() {
+    return device_.has_value() && deviceControlGeneration_ == control_.SessionGeneration();
+  }
   urnet::DeviceRemote& device() { return *device_; }
   // The daemon control channel, shared with the location-override writer
   // (DaemonGeoClueWriter) — one socket, one hello, one version check.
@@ -648,6 +664,11 @@ class SdkHost {
   void HandleNetworkCreateResult(std::optional<urnet::NetworkCreateResult> result,
                                  std::optional<std::string> err,
                                  std::function<void(AuthResult)> done);
+  // The body of StartTunnel(). Requires mutex_, so the recovery inside
+  // ConnectBestAvailable can rebuild a session it has just discovered is dead
+  // without re-entering a non-recursive lock. Every outcome logs, and the
+  // failing ones leave a renderable sentence in lastTunnelError_.
+  TunnelStartResult StartTunnelLocked();
   // Tear down the device/tunnel/view-controllers without touching the stored
   // auth (Logout clears auth too; the guest upgrade only swaps the device).
   void TeardownDeviceLocked();
@@ -795,6 +816,11 @@ class SdkHost {
   unsigned int rpcBindWatchId_ = 0;        // g_timeout source id; 0 = unarmed
   uint64_t rpcBindWatchGeneration_ = 0;    // the session the armed watchdog belongs to
   std::string rpcHostPort_;                // what THIS session dialed ("" when none)
+  // ControlClient::SessionGeneration() at the moment device_ was bound. A
+  // different value now means the control connection was rebuilt — the daemon
+  // restarted — so the DeviceLocal this device_ talks to is gone. Atomic
+  // because hasDevice() reads it without mutex_.
+  std::atomic<uint64_t> deviceControlGeneration_{0};
   // The reservation described by HoldDeviceRpcDefaultPortLocked: a bound,
   // NEVER-listening socket on 127.0.0.1:<ctl::kDeviceRpcPort>. -1 = not held.
   int deviceRpcDefaultPortFd_ = -1;

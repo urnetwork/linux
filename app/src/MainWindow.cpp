@@ -285,9 +285,34 @@ TunnelStartResult MainWindow::StartTunnelUi() {
     case TunnelStartResult::Started:
       break;  // empty notice clears both
     case TunnelStartResult::DaemonUnreachable:
-      notice = T_("daemon_unreachable",
-                  "The URnetwork system service is not running. Install or start it, then "
-                  "try again.");
+      // "Unreachable" is three different problems with three different fixes.
+      // Collapsing them into "not running" actively misleads: on a fresh
+      // install the service IS running and the user simply is not in the
+      // urnetwork group yet, and telling them to start a running service sends
+      // them nowhere.
+      switch (host_.Control().LastUnreachableReason()) {
+        case DaemonUnreachableReason::PermissionDenied:
+          notice = T_("daemon_permission_denied",
+                      "The URnetwork system service is running, but this account is not "
+                      "allowed to use it. Add yourself to the 'urnetwork' group, then log "
+                      "out and back in.");
+          break;
+        case DaemonUnreachableReason::Other: {
+          // LastTunnelError() is EnsureSession's own out-param, which already
+          // carries strerror for this case.
+          const std::string detail = host_.LastTunnelError();
+          notice = Glib::ustring(T_("daemon_unreachable_detail",
+                                    "Could not reach the URnetwork system service"));
+          if (!detail.empty()) notice += ": " + detail;
+          break;
+        }
+        case DaemonUnreachableReason::SocketMissing:
+        case DaemonUnreachableReason::None:
+          notice = T_("daemon_unreachable",
+                      "The URnetwork system service is not running. Install or start it, "
+                      "then try again.");
+          break;
+      }
       break;
     case TunnelStartResult::DaemonTooOld:
       notice = T_("daemon_too_old",
@@ -311,6 +336,7 @@ TunnelStartResult MainWindow::StartTunnelUi() {
       break;
     }
   }
+  if (!notice.empty()) g_warning("connect: %s", notice.c_str());
   daemonStatusLabel_.set_text(notice);
   daemonStatusLabel_.set_visible(!notice.empty());
   if (connectPage_) connectPage_->SetDaemonNotice(notice);
@@ -1587,14 +1613,20 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
 }
 
 void MainWindow::ToggleConnect() {
+  g_message("connect: toggle pressed (connected=%s, hasDevice=%s)",
+            connected_ ? "yes" : "no", host_.hasDevice() ? "yes" : "no");
   if (connected_) {
     host_.Disconnect();
     return;
   }
-  // No device yet (daemon was missing at startup, or a start failed): retry
-  // the session first, so "install/start the service, then hit Connect" works
-  // without restarting the app. The banner re-renders either way.
-  if (!host_.hasDevice() && StartTunnelUi() != TunnelStartResult::Started) return;
+  // ALWAYS run the start path and let SdkHost decide whether the existing
+  // session can be reused. This used to be gated on !hasDevice(), which meant a
+  // stale handle — one bound over a control connection the daemon has since
+  // closed, e.g. after a service upgrade — skipped the start entirely and sent
+  // the press into a device with nothing behind it. StartTunnel is cheap when
+  // the session is genuinely live (one status read) and self-heals when it is
+  // not; the caller is not the right place to guess.
+  if (StartTunnelUi() != TunnelStartResult::Started) return;
   host_.ConnectBestAvailable();
   // status handler + SetConnected reflect the real state as it changes
 }

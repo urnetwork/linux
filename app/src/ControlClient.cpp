@@ -2,6 +2,7 @@
 #include "ControlClient.hpp"
 
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/un.h>
@@ -120,8 +121,9 @@ void ControlClient::SetReceiveTimeoutLocked(long seconds) {
   receiveTimeoutSeconds_ = seconds;
 }
 
-bool ControlClient::SendAllLocked(const std::string& data) {
+bool ControlClient::SendAllLocked(const std::string& data, size_t* sentOut) {
   size_t sent = 0;
+  if (sentOut) *sentOut = 0;
   while (sent < data.size()) {
 #ifdef MSG_NOSIGNAL
     const ssize_t n = ::send(fd_, data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
@@ -133,6 +135,37 @@ bool ControlClient::SendAllLocked(const std::string& data) {
       return false;
     }
     sent += static_cast<size_t>(n);
+    // Reported as we go, not at the end, so the count is meaningful on the
+    // failure path too — "0 of 2875 bytes" and "2100 of 2875" are different
+    // diagnoses of a dead socket.
+    if (sentOut) *sentOut = sent;
+  }
+  return true;
+}
+
+// A cached fd is a memory of a connection, not a connection. urnetworkd
+// restarting (a `systemctl restart`, or the installer's reinstall) closes
+// every control connection, and a client that only notices at write time
+// spends its one non-idempotent attempt on a socket with nothing behind it.
+// That is exactly how a Connect after a daemon restart reached the daemon
+// zero times and still reported "the service is not running".
+bool ControlClient::SessionAliveLocked() {
+  if (fd_ < 0) return false;
+  pollfd pfd{};
+  pfd.fd = fd_;
+  pfd.events = POLLIN;
+  const int n = ::poll(&pfd, 1, 0);
+  if (n < 0) return errno == EINTR;  // could not tell: assume alive, the write decides
+  if (n == 0) return true;           // nothing pending: alive
+  if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) return false;
+  if (pfd.revents & POLLIN) {
+    // Readable is ambiguous: an orderly close reads as EOF, while a future
+    // daemon pushing an unsolicited event reads as data. PEEK so a real frame
+    // stays queued for RoundTripLocked.
+    char probe = 0;
+    const ssize_t r = ::recv(fd_, &probe, 1, MSG_PEEK | MSG_DONTWAIT);
+    if (r == 0) return false;  // EOF: the daemon closed on us
+    if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) return false;
   }
   return true;
 }
@@ -156,9 +189,21 @@ bool ControlClient::ReadLineLocked(std::string& line) {
 }
 
 std::optional<nlohmann::json> ControlClient::RoundTripLocked(const nlohmann::json& request,
-                                                             int64_t id) {
+                                                             int64_t id, bool* frameDelivered) {
+  if (frameDelivered) *frameDelivered = false;
   if (fd_ < 0) return std::nullopt;
-  if (!SendAllLocked(ctl::EncodeFrame(request))) return std::nullopt;
+  size_t sent = 0;
+  const std::string frame = ctl::EncodeFrame(request);
+  const bool ok = SendAllLocked(frame, &sent);
+  // A frame is one LINE (EncodeFrame ends in '\n'), so a short write cannot
+  // have produced anything the daemon will decode, let alone act on. Only a
+  // complete write puts the request in the daemon's hands.
+  if (frameDelivered) *frameDelivered = ok;
+  if (!ok) {
+    std::fprintf(stderr, "[control] send failed after %zu of %zu bytes: %s\n", sent,
+                 frame.size(), std::strerror(errno));
+    return std::nullopt;
+  }
   // Read until the reply matching our id; skip anything else (a future daemon
   // may push unsolicited events — additive, so ignore them here).
   for (;;) {
@@ -225,13 +270,28 @@ DaemonSessionState ControlClient::HelloLocked(std::string* error) {
     return DaemonSessionState::SdkMismatch;
   }
   helloOk_ = true;
+  // A NEW connection is now live. Everything a caller cached against the
+  // previous one — most importantly a DeviceRemote bound to a DeviceLocal
+  // that died with the old daemon process — is stale from here.
+  ++sessionGeneration_;
   return DaemonSessionState::Ok;
 }
 
 DaemonSessionState ControlClient::EnsureSessionLocked(std::string* error) {
   if (fd_ >= 0 && helloOk_) {
-    lastState_ = DaemonSessionState::Ok;
-    return lastState_;
+    // NOT just `fd_ >= 0 && helloOk_`. That short-circuit believed a dead
+    // socket forever: after urnetworkd restarted, the next verb was written
+    // into a closed connection, and for the one verb that is not re-sent
+    // (start_tunnel) the Connect was lost outright — the daemon received
+    // nothing at all and the UI blamed a service that was running fine.
+    if (SessionAliveLocked()) {
+      lastState_ = DaemonSessionState::Ok;
+      return lastState_;
+    }
+    std::fprintf(stderr,
+                 "[control] the daemon closed our control session (service restarted?); "
+                 "reconnecting before the next request\n");
+    CloseLocked();
   }
   if (!ConnectLocked(error)) {
     lastState_ = DaemonSessionState::Unreachable;
@@ -269,19 +329,43 @@ std::string ControlClient::LastSocketPath() {
 std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann::json payload,
                                                         std::string* error, bool allowRetry,
                                                         long receiveTimeoutSeconds) {
-  const int attempts = allowRetry ? 2 : 1;
-  for (int attempt = 0; attempt < attempts; ++attempt) {
+  constexpr int kMaxAttempts = 2;
+  for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
     if (EnsureSessionLocked(error) != DaemonSessionState::Ok) return std::nullopt;
     SetReceiveTimeoutLocked(receiveTimeoutSeconds);
     const int64_t id = nextId_++;
-    if (auto reply = RoundTripLocked(ctl::MakeRequest(verb, id, payload), id)) {
+    bool frameDelivered = false;
+    if (auto reply =
+            RoundTripLocked(ctl::MakeRequest(verb, id, payload), id, &frameDelivered)) {
       return reply;
     }
-    // dead socket (daemon restarted?): reconnect once for idempotent verbs,
-    // never for start_tunnel.
+    // Dead socket. Whether we may send it again turns on ONE question: did any
+    // byte of this request reach the daemon?
     CloseLocked();
     lastState_ = DaemonSessionState::Unreachable;
     if (error) *error = "lost connection to the daemon";
+    if (attempt + 1 >= kMaxAttempts) {
+      std::fprintf(stderr, "[control] %s failed twice; giving up\n", ctl::ToString(verb));
+      break;
+    }
+    if (!allowRetry && frameDelivered) {
+      // It reached the daemon and went unanswered: the daemon may be acting on
+      // it right now, and a duplicate start_tunnel is what used to tear a
+      // half-built tunnel down and restart it. Abandon it, loudly.
+      std::fprintf(stderr,
+                   "[control] %s reached the daemon but it did not answer; NOT re-sending "
+                   "(a duplicate would restart the bring-up)\n",
+                   ctl::ToString(verb));
+      break;
+    }
+    // The frame never landed whole, so the daemon cannot have decoded it, let
+    // alone acted on it — this is not "a request that may be running", it is a
+    // request that never happened. Reconnecting and sending it once is safe
+    // even for start_tunnel, and NOT doing so is what turned the first Connect
+    // after a daemon restart into a silent no-op with an empty daemon journal.
+    std::fprintf(stderr, "[control] %s never reached the daemon; reconnecting and sending "
+                         "it once\n",
+                 ctl::ToString(verb));
   }
   return std::nullopt;
 }
@@ -382,24 +466,6 @@ ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
   }
   outcome.ok = true;
   return outcome;
-}
-
-bool ControlClient::StartTunnel(const std::string& byJwt, const std::string& instanceId,
-                                const std::string& appVersion,
-                                const std::string& networkSpaceJson, int* rpcPort,
-                                std::string* error) {
-  // Deliberately sends NO pinning material, so ValidateStartTunnelRequest
-  // inside StartTunnelEx refuses it locally with kCodeRpcPinRequired. See the
-  // header: this overload exists only to keep its last caller compiling.
-  StartTunnelOptions options;
-  options.by_jwt = byJwt;
-  options.instance_id = instanceId;
-  options.app_version = appVersion;
-  options.network_space_json = networkSpaceJson;
-  const StartTunnelOutcome outcome = StartTunnelEx(options);
-  if (error) *error = outcome.error;
-  if (rpcPort) *rpcPort = outcome.rpc_port;
-  return outcome.ok;
 }
 
 bool ControlClient::SetKillSwitch(bool enabled, ctl::StatusReply* out, std::string* error) {
