@@ -645,6 +645,38 @@ void MainWindow::size_allocate_vfunc(int width, int height, int baseline) {
 // The signed-in breakpoint fan-out. Every destination owns its own thresholds
 // (Connect folds at 1000/640, Network/Settings/Earnings at their own); the
 // window only reports the width it was actually given.
+// Every few seconds while we believe a tunnel exists, ask the daemon what it
+// thinks. A protective teardown publishes tunnel_state=Error with a reason and a
+// code, and until now NOTHING in the app ever read it: the only Status() calls
+// are on a connect press, the stale-device check, and the kill-switch read-back.
+// A user sitting idle would keep a green "Connected" while the daemon had
+// already stopped the session and possibly armed the kill switch.
+bool MainWindow::PollDaemonHealth() {
+  if (!connected_) return true;  // nothing claimed; nothing to contradict
+  const auto status = host_.Control().Status();
+  if (!status) return true;      // unreachable is StartTunnelUi's business
+  if (status->tunnel_state != ctl::TunnelState::Error &&
+      status->tunnel_state != ctl::TunnelState::Stopped) {
+    return true;
+  }
+  // The daemon stopped carrying traffic without us asking. Say so, verbatim —
+  // the daemon composes the plain-language reason (including whether the machine
+  // is now blocked and how to lift it), and inventing our own wording here would
+  // be a third place that can disagree about what happened.
+  const Glib::ustring detail =
+      status->error.empty()
+          ? Glib::ustring(T_("tunnel_stopped_unexpectedly", "The connection stopped."))
+          : Glib::ustring(status->error);
+  g_warning("connect: the daemon stopped the session (%s): %s",
+            status->error_code.empty() ? "no code" : status->error_code.c_str(),
+            status->error.c_str());
+  SetConnected(false);
+  if (connectPage_) connectPage_->SetDaemonNotice(detail);
+  daemonStatusLabel_.set_text(detail);
+  daemonStatusLabel_.set_visible(true);
+  return true;
+}
+
 void MainWindow::ApplyPageBreakpoint(int widthDip) {
   if (connectPage_) connectPage_->ApplyBreakpoint(widthDip);
   if (networkPage_) networkPage_->ApplyBreakpoint(widthDip);
@@ -1289,6 +1321,9 @@ void MainWindow::BuildHome() {
     }
   };
   shell_->Navigate("connect");
+  // 5s: slow enough to cost nothing on a local socket, fast enough that a
+  // protective teardown is not sat on.
+  Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::PollDaemonHealth), 5000);
 
   // Advanced Mode (D5): bind-then-replay — the handler is bound before the
   // stored value is replayed, so a restored-from-disk true cannot be lost.

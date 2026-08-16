@@ -164,16 +164,81 @@ class TunnelHost {
 
   // The whole bring-up. Runs either inline (async=false) or on worker_.
   void RunStart(ctl::StartTunnelRequest config);
-  // Requires opMutex_.
+  // Requires opMutex_. A reason means "somebody asked for this stop": it lifts
+  // the nftables policy on the way out (ApplyFilterLocked(Off)) and REPLACES
+  // status_.error/error_code with the reason. An EMPTY reason means "the caller
+  // owns what happens next": the firewall is left exactly as it is and the
+  // published error is left exactly as it is, for the caller to set.
   void StopInternalLocked(const std::string& reason);
+
+  // THE PROTECTIVE TEARDOWN. The session is being destroyed because it has been
+  // PROVEN unsafe — the daemon's own traffic is no longer outside its own
+  // tunnel, or the tun is amplifying instead of carrying — and not because
+  // anybody asked it to stop. It exists because the landing state is the
+  // OPPOSITE of a user stop's:
+  //   * StopInternalLocked(<non-empty reason>) is a user disconnect and LIFTS
+  //     the kill-switch floor (FloorForTransition answers false for every
+  //     transition into Off — Tunnel.cpp).
+  //   * this FAILS CLOSED: Armed, floor holding, whenever the user asked for
+  //     the kill switch — an involuntary teardown is an unexpected drop, which
+  //     is the one case that arms rather than lifts (§6.3) — and it publishes,
+  //     LAST of all, whether this machine is now blocked and how to unblock it.
+  // A guard must never reach for StopInternalLocked(<reason>): doing so lifted
+  // the floor at the exact instant we had four datagrams of proof that traffic
+  // was leaving unprotected, and erased the explanation on the same line.
+  // Requires opMutex_.
+  void StopUnsafeSessionLocked(const std::string& reason, const std::string& message,
+                               const std::string& code);
+
   void ReapRetiredLoopsLocked();
   // RUNAWAY GUARD. Samples the tun's own byte counters and tears the tunnel
   // down if it is transmitting hard while receiving nothing — the signature of
-  // a capture loop. Returns true when it stopped the tunnel.
+  // a capture loop. Tears down through StopUnsafeSessionLocked, so a machine
+  // whose owner asked for the kill switch stays blocked. Returns true when it
+  // stopped the tunnel.
   bool CheckTunnelStormLocked();
   uint64_t stormLastTx_ = 0;
   uint64_t stormLastRx_ = 0;
   int stormStrikes_ = 0;
+
+  // THE CONTINUOUS EGRESS WITNESS. Re-runs Tunnel::VerifyEgressWitness on the
+  // reaper tick and tears the session down on two CONSECUTIVE failures.
+  //
+  // The bring-up witness proves the exclusion held at t=0. It cannot prove it
+  // still holds at t=40min, and the incident this exists for ran for forty
+  // minutes: a `systemctl restart nftables` (whose shipped Fedora/Bazzite
+  // config begins with `flush ruleset`), a default-route change, an interface
+  // flap or a competing `ip rule` can each end the exclusion under a tunnel
+  // that has already been declared up.
+  //
+  // WHY IT DOES NOT REPLACE THE STORM GUARD, AND WHY BOTH SHIP. The storm
+  // guard fires on a SYMPTOM — >=64 MiB out with <1 MiB back, three ticks
+  // running — so it needs a loop already moving ~192 MiB before it acts, and
+  // it is blind to a low-rate failure where the SDK simply backs off and the
+  // UI sits on Connected forever. This fires on DIRECT ATTRIBUTION, at four
+  // datagrams, at any rate. The witness proves the precondition; the storm
+  // guard bounds the damage if the precondition fails between samples.
+  //
+  // TWO consecutive failures, not one: a genuine transient during an interface
+  // change is real, and tearing a healthy tunnel down on a single sample would
+  // make the guard the outage. Two samples caps exposure at ~60s against the
+  // 40 minutes that actually happened.
+  //
+  // The teardown goes through StopUnsafeSessionLocked and lands FAIL-CLOSED
+  // (Armed, floor holding) when the kill switch was asked for: this guard fires
+  // on PROVEN-UNPROTECTED traffic, so it is the last moment at which the floor
+  // may come down.
+  bool CheckEgressWitnessLocked();
+  int egressWitnessTicks_ = 0;
+  int egressWitnessFailures_ = 0;
+
+  // R4's primary mechanism: marks every socket this process creates with
+  // kEgressMark at socket() time, from a cgroup-bpf sock_create program, so
+  // the SDK's sockets never resolve a tunnel route (or a tunnel source
+  // address) in the first place. Owned for the length of a session and
+  // detached in the teardown; see EgressSocketMarker in Tunnel.hpp for why the
+  // nftables mark chain alone cannot do this job.
+  EgressSocketMarker egressMarker_;
 
   // ---- the nftables floor: ONE decision site --------------------------------
   //
