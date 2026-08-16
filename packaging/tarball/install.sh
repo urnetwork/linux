@@ -703,6 +703,46 @@ if [ -z "${PREFIX}" ]; then
     # a wrong label costs an AVC denial that looks like a mystery failure.
     # restorecon applies the policy's own contexts; a system without SELinux
     # simply has no such command.
+    # SELINUX DOMAIN FOR THE DAEMON. A binary we install ourselves carries no
+    # policy of its own, so systemd runs it in `init_t` — and init_t is
+    # deliberately forbidden the three things this daemon exists to do.
+    # Measured on Bazzite (Enforcing), as root, with the full capability set:
+    #
+    #   avc denied { read write } name="tun" tcontext=tun_tap_device_t chr_file
+    #   avc denied { name_connect } dest=443 tcontext=http_port_t tcp_socket
+    #   avc denied { create } tclass=rawip_socket
+    #
+    # Being root with CAP_NET_ADMIN does not help: SELinux is a separate layer,
+    # and it refuses before the capability is ever consulted. Without this the
+    # tunnel cannot open /dev/net/tun and the API is unreachable.
+    #
+    # The daemon is therefore labelled unconfined_exec_t, so systemd transitions
+    # it to unconfined_service_t instead of init_t. This is the same choice
+    # several third-party VPN packages make on Fedora. It is NOT the ideal end
+    # state: a tailored policy module granting exactly tun + the nft/ip domain
+    # transitions + outbound 443 would confine this daemon properly, and that is
+    # tracked as follow-up work. Shipping unconfined beats shipping broken, and
+    # beats telling users to disable SELinux.
+    #
+    # semanage makes it survive a full relabel; chcon is the fallback when
+    # policycoreutils-python-utils is absent (it is on a stock Bazzite).
+    if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce 2>/dev/null)" != 'Disabled' ]; then
+        DAEMON_BIN="$(map_path '/usr/lib/urnetwork')/urnetworkd"
+        if command -v semanage >/dev/null 2>&1; then
+            run semanage fcontext -a -t unconfined_exec_t "${DAEMON_BIN}" 2>/dev/null ||               run semanage fcontext -m -t unconfined_exec_t "${DAEMON_BIN}" 2>/dev/null || true
+            command -v restorecon >/dev/null 2>&1 && run restorecon -v "${DAEMON_BIN}" >/dev/null 2>&1 || true
+            note "SELinux: ${DAEMON_BIN} labelled unconfined_exec_t (persistent)"
+        elif command -v chcon >/dev/null 2>&1; then
+            if run chcon -t unconfined_exec_t "${DAEMON_BIN}" 2>/dev/null; then
+                note "SELinux: ${DAEMON_BIN} labelled unconfined_exec_t (chcon; a full relabel will drop it -- install policycoreutils-python-utils for a persistent label)"
+            else
+                warn "SELinux is enforcing and ${DAEMON_BIN} could not be labelled: the tunnel will fail to open /dev/net/tun. Run: sudo chcon -t unconfined_exec_t ${DAEMON_BIN}"
+            fi
+        else
+            warn "SELinux is enforcing and neither semanage nor chcon is available: the tunnel will fail to open /dev/net/tun."
+        fi
+    fi
+
     if [ "${LAYOUT}" = 'immutable' ] && command -v restorecon >/dev/null 2>&1; then
         restorecon -R "$(map_path '/usr/lib/urnetwork')" \
                       "$(map_path '/usr/bin')/urnetwork" \

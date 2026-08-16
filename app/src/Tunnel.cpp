@@ -402,6 +402,35 @@ CommandResult RunCommand(const std::vector<std::string>& argv, const std::string
   return result;
 }
 
+// EACCES/EPERM on /dev/net/tun while running as root is almost never a missing
+// capability — the daemon holds CAP_NET_ADMIN by virtue of being root, and
+// systemd is not dropping it. It is a MANDATORY ACCESS CONTROL refusal, and on
+// the Fedora family it is specifically SELinux denying the `init_t` domain
+// read/write on tun_tap_device_t, because a binary installed outside a package
+// carries no policy of its own. Measured on Bazzite:
+//
+//   avc denied { read write } name="tun" scontext=init_t
+//        tcontext=tun_tap_device_t tclass=chr_file
+//
+// Naming CAP_NET_ADMIN alone sent a reader hunting for a capability that was
+// already held. Say what it actually is, and how to confirm it.
+std::string TunPermissionDeniedDetail(const char* verb) {
+  std::string out(verb);
+  out +=
+      " was refused. The daemon runs as root and holds CAP_NET_ADMIN, so this is a "
+      "mandatory-access-control refusal, not a missing capability";
+  if (::access("/sys/fs/selinux/enforce", F_OK) == 0) {
+    out +=
+        ". SELinux is present on this host: confirm with `sudo journalctl -t audit | "
+        "grep 'denied.*tun'`, and label the daemon with `sudo chcon -t unconfined_exec_t "
+        "<path to urnetworkd>` (the installer does this automatically)";
+  } else {
+    out += " (check AppArmor or any other LSM on this host)";
+  }
+  return out;
+}
+
+
 std::string FindTool(const char* tool) {
   if (tool == nullptr || *tool == '\0') return {};
   if (std::strchr(tool, '/') != nullptr) {
@@ -1347,8 +1376,7 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg, TunnelError* err) 
       case EACCES:
       case EPERM:
         return fail("tun_permission_denied",
-                    "permission denied opening /dev/net/tun: the daemon is missing "
-                    "CAP_NET_ADMIN");
+                    "opening /dev/net/tun: " + TunPermissionDeniedDetail("open"));
       case ENODEV:
         return fail("tun_module_missing",
                     "/dev/net/tun exists but the tun driver is not available in this kernel "
@@ -1368,8 +1396,7 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg, TunnelError* err) 
     const int e = errno;
     ::close(fd);
     if (e == EPERM || e == EACCES) {
-      return fail("tun_permission_denied",
-                  "TUNSETIFF was refused: the daemon is missing CAP_NET_ADMIN");
+      return fail("tun_permission_denied", TunPermissionDeniedDetail("TUNSETIFF"));
     }
     if (e == EBUSY) {
       return fail("tun_busy",
