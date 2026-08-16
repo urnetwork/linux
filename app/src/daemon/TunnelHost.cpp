@@ -874,6 +874,27 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
   sessionGeneration_.fetch_add(1);
   ioLoopDied_.store(false);
 
+  // THE DNS UNDO GOES FIRST, WHILE urnet0 STILL EXISTS.
+  //
+  // MEASURED, on every teardown in the journal without exception:
+  //     [dns] resolvectl revert urnet0: exit 1: Failed to resolve interface
+  //           "urnet0": No such device
+  // The revert lived in ~Tunnel, and ~Tunnel runs at `tunnel_.reset()` below —
+  // AFTER `ioLoop_->close()`. urnet::newIoLoop was handed tunnel_->fd() (step 6
+  // of the start path), Go owns that descriptor, and a non-persistent tun
+  // disappears with its last descriptor: closing the loop destroys the link, so
+  // the revert was always addressed to a device that no longer existed. Every
+  // teardown left resolved's per-link override to be garbage-collected by the
+  // link's disappearance instead of removed on purpose — benign on
+  // systemd-resolved, NOT benign on the tier-2/3 hosts where the undo is a file
+  // on disk, and a failure nobody could distinguish from a real one.
+  //
+  // Reordering inside Tunnel.cpp could not have fixed this: the revert was
+  // already the first thing ~Tunnel did. The ordering that was wrong is this
+  // one. Tunnel::RevertDns() is idempotent, so ~Tunnel's own call below stays
+  // exactly as it was for the paths that never reach this function.
+  if (tunnel_) tunnel_->RevertDns();
+
   // Reverse dependency order. close() actually stops the SDK goroutines and
   // the IoLoop; releasing the handle alone would leak them.
   if (device_) device_->setTunnelStarted(false);

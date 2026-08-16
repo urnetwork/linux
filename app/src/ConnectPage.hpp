@@ -70,7 +70,33 @@ class ConnectPage : public Gtk::Box {
   void SetPresentationActive(bool active);
   void Tick();  // the shared ~10fps clock: canvas dot transitions
 
-  // the connect toggle, shared by the hero, the button and the tray
+  // What will the next press DO? This is the same expression that writes the
+  // button's label, cached by ApplyConnectStatus, so the word on the button and
+  // the action behind it are one reading and cannot drift. The tray asks this;
+  // the button does not need to, because its press carries the answer.
+  bool ConnectActionIsDisconnect() const { return actionIsDisconnect_; }
+
+  // Retire an outstanding Disconnect intent. The page's own presses do this for
+  // themselves; this exists for the presses that never touch a page widget —
+  // the tray's Connect item — which would otherwise start a session while the
+  // page still held "Disconnecting…" over it.
+  void ClearDisconnectIntent();
+
+  // Is a Disconnect the user asked for still in flight? Read by MainWindow so
+  // an EXPECTED teardown is not reported to the user as the daemon dropping
+  // the session on its own.
+  bool DisconnectPending() const { return disconnectRequestedAtUs_ != 0; }
+
+  // THE PRESS CARRIES ITS OWN ACTION. `disconnect` is the action that wrote the
+  // label the user actually clicked, captured at press time — not something the
+  // window re-derives afterwards. It has to be, because this page consumes the
+  // press and re-renders BEFORE relaying it, so any question asked after the
+  // relay gets the POST-press reading, a different answer to the one the user
+  // gave by clicking a labelled button. Prefer this over on_toggle_connect.
+  std::function<void(bool disconnect)> on_connect_action;
+  // the legacy void toggle: still used by the tray, which has no button in
+  // front of the user and must therefore ask (ConnectActionIsDisconnect).
+  // Only consulted when on_connect_action is unwired.
   std::function<void()> on_toggle_connect;
   // the selected-provider row opens the chooser (owned by MainWindow)
   std::function<void()> on_open_locations;
@@ -100,6 +126,14 @@ class ConnectPage : public Gtk::Box {
   DnsStatusRow MakeDnsStatusRow(const Glib::ustring& title);
 
   void ApplyConnectStatus();       // THE one writer
+  // The hero and the button share one press handler: it captures the action
+  // that wrote the label, records a disconnect intent when that action is
+  // "disconnect", re-renders, and only then relays.
+  void RelayConnectPress();
+  // Is a Disconnect press still in flight? Settles the intent as a side effect
+  // (clears it once the reading really is down, or after kDisconnectIntentUs so
+  // a teardown that never completes cannot freeze the page on "Disconnecting").
+  bool DisconnectIntentLive();
   void ApplyMoreOptionsVisibility();
   void SyncProvideControlMode();
   void ApplyProvideControlMode();
@@ -206,6 +240,18 @@ class ConnectPage : public Gtk::Box {
   int foldWidth_ = -1;  // the pane-grid width the current fold was taken on
   bool foldRecheckPending_ = false;
   std::string connectStatus_ = "DISCONNECTED";
+  // The action the LAST render put on the button, and the answer any caller
+  // gets from ConnectActionIsDisconnect(). Written by ApplyConnectStatus from
+  // the very expression that sets the label — one reading, one answer.
+  bool actionIsDisconnect_ = false;
+  // THE USER'S INTENT, WHICH THE SDK'S CONNECTION TOKEN DOES NOT CARRY.
+  // g_get_monotonic_time() microseconds at the moment a Disconnect press was
+  // relayed, or 0 for "no disconnect in flight". Until the reading actually
+  // reads down, this is the ONLY thing on the page that knows a teardown was
+  // asked for: the SDK keeps publishing DESTINATION_SET/CONNECTING right
+  // through a teardown, which is how a Disconnect press used to land on
+  // "Connecting to providers".
+  gint64 disconnectRequestedAtUs_ = 0;
   LiveStats stats_;
   Glib::ustring daemonNotice_;
   std::string selectedConnectionId_;

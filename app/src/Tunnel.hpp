@@ -977,6 +977,24 @@ class Tunnel {
   // is captured exactly once, on the first takeover.
   bool ApplyDns();
 
+  // THE DNS UNDO, CALLABLE BEFORE THE LINK DIES.
+  //
+  // It used to exist only inside ~Tunnel, and by the time ~Tunnel ran the tun
+  // was ALREADY GONE: TunnelHost hands tunnel_->fd() to urnet::newIoLoop, the
+  // Go loop owns that descriptor, and TunnelHost::StopInternalLocked closes the
+  // loop BEFORE it destroys this object. A non-persistent tun disappears with
+  // its last descriptor, so `resolvectl revert urnet0` was asked of a device
+  // that no longer existed and answered "No such device" on EVERY teardown in
+  // the journal. The revert was already first inside ~Tunnel — the ordering
+  // that was wrong was one level up, so the fix is an entry point the owner of
+  // the io loop can call while the link is still there.
+  //
+  // IDEMPOTENT, and ~Tunnel still calls it: an early call is the ordinary path,
+  // the destructor call is the safety net for the throw/crash paths that never
+  // reach TunnelHost's stop sequence. The second call is a no-op, so the two
+  // can never disagree about whether the undo happened.
+  void RevertDns();
+
   // Is the DNS we applied STILL in force? Cheap (one file read for tiers 2/3,
   // one `resolvectl status` for tier 1) and side-effect free, so it can sit on
   // the reaper tick beside NetFilter::Verify().
@@ -1076,6 +1094,11 @@ class Tunnel {
   // and 3 record their undo on DISK (DirectResolvConfStatePath) instead, because
   // theirs has to survive this process dying.
   bool dnsTouched_ = false;
+  // RevertDns() has already run. Not a duplicate of dnsTouched_: that one says
+  // "resolvectl holds an override", this one says "the whole undo — resolvectl
+  // AND the on-disk tier-2/3 state — has been performed", which is what makes
+  // the early call and the destructor call safe to both make.
+  bool dnsReverted_ = false;
   DnsBackend dnsBackend_ = DnsBackend::None;
   // The name tier 2 registered with resolvconf (`tun.` prefixed on Debian
   // resolvconf), so teardown deregisters exactly what was registered.

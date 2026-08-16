@@ -417,9 +417,7 @@ void ConnectPage::BuildPaneA() {
   adw_clamp_set_tightening_threshold(ADW_CLAMP(heroClamp_), kHeroAdvanced);
   adw_clamp_set_child(ADW_CLAMP(heroClamp_), GTK_WIDGET(canvas_->gobj()));
   hero_->set_child(*Glib::wrap(heroClamp_));
-  hero_->signal_clicked().connect([this] {
-    if (on_toggle_connect) on_toggle_connect();
-  });
+  hero_->signal_clicked().connect([this] { RelayConnectPress(); });
   {  // hover + keyboard focus ring (desktop affordances the phones lack)
     auto motion = Gtk::EventControllerMotion::create();
     motion->signal_enter().connect([this](double, double) { canvas_->SetHovered(true); });
@@ -483,9 +481,7 @@ void ConnectPage::BuildPaneA() {
   // you are fine (the fill IS a status channel)
   connectBtn_ = Gtk::make_managed<Gtk::Button>(T_("connect", "Connect"));
   connectBtn_->add_css_class("ur-pane-primary");
-  connectBtn_->signal_clicked().connect([this] {
-    if (on_toggle_connect) on_toggle_connect();
-  });
+  connectBtn_->signal_clicked().connect([this] { RelayConnectPress(); });
   paneAContent_->append(*connectBtn_);
 
   // "More options" disclosure (Simple only) gating provide/options/peers
@@ -1012,6 +1008,62 @@ void ConnectPage::BuildDnsGroup() {
   paneC_.content->append(*dnsUnavailableRow_);
 }
 
+// ---- the press, and the intent it leaves behind --------------------------------
+
+// How long a Disconnect press is allowed to hold the page on "Disconnecting…".
+// It is a CEILING, not a duration: the intent normally clears the moment the
+// reading actually reads down. The ceiling exists because a teardown can fail —
+// the daemon can be gone, StopTunnel can throw — and a UI that waits forever for
+// a completion that will never arrive is a worse lie than the one being fixed.
+constexpr gint64 kDisconnectIntentUs = 8 * G_TIME_SPAN_SECOND;
+
+bool ConnectPage::DisconnectIntentLive() {
+  if (disconnectRequestedAtUs_ == 0) return false;
+  // SETTLED, not merely observed. Once the SDK agrees we are down, the intent
+  // has been honoured and must stop overriding the reading, or the page would
+  // sit on "Disconnecting…" over a genuinely disconnected session.
+  const std::string status = UpperCopy(connectStatus_);
+  const bool readsDown = !connected_ && !stats_.connected && status != "CONNECTING" &&
+                         status != "DESTINATION_SET";
+  if (readsDown || g_get_monotonic_time() - disconnectRequestedAtUs_ >= kDisconnectIntentUs) {
+    disconnectRequestedAtUs_ = 0;
+    return false;
+  }
+  return true;
+}
+
+void ConnectPage::ClearDisconnectIntent() {
+  if (disconnectRequestedAtUs_ == 0) return;
+  disconnectRequestedAtUs_ = 0;
+  ApplyConnectStatus();
+}
+
+// ONE HANDLER FOR THE HERO AND THE BUTTON, and the only place a press turns
+// into an action. It captures the action THAT WROTE THE LABEL (actionIsDisconnect_,
+// as of the render the user was looking at), records the intent, re-renders so
+// the page answers the press in the same frame, and only then relays.
+//
+// Relaying the action instead of a bare "toggle" is the fix for the reported
+// defect. MainWindow used to re-derive it from SdkHost::Connected(), which is
+// `sdkConnected && tunnelBound` — a STRICTER question than the one that wrote
+// the button's label (connected_ || stats_.connected || connecting). Every
+// state where those two disagree — the whole connecting phase, and every moment
+// after the daemon has dropped the tunnel while the SDK still reports provider
+// sessions, which on this machine is most of every session — turned a press on
+// a button reading "Disconnect" into StartTunnelUi() + ConnectBestAvailable(),
+// and the SDK's next status push ("CONNECTING") rendered as "Connecting to
+// providers". The user pressed Disconnect and started a connection.
+void ConnectPage::RelayConnectPress() {
+  const bool disconnect = actionIsDisconnect_;
+  disconnectRequestedAtUs_ = disconnect ? g_get_monotonic_time() : 0;
+  ApplyConnectStatus();  // answer the press NOW, before the SDK says anything
+  if (on_connect_action) {
+    on_connect_action(disconnect);
+    return;
+  }
+  if (on_toggle_connect) on_toggle_connect();
+}
+
 // ---- the one status writer ----------------------------------------------------
 
 void ConnectPage::ApplyConnectStatus() {
@@ -1020,13 +1072,27 @@ void ConnectPage::ApplyConnectStatus() {
   const std::string status = UpperCopy(connectStatus_);
   const bool connecting = (status == "CONNECTING" || status == "DESTINATION_SET");
   const bool failed = (status == "CONNECT_FAILED");
+  // Asked once, here, because it SETTLES the intent as a side effect and the
+  // label branch below has to see the same answer the status branch did.
+  const bool disconnecting = DisconnectIntentLive();
 
   Glib::ustring text;
   const char* dot = kDotIdle;
   ConnectCanvas::State heroState = ConnectCanvas::State::Disconnected;
   bool showNotProtected = false;
 
-  if (stats_.insufficientBalance) {
+  if (disconnecting) {
+    // THE USER'S INTENT OUTRANKS THE SDK'S TOKEN, and it has to: the SDK goes on
+    // publishing DESTINATION_SET/CONNECTING right through a teardown (the
+    // location is still selected, the provider sessions are still winding down),
+    // so a reading-only page answers a Disconnect press with "Connecting to
+    // providers". It outranks the balance branch too — an insufficient balance
+    // is not the answer to "what is happening right now" when the answer is
+    // "the thing you just asked for".
+    text = T_("site_app_disconnecting", "Disconnecting…");
+    dot = kDotAmber;
+    heroState = ConnectCanvas::State::Processing;
+  } else if (stats_.insufficientBalance) {
     // balance overrides the connection reading (processing wins over blocked)
     text = T_("insufficient_balance_add_balance_or_plan",
               "Insufficient balance — add balance or a plan");
@@ -1069,11 +1135,25 @@ void ConnectPage::ApplyConnectStatus() {
 
   // the action: filled Connect vs outlined Disconnect (four channels — word,
   // fill, dot, status line)
+  //
+  // CACHED, because this expression is now TWO things: the word on the button
+  // and the answer every caller gets to "what does the next press do"
+  // (ConnectActionIsDisconnect, and the action RelayConnectPress hands to
+  // MainWindow). Deriving the action anywhere else is what let a button
+  // labelled Disconnect run the connect path.
   const bool isDisconnect = connected_ || stats_.connected || connecting;
+  actionIsDisconnect_ = isDisconnect;
   connectBtn_->set_label(isDisconnect ? T_("disconnect", "Disconnect")
                                       : T_("connect", "Connect"));
   connectBtn_->remove_css_class(isDisconnect ? "ur-pane-primary" : "ur-pane-secondary");
   connectBtn_->add_css_class(isDisconnect ? "ur-pane-secondary" : "ur-pane-primary");
+  // A teardown the user asked for is IN FLIGHT, not offered again. Leaving the
+  // control live here would let a second press — on a button still reading
+  // "Disconnect" while the reading has not caught up — take the connect branch
+  // and start a tunnel out of a disconnect. The intent expires on its own
+  // (kDisconnectIntentUs), so this can never latch off.
+  connectBtn_->set_sensitive(!disconnecting);
+  hero_->set_sensitive(!disconnecting);
 }
 
 void ConnectPage::SetDaemonNotice(const Glib::ustring& notice) {
@@ -2404,6 +2484,13 @@ void ConnectPage::Tick() {
   if (!presenting_ || !pageVisible_) return;
   canvas_->Tick();
   ++tickCount_;
+  // The disconnect intent is the one piece of page state that changes with the
+  // CLOCK rather than with a push: nothing from the SDK arrives to announce
+  // that a teardown has taken too long. Without this the ceiling would only be
+  // applied on the next unrelated event, and a wedged teardown could hold
+  // "Disconnecting…" and a dead button on screen indefinitely. Re-rendered only
+  // while an intent is actually outstanding, so an idle page costs nothing.
+  if (disconnectRequestedAtUs_ != 0) ApplyConnectStatus();
   // the charts ride the throughput feed; at 2fps the 60s window still reads
   // live and the read stays off the per-frame path
   if (tickCount_ % 5 == 0) PullThroughput();

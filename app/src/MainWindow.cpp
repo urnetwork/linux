@@ -341,7 +341,7 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
 // through TunnelStartResult::Failed with an authorization verdict on the
 // control client (DaemonAuthOutcome). It is rendered from its own copy table
 // below and never through the DaemonUnreachable arm.
-TunnelStartResult MainWindow::StartTunnelUi() {
+TunnelStartResult MainWindow::StartTunnelUi(bool connectDestination) {
   // Snapshot the reply counter BEFORE the attempt. LastAuthOutcome() describes
   // the last reply this client processed, and StartTunnel() has failure paths
   // that never send anything (not signed in; unusable device-rpc key material).
@@ -455,6 +455,38 @@ TunnelStartResult MainWindow::StartTunnelUi() {
   daemonStatusLabel_.set_text(notice);
   daemonStatusLabel_.set_visible(!notice.empty());
   if (connectPage_) connectPage_->SetDaemonNotice(notice);
+
+  // A TUNNEL WITHOUT A DESTINATION CARRIES NOTHING, AND LOOKS EXACTLY LIKE ONE
+  // THAT DOES. This is the "Connect doesn't actually forward real traffic" bug,
+  // measured on the owner's machine: urnet0 up, 31 capture routes installed,
+  // DNS pinned, egress witness passing, UI green — and 166 seconds with not one
+  // [rel], [contract], [multi] or firstload line in the daemon journal, because
+  // no provider session existed. The instant ConnectBestAvailable ran, the
+  // relay came up 0.6s later.
+  //
+  // The cause was pairing: StartTunnelUi() has TEN call sites and exactly ONE
+  // of them (ToggleConnect) also called host_.ConnectBestAvailable(). Every
+  // other path — including the constructor's auto-start for an already
+  // signed-in account, which is what most launches take — brought the tunnel up
+  // with no destination. Pairing them here rather than at nine call sites is
+  // the point: a rule that has to be remembered ten times is a rule that will
+  // be missed again.
+  //
+  // SelectedLocation() is respected: a user who has chosen a specific provider
+  // must not be silently moved to "best available". Only an empty selection
+  // asks the SDK to pick.
+  if (result == TunnelStartResult::Started && connectDestination) {
+    // Honour an explicit choice. ConnectBestAvailable() always asks the SDK to
+    // pick, so using it unconditionally would silently move a user off the
+    // provider they selected.
+    if (const auto selected = host_.SelectedLocation(); selected.has_value()) {
+      g_message("connect: routing to the selected provider");
+      host_.Connect(selected);
+    } else {
+      g_message("connect: no destination selected, choosing the best available");
+      host_.ConnectBestAvailable();
+    }
+  }
   return result;
 }
 
@@ -779,6 +811,18 @@ bool MainWindow::PollDaemonHealth() {
   }
   if (status->tunnel_state != ctl::TunnelState::Error &&
       status->tunnel_state != ctl::TunnelState::Stopped) {
+    return true;
+  }
+  // …UNLESS WE ARE THE ONES WHO ASKED. A user disconnect ends with
+  // SdkHost::Disconnect -> control_.StopTunnel(), so the daemon's very next
+  // status reads Stopped — indistinguishable, from here, from the protective
+  // teardown this poll exists to surface. Reporting it would answer a Disconnect
+  // press with "The connection stopped.", a scary notice for the thing the user
+  // just asked for. The page holds the intent (it is what renders
+  // "Disconnecting…"), so it is the one that can tell the two apart; settle the
+  // window's own state and say nothing.
+  if (connectPage_ && connectPage_->DisconnectPending()) {
+    SetConnected(false);
     return true;
   }
   // The daemon stopped carrying traffic without us asking. Say so, verbatim —
@@ -1212,7 +1256,11 @@ void MainWindow::BuildHome() {
 
   connectBtn_.add_css_class("suggested-action");
   connectBtn_.add_css_class("pill");
-  connectBtn_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::ToggleConnect));
+  // The legacy column's own button. It is labelled from connected_ (SetConnected
+  // below), not from the page's reading, so it has no action to carry and takes
+  // the ask-the-page path — and `sigc::mem_fun` can no longer name an overloaded
+  // member anyway.
+  connectBtn_.signal_clicked().connect([this] { ToggleConnect(); });
   box->append(connectBtn_);
 
   // network peers status line, right under the connect button: a dot (green when
@@ -1332,7 +1380,11 @@ void MainWindow::BuildHome() {
   // legacy single-column drawer stays in the tree under "connect-legacy"
   // until every drawer surface has been relocated into panes B/C.
   connectPage_ = Gtk::make_managed<ConnectPage>(host_);
-  connectPage_->on_toggle_connect = [this] { ToggleConnect(); };
+  // on_connect_action, NOT on_toggle_connect: the press carries the action that
+  // wrote the label the user actually clicked. Binding the void toggle here is
+  // what left the window re-deriving the action from a stricter reading, and a
+  // button reading "Disconnect" starting a tunnel.
+  connectPage_->on_connect_action = [this](bool disconnect) { ToggleConnect(disconnect); };
   connectPage_->on_open_locations = [this] {
     if (drawer_) drawer_->OpenLocationChooser();
   };
@@ -1774,13 +1826,50 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
   }
 }
 
+// The tray has no button in front of the user, so it must ask the page — the
+// same reading that writes the on-screen label, never a second opinion. With no
+// page yet (the login view), connected_ is the only answer there is.
 void MainWindow::ToggleConnect() {
-  g_message("connect: toggle pressed (connected=%s, hasDevice=%s)",
-            connected_ ? "yes" : "no", host_.hasDevice() ? "yes" : "no");
-  if (connected_) {
+  // THE TRAY'S ENTRY POINT, and it must decide from what the TRAY IS SHOWING.
+  // The tray's label is set from on_connected_change, i.e. from connected_
+  // alone (main.cpp). ConnectPage's button uses a wider predicate — connected
+  // OR connecting — so routing the tray through the page's predicate made the
+  // two disagree for the whole connecting window: the menu said "Connect"
+  // while pressing it disconnected. The page still gets its richer behaviour;
+  // it passes its own intent explicitly through ToggleConnect(bool).
+  ToggleConnect(connected_);
+}
+
+void MainWindow::ToggleConnect(bool disconnect) {
+  g_message("connect: toggle pressed (action=%s, connected=%s, hasDevice=%s)",
+            disconnect ? "disconnect" : "connect", connected_ ? "yes" : "no",
+            host_.hasDevice() ? "yes" : "no");
+  if (disconnect) {
+    // NOT gated on connected_. That gate is the defect: connected_ is
+    // SdkHost::Connected() = sdkConnected && the DeviceRemote still bound to the
+    // current control session, while the button says "Disconnect" whenever the
+    // page reads connected OR connecting. Whenever those disagreed — the entire
+    // connecting phase, and every moment after the daemon dropped the tunnel
+    // while the SDK still reported provider sessions — the press fell through to
+    // the start path below, and the status line the user got back was
+    // "Connecting to providers".
+    //
+    // Disconnect is safe to run unconditionally: SdkHost::Disconnect asks the
+    // view controller to disconnect and then stops the daemon's tunnel, both
+    // best-effort, both no-ops when there is nothing to stop.
     host_.Disconnect();
+    // Re-read every window surface once, now. The page is already showing
+    // "Disconnecting…" from its own intent; this keeps the tray, the legacy
+    // headline and the status strip from holding "Connected" until whatever the
+    // SDK sends next — which, on a teardown, may be nothing at all.
+    SetConnected(host_.Connected());
     return;
   }
+  // A connect press retires any disconnect the user is no longer waiting on, so
+  // the page cannot hold "Disconnecting…" over a connection it has just started.
+  // The page's own presses already do this; a TRAY press arrives here without
+  // passing through ConnectPage::RelayConnectPress, so it has to be said again.
+  if (connectPage_) connectPage_->ClearDisconnectIntent();
   // ALWAYS run the start path and let SdkHost decide whether the existing
   // session can be reused. This used to be gated on !hasDevice(), which meant a
   // stale handle — one bound over a control connection the daemon has since
@@ -1788,7 +1877,9 @@ void MainWindow::ToggleConnect() {
   // the press into a device with nothing behind it. StartTunnel is cheap when
   // the session is genuinely live (one status read) and self-heals when it is
   // not; the caller is not the right place to guess.
-  if (StartTunnelUi() != TunnelStartResult::Started) return;
+  // false: this path issues its own connect immediately below, deliberately
+  // unconditional so a Connect press also self-heals a stale session.
+  if (StartTunnelUi(/*connectDestination=*/false) != TunnelStartResult::Started) return;
   host_.ConnectBestAvailable();
   // status handler + SetConnected reflect the real state as it changes
 }

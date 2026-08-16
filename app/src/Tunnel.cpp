@@ -3463,7 +3463,23 @@ bool Tunnel::VerifyDnsStillApplied(std::string* detail) const {
   return true;
 }
 
-Tunnel::~Tunnel() {
+// THE DNS UNDO, LIFTED OUT OF ~Tunnel SO IT CAN RUN WHILE THE LINK IS STILL UP.
+//
+// Nothing in the body below changed; what changed is WHO CAN CALL IT AND WHEN.
+// The measured defect: `resolvectl revert urnet0` failed with "Failed to
+// resolve interface urnet0: No such device" on every single teardown in the
+// journal, because TunnelHost hands tunnel_->fd() to urnet::newIoLoop and then
+// closes that io loop BEFORE it destroys this object — Go owns the descriptor,
+// a non-persistent tun dies with its last descriptor, and the link was already
+// gone by the time ~Tunnel got to speak. The revert was ALREADY the first thing
+// ~Tunnel did, so no reordering inside this file could have fixed it.
+//
+// It is idempotent, which is what lets TunnelHost::StopInternalLocked call it
+// early on the ordinary path while ~Tunnel keeps calling it for the paths that
+// never reach that stop sequence (a throw out of StartTunnel, a crash unwind).
+void Tunnel::RevertDns() {
+  if (dnsReverted_) return;
+  dnsReverted_ = true;
   // TWO INDEPENDENT UNDOS, NEITHER GATED ON WHICH TIER "WON", because a tier
   // can leave state behind WITHOUT winning. ApplyDnsViaResolved sets the
   // per-link DNS and only then discovers that `resolvectl domain` fails: that
@@ -3508,6 +3524,16 @@ Tunnel::~Tunnel() {
                    detail.c_str());
     }
   }
+}
+
+Tunnel::~Tunnel() {
+  // THE SAFETY NET, NOT THE ORDINARY PATH. On a normal stop TunnelHost has
+  // already called this while urnet0 was still up (that is the whole point of
+  // the split), and the call below is a no-op. It stays here for every path
+  // that never reaches TunnelHost's stop sequence — Open() throwing halfway,
+  // a bring-up gate failing, the process unwinding — where this destructor is
+  // still the only thing that will ever undo the DNS override.
+  RevertDns();
   RemovePolicyRules();
   if (fd_ >= 0) {
     ::close(fd_);  // non-persistent tun: closing removes the interface + routes
