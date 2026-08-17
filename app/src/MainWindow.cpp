@@ -6,6 +6,7 @@
 
 #include <cstdio>
 
+#include "AppPrefs.hpp"
 #include "BrandIcons.hpp"
 #include "Formatters.hpp"
 #include "UrTheme.hpp"
@@ -276,7 +277,17 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       std::make_unique<DaemonGeoClueWriter>(host_.Control()));
 
   if (host_.IsLoggedIn()) {
-    StartTunnelUi();
+    // AUTO-CONNECT IS OPT IN, DEFAULT OFF. Being signed in is not a request to
+    // connect: this ran on every launch of a signed-in account and brought the
+    // tunnel up — urnet0, capture routes, DNS — before the user touched
+    // anything. The preference is device-local (AppPrefs, not the account
+    // preferences API: launch behaviour is per-device and must not wait on a
+    // network round trip) and gates ONLY this call.
+    //
+    // Nothing about StartTunnelUi changes, and no other path to it moves. The
+    // post-login handlers still connect on a fresh sign-in — that is a user
+    // action with an obvious intent, not a launch.
+    if (prefs::Get<bool>(prefs::kConnectOnLaunchKey, false)) StartTunnelUi();
     ApplyAuthState(true);
   } else {
     ApplyAuthState(false);

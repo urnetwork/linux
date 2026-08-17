@@ -988,6 +988,30 @@ void SettingsPage::BuildGeneralSection(Gtk::Box& host) {
 void SettingsPage::BuildConnectionsSection(Gtk::Box& host) {
   host.append(*kit::MakePaneGroupHeader(T_("site_app_connections", "Connections")).root);
 
+  // Launch behaviour, before the numbered rows: what happens when the app opens
+  // precedes what happens when a connection drops.
+  //
+  // A LOCAL preference, exactly like the updates auto-check row — no session
+  // gate, no FieldState, no echo guard, because this toggle is the only writer
+  // and nothing ever writes its state back. Read once by MainWindow's
+  // constructor; see prefs::kConnectOnLaunchKey.
+  connectOnLaunch_ = AddToggleRow(
+      host, T_("conn_connect_on_launch", "Connect automatically when the app starts"),
+      T_("conn_connect_on_launch_note",
+         "Off by default. When on, URnetwork connects to your selected provider as "
+         "soon as you open the app. This changes the next launch - it does not "
+         "connect now."));
+  connectOnLaunch_->set_active(prefs::Get<bool>(prefs::kConnectOnLaunchKey, false));
+  connectOnLaunch_->property_active().signal_changed().connect([this] {
+    // Persisted immediately (whole-file read-modify-write, so it cannot clobber
+    // the keys beside it). DELIBERATELY nothing else: turning this ON must not
+    // start a tunnel — it records a launch preference, and connecting now would
+    // be a second, unasked-for action. It is also unrelated to the tray
+    // autostart and the .desktop autostart template, which decide whether the
+    // app RUNS, not what it does once it has.
+    prefs::Set(prefs::kConnectOnLaunchKey, connectOnLaunch_->get_active());
+  });
+
   // Row 1 — the kill switch. The shipped store key site_app_kill_switch_note
   // is DELIBERATELY not used: it is wrong twice (this is not browser-only, and
   // "when disconnected" describes a bug as a feature — the switch guards only

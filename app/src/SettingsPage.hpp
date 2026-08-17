@@ -173,6 +173,8 @@ class SettingsPage : public Gtk::Box {
   Gtk::Switch* autoCheckUpdates_ = nullptr;
 
   // ---- Pane A: Connections -------------------------------------------------
+  // Local preference (prefs::kConnectOnLaunchKey), no echo guard: sole writer.
+  Gtk::Switch* connectOnLaunch_ = nullptr;
   Gtk::Switch* killSwitch_ = nullptr;
   bool applyingKillSwitch_ = false;  // echo guard
   // What is REALLY in force (SdkHost::KillSwitchStatus), rendered under the

@@ -4,6 +4,7 @@
 // file on every set so keys never clobber each other. Known keys:
 //   "advanced_mode"           bool   the D5 standing state
 //   "onboarding_version_seen" int    replay gate for onboarding
+//   "connect_on_launch"       bool   opt-in auto-connect, DEFAULT FALSE
 // Header-only; nlohmann + glib only.
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
@@ -15,6 +16,19 @@
 #include <nlohmann/json.hpp>
 
 namespace urnw::prefs {
+
+// Launch behaviour, owned by the Settings "Connect automatically when the app
+// starts" toggle and read once by MainWindow's constructor.
+//
+// DEFAULT FALSE, deliberately: a VPN that dials itself the moment it is opened
+// is a decision the user never made. It lives HERE rather than behind the
+// account preferences API because launch behaviour is per-device — a laptop and
+// a desktop signed into one account want different answers — and because the
+// constructor must decide without waiting on a network round trip.
+//
+// It governs the NEXT launch only. Nothing reads it after startup, so turning
+// it on connects nothing now.
+inline constexpr const char* kConnectOnLaunchKey = "connect_on_launch";
 
 inline std::string PrefsPath() {
   std::string dir = std::string(g_get_user_config_dir()) + "/urnetwork";

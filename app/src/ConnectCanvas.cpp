@@ -441,6 +441,23 @@ void ConnectCanvas::RunBlobs(bool in) {
 // ---- the animation clock ----------------------------------------------------
 
 void ConnectCanvas::EnsureAnimClock() {
+  // INVALIDATE FIRST, ALWAYS. Every animated path (SetState, RunBlobs,
+  // StartIdlePulse, SetHovered) ends here and paints NOTHING itself: the new
+  // pose reaches the screen only through the tick callback below. GTK4 caches
+  // this widget's render node, so a state change that never gets a frame keeps
+  // the PREVIOUS pose on screen while the rest of the page repaints — measured
+  // on the owner's first auto-connect: the headline read "Connected" over a
+  // hero still drawing the Connecting lattice, with the blobs parked at
+  // progress 0 (outside the globe clip, i.e. invisible).
+  //
+  // It is also the only thing that can rescue an arming that latched:
+  // animClockActive_ goes true the moment a callback is ADDED and is cleared
+  // only from inside a callback that has RUN, so between those two points
+  // every EnsureAnimClock() is a no-op that installs nothing and — without
+  // this line — schedules nothing either. queue_draw() requests the frame
+  // whose UPDATE phase runs the pending callback, so a stranded animation
+  // resumes on the next frame instead of never.
+  queue_draw();
   if (animClockActive_) return;
   animClockActive_ = true;
   add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>& clock) -> bool {
