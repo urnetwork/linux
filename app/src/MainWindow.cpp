@@ -141,7 +141,10 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     if (developerPage_) developerPage_->SetPresenting(windowVisible_);
     if (windowVisible_) {
       status_.set_text(lastStatus_);
-      SetConnected(host_.Connected());
+      // RE-READ, never replay: SetPresentationActive(true) above has just
+      // reopened the connect controller, so the reading the window was last
+      // pushed describes a moment when there was no controller to ask.
+      ApplyConnectReading(host_.CurrentConnectReading());
       ApplyStats(lastStats_);
       if (drawer_) drawer_->RefreshAll();  // drawer events are dropped while hidden
     }
@@ -207,15 +210,13 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   host_.SetJwtRefreshedHandler([this] {
     PostToMain([this] { balance_.OnJwtRefreshed(); });
   });
-  host_.SetConnectionStatusHandler([this](std::string status) {
-    PostToMain([this, status] {
-      lastStatus_ = status;
-      if (connectPage_) connectPage_->SetConnectionStatus(status);
-      // the tray must reflect state even while hidden; the window label only
-      // when visible (resynced on show)
-      SetConnected(host_.Connected());
-      if (windowVisible_) status_.set_text(status);
-    });
+  // THE CONNECTION FEED, AND IT IS NOT GATED ON VISIBILITY. That asymmetry —
+  // this push ungated beside a stats push gated on windowVisible_ — is how two
+  // copies of one fact came to describe two different moments. There is one
+  // copy now, and it carries every field, so there is nothing left to age
+  // independently.
+  host_.SetConnectReadingHandler([this](ConnectReading reading) {
+    PostToMain([this, reading] { ApplyConnectReading(reading); });
   });
   // Live stats (provider count / throughput / provide). Same visibility gate:
   // cache always, but only touch widgets while the window is shown.
@@ -822,7 +823,7 @@ bool MainWindow::PollDaemonHealth() {
   // "Disconnecting…"), so it is the one that can tell the two apart; settle the
   // window's own state and say nothing.
   if (connectPage_ && connectPage_->DisconnectPending()) {
-    SetConnected(false);
+    ApplyConnectReading(DaemonTunnelGoneReading());
     return true;
   }
   // The daemon stopped carrying traffic without us asking. Say so, verbatim —
@@ -836,7 +837,7 @@ bool MainWindow::PollDaemonHealth() {
   g_warning("connect: the daemon stopped the session (%s): %s",
             status->error_code.empty() ? "no code" : status->error_code.c_str(),
             status->error.c_str());
-  SetConnected(false);
+  ApplyConnectReading(DaemonTunnelGoneReading());
   if (connectPage_) connectPage_->SetDaemonNotice(detail);
   daemonStatusLabel_.set_text(detail);
   daemonStatusLabel_.set_visible(true);
@@ -1256,7 +1257,7 @@ void MainWindow::BuildHome() {
 
   connectBtn_.add_css_class("suggested-action");
   connectBtn_.add_css_class("pill");
-  // The legacy column's own button. It is labelled from connected_ (SetConnected
+  // The legacy column's own button. It is labelled from connected_ (ApplyConnectReading
   // below), not from the page's reading, so it has no action to carry and takes
   // the ask-the-page path — and `sigc::mem_fun` can no longer name an overloaded
   // member anyway.
@@ -1798,7 +1799,7 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
   provideResetOnUpgrade_ = false;
   if (loggedIn) {
     SyncProvideControlMode();
-    SetConnected(host_.Connected());
+    ApplyConnectReading(host_.CurrentConnectReading());
     // (re)seed the balance/plan store from the (possibly new) jwt: login,
     // guest upgrade, and app start all land here
     balance_.SetWindowVisible(windowVisible_);
@@ -1811,7 +1812,9 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
     if (connectPage_) connectPage_->Resync();
     if (shell_ && shell_->on_navigate) shell_->on_navigate(shell_->CurrentTag());
   } else {
-    SetConnected(false);
+    // A signed-out window has no session at all: the DEFAULT reading, not a
+    // bool poked into a copy of the last one.
+    ApplyConnectReading(ConnectReading{});
     balance_.Stop();
     if (earningsPage_) earningsPage_->Load();  // settles every panel on empty
     if (settingsPage_) settingsPage_->Load();
@@ -1862,7 +1865,7 @@ void MainWindow::ToggleConnect(bool disconnect) {
     // "Disconnecting…" from its own intent; this keeps the tray, the legacy
     // headline and the status strip from holding "Connected" until whatever the
     // SDK sends next — which, on a teardown, may be nothing at all.
-    SetConnected(host_.Connected());
+    ApplyConnectReading(host_.CurrentConnectReading());
     return;
   }
   // A connect press retires any disconnect the user is no longer waiting on, so
@@ -1881,18 +1884,60 @@ void MainWindow::ToggleConnect(bool disconnect) {
   // unconditional so a Connect press also self-heals a stale session.
   if (StartTunnelUi(/*connectDestination=*/false) != TunnelStartResult::Started) return;
   host_.ConnectBestAvailable();
-  // status handler + SetConnected reflect the real state as it changes
+  // the connect-reading feed reflects the real state as it changes
 }
 
-void MainWindow::SetConnected(bool connected) {
-  connected_ = connected;
-  connectBtn_.set_label(connected ? T_("disconnect", "Disconnect") : T_("connect", "Connect"));
-  // the status strip's state field: dot color per state (§8.1 connect dots)
+// THE DAEMON'S OWN VERDICT, WRITTEN INTO THE READING. The status poll has just
+// learned that urnetworkd is not running our tunnel any more; `tunnelBound` is
+// precisely that fact, so it is set here rather than answered with a separate
+// boolean beside the reading. (The SDK's next push re-reads it, exactly as the
+// old SetConnected(false) was overwritten by the next status push.)
+ConnectReading MainWindow::DaemonTunnelGoneReading() {
+  // The verdict is recorded IN THE PRODUCER, not stamped onto a copy here.
+  // Setting tunnelBound=false on a local copy lasted exactly until the next
+  // SDK push (~10/s during a ramp) re-derived it from getters that cannot see
+  // the daemon — so the hero flipped back to green over a stopped tunnel. The
+  // latch clears on the next start_tunnel and nowhere else.
+  host_.NoteDaemonTunnelGone();
+  return host_.CurrentConnectReading();
+}
+
+// ONE READING IN, EVERY WINDOW SURFACE OUT — and the page gets the SAME value,
+// not a boolean summary of it. Nothing below re-derives anything from the SDK:
+// one health::Render() call answers the label, the strip and the tray together.
+void MainWindow::ApplyConnectReading(const ConnectReading& reading) {
+  // The feed fires on every grid step during a connect ramp (~10/s). An
+  // unchanged reading must not re-emit the tray's NewIcon/LayoutUpdated DBus
+  // pair or rebuild the page's panes underneath the user.
+  if (reading == reading_ && readingApplied_) return;
+  readingApplied_ = true;
+  const bool wasConnected = connected_;
+  reading_ = reading;
+  const health::Signals signals = reading.ToSignals(/*disconnectRequested=*/false);
+  const health::Reading view = health::Render(signals);
+  // "There is a session to disconnect from." Exactly what SdkHost::Connected()
+  // used to be asked for, now asked once: the tray's label, the tray's action
+  // and this window's press logging all read this one bit, so the menu can no
+  // longer say "Connect" over a press that disconnects.
+  connected_ = view.action == health::Action::Disconnect;
+  connectBtn_.set_label(connected_ ? T_("disconnect", "Disconnect") : T_("connect", "Connect"));
+  // The strip's raw status field carries the controller's OWN token now
+  // (CONNECTING/CONNECTED/CONNECT_FAILED), not the two-word destination
+  // vocabulary the old push could produce.
+  lastStatus_ = reading.rawStatus.empty() ? std::string("DISCONNECTED") : reading.rawStatus;
+  // the status strip's state field: dot color per state (§8.1 connect dots).
+  // Green only for the state the hero calls Connected — the strip used to go
+  // green the moment a destination was picked.
   if (shell_) {
-    shell_->SetStatusState(lastStatus_, connected ? "#87FB67" : "#2A60FF");
+    shell_->SetStatusState(
+        lastStatus_, view.state == health::State::Connected ? "#87FB67" : "#2A60FF");
   }
-  if (connectPage_) connectPage_->SetConnected(connected);
-  if (on_connected_change) on_connected_change(connected);
+  if (windowVisible_) status_.set_text(lastStatus_);
+  if (connectPage_) connectPage_->ApplyConnectReading(reading);
+  if (on_connected_change && (connected_ != wasConnected || !trayConnectedPushed_)) {
+    trayConnectedPushed_ = true;
+    on_connected_change(connected_);
+  }
 }
 
 void MainWindow::OpenProviderLocations() {

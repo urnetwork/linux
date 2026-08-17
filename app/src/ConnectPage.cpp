@@ -865,7 +865,7 @@ void ConnectPage::BuildDataUsageGroup() {
   CapNatural(providerCountText_, 30);
   providerCountLine_->set_child(*providerCountText_);
   providerCountLine_->signal_clicked().connect([this] {
-    if (!connected_) return;  // the globe has nothing to plot without a session
+    if (!ConnectedNow()) return;  // the globe has nothing to plot without a session
     if (on_open_provider_locations) on_open_provider_locations();
   });
   liveStatsGroup_->append(*providerCountLine_);
@@ -1019,12 +1019,15 @@ constexpr gint64 kDisconnectIntentUs = 8 * G_TIME_SPAN_SECOND;
 
 bool ConnectPage::DisconnectIntentLive() {
   if (disconnectRequestedAtUs_ == 0) return false;
-  // SETTLED, not merely observed. Once the SDK agrees we are down, the intent
+  // SETTLED, not merely observed. Once the session is actually down the intent
   // has been honoured and must stop overriding the reading, or the page would
   // sit on "Disconnecting…" over a genuinely disconnected session.
-  const std::string status = UpperCopy(connectStatus_);
-  const bool readsDown = !connected_ && !stats_.connected && status != "CONNECTING" &&
-                         status != "DESTINATION_SET";
+  //
+  // ONE QUESTION, THE SAME ONE THE HEADLINE ASKS: is there still a session?
+  // This used to be a hand-rolled conjunction of all three copies plus two
+  // string comparisons — a fourth opinion about the state, and one that could
+  // disagree with the row it was gating.
+  const bool readsDown = !health::SessionUp(reading_.ToSignals(/*disconnectRequested=*/false));
   if (readsDown || g_get_monotonic_time() - disconnectRequestedAtUs_ >= kDisconnectIntentUs) {
     disconnectRequestedAtUs_ = 0;
     return false;
@@ -1043,33 +1046,24 @@ void ConnectPage::ClearDisconnectIntent() {
 // as of the render the user was looking at), records the intent, re-renders so
 // the page answers the press in the same frame, and only then relays.
 //
-// Relaying the action instead of a bare "toggle" is the fix for the reported
-// defect. MainWindow used to re-derive it from SdkHost::Connected(), which is
-// `sdkConnected && tunnelBound` — a STRICTER question than the one that wrote
-// the button's label (connected_ || stats_.connected || connecting). Every
-// state where those two disagree — the whole connecting phase, and every moment
-// after the daemon has dropped the tunnel while the SDK still reports provider
-// sessions, which on this machine is most of every session — turned a press on
-// a button reading "Disconnect" into StartTunnelUi() + ConnectBestAvailable(),
-// and the SDK's next status push ("CONNECTING") rendered as "Connecting to
-// providers". The user pressed Disconnect and started a connection.
+// Relaying the action instead of a bare "toggle" is the fix for an earlier
+// report: MainWindow used to re-derive it from SdkHost::Connected(), a
+// different question from the one that wrote the button's label, and in every
+// state where they disagreed a press on a button reading "Disconnect" ran
+// StartTunnelUi() + ConnectBestAvailable(). Both sides now read one
+// health::Render() over one ConnectReading, so they can no longer disagree —
+// the relay stays because the page re-renders BEFORE relaying, and a question
+// asked after the relay would get the POST-press answer.
 void ConnectPage::RelayConnectPress() {
   const bool disconnect = actionIsDisconnect_;
   disconnectRequestedAtUs_ = disconnect ? g_get_monotonic_time() : 0;
-  if (disconnect) {
-    // DROP THE STALE PUSH. connectStatus_ has exactly one writer — the SDK's
-    // status callback — and nothing ever cleared it. On a teardown the SDK
-    // simply stops pushing, so a session that last reported CONNECTING left
-    // that word latched forever: `connecting` stayed true, so isDisconnect
-    // stayed true, so the button read Disconnect and EVERY subsequent press
-    // ran the disconnect path. The user could not reconnect without
-    // restarting the app. Measured: three presses at 06:26:49, 06:27:13 and
-    // 06:27:38, all logging action=disconnect with connected=no.
-    //
-    // The teardown's own display does not depend on this: the 8s disconnect
-    // intent owns "Disconnecting…" and the tick re-renders while it is live.
-    connectStatus_.clear();
-  }
+  // NOTHING IS CLEARED HERE ANY MORE. The previous fix had to drop the pushed
+  // status string on a disconnect press, because that string was the only
+  // thing keeping the button on "Disconnect" and nothing ever superseded it —
+  // a latch that had to be broken by hand. The reading has no latch to break:
+  // the button's word is health::Render()'s `action`, which is false as soon
+  // as the session is down, and SdkHost::Disconnect publishes a fresh reading
+  // the moment it has torn the session down.
   ApplyConnectStatus();  // answer the press NOW, before the SDK says anything
   if (on_connect_action) {
     on_connect_action(disconnect);
@@ -1081,63 +1075,35 @@ void ConnectPage::RelayConnectPress() {
 // ---- the one status writer ----------------------------------------------------
 
 void ConnectPage::ApplyConnectStatus() {
-  // RenderHealth reconciliation: the button label and the status line must
-  // derive from ONE reading, so the hero can never lag the line above it.
-  const std::string status = UpperCopy(connectStatus_);
-  // REALITY OUTRANKS THE STRING. connectStatus_ is a push from the SDK and is
-  // the ONLY input that used to decide "connecting" — so a session that
-  // reported CONNECTING and then started carrying traffic without sending
-  // another status kept the hero on "Connecting to providers" while the graph
-  // showed 191 KiB/s. Measured on the owner's machine with 41 hosts attached.
-  // A reading that says we are connected settles the question by itself.
-  const bool reallyConnected = connected_ || stats_.connected;
-  const bool connecting =
-      !reallyConnected && (status == "CONNECTING" || status == "DESTINATION_SET");
-  const bool failed = (status == "CONNECT_FAILED");
-  // Asked once, here, because it SETTLES the intent as a side effect and the
-  // label branch below has to see the same answer the status branch did.
+  // ONE READING, ONE CALL, FOUR CHANNELS OUT. The headline, the dot, the hero
+  // pose and the button's word are fields of a single health::Reading — they
+  // are not four branches that happen to agree today. Nothing below asks the
+  // SDK anything; every input is a field of reading_, sampled together.
+  //
+  // Asked once, here, because DisconnectIntentLive SETTLES the intent as a
+  // side effect and the label has to see the same answer the headline did.
   const bool disconnecting = DisconnectIntentLive();
+  const health::Reading view = health::Render(reading_.ToSignals(disconnecting));
+  renderedState_ = view.state;
 
-  Glib::ustring text;
+  const Glib::ustring text = T_(view.textKey, view.textEnglish);
   const char* dot = kDotIdle;
-  ConnectCanvas::State heroState = ConnectCanvas::State::Disconnected;
-  bool showNotProtected = false;
-
-  if (disconnecting) {
-    // THE USER'S INTENT OUTRANKS THE SDK'S TOKEN, and it has to: the SDK goes on
-    // publishing DESTINATION_SET/CONNECTING right through a teardown (the
-    // location is still selected, the provider sessions are still winding down),
-    // so a reading-only page answers a Disconnect press with "Connecting to
-    // providers". It outranks the balance branch too — an insufficient balance
-    // is not the answer to "what is happening right now" when the answer is
-    // "the thing you just asked for".
-    text = T_("site_app_disconnecting", "Disconnecting…");
-    dot = kDotAmber;
-    heroState = ConnectCanvas::State::Processing;
-  } else if (stats_.insufficientBalance) {
-    // balance overrides the connection reading (processing wins over blocked)
-    text = T_("insufficient_balance_add_balance_or_plan",
-              "Insufficient balance — add balance or a plan");
-    dot = kDotCoral;
-    heroState = ConnectCanvas::State::Error;
-  } else if (connected_ && stats_.connected) {
-    text = T_("connected", "Connected");
-    dot = kDotGreen;
-    heroState = ConnectCanvas::State::Connected;
-  } else if (connecting) {
-    text = T_("connecting_status_indicator", "Connecting to providers");
-    dot = kDotConnecting;
-    heroState = ConnectCanvas::State::Connecting;
-  } else if (failed) {
-    text = T_("conn_failed", "Couldn't connect");
-    dot = kDotCoral;
-    heroState = ConnectCanvas::State::Error;
-  } else {
-    text = T_("disconnected", "Disconnected");
-    dot = kDotIdle;
-    heroState = ConnectCanvas::State::Disconnected;
-    showNotProtected = true;
+  switch (view.dot) {
+    case health::Dot::Green: dot = kDotGreen; break;
+    case health::Dot::Connecting: dot = kDotConnecting; break;
+    case health::Dot::Coral: dot = kDotCoral; break;
+    case health::Dot::Amber: dot = kDotAmber; break;
+    case health::Dot::Idle: dot = kDotIdle; break;
   }
+  ConnectCanvas::State heroState = ConnectCanvas::State::Disconnected;
+  switch (view.hero) {
+    case health::Hero::Connected: heroState = ConnectCanvas::State::Connected; break;
+    case health::Hero::Connecting: heroState = ConnectCanvas::State::Connecting; break;
+    case health::Hero::Error: heroState = ConnectCanvas::State::Error; break;
+    case health::Hero::Processing: heroState = ConnectCanvas::State::Processing; break;
+    case health::Hero::Disconnected: heroState = ConnectCanvas::State::Disconnected; break;
+  }
+  const bool showNotProtected = view.showNotProtected;
 
   statusText_->set_text(text);
   statusDot_->set_markup(std::string("<span size='") + std::to_string(10 * PANGO_SCALE) +
@@ -1158,12 +1124,14 @@ void ConnectPage::ApplyConnectStatus() {
   // the action: filled Connect vs outlined Disconnect (four channels — word,
   // fill, dot, status line)
   //
-  // CACHED, because this expression is now TWO things: the word on the button
-  // and the answer every caller gets to "what does the next press do"
-  // (ConnectActionIsDisconnect, and the action RelayConnectPress hands to
-  // MainWindow). Deriving the action anywhere else is what let a button
-  // labelled Disconnect run the connect path.
-  const bool isDisconnect = reallyConnected || connecting;
+  // IT CAME OUT OF THE SAME Render() CALL AS THE HEADLINE ABOVE. There is no
+  // second expression here to keep in step with the first: `view.action` is a
+  // field of the value that produced `text`, `dot` and `heroState`. Cached
+  // because it is also the answer every caller gets to "what does the next
+  // press do" (ConnectActionIsDisconnect, and the action RelayConnectPress
+  // hands to MainWindow) — deriving the action anywhere else is what let a
+  // button labelled Disconnect run the connect path.
+  const bool isDisconnect = view.action == health::Action::Disconnect;
   actionIsDisconnect_ = isDisconnect;
   connectBtn_->set_label(isDisconnect ? T_("disconnect", "Disconnect")
                                       : T_("connect", "Connect"));
@@ -1183,14 +1151,24 @@ void ConnectPage::SetDaemonNotice(const Glib::ustring& notice) {
   ApplyConnectStatus();
 }
 
-void ConnectPage::SetConnected(bool connected) {
-  connected_ = connected;
+// THE ONLY WRITER OF THE CONNECTION STATE ON THIS PAGE. It takes the whole
+// reading or none of it: there is no setter that can move one field forward
+// and leave its siblings behind.
+void ConnectPage::ApplyConnectReading(const ConnectReading& reading) {
+  // The 1 Hz re-read below arrives whether or not anything moved; an unchanged
+  // reading must not rebuild pane C's rows underneath the user. The intent's
+  // 8 s ceiling does not depend on this — Tick() re-renders while one is live.
+  if (reading == reading_ && renderedApplied_) return;
+  renderedApplied_ = true;
+  reading_ = reading;
   ApplyConnectStatus();
-}
-
-void ConnectPage::SetConnectionStatus(const std::string& status) {
-  connectStatus_ = status;
-  ApplyConnectStatus();
+  // Pane B/C carry gates that used to test stats_.connected — a LOOSER
+  // question than the headline's. Re-apply them against the verdict this
+  // render just produced so "Connected to N providers" cannot appear under
+  // "Connecting to providers".
+  ApplySessionRows();
+  ApplySessionCardsVisibility();
+  ApplyLiveStatsGroup();
 }
 
 void ConnectPage::ApplyStats(const LiveStats& stats) {
@@ -1203,7 +1181,7 @@ void ConnectPage::ApplyStats(const LiveStats& stats) {
   // COLLAPSES entirely rather than reading "0 bps"
   if (paneB_.meta) {
     kit::SetTextOrCollapse(*paneB_.meta,
-                           stats.connected
+                           ConnectedNow()
                                ? Glib::ustring("↓ " + FormatBitRate(stats.downBitsPerSecond) +
                                                "   ↑ " + FormatBitRate(stats.upBitsPerSecond))
                                : Glib::ustring());
@@ -1239,31 +1217,36 @@ void ConnectPage::ApplyStats(const LiveStats& stats) {
   // location per call, while ApplyStats rides every throughput sample. Both
   // ride the location reading instead (RefreshFeeds / DrawerEvent::Location).
 
-  // 4.3 the provider-count entry: gated on the AGGREGATE reading, so
-  // "Connected to N providers" can never appear under "Finding providers…"
-  if (liveStatsGroup_ && providerCountText_) {
-    liveStatsGroup_->set_visible(stats.connected);
-    const bool show = stats.connected && connected_;
-    kit::SetTextOrCollapse(
-        *providerCountText_,
-        show ? Glib::ustring(Format(TN_("connected_provider_count", "Connected to {} provider",
-                                        "Connected to {} providers",
-                                        static_cast<unsigned long>(stats.providerCount)),
-                                    stats.providerCount))
-             : Glib::ustring());
-    if (providerCountLine_) {
-      kit::SetAccessibleLabel(*providerCountLine_, providerCountText_->get_text());
-      // A row that cannot act must not claim it can: with the callback
-      // unassigned (the globe sheet cannot be owned here — it needs
-      // MainWindow's LocationOverrideController) the row stays greyed rather
-      // than swallowing the click.
-      providerCountLine_->set_sensitive(show && on_open_provider_locations != nullptr);
-    }
-  }
-
+  ApplyLiveStatsGroup();
   ApplySessionRows();
   ApplySessionCardsVisibility();
   ApplyConnectStatus();
+}
+
+// 4.3 the provider-count entry: gated on the AGGREGATE reading (the verdict
+// ApplyConnectStatus just rendered), so "Connected to 11 providers" can never
+// appear under "Connecting to providers". It used to be gated on
+// `stats_.connected && connected_` — two of the three copies, ANDed, which is
+// a third question again.
+void ConnectPage::ApplyLiveStatsGroup() {
+  if (!liveStatsGroup_ || !providerCountText_) return;
+  const bool show = ConnectedNow();
+  liveStatsGroup_->set_visible(show);
+  kit::SetTextOrCollapse(
+      *providerCountText_,
+      show ? Glib::ustring(Format(TN_("connected_provider_count", "Connected to {} provider",
+                                      "Connected to {} providers",
+                                      static_cast<unsigned long>(stats_.providerCount)),
+                                  stats_.providerCount))
+           : Glib::ustring());
+  if (providerCountLine_) {
+    kit::SetAccessibleLabel(*providerCountLine_, providerCountText_->get_text());
+    // A row that cannot act must not claim it can: with the callback
+    // unassigned (the globe sheet cannot be owned here — it needs
+    // MainWindow's LocationOverrideController) the row stays greyed rather
+    // than swallowing the click.
+    providerCountLine_->set_sensitive(show && on_open_provider_locations != nullptr);
+  }
 }
 
 // ---- pane B: the routing-decision list ----------------------------------------
@@ -1376,7 +1359,7 @@ void ConnectPage::ApplyConnectionSelectionVisuals() {
 void ConnectPage::ApplySessionCardsVisibility() {
   if (!connectionsHost_ || !connectionsEmpty_) return;
   // the list and the sentence SWAP; the connected flag gates which
-  const bool showList = stats_.connected && connectionsHost_->get_first_child() != nullptr;
+  const bool showList = ConnectedNow() && connectionsHost_->get_first_child() != nullptr;
   connectionsHost_->set_visible(showList);
   connectionsEmpty_->set_visible(!showList);
 }
@@ -1396,9 +1379,9 @@ void ConnectPage::ApplySessionRows() {
   // an em dash is "no session", NOT a zero
   const Glib::ustring none = T_("adv_na", "—");
   add(T_("remote", "Remote"),
-      stats_.connected ? Glib::ustring("↓ " + FormatBitRate(stats_.downBitsPerSecond)) : none);
+      ConnectedNow() ? Glib::ustring("↓ " + FormatBitRate(stats_.downBitsPerSecond)) : none);
   add(T_("local", "Local"),
-      stats_.connected ? Glib::ustring("↑ " + FormatBitRate(stats_.upBitsPerSecond)) : none);
+      ConnectedNow() ? Glib::ustring("↑ " + FormatBitRate(stats_.upBitsPerSecond)) : none);
   add(T_("allowed", "Allowed"),
       blockStats_ ? Glib::ustring(FormatCountCompact(blockStats_->AllowedCount)) : none);
   add(T_("blocked", "Blocked"),
@@ -1413,18 +1396,16 @@ void ConnectPage::ApplySessionRows() {
     // Advanced reads the raw field through it), so stats_.connectionStatus IS
     // the pre-clamp reading and this row is truthful exactly as written.
     //
-    // TODO(sdk-wiring): what is missing here is the CLAMP, not the field. A
-    // DeviceRemote whose loopback rpc to urnetworkd has gone away keeps
-    // returning the last status it was told, so the hero can read Connected
-    // over a tunnel that no longer exists. The reading that would drive it is
-    // reachable — ReliabilitySnapshot::remoteConnected arrives on the very
-    // snapshot RefreshExitRouting below takes every 5 s, and is deliberately
-    // NOT kept here — but the clamp belongs in SdkHost::ReadStats, where
-    // LiveStats gains
-    // daemonDown/rawConnectionStatus and every consumer sees it at once. It
-    // must NOT be applied here: ApplyConnectStatus is the single writer of the
-    // status line, the dot, the hero and the button, and it must not acquire a
-    // second status source behind its back.
+    // The CLAMP that used to be missing here now lives in the reading:
+    // ConnectReading::tunnelBound is "a DeviceRemote is still bound over the
+    // CURRENT control session", an O(1) generation compare with no round trip,
+    // and health::Render refuses every non-idle row without it. So a
+    // DeviceRemote whose loopback rpc to urnetworkd has gone away can no
+    // longer hold the hero on Connected. What is STILL only approximated is a
+    // daemon that is alive but has stopped carrying: MainWindow's status poll
+    // writes that into the reading (DaemonTunnelGoneReading) rather than the
+    // SDK reporting it. This raw row is deliberately unclamped — it is the
+    // pre-clamp field, and Advanced exists to show it.
     add(T_("adv_raw_status", "Raw status"),
         stats_.connectionStatus.empty() ? Glib::ustring(T_("adv_none", "none"))
                                         : Glib::ustring(stats_.connectionStatus));
@@ -2068,6 +2049,13 @@ void ConnectPage::PullThroughput() {
 // to nullopt with no device, and every writer renders that as its own settled
 // reading — never a spinner, never a zero.
 void ConnectPage::RefreshFeeds(bool force) {
+  // NO STATE MAY PERSIST AFTER ITS PRODUCER STOPS PUBLISHING. The SDK simply
+  // goes quiet on some teardowns — that silence is what let the old status
+  // string latch on its last word for the rest of the session — so the
+  // connection reading is RE-READ here, on the page's own clock, and not only
+  // when something pushes. Cheap: ReadConnectReading takes no lock and reads
+  // getters the stats feed already reads many times a second.
+  ApplyConnectReading(host_.CurrentConnectReading());
   {
     auto actions = host_.BlockActions();
     const uint64_t sig = BlockActionsSig(actions);

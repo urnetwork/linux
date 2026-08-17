@@ -49,8 +49,12 @@ class ConnectPage : public Gtk::Box {
 
   // live feeds (MainWindow relays; all already marshaled to the GTK loop)
   void ApplyStats(const LiveStats& stats);
-  void SetConnected(bool connected);
-  void SetConnectionStatus(const std::string& status);
+  // THE CONNECTION FEED, AND THE ONLY ONE. It replaced SetConnected(bool) +
+  // SetConnectionStatus(string): two setters, two members, two freshnesses,
+  // and a third copy in stats_.connected beside them — which is how the status
+  // row came to describe a session none of the three was looking at. See
+  // Health.hpp for what those three actually meant.
+  void ApplyConnectReading(const ConnectReading& reading);
   // The daemon-session line under the status row ("" = healthy).
   // TODO(wiring): MainWindow owns the SCM/daemon probe and still renders it in
   // the LEGACY column's daemonStatusLabel_; it must relay every change here
@@ -158,6 +162,24 @@ class ConnectPage : public Gtk::Box {
   void SelectConnection(const std::string& id);
   void ApplySessionCardsVisibility();
   void ApplySessionRows();
+  void ApplyLiveStatsGroup();  // pane C's "Connected to N providers" entry
+  // THE SAME VERDICT THE HEADLINE RENDERED, for every surface that used to ask
+  // its own looser version of the question (stats_.connected, connected_, or
+  // the two ANDed). Never re-derived — it is what the last ApplyConnectStatus
+  // put on screen.
+  // "IS THERE A LIVE SESSION TO SHOW NUMBERS FOR?" — deliberately NOT
+  // `state == Connected`. Blocked (out of balance) and Disconnecting are both
+  // states in which the tunnel is STILL CARRYING, so gating the globe, the
+  // connections list and the throughput readouts on Connected alone blanked
+  // every live-session surface the moment the balance ran out, and again for
+  // up to 8s during every teardown — while bytes were still moving.
+  // Evaluating and Connecting are excluded on purpose: there is no provider
+  // attached yet, so there is genuinely nothing to plot.
+  bool ConnectedNow() const {
+    return renderedState_ == health::State::Connected ||
+           renderedState_ == health::State::Blocked ||
+           renderedState_ == health::State::Disconnecting;
+  }
   void ApplyContractsList();
   void ApplySplitRuleCount();
   void ApplyDnsCard();
@@ -231,7 +253,6 @@ class ConnectPage : public Gtk::Box {
   bool advanced_ = false;
   bool presenting_ = false;
   bool pageVisible_ = false;  // this destination is the mapped stack child
-  bool connected_ = false;
   bool moreOptionsExpanded_ = false;
   // set the first time a real DrawerEvent lands: the clock-driven poll then
   // drops to a slow safety net instead of carrying the page on its own.
@@ -239,18 +260,30 @@ class ConnectPage : public Gtk::Box {
   int widthDip_ = 1120;
   int foldWidth_ = -1;  // the pane-grid width the current fold was taken on
   bool foldRecheckPending_ = false;
-  std::string connectStatus_ = "DISCONNECTED";
+  // THE ONE READING pane A renders from. Every field of it was sampled at one
+  // instant by SdkHost::ReadConnectReading, so no part of the status row can
+  // describe a different moment than any other part.
+  ConnectReading reading_;
+  // The one health verdict the LAST render produced, cached so the pane B/C
+  // gates that used to test stats_.connected ask the SAME question the
+  // headline answered instead of a looser one beside it.
+  health::State renderedState_ = health::State::Disconnected;
+  // Has a reading ever been applied? Without it the FIRST push — which for a
+  // signed-out or idle app equals the default-constructed reading — would be
+  // skipped as "unchanged" and the panes would never be seeded.
+  bool renderedApplied_ = false;
   // The action the LAST render put on the button, and the answer any caller
   // gets from ConnectActionIsDisconnect(). Written by ApplyConnectStatus from
   // the very expression that sets the label — one reading, one answer.
   bool actionIsDisconnect_ = false;
   // THE USER'S INTENT, WHICH THE SDK'S CONNECTION TOKEN DOES NOT CARRY.
   // g_get_monotonic_time() microseconds at the moment a Disconnect press was
-  // relayed, or 0 for "no disconnect in flight". Until the reading actually
+  // relayed, or 0 for "no disconnect in flight". Until the session actually
   // reads down, this is the ONLY thing on the page that knows a teardown was
-  // asked for: the SDK keeps publishing DESTINATION_SET/CONNECTING right
-  // through a teardown, which is how a Disconnect press used to land on
-  // "Connecting to providers".
+  // asked for: the SDK keeps reporting a selected destination right through a
+  // teardown, which is how a Disconnect press used to land on "Connecting to
+  // providers". It is the one input to health::Render that does not come from
+  // the SDK — and it is bounded (DisconnectIntentLive), so it cannot latch.
   gint64 disconnectRequestedAtUs_ = 0;
   LiveStats stats_;
   Glib::ustring daemonNotice_;

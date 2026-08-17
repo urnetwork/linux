@@ -103,6 +103,14 @@ Element order, top to bottom:
 - If `connectStatus_` ∈ {Connecting, DestinationSet} AND health ∈ {Disconnected, NoService, Connected} ⇒ render Connecting. (Never overrides Evaluating/Degraded/Failed.)
 - If `connectStatus_` == Disconnected AND health ∉ {NoService, Disconnected} ⇒ render Disconnected (a settled idle status outranks stale ACTIVE health).
 
+**LINUX CORRECTION (measured, 2026-08-16 — read this before touching `ApplyConnectStatus` again).** The Windows spec above assumes `connectStatus_` carries the connect controller's own alphabet and that `CONNECTED` arrives to end a `DESTINATION_SET`. Neither is true on Linux, and that is what made this row lie four times:
+
+* `ConnectViewController::GetConnected()` (sdk `connect_view_controller.go:154`) returns `self.connected`, written in exactly ONE place — `ConnectLocationChanged` (`:116-125`). It means **“a destination is selected”**, not “providers are attached”, and it is true through the whole connecting phase. `LiveStats::connected` is a copy of it, and the old `SdkHost::Connected()` was that bit ANDed with “the DeviceRemote is bound over the current control session”.
+* SdkHost's old `ConnectionStatusHandler` — the feed that wrote `connectStatus_` — emitted exactly **two** strings from all five of its call sites: `"DESTINATION_SET"` and `"DISCONNECTED"`. It never emitted `CONNECTING`, `CONNECTED` or `CONNECT_FAILED`, so the `CONNECT_FAILED` branch was unreachable and `DESTINATION_SET` — a **steady-state** token that stands for the entire life of a carrying session — was being read as “in flight”.
+* The only signal that separates connecting from connected is `getConnectionStatus()` (`Connecting` until the provider window reports `MinSatisfied`, then `Connected`, `connect_view_controller.go:1055-1063`). It reached the page on `LiveStats::connectionStatus` and was never read for the verdict.
+
+So the page is now written from ONE snapshot (`urnw::ConnectReading`, SdkHost) through ONE pure decision table (`app/src/Health.hpp`, pinned by `app/tests/HealthTest.cpp`). `sessionUp = destinationSelected && tunnelBound` decides the button and the settled-idle row; `sdk == Connected` is the ONLY thing that may render Connected; `providerCount > 0` under a non-Connected status is Evaluating. There is no `connected_`, no `connectStatus_` and no `stats_.connected` left on the page to disagree with each other. Degraded is not yet reachable on Linux (it needs a “was carrying” memory the SDK does not expose); it renders as Evaluating/Connecting, same yellow.
+
 Per-state rendering (text / dot color / hero state):
 
 | render state | StatusText | dot | hero |

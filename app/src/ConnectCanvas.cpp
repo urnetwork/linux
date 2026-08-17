@@ -114,7 +114,14 @@ void ConnectCanvas::SetState(State state) {
   const bool leavingLive = (state_ == State::Connecting || state_ == State::Connected);
   const bool enteringLive = (state == State::Connecting || state == State::Connected);
   if (leavingLive && !enteringLive) ClearPoints();
+  const bool wasConnecting = (state_ == State::Connecting);
   state_ = state;
+  // ENTERING Connecting: fold in the grid that is already in hand. The page
+  // pushes the grid before the state, so without this the dots wait for the
+  // NEXT SDK push — and on a session whose grid has settled (the feed goes
+  // quiet once the window stops changing) that push may never come, leaving a
+  // bare lattice under "Connecting to providers" for the whole session.
+  if (state == State::Connecting && !wasConnecting) ApplyGrid();
   // Connected FREEZES the grid (§7.1): SetGrid stops taking pushes, so settle
   // what is on the canvas — the connected state then costs nothing per tick,
   // and the last frame before the circles slide over it is a complete grid
@@ -164,10 +171,52 @@ void ConnectCanvas::SetState(State state) {
 
 void ConnectCanvas::SetGrid(const std::vector<urnet::ProviderGridPoint>& points,
                             int64_t gridWidth, int64_t gridHeight) {
+  // ALWAYS CACHE, EVEN OUTSIDE Connecting. The dots are the only part of this
+  // canvas carrying live SDK data, and they were being dropped on the exact
+  // frame that matters: ConnectPage::ApplyStats pushes the grid first and the
+  // state last, so the push that arrives as the hero turns Connecting saw the
+  // OLD state here and was discarded. Caching makes the order irrelevant.
+  lastPoints_ = points;
+  lastGridWidth_ = gridWidth;
+  lastGridHeight_ = gridHeight;
+  haveLastGrid_ = true;
+  // ONE line, once per process, naming the three numbers that decide whether a
+  // dot can be drawn at all. Without it "I see no provider dots" is not
+  // falsifiable from a journal: an empty list, a zero-sized grid and a state
+  // that never reaches Connecting all render the same bare lattice.
+  if (!loggedFirstGrid_ && !points.empty()) {
+    loggedFirstGrid_ = true;
+    g_message("hero: first provider grid — points=%zu dims=%" G_GINT64_FORMAT "x%" G_GINT64_FORMAT
+              " canvas_state=%d (dots draw only in state 1 = Connecting)",
+              points.size(), gridWidth, gridHeight, static_cast<int>(state_));
+  }
   // iOS freezes the grid the instant the connection lands
   if (state_ != State::Connecting) return;
-  gridWidth_ = gridWidth;
-  gridHeight_ = gridHeight;
+  ApplyGrid();
+}
+
+void ConnectCanvas::ApplyGrid() {
+  if (!haveLastGrid_) return;
+  const std::vector<urnet::ProviderGridPoint>& points = lastPoints_;
+  gridWidth_ = lastGridWidth_;
+  gridHeight_ = lastGridHeight_;
+  // A ZERO-SIZED GRID MUST NOT SILENTLY ERASE A POPULATED ONE. The draw path
+  // sizes cells by max(gridWidth_, gridHeight_) and skips the whole dot loop
+  // when that is 0, so a feed that reports points but no dimensions (the
+  // DeviceRemote path has no obligation to fill them, and a 0 is what an
+  // unset int64 marshals as) renders a fully populated grid as the BARE
+  // LATTICE — indistinguishable from "no providers". Derive the extent from
+  // the points themselves, which is the one source that cannot be missing
+  // when there is anything to draw.
+  if (gridWidth_ <= 0 && gridHeight_ <= 0) {
+    int64_t maxX = 0, maxY = 0;
+    for (const auto& p : points) {
+      maxX = std::max<int64_t>(maxX, p.X);
+      maxY = std::max<int64_t>(maxY, p.Y);
+    }
+    gridWidth_ = maxX + 1;
+    gridHeight_ = maxY + 1;
+  }
 
   // The reduce-motion / not-presenting rule (§5's fade-helper semantics) as it
   // applies to the dot layer. A dot is born at scale 0 and grown in by Tick()
@@ -277,6 +326,12 @@ void ConnectCanvas::Tick() {
 void ConnectCanvas::ClearPoints() {
   dots_.clear();
   dotsAnimating_ = false;
+  // and the cache with them: §5 wants the next connect to grow the grid in
+  // FROM NOTHING, so a replay must never resurrect the previous session's
+  // providers on the next Connecting.
+  lastPoints_.clear();
+  lastGridWidth_ = lastGridHeight_ = 0;
+  haveLastGrid_ = false;
 }
 
 // Every dot at its settled pose, nothing left to animate. Used wherever a dot

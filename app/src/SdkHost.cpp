@@ -1013,6 +1013,9 @@ TunnelStartResult SdkHost::StartTunnel() {
 
 TunnelStartResult SdkHost::StartTunnelLocked() {
   lastTunnelError_.clear();
+  // A new start makes any previous "the daemon stopped it" verdict obsolete.
+  // This is the ONLY thing that clears the latch.
+  daemonTunnelGone_.store(false);
   // EVERY outcome of this function is logged. It used to be silent on all of
   // them, so a Connect that failed here left NOTHING to read: not in the app,
   // not in the journal, not in the daemon (which is never reached on most of
@@ -1111,7 +1114,7 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
     // that fold on hasDevice() stop rendering a session that does not exist.
     TeardownDeviceLocked();
     EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
-    if (onStatus_) onStatus_("DISCONNECTED");
+    PublishConnectReading();
   }
 
   rpcsession::Blob rpc;
@@ -1346,17 +1349,21 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
 
     // Connection choice is data-plane state, so keep this lightweight listener
     // alive for the tray even when every presentation controller is closed.
+    //
+    // IT PUBLISHES THE WHOLE READING, not the one bit it carries. The old
+    // handler pushed "DESTINATION_SET"/"DISCONNECTED" — a two-word vocabulary
+    // that the page then had to read as "in flight", which is why a carrying
+    // tunnel rendered "Connecting to providers" for the whole session: the
+    // destination stays selected while the tunnel carries, and no later push
+    // ever contradicted it. Re-reading everything means the page can never
+    // hold one field from this instant beside another from a previous one.
     subs_.push_back(device_->addConnectLocationChangeListener(
-        [this](std::optional<urnet::ConnectLocation> location) {
-          if (onStatus_) onStatus_(location ? "DESTINATION_SET" : "DISCONNECTED");
-        }));
+        [this](std::optional<urnet::ConnectLocation>) { PublishConnectReading(); }));
     if (presentationActive_) {
       SubscribeStats();
       SubscribeDrawer();
     }
-    if (onStatus_) {
-      onStatus_(device_->getConnectLocation() ? "DESTINATION_SET" : "DISCONNECTED");
-    }
+    PublishConnectReading();
     // Remember the triple so the NEXT launch is adopted instead of rebuilding
     // this tunnel. Written only now, after the daemon accepted it and this
     // side bound to it, so a blob on disk always describes a pairing that
@@ -1405,7 +1412,16 @@ void SdkHost::SubscribeStats() {
   connectVc_ = device_->openConnectViewController();
   connectVc_->start();
   contractVc_ = device_->openContractViewController();  // live throughput feed
-  auto pub = [this] { PublishStats(); };
+  // BOTH FEEDS, FROM ONE EVENT. The connect controller's status listener is
+  // the only place CONNECTING -> CONNECTED is ever announced, and it used to
+  // reach the stats feed alone — which the window drops while it is hidden,
+  // and which the status row never read for its verdict. It now also
+  // republishes the connect reading, ungated, so "the SDK has provider
+  // sessions" reaches the status row the moment it becomes true.
+  auto pub = [this] {
+    PublishStats();
+    PublishConnectReading();
+  };
   presentationSubs_.push_back(connectVc_->addConnectionStatusListener(pub));
   presentationSubs_.push_back(connectVc_->addGridListener(pub));  // provider window size
   presentationSubs_.push_back(connectVc_->addSelectedLocationListener(
@@ -1433,8 +1449,12 @@ void SdkHost::SubscribeStats() {
         provideHasNetworkKey_.store(hasNetworkKey);
         PublishStats();
       }));
-  presentationSubs_.push_back(device_->addTunnelChangeListener([this](bool) { PublishStats(); }));
-  PublishStats();  // initial snapshot
+  presentationSubs_.push_back(device_->addTunnelChangeListener([this](bool) {
+    PublishStats();
+    PublishConnectReading();
+  }));
+  PublishStats();           // initial snapshot
+  PublishConnectReading();  // ... and the reading it must never disagree with
 }
 
 LiveStats SdkHost::ReadStats() {
@@ -1482,6 +1502,91 @@ LiveStats SdkHost::ReadStats() {
 
 void SdkHost::PublishStats() {
   if (onStats_) onStats_(ReadStats());
+}
+
+// ---- the one connect reading -------------------------------------------------
+// EVERY field, every time, from the live getters. The defect this replaces was
+// three copies of "are we connected" with three writers and three freshnesses:
+// SdkHost::Connected() (destination selected AND the tunnel still ours),
+// LiveStats::connected (destination selected, and only applied while the window
+// was visible), and a pushed status string whose entire vocabulary was
+// {DESTINATION_SET, DISCONNECTED}. See Health.hpp.
+void SdkHost::NoteDaemonTunnelGone() {
+  daemonTunnelGone_.store(true);
+  PublishConnectReading();
+}
+
+ConnectReading SdkHost::ReadConnectReading() {
+  ConnectReading r;
+  const bool haveDevice = device_.has_value();
+  r.tunnelBound = haveDevice && deviceControlGeneration_ == control_.SessionGeneration();
+  // THE DAEMON'S VERDICT IS STICKY, AND IT HAS TO BE. When the daemon tears a
+  // session down protectively (proven-unprotected egress, an amplification
+  // storm, a DNS override it could not restore) the GUI learns it only from
+  // PollDaemonHealth. Nothing in the three getters above can see it: device_
+  // is still held and the control generation still matches, so tunnelBound
+  // reads TRUE and the very next SDK push — which arrives ~10/s during a ramp —
+  // would overwrite the verdict and put the hero back to green over a tunnel
+  // that is gone. Patching tunnelBound onto a COPY of the reading, as the
+  // caller used to, is self-reverting by construction.
+  //
+  // Cleared only by a NEW start_tunnel (StartTunnelLocked), because that is the
+  // one event that makes the old verdict obsolete.
+  if (daemonTunnelGone_.load()) r.tunnelBound = false;
+  if (connectVc_) {
+    r.rawStatus = connectVc_->getConnectionStatus();
+    r.destinationSelected = connectVc_->getConnected();
+    if (auto grid = connectVc_->getGrid()) r.providerCount = grid.getWindowCurrentSize();
+  } else if (haveDevice) {
+    // No presentation controller (the window is hidden): the destination is
+    // still the honest half, and there is simply no status to report. Left
+    // Unknown rather than fabricated — Unknown is not Disconnected.
+    r.destinationSelected = device_->getConnectLocation().has_value();
+  }
+  if (haveDevice) {
+    if (auto cs = device_->getContractStatus(); cs) r.insufficientBalance = cs->InsufficientBalance;
+  }
+
+  // The status latch, scoped to the session and to nothing else.
+  const bool sessionUp = r.destinationSelected && r.tunnelBound;
+  if (!sessionUp) {
+    // THE LATCH DIES WITH THE SESSION IT DESCRIBES. Nothing here can outlive
+    // its producer: the next reading over a new session starts from Unknown.
+    lastKnownSdk_.store(static_cast<int>(health::SdkStatus::Unknown));
+    r.sdk = health::SdkStatus::Unknown;
+    // ... and so does the token the Advanced strip shows. Reporting the
+    // controller's last word ("CONNECTING") beside a torn-down session is the
+    // same lie in miniature.
+    r.rawStatus = "DISCONNECTED";
+    return r;
+  }
+  const health::SdkStatus parsed = health::ParseSdkStatus(r.rawStatus);
+  if (parsed != health::SdkStatus::Unknown && parsed != health::SdkStatus::Disconnected) {
+    lastKnownSdk_.store(static_cast<int>(parsed));
+    r.sdk = parsed;
+    return r;
+  }
+  // Nothing usable came back this time (a controller that has just been
+  // reopened, or none at all): keep the last thing this session actually said.
+  r.sdk = static_cast<health::SdkStatus>(lastKnownSdk_.load());
+  return r;
+}
+
+void SdkHost::PublishConnectReading() {
+  if (onReading_) onReading_(ReadConnectReading());
+}
+
+// THE ONLY DEFINITION OF "ARE WE CONNECTED" LEFT IN THIS PROCESS.
+//
+// SdkHost::Connected() used to live here and answer a DIFFERENT question from
+// LiveStats::connected, which answered a different question again from the
+// status string pushed beside them — three predicates over one underlying bit,
+// and the status row had to guess which pair of them to trust. There is one
+// reading now and one decision table over it (health::Render); this is simply
+// how a caller gets a fresh copy.
+ConnectReading SdkHost::CurrentConnectReading() {
+  std::scoped_lock lock(mutex_);
+  return ReadConnectReading();
 }
 
 LiveStats SdkHost::CurrentStats() { return ReadStats(); }
@@ -2204,7 +2309,7 @@ void SdkHost::ConnectBestAvailable() {
                 statusError.empty() ? "" : "; ", statusError.c_str());
       TeardownDeviceLocked();
       EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
-      if (onStatus_) onStatus_("DISCONNECTED");
+      PublishConnectReading();
       // AND THEN DO WHAT THE PRESS ASKED FOR. The caller skipped the start
       // path because hasDevice() was still true when it looked (nothing had
       // touched the control socket since the daemon died, so the cached
@@ -2275,29 +2380,10 @@ void SdkHost::Disconnect() {
   // with nothing on the other end: the machine loses its internet and the UI
   // says "Disconnected". Best effort, exactly as Logout/Shutdown do it.
   control_.StopTunnel();
-}
-
-bool SdkHost::Connected() {
-  std::scoped_lock lock(mutex_);
-  // A VPN may only say "connected" when TRAFFIC IS ACTUALLY CARRIED. The SDK's
-  // own connected flag is an APPLICATION-level fact — it is true as soon as
-  // there are provider sessions, with or without a tun — so on its own it will
-  // happily report a green, protected-looking state while every packet is still
-  // going out in the clear.
-  //
-  // Measured: the daemon crashed three seconds after the tunnel came up, taking
-  // urnet0, the routes and the DNS override with it, and the app kept saying
-  // "Connected" with a green dot and a live host list. That is the worst UI lie
-  // this product can tell.
-  //
-  // hasDevice() is the honest half: it is true only while a DeviceRemote is
-  // bound over the CURRENT control session, so a daemon that died, restarted or
-  // dropped us makes it false with no round trip.
-  const bool sdkConnected = connectVc_ ? connectVc_->getConnected()
-                                       : (device_ && device_->getConnectLocation().has_value());
-  const bool tunnelBound = device_.has_value() &&
-                           deviceControlGeneration_ == control_.SessionGeneration();
-  return sdkConnected && tunnelBound;
+  // Say so NOW rather than waiting for the connect-location listener: on a
+  // teardown the SDK can simply stop publishing, and a reading nobody
+  // refreshes is exactly how the row used to latch on its last word.
+  PublishConnectReading();
 }
 
 void SdkHost::SetProvideControlMode(const std::string& mode) {
@@ -2407,7 +2493,7 @@ void SdkHost::OnRpcBindDeadline() {
   // The material is bound to nothing now; remembering it could only produce a
   // reattach that mismatches again.
   ClearRpcSession();
-  if (onStatus_) onStatus_("DISCONNECTED");
+  PublishConnectReading();
   EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
 }
 

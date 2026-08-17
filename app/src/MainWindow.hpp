@@ -116,7 +116,13 @@ class MainWindow : public Gtk::ApplicationWindow {
   void NavigateCreate(CreateNetworkPage::Mode mode, const std::string& userAuth, bool fromHome);
   void NavigateVerify(const std::string& userAuth);
   void ApplyAuthState(bool loggedIn);
-  void SetConnected(bool connected);
+  // ONE READING IN, EVERY WINDOW SURFACE OUT. There is no SetConnected(bool)
+  // any more: a bool is what let this window's copy of "connected" age
+  // independently of the page's, and of the stats copy beside it.
+  void ApplyConnectReading(const ConnectReading& reading);
+  // The current reading with tunnelBound forced down: what the daemon status
+  // poll has just proven when it finds urnetworkd no longer carrying.
+  ConnectReading DaemonTunnelGoneReading();
   void ApplyStats(const LiveStats& stats);  // live provider count / throughput / provide
   void OpenProviderLocations();             // the "Connected to N providers" entry point
   // Keep the device-location override pointed at the oldest connected provider
@@ -225,6 +231,15 @@ class MainWindow : public Gtk::ApplicationWindow {
   ResetPasswordPage* resetPage_ = nullptr;
   bool createPageFromHome_ = false;  // guest upgrade backs out to home, not login
 
+  // The last reading, and the one bit every window surface derives from it:
+  // "there is a session to disconnect from" (health::SessionUp). The tray's
+  // label and the tray's action both read it, so they cannot disagree.
+  ConnectReading reading_;
+  // Has a reading ever been applied / pushed to the tray? Without these the
+  // FIRST reading — which for an idle app equals the default-constructed one —
+  // would be skipped as "unchanged" and no surface would ever be seeded.
+  bool readingApplied_ = false;
+  bool trayConnectedPushed_ = false;
   bool connected_ = false;
   // the free -> Pro provide reset ran for this session's upgrade detection
   // (the store's flag stays up all session; the reset must apply exactly once

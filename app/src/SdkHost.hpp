@@ -30,6 +30,7 @@
 #include <urnetwork_sdk.hpp>
 
 #include "ControlClient.hpp"
+#include "Health.hpp"
 #include "RpcSession.hpp"
 #include "WalletConnect.hpp"
 
@@ -126,6 +127,52 @@ struct LiveStats {
   // the provider holds a Network-mode provide key: with provideEnabled this
   // means the device is discoverable/connectable as a same-network peer
   bool provideHasNetworkKey = false;
+};
+
+// THE ONE CONNECT READING — every fact the connect status row is allowed to
+// depend on, sampled TOGETHER from the live SDK getters at one instant.
+//
+// It exists because the status row used to be written from three independently
+// aged copies of the same underlying bit (see Health.hpp). Nothing here is a
+// cached copy of anything else: ReadConnectReading() re-reads all of it every
+// time, so no field of one reading can describe a different moment than
+// another field of the same reading, and no reading can outlive its producer.
+struct ConnectReading {
+  // The connect controller's OWN status, latched to the last KNOWN value for
+  // the life of the session (a freshly reopened controller reports
+  // Disconnected until its first window-monitor event). Unknown = no status
+  // has ever landed for this session.
+  health::SdkStatus sdk = health::SdkStatus::Unknown;
+  // The raw token behind `sdk`, for the Advanced status strip only. Never a
+  // decision input — decisions read `sdk`.
+  std::string rawStatus;
+  // ConnectViewController::GetConnected(): a destination is SELECTED.
+  bool destinationSelected = false;
+  // A DeviceRemote is still bound over the CURRENT control session.
+  bool tunnelBound = false;
+  int64_t providerCount = 0;  // grid.getWindowCurrentSize()
+  bool insufficientBalance = false;
+
+  // Value equality, so a consumer can skip a rebuild when nothing moved. It
+  // compares EVERY field on purpose: a partial comparison would be one more
+  // place that can decide two different readings are the same one.
+  bool operator==(const ConnectReading& o) const {
+    return sdk == o.sdk && rawStatus == o.rawStatus &&
+           destinationSelected == o.destinationSelected && tunnelBound == o.tunnelBound &&
+           providerCount == o.providerCount && insufficientBalance == o.insufficientBalance;
+  }
+  bool operator!=(const ConnectReading& o) const { return !(*this == o); }
+
+  health::Signals ToSignals(bool disconnectRequested) const {
+    health::Signals s;
+    s.sdk = sdk;
+    s.destinationSelected = destinationSelected;
+    s.tunnelBound = tunnelBound;
+    s.providerCount = providerCount;
+    s.insufficientBalance = insufficientBalance;
+    s.disconnectRequested = disconnectRequested;
+    return s;
+  }
 };
 
 // ONE consistent reading of the SDK's smart-routing (reliability) state: the
@@ -290,7 +337,11 @@ class SdkHost {
   // marshals onto the main loop and calls Logout().
   using AuthInvalidHandler = std::function<void()>;
   using JwtRefreshedHandler = std::function<void()>;
-  using ConnectionStatusHandler = std::function<void(std::string status)>;
+  // The ONE connection feed. It replaced a string push whose five call sites
+  // could only ever emit "DESTINATION_SET" or "DISCONNECTED" — a vocabulary
+  // with no word for "connected" — beside a separate, visibility-gated stats
+  // push that carried the real status and was never read for the status row.
+  using ConnectReadingHandler = std::function<void(ConnectReading reading)>;
   using StatsHandler = std::function<void(const LiveStats& stats)>;
   using DrawerEventHandler = std::function<void(DrawerEvent event)>;
 
@@ -431,7 +482,6 @@ class SdkHost {
   // (client id + display name). No-op with the tunnel down (no connect VC).
   void Connect(const std::optional<urnet::ConnectLocation>& location);
   void Disconnect();
-  bool Connected();
   // Own presentation-only SDK view controllers only while the GTK window is
   // visible. The DeviceLocal, tunnel and packet loop remain alive in the tray.
   void SetPresentationActive(bool active);
@@ -463,7 +513,21 @@ class SdkHost {
   void SetAuthStateHandler(AuthStateHandler h) { onAuth_ = std::move(h); }
   void SetAuthInvalidHandler(AuthInvalidHandler h) { onAuthInvalid_ = std::move(h); }
   void SetJwtRefreshedHandler(JwtRefreshedHandler h) { onJwtRefreshed_ = std::move(h); }
-  void SetConnectionStatusHandler(ConnectionStatusHandler h) { onStatus_ = std::move(h); }
+  // The connection feed. Fired on every event that can change any part of the
+  // reading, and NEVER gated on window visibility by its consumer: the copies
+  // this replaced diverged precisely because one of them was gated and the
+  // other was not.
+  void SetConnectReadingHandler(ConnectReadingHandler h) { onReading_ = std::move(h); }
+  // Snapshot on demand. Used on window re-show and by the page's 1 Hz poll, so
+  // no part of the reading can persist on screen after its producer goes quiet.
+  // Locked, exactly as the SdkHost::Connected() it replaced was — the callers
+  // are UI-thread callers that already take this lock through the other feed
+  // accessors (BlockActions, SelectedLocation, ContractRows).
+  ConnectReading CurrentConnectReading();
+  // The daemon reported the tunnel gone. Latches until the next start_tunnel;
+  // a plain field on a copied reading is self-reverting, because the next SDK
+  // push re-derives tunnelBound from getters that cannot see the daemon.
+  void NoteDaemonTunnelGone();
   // Live stats push (connection/throughput/provide). Fired on SDK listener
   // callbacks; the UI marshals onto the GTK loop and gates on window visibility.
   void SetStatsHandler(StatsHandler h) { onStats_ = std::move(h); }
@@ -682,6 +746,11 @@ class SdkHost {
   void EmitDrawerEvent(DrawerEvent event);
   LiveStats ReadStats();  // read the current snapshot from the SDK getters
   void PublishStats();    // ReadStats() -> onStats_
+  // Re-reads EVERY field from the live SDK getters. Takes no lock (same
+  // contract as ReadStats): it is called from SDK listener threads, from the
+  // GTK loop, and from inside StartTunnelLocked with mutex_ already held.
+  ConnectReading ReadConnectReading();
+  void PublishConnectReading();  // ReadConnectReading() -> onReading_
 
   // ---- kill switch internals ------------------------------------------------
   // Requires mutex_. The soft legs, in the parity order: LocalState FIRST
@@ -849,7 +918,21 @@ class SdkHost {
   AuthStateHandler onAuth_;
   AuthInvalidHandler onAuthInvalid_;
   JwtRefreshedHandler onJwtRefreshed_;
-  ConnectionStatusHandler onStatus_;
+  ConnectReadingHandler onReading_;
+  // The last KNOWN connect-controller status of the CURRENT session, held as
+  // the enum's integer value. A controller reopened on window re-show reports
+  // Disconnected until its first window-monitor event
+  // (connect_view_controller.go:89), and letting that regress the reading
+  // would flash "Connecting to providers" across a carrying tunnel every time
+  // the window is shown. It is SESSION-scoped, not sticky: ReadConnectReading
+  // clears it the moment the session stops being up, so it can never outlive
+  // the thing it describes.
+  std::atomic<int> lastKnownSdk_{static_cast<int>(health::SdkStatus::Unknown)};
+  // The daemon stopped the tunnel underneath us (PollDaemonHealth saw it).
+  // Forces tunnelBound false in EVERY subsequent reading until a new
+  // start_tunnel clears it — see ReadConnectReading. Atomic because the poll
+  // runs on the GTK loop and readings are published from SDK threads.
+  std::atomic<bool> daemonTunnelGone_{false};
   StatsHandler onStats_;
   DrawerEventHandler onDrawerEvent_;
 };
