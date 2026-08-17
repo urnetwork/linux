@@ -1028,6 +1028,19 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
     return TunnelStartResult::Failed;
   }
   const std::string instanceId = localState_->getInstanceId();
+  // FROM UPSTREAM (556dca7). The daemon's ValidateStartTunnelRequest already
+  // refuses an empty instance_id, so this is not the enforcing check — it is
+  // the one that fails FAST and legibly. Without it an empty id costs a daemon
+  // connect, a hello and a version negotiation before coming back as a generic
+  // "instance_id is required" attributed to the daemon, which reads like a
+  // protocol fault rather than what it is: this process has no local device
+  // identity yet. instance_id is the DEVICE PAIRING KEY, so an empty one can
+  // never succeed and there is nothing to gain by putting it on the wire.
+  if (instanceId.empty()) {
+    lastTunnelError_ = "local device instance is missing";
+    g_warning("connect: refused — the local state has no instance id");
+    return TunnelStartResult::Failed;
+  }
 
   // 1) daemon session: connect + hello. The protocol version is enforced in
   //    BOTH directions here (APPIMAGE.md §11b) — each failure mode is a

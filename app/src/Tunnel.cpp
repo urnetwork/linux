@@ -2164,6 +2164,29 @@ bool Tunnel::Configure(const TunnelConfig& cfg, TunnelError* err) {
       {ip, "-4", "address", "replace", addr, "dev", name_},
       {ip, "link", "set", "dev", name_, "up"},
   };
+  // FROM UPSTREAM (556dca7), but BEST-EFFORT rather than one of the fatal
+  // `steps` above, which is the whole reason it is not in that vector: the
+  // loop below aborts the entire bring-up on any non-zero exit, and
+  // `addrgenmode` is an iproute2/kernel capability we do not require anywhere
+  // else. Making it fatal would trade a working tunnel for a hardening measure
+  // on exactly the older kernels least able to spare one.
+  //
+  // What it buys: set while the link is still DOWN (the `up` step is last), it
+  // stops the kernel synthesizing an IPv6 link-local address on urnet0 at all,
+  // so there is no tunnel-local v6 source address for anything to bind or
+  // advertise. This is defence in depth UNDER the nftables v6 block
+  // (FilterConfig::block_ipv6, §6.3), never a replacement for it — the filter
+  // is still what refuses v6 egress; this removes the address that block
+  // exists to contain. Host IPv6 is untouched: no route and no blackhole is
+  // installed, so the physical interface keeps its normal policy.
+  if (const CommandResult agm =
+          RunCommand({ip, "link", "set", "dev", name_, "addrgenmode", "none"});
+      !agm.ok()) {
+    std::fprintf(stderr,
+                 "[tun] addrgenmode none unavailable (%s); the nftables IPv6 block remains "
+                 "the enforcing layer\n",
+                 agm.Describe().c_str());
+  }
   for (const auto& step : steps) {
     const CommandResult r = RunCommand(step);
     if (!r.ok()) {
