@@ -53,7 +53,16 @@ struct Argb {
 constexpr Argb kDotColors[] = {
     {1.0, 0xEF / 255.0, 0xF7 / 255.0, 0xBB / 255.0},  // InEvaluation  kAccent
     {1.0, 0xFF / 255.0, 0x6C / 255.0, 0x58 / 255.0},  // EvaluationFailed  coral
-    {1.0, 0xFF / 255.0, 0x6C / 255.0, 0x58 / 255.0},  // NotAdded  coral
+    // NOT the same coral as EvaluationFailed, which is what it used to be.
+    // NotAdded is the NORMAL outcome for most evaluated providers: the SDK
+    // requests roughly double the window target (evaluationpoolmultiple=2) and
+    // adds the best of them, so every surplus provider is healthy and simply
+    // lost the race. Painting it identically to a failure made a WORKING full
+    // window read as a wall of errors — the owner reported "they keep turning
+    // red" on a session that was carrying traffic, and raising the window from
+    // 2 to 6 tripled how many of these exist. Muted slate: present, evaluated,
+    // not chosen.
+    {1.0, 0x6B / 255.0, 0x72 / 255.0, 0x80 / 255.0},  // NotAdded  slate
     {1.0, 0x87 / 255.0, 0xFB / 255.0, 0x67 / 255.0},  // Added  green
     {0.0, 0x10 / 255.0, 0x10 / 255.0, 0x10 / 255.0},  // Removed  urBlack @ 0
 };
