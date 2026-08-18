@@ -706,6 +706,14 @@ struct StatusReply {
   TunnelState tunnel_state = TunnelState::Stopped;
   int rpc_port = 0;          // 0 while the tunnel is down
   std::string client_id;     // the DeviceLocal's client id ("" while down)
+  // UPSTREAM FIELDS, kept so upstream's RpcSessionStore /
+  // SecretServiceRpcSessionStore compile against this protocol. Our fork
+  // regenerates the device-RPC material per session rather than persisting it
+  // through the Secret Service, so nothing here populates rpc_session_id yet;
+  // reconciling the two credential lifetimes is a maintainer decision and is
+  // called out in the PR rather than resolved unilaterally.
+  std::string instance_id;    // exact live DeviceLocal identity ("" while down)
+  std::string rpc_session_id; // opaque per-tunnel RPC credential generation
   std::string error;         // last start error ("" when none)
 
   // Machine-readable twin of `error` (one of the kCode* below), so the UI
@@ -758,6 +766,8 @@ inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["tunnel_state"] = ToString(v.tunnel_state);
   j["rpc_port"] = v.rpc_port;
   j["client_id"] = v.client_id;
+  j["instance_id"] = v.instance_id;
+  j["rpc_session_id"] = v.rpc_session_id;
   j["error"] = v.error;
   j["error_code"] = v.error_code;
   j["routes_installed"] = v.routes_installed;
@@ -780,6 +790,8 @@ inline void from_json(const nlohmann::json& j, StatusReply& v) {
   v.tunnel_state = TunnelStateFromString(state);
   detail::Get(j, "rpc_port", v.rpc_port);
   detail::Get(j, "client_id", v.client_id);
+  detail::Get(j, "instance_id", v.instance_id);
+  detail::Get(j, "rpc_session_id", v.rpc_session_id);
   detail::Get(j, "error", v.error);
   detail::Get(j, "error_code", v.error_code);
   detail::Get(j, "routes_installed", v.routes_installed);

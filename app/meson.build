@@ -28,6 +28,9 @@ project('urnetwork', 'cpp',
 # -Dgui=enabled makes a missing toolkit a hard error for the AppImage build.
 gtkmm   = dependency('gtkmm-4.0', required : get_option('gui'))     # GTK4 C++ bindings (GUI only)
 adwaita = dependency('libadwaita-1', required : get_option('gui'))  # libadwaita (C API; GUI only)
+# Secret Service backing for the GUI-owned RPC credentials (upstream's
+# RpcSessionStore/SecretServiceRpcSessionStore). GUI-only, like gtkmm.
+libsecret = dependency('libsecret-1', required : get_option('gui'))
 build_gui = gtkmm.found() and adwaita.found()
 
 gio     = dependency('gio-2.0')         # raw GDBus C API for the SNI tray (also brings glib/gobject)
@@ -112,7 +115,7 @@ pkgdata_args = ['-DUR_PKGDATADIR="' + pkgdatadir + '"']
 # Ubuntu 24.04 ships it as libwebkitgtk-6.0-dev.
 webkit = dependency('webkitgtk-6.0', required : false)
 webkit_args = []
-gui_deps = [gtkmm, adwaita, gio, json, threads, sdk_lib]
+gui_deps = [gtkmm, adwaita, libsecret, gio, json, threads, sdk_lib]
 if webkit.found() and build_gui
   gui_deps += webkit
   webkit_args = ['-DUR_HAVE_WEBKIT']
@@ -152,6 +155,8 @@ executable('urnetwork-gui',
   sources : [
     'src/main.cpp',
     'src/ControlClient.cpp',
+    'src/RpcSessionStore.cpp',
+    'src/SecretServiceRpcSessionStore.cpp',
     'src/SdkHost.cpp',
     'src/WalletConnect.cpp',
     'src/MainWindow.cpp',
@@ -384,12 +389,15 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/ProviderLocationRowTest.cpp',
     'tests/LocationOverrideStateTest.cpp',
     'tests/ControlProtocolTest.cpp',
+    'tests/RpcSessionStoreTest.cpp',
+    'tests/TunnelPolicyTest.cpp',
     'tests/NetworkServerUtilsTest.cpp',
     'tests/HealthTest.cpp',
     'src/GlobeGeometry.cpp',
     'src/WorldTopology.cpp',
     'src/ProviderLocationRow.cpp',
     'src/LocationOverrideState.cpp',
+    'src/RpcSessionStore.cpp',
   ],
   include_directories : include_directories('src', 'tests'),
   dependencies : [json],
