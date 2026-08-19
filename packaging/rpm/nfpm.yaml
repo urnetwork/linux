@@ -1,0 +1,223 @@
+# nfpm (https://nfpm.goreleaser.com) package definition for the URnetwork
+# daemon .rpm -- the Fedora-family half of the "native package is the primary
+# channel" plan (docs/linux_agent_help.md 10.2, 10.4).
+#
+# WHY nfpm AND NOT rpmbuild/A .spec FILE
+# --------------------------------------
+# The .deb is already nfpm (packaging/deb/nfpm.yaml), and both packages are
+# assembled from the SAME `meson install --destdir` staging tree through
+# packaging/lib/common.sh assemble_daemon_root(). Introducing rpmbuild would
+# mean a second, independent description of the installed-path table, and the
+# two would drift -- which is the exact failure common.sh exists to prevent.
+# nfpm is also pure Go: it builds an .rpm on the macOS build server and inside
+# the workflow's ubuntu:22.04 container with no rpm toolchain and no
+# fakeroot/mock, and ownership is declarative root:root regardless of build
+# uid.
+#
+# WHAT THAT COSTS, STATED PLAINLY. nfpm does not expand rpm macros, so:
+#   * %systemd_post / %systemd_preun / %systemd_postun_with_restart are
+#     hand-written in scripts/post|preun|postun. They are faithful to the
+#     systemd-rpm-macros expansions (both the >= 253 systemd-update-helper
+#     form and the older systemctl form) -- see each script's header. This is
+#     the same trade the .deb already makes for dh_installsystemd, and the
+#     same discipline: the scriptlets must stay EQUIVALENT, not merely similar.
+#   * rpm's automatic dependency generator does not run, so there is no
+#     libc.so.6(GLIBC_2.35)(64bit) auto-requires. `glibc >= 2.35` below is
+#     hand-written, exactly like the .deb's `libc6 (>= 2.35)`, and
+#     app/tests/glibc-floor-gate.sh (meson test `glibc-floor`) is the only
+#     thing coupling that declaration to the actual binary.
+#   * there is no rpmlint in the loop. make-rpm.sh runs `rpm -qp` checks where
+#     rpm exists; a Fedora VM is still the only place the scriptlets execute.
+#
+# Do not run nfpm against this file directly: this is a TEMPLATE. make-rpm.sh
+# assembles the package root, builds the SELinux policy module, substitutes
+# ${RPM_VERSION} / ${RPM_RELEASE} / ${RPM_ARCH} / ${PKGROOT} itself (nfpm does
+# not expand environment variables in contents[].src -- the .deb verified this
+# against nfpm v2.47, which is the pinned version in
+# .github/workflows/beta-build.yml), and names the output per the asset
+# contract.
+name: urnetwork-daemon
+arch: "${NFPM_ARCH}"
+platform: linux
+# RPM FORBIDS '-' IN BOTH Version AND Release. The pipeline's VERSION is
+# 2026.8.16-1020679030-beta -- two hyphens -- so make-rpm.sh splits it:
+#   Version = 2026.8.16                (leading dotted-numeric run)
+#   Release = 0.1020679030.beta        (the rest; '-' -> '.', and the leading
+#                                       "0." is the Fedora prerelease
+#                                       convention so any later non-beta
+#                                       Release sorts strictly higher)
+# rpmvercmp compares numerically per segment, so 2026.8.9 < 2026.8.16 and
+# 0.1020679030.beta < 0.1020679040.beta < 1020679040. See rpm_fields() in
+# make-rpm.sh, which prints the resulting NVR on every build.
+version: "${RPM_VERSION}"
+release: "${RPM_RELEASE}"
+# version_schema none: keep make-rpm.sh's split verbatim. Left to its semver
+# default, nfpm re-parses "2026.8.16" and can rewrite the fields; the .deb
+# learned that lesson the hard way (a '~' that sorted BEFORE the base version).
+version_schema: none
+maintainer: "URnetwork <support@ur.io>"
+vendor: "URnetwork"
+homepage: "https://ur.io"
+# Ground rule 8 (docs/linux_agent_help.md 1): the code is MPL-2.0, used
+# verbatim in the deb License:, here, and in the Flathub project_license.
+license: "MPL-2.0"
+description: |
+  Privileged system half of URnetwork for Linux: owns /dev/net/tun, routes
+  and DNS, exposes a root/urnetwork-group-only control socket under
+  /run/urnetwork, and starts idle -- no tunnel comes up until an
+  authenticated desktop client asks. The GUI is the separate, unprivileged
+  URnetwork AppImage, which lives in a user-writable path so it can
+  self-update; this package installs the stable /usr/bin/urnetwork launcher
+  plus the desktop entry, urnetwork:// scheme handler, icons and autostart
+  template that point at it.
+
+# NO GTK (or any GUI) dependency -- the daemon must install on a headless box.
+depends:
+  # C runtime floor: the SDK is cross-built against glibc 2.35 (jammy),
+  # sdk/cgo/Makefile target gnu.2.35. libstdc++ is linked statically into the
+  # binaries; if `readelf -d urnetworkd` ever shows libstdc++.so.6 NEEDED, add
+  # "libstdc++ >= 12" here as well as the deb's libstdc++6.
+  #
+  # WHICH DISTROS THIS ADMITS, honestly: Fedora 36+ (2.35), RHEL/Alma/Rocky 10
+  # (2.39) and openSUSE Tumbleweed clear it. RHEL/Alma/Rocky 9 is glibc 2.34
+  # and openSUSE Leap 15.x is 2.31 -- BOTH ARE EXCLUDED BY THIS LINE, and that
+  # is the truthful outcome of the 2.35 build floor, not something to paper
+  # over by deleting the dependency.
+  - "glibc >= 2.35"
+  # Tunnel.cpp builds the tun link, the capture routes and the policy rules
+  # with `ip`, and the kill switch / egress self-exclusion with `nft`. Both
+  # are REQUIRED tools in the daemon's own preflight (daemon/main.cpp:751-753)
+  # -- without either, Connect fails at the first exec.
+  #
+  # Package names, not file dependencies on /usr/sbin/ip: Fedora 41+ made
+  # /usr/sbin a symlink to /usr/bin (verified on this Bazzite host: `ls -ld
+  # /usr/sbin` -> "bin"), so a Requires: /usr/sbin/ip does not resolve against
+  # the merged file lists.
+  #
+  # NOTE FOR THE .deb OWNER: packaging/deb/nfpm.yaml declares iproute2 but NOT
+  # nftables, while the daemon's preflight marks nft required. That looks like
+  # a genuine gap on the Debian side; it is deliberately not replicated here.
+  - "iproute"
+  - "nftables"
+  # groupadd/usermod in the scriptlets (see scripts/pre and scripts/post).
+  # openSUSE spells this package "shadow"; see the portability note at the
+  # bottom of this file.
+  - "shadow-utils"
+  # The unit, systemctl, and the preset machinery the scriptlets drive.
+  - "systemd"
+recommends:
+  # The GUI AppImage needs libfuse.so.2 at runtime, and this is the one genuine
+  # win of shipping a native package: every AppImage-only vendor walks users
+  # through installing it by hand. Declared as the SONAME rather than a package
+  # name because Fedora calls it fuse-libs and openSUSE calls it libfuse2 --
+  # both Provide this string.
+  #
+  # Weak, not hard, and that is a deliberate difference from the .deb's
+  # `libfuse2t64 | libfuse2` Depends: dnf and zypper install recommends by
+  # default, so the practical outcome on a desktop is identical, while a
+  # minimal/headless image that excludes weak deps still gets an installable
+  # daemon. The daemon itself never touches FUSE.
+  - "libfuse.so.2()(64bit)"
+
+contents:
+  # ONE tree, and everything lives under /usr. Two rpm-specific facts drive
+  # this and neither applies to the .deb:
+  #
+  # 1. THE UNIT GOES TO /usr/lib/systemd/system, NOT /lib/systemd/system.
+  #    docs/linux_agent_help.md 10.2 requires it, and rpm makes it mandatory
+  #    rather than stylistic: on a merged-usr distro /lib IS a symlink to
+  #    /usr/lib, and an rpm that owns paths *through* a symlink fights the
+  #    filesystem package. make-rpm.sh moves the staged unit accordingly.
+  #    It is NOT marked config: /usr/lib/systemd/system is the VENDOR unit
+  #    directory, admin edits live in /etc/systemd/system (drop-ins,
+  #    `systemctl edit`), and rpm never writes there -- so "never overwrite an
+  #    admin-edited unit" is satisfied by the path itself, with no scriptlet
+  #    logic to get wrong (the GitLab-runner postinst bug cited in 10.2).
+  #
+  # 2. THE .desktop FILE AND hicolor ICONS RIDE AS PLAIN rpm-SHIPPED FILES ON
+  #    PURPOSE, exactly as they ride as plain dpkg files in the .deb, and for
+  #    the same reason under a different mechanism: desktop-file-utils and the
+  #    gtk update-icon-cache packages declare rpm FILE TRIGGERS
+  #    (%transfiletriggerin) on /usr/share/applications and /usr/share/icons,
+  #    so mimeinfo.cache -- the thing x-scheme-handler/urnetwork lookups
+  #    actually consult -- and the icon cache refresh with zero scriptlet code.
+  #    Never call update-desktop-database from %post: it is redundant on rpm
+  #    and it is the shape that silently skips the trigger on dpkg.
+  #
+  # Also carried in this tree by make-rpm.sh, neither of which the .deb has:
+  #   /usr/lib/systemd/system-preset/85-urnetwork.preset
+  #   /usr/share/selinux/packages/urnetwork/urnetwork.{pp,te}
+  - src: "${PKGROOT}/usr"
+    dst: /usr
+    type: tree
+  # Admin-editable integration files. %config(noreplace) is the rpm equivalent
+  # of a dpkg conffile: an edited file is preserved and the package's version
+  # lands beside it as .rpmnew.
+  - src: "${PKGROOT}/etc/urnetwork/autostart/network.ur.urnetwork.desktop"
+    dst: /etc/urnetwork/autostart/network.ur.urnetwork.desktop
+    type: "config|noreplace"
+  - src: "${PKGROOT}/etc/NetworkManager/conf.d/95-urnetwork.conf"
+    dst: /etc/NetworkManager/conf.d/95-urnetwork.conf
+    type: "config|noreplace"
+  - src: "${PKGROOT}/etc/udev/rules.d/85-urnetwork-unmanaged.rules"
+    dst: /etc/udev/rules.d/85-urnetwork-unmanaged.rules
+    type: "config|noreplace"
+
+scripts:
+  preinstall: scripts/pre
+  postinstall: scripts/post
+  preremove: scripts/preun
+  postremove: scripts/postun
+
+rpm:
+  # Explicit, not inferred: the RPM arch spelling is x86_64 / aarch64 while the
+  # release-asset arch spelling stays the Debian amd64 / arm64 (the asset-name
+  # contract at the top of .github/workflows/beta-build.yml). make-rpm.sh owns
+  # both spellings and keeps them from being confused.
+  arch: "${RPM_ARCH}"
+  summary: "URnetwork tunnel daemon"
+  # Fixed, not the build machine's hostname. nfpm defaults BUILDHOST to
+  # os.Hostname(), which makes the header non-reproducible and leaks whatever a
+  # developer's laptop is called into every artifact (`rpm -qp --info` prints
+  # it). Nothing consumes this tag.
+  buildhost: "build.ur.io"
+  # xz, not zstd: zstd-compressed payloads are unreadable to older rpm
+  # (RHEL 8.0), and the .deb already uses xz. Nothing here is large enough for
+  # the ratio to matter.
+  compression: xz
+  requires:
+    # Requires(post): semodule, used by scripts/post to install the SELinux
+    # policy module. Without policycoreutils present AT SCRIPTLET TIME the
+    # module cannot be loaded and the tunnel cannot open /dev/net/tun on any
+    # enforcing host -- so this is an ordering dependency, not decoration.
+    # (nfpm exposes only requires.post; scripts/postun's `semodule -r` is
+    # guarded with command -v for the erase path.)
+    post:
+      - "policycoreutils"
+# make-rpm.sh replaces the next line with an indented
+#     signature:
+#       key_file: <path>
+# stanza (still inside the rpm: block above) when UR_RPM_SIGN_KEY_FILE is set.
+# Left alone it is just a comment. Do not move it out of the rpm: block and do
+# not add a second top-level `rpm:` key -- YAML would silently keep only one.
+#UR_RPM_SIGNATURE_PLACEHOLDER
+
+# ---------------------------------------------------------------------------
+# PORTABILITY NOTE -- WHAT THIS PACKAGE IS AND IS NOT
+# ---------------------------------------------------------------------------
+# This is the FEDORA-FAMILY rpm (Fedora, RHEL 10+ and rebuilds, and Bazzite /
+# Silverblue / Kinoite as far as rpm-ostree allows -- see make-rpm.sh's header
+# for the ostree caveat). It installs on openSUSE Tumbleweed too, except for
+# two package-name spellings that differ there and are NOT expressible as a
+# single portable string with nfpm (rpm rich dependencies -- "(iproute or
+# iproute2)" -- need the RPMSENSE_RICH flag bit, which nfpm does not set; the
+# string would be taken as a literal package name and fail to resolve):
+#
+#     Fedora / RHEL        openSUSE
+#     iproute              iproute2
+#     shadow-utils         shadow
+#
+# If a SUSE channel is ever wanted, the honest answer is a second overrides
+# block or a second template, not a clever string. Do not "fix" this by
+# dropping the dependencies: `ip` and `nft` are required tools in the daemon's
+# own preflight.

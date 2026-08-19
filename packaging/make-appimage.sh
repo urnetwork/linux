@@ -343,11 +343,27 @@ ARCH="${APPIMAGE_ARCH}" "${APPIMAGETOOL}" \
     "${APPDIR}" "${APPIMAGE}"
 
 [ -f "${APPIMAGE}" ] || die "appimagetool did not produce ${APPIMAGE}"
-# appimagetool writes the .zsync beside the output when update info is set.
+
+# THE .zsync LANDS IN THE CURRENT DIRECTORY, NOT BESIDE THE APPIMAGE.
+# appimagetool takes the basename of its output path for the zsync's filename and
+# writes it relative to CWD, so with an absolute --output the AppImage goes to
+# $OUT_DIR and its .zsync is left wherever the build happened to be standing.
+# Measured twice: by hand during development (the file had to be moved manually
+# every time), and then by CI, which failed the payload check with
+# "URnetwork-<version>-<arch>.AppImage.zsync was not produced". Moving it here
+# means the script owns the whole contract rather than leaving one asset for the
+# caller to find, since the update channel needs the pair.
+ZSYNC_NAME="$(basename "${APPIMAGE}").zsync"
 if [ -f "${APPIMAGE}.zsync" ]; then
     log "zsync: ${APPIMAGE}.zsync"
+elif [ -f "${ZSYNC_NAME}" ]; then
+    mv -f "${ZSYNC_NAME}" "${APPIMAGE}.zsync"
+    log "zsync: ${APPIMAGE}.zsync (moved out of $(pwd))"
+elif [ -f "${PWD}/${ZSYNC_NAME}" ]; then
+    mv -f "${PWD}/${ZSYNC_NAME}" "${APPIMAGE}.zsync"
+    log "zsync: ${APPIMAGE}.zsync (moved out of ${PWD})"
 else
-    warn "no .zsync produced -- older appimagetool? The update channel needs URnetwork-${VERSION}-${ARCH}.AppImage.zsync"
+    warn "no .zsync produced -- older appimagetool? The update channel needs ${ZSYNC_NAME}"
 fi
 
 # Detached signatures (APPIMAGE.md 11f): appimagetool --sign embeds the key

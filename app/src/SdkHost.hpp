@@ -16,17 +16,22 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <urnetwork_sdk.hpp>
 
 #include "ControlClient.hpp"
-#include "SecretServiceRpcSessionStore.hpp"
+#include "Health.hpp"
+#include "RpcSession.hpp"
 #include "WalletConnect.hpp"
 
 namespace urnw {
@@ -124,8 +129,207 @@ struct LiveStats {
   bool provideHasNetworkKey = false;
 };
 
+// THE ONE CONNECT READING — every fact the connect status row is allowed to
+// depend on, sampled TOGETHER from the live SDK getters at one instant.
+//
+// It exists because the status row used to be written from three independently
+// aged copies of the same underlying bit (see Health.hpp). Nothing here is a
+// cached copy of anything else: ReadConnectReading() re-reads all of it every
+// time, so no field of one reading can describe a different moment than
+// another field of the same reading, and no reading can outlive its producer.
+struct ConnectReading {
+  // The connect controller's OWN status, latched to the last KNOWN value for
+  // the life of the session (a freshly reopened controller reports
+  // Disconnected until its first window-monitor event). Unknown = no status
+  // has ever landed for this session.
+  health::SdkStatus sdk = health::SdkStatus::Unknown;
+  // The raw token behind `sdk`, for the Advanced status strip only. Never a
+  // decision input — decisions read `sdk`.
+  std::string rawStatus;
+  // ConnectViewController::GetConnected(): a destination is SELECTED.
+  bool destinationSelected = false;
+  // A DeviceRemote is still bound over the CURRENT control session.
+  bool tunnelBound = false;
+  int64_t providerCount = 0;  // grid.getWindowCurrentSize()
+  bool insufficientBalance = false;
+
+  // Value equality, so a consumer can skip a rebuild when nothing moved. It
+  // compares EVERY field on purpose: a partial comparison would be one more
+  // place that can decide two different readings are the same one.
+  bool operator==(const ConnectReading& o) const {
+    return sdk == o.sdk && rawStatus == o.rawStatus &&
+           destinationSelected == o.destinationSelected && tunnelBound == o.tunnelBound &&
+           providerCount == o.providerCount && insufficientBalance == o.insufficientBalance;
+  }
+  bool operator!=(const ConnectReading& o) const { return !(*this == o); }
+
+  health::Signals ToSignals(bool disconnectRequested) const {
+    health::Signals s;
+    s.sdk = sdk;
+    s.destinationSelected = destinationSelected;
+    s.tunnelBound = tunnelBound;
+    s.providerCount = providerCount;
+    s.insufficientBalance = insufficientBalance;
+    s.disconnectRequested = disconnectRequested;
+    return s;
+  }
+};
+
+// ONE consistent reading of the SDK's smart-routing (reliability) state: the
+// exit window, the destination->exit routing table, the knob set, the counters
+// and the probe suite. Taken under a single SdkHost lock hold so the parts can
+// never describe different sessions — separate reads can straddle a device
+// teardown and then join a destination ip against an exit that belonged to a
+// device which no longer exists.
+//
+// EVERY field distinguishes UNKNOWN from a real answer, because on this
+// surface a fabricated zero is the failure mode:
+//   * `settings`/`metrics` nullopt = "nothing was read". It is NOT "every knob
+//     is off / every counter is zero". A default-constructed ReliabilitySettings
+//     written back would disable the whole reliability stack (that bug shipped
+//     once on Windows) — never round-trip a nullopt read as a struct.
+//   * the three list fields nullopt = "never read, or the getter threw"; an
+//     EMPTY list is a real answer ("this device has no exits"). A caller must
+//     render the two differently — "unknown" and "none" are different facts.
+//   * the two bools have no third state to carry: a read that threw reads as
+//     false, which is why the getter failure is also logged (g_warning).
+struct ReliabilitySnapshot {
+  bool haveDevice = false;       // a DeviceRemote existed when the read ran
+  bool remoteConnected = false;  // the daemon's device rpc is attached
+  std::optional<urnet::ReliabilitySettings> settings;
+  std::optional<urnet::ReliabilityMetrics> metrics;
+  std::optional<urnet::ExitList> exits;
+  std::optional<urnet::DestinationExitList> destinationExits;
+  bool probeSuiteRunning = false;
+  std::optional<urnet::ProbeResultList> probeResults;
+};
+
+// How much of the snapshot to pay for. Each field is one SYNCHRONOUS device
+// rpc, so the scope is the difference between a 3-rpc poll and a 7-rpc one.
+enum class ReliabilityRead {
+  ExitsOnly,  // remoteConnected + the two exit tables (Home's Advanced inspector)
+  Full,       // + settings/metrics/probe suite (the Developer destination)
+};
+
+// ---- the kill switch -------------------------------------------------------
+// What the three toggles now drive. THREE legs, in this order
+// (docs/parity/settings.md §113, windows SdkHost::SetKillSwitch):
+//
+//   1. LocalState  routeLocal = !on   — the persistent truth; survives a crash
+//                                       and is what the next start_tunnel and
+//                                       the next device creation replay.
+//   2. DeviceRemote routeLocal = !on  — the SDK's SOFT leg, over the device
+//                                       rpc: a branch inside sendPacket, so it
+//                                       never sees IPv6, the deliberately
+//                                       route-excluded LAN, another adapter's
+//                                       resolver, or a dead daemon.
+//   3. urnetworkd  set_kill_switch(on) — the ENFORCEMENT leg: the nftables
+//                                       ruleset (`table inet urnetwork`). This
+//                                       is the leg the toggles never had, and
+//                                       without it the UI claimed a protection
+//                                       that was not in force.
+//
+// Leg 3 is a blocking control-socket round trip (up to 30 s against a wedged
+// daemon), so it runs on a worker thread; legs 1 and 2 stay on the caller's
+// thread so a re-read right after the call already reflects them.
+//
+// The daemon reports what it ACTUALLY installed. Never assume the request
+// took, and never render Failed as Off.
+struct KillSwitchStatus {
+  // The standing preference (== !routeLocal). This is what the toggle shows.
+  bool requested = false;
+  // What the daemon says is installed. Meaningful ONLY when installed_known.
+  ctl::KillSwitchState installed = ctl::KillSwitchState::Off;
+  // false => the daemon did not answer, so `installed` is a default and NOT a
+  // fact. "Unknown" and "off" are different states and must render differently.
+  bool installed_known = false;
+  // A floor is really up (Armed or Connected).
+  bool in_force = false;
+  // The daemon's own tunnel state, so the UI can tell the daemon's DELIBERATE
+  // "requested, nothing connected, so nothing is blocked yet" (TunnelHost::
+  // SetKillSwitch refuses to cut a machine off that never connected) apart
+  // from a real "the tunnel is up and the floor is missing".
+  ctl::TunnelState tunnel_state = ctl::TunnelState::Stopped;
+  // How the control channel stands — the UI maps this to remediation copy
+  // (not installed / not running / not authorized / version skew).
+  DaemonSessionState session = DaemonSessionState::Unreachable;
+  // WHY the channel is Unreachable. Meaningful only while
+  // session == Unreachable, and the reason the UI can stop saying "the service
+  // is not running" at a socket that is right there and merely refuses this
+  // user (EACCES — the installers create the `urnetwork` group empty, so this
+  // is the state a FRESH INSTALL lands in). See DaemonUnreachableReason.
+  DaemonUnreachableReason unreachable_reason = DaemonUnreachableReason::None;
+  // The daemon's kill_switch_detail, or the transport error. "" when there is
+  // nothing to explain. NOT localized: it is a daemon string, and the UI pairs
+  // it with its own localized lead sentence.
+  std::string detail;
+  // A leg-3 write is still in flight. The toggle stays where the user put it
+  // and the state line says so — it must never flap.
+  bool pending = false;
+};
+
+// The ONE classification the three surfaces share, so they cannot disagree
+// about what the same status means. Pure.
+//
+// THREE STATES THAT USED TO BE ONE. `installed_known == false` used to fall
+// into NotInForce, whose copy asserts "your traffic is not being blocked" and
+// whose remediation says the service is not running. Both are claims, and in
+// the state that matters most they are the OPPOSITE of the truth: the nftables
+// table is not process-bound, so a floor installed by an earlier session is
+// still blocking this machine when the daemon is gone, and a daemon that is
+// running but merely refuses THIS user (EACCES) is not a daemon that is
+// stopped. "Cannot tell" is now its own state and says so.
+enum class KillSwitchDisplay {
+  Off,       // not requested, and nothing is installed: nothing to say
+  Applying,  // a leg-3 write is in flight, in EITHER direction
+  InForce,   // requested AND a floor is installed
+  // NOT requested and a floor is installed anyway — a removal that failed, or
+  // a floor re-armed from the crash marker under a switch the user turned off.
+  // The user is CUT OFF while the control reads "off"; this is the state the
+  // UI said nothing at all about.
+  InForceUnrequested,
+  ArmedAtNextStart,  // requested, no tunnel: the daemon deliberately holds off
+  // requested, the daemon ANSWERED, and it installed nothing while the tunnel
+  // is up. A real defect, and the only state entitled to claim "not blocked".
+  NotInForce,
+  // requested, and the daemon could not be asked at all. NOT "off": what is
+  // installed is genuinely unknown, and the user may be cut off by our own
+  // floor right now. Carries the recovery command, because the app cannot lift
+  // a floor it cannot reach the daemon to lift.
+  Unknown,
+  Failed,  // requested, the daemon TRIED and could not — never render as Off
+};
+
+inline KillSwitchDisplay ClassifyKillSwitch(const KillSwitchStatus& s) {
+  // A write in flight outranks everything, in either direction: the last
+  // reading describes a state the daemon is in the middle of leaving. (This
+  // deliberately also covers !requested — turning the switch OFF is a write
+  // that can fail, and it used to render as silence.)
+  if (s.pending) return KillSwitchDisplay::Applying;
+  if (!s.requested) {
+    // Silence is correct ONLY when the daemon has told us nothing is up.
+    // A floor still standing under an off switch is not a nuance, it is the
+    // user's network being blocked with no explanation on screen.
+    if (s.installed_known && s.in_force) return KillSwitchDisplay::InForceUnrequested;
+    return KillSwitchDisplay::Off;
+  }
+  if (s.installed_known && s.installed == ctl::KillSwitchState::Failed) {
+    return KillSwitchDisplay::Failed;
+  }
+  if (s.in_force) return KillSwitchDisplay::InForce;
+  // The daemon could not be asked. Unknown, never "not in force".
+  if (!s.installed_known) return KillSwitchDisplay::Unknown;
+  // The daemon answered "off" with the switch on. That is EXPECTED while
+  // nothing is connected — switching it on with no tunnel must not cut the
+  // machine off the network — and a defect once the tunnel is up.
+  if (s.tunnel_state != ctl::TunnelState::Up) return KillSwitchDisplay::ArmedAtNextStart;
+  return KillSwitchDisplay::NotInForce;
+}
+
 class SdkHost {
  public:
+  ~SdkHost();
+
   using AuthStateHandler = std::function<void(bool loggedIn)>;
   // Fired when the sdk finds the stored auth is no longer valid on the server
   // (e.g. the client was removed): the sdk has already cleared its local auth
@@ -133,7 +337,11 @@ class SdkHost {
   // marshals onto the main loop and calls Logout().
   using AuthInvalidHandler = std::function<void()>;
   using JwtRefreshedHandler = std::function<void()>;
-  using ConnectionStatusHandler = std::function<void(std::string status)>;
+  // The ONE connection feed. It replaced a string push whose five call sites
+  // could only ever emit "DESTINATION_SET" or "DISCONNECTED" — a vocabulary
+  // with no word for "connected" — beside a separate, visibility-gated stats
+  // push that carried the real status and was never read for the status row.
+  using ConnectReadingHandler = std::function<void(ConnectReading reading)>;
   using StatsHandler = std::function<void(const LiveStats& stats)>;
   using DrawerEventHandler = std::function<void(DrawerEvent event)>;
 
@@ -274,7 +482,6 @@ class SdkHost {
   // (client id + display name). No-op with the tunnel down (no connect VC).
   void Connect(const std::optional<urnet::ConnectLocation>& location);
   void Disconnect();
-  bool Connected();
   // Own presentation-only SDK view controllers only while the GTK window is
   // visible. The DeviceLocal, tunnel and packet loop remain alive in the tray.
   void SetPresentationActive(bool active);
@@ -306,7 +513,21 @@ class SdkHost {
   void SetAuthStateHandler(AuthStateHandler h) { onAuth_ = std::move(h); }
   void SetAuthInvalidHandler(AuthInvalidHandler h) { onAuthInvalid_ = std::move(h); }
   void SetJwtRefreshedHandler(JwtRefreshedHandler h) { onJwtRefreshed_ = std::move(h); }
-  void SetConnectionStatusHandler(ConnectionStatusHandler h) { onStatus_ = std::move(h); }
+  // The connection feed. Fired on every event that can change any part of the
+  // reading, and NEVER gated on window visibility by its consumer: the copies
+  // this replaced diverged precisely because one of them was gated and the
+  // other was not.
+  void SetConnectReadingHandler(ConnectReadingHandler h) { onReading_ = std::move(h); }
+  // Snapshot on demand. Used on window re-show and by the page's 1 Hz poll, so
+  // no part of the reading can persist on screen after its producer goes quiet.
+  // Locked, exactly as the SdkHost::Connected() it replaced was — the callers
+  // are UI-thread callers that already take this lock through the other feed
+  // accessors (BlockActions, SelectedLocation, ContractRows).
+  ConnectReading CurrentConnectReading();
+  // The daemon reported the tunnel gone. Latches until the next start_tunnel;
+  // a plain field on a copied reading is self-reverting, because the next SDK
+  // push re-derives tunnelBound from getters that cannot see the daemon.
+  void NoteDaemonTunnelGone();
   // Live stats push (connection/throughput/provide). Fired on SDK listener
   // callbacks; the UI marshals onto the GTK loop and gates on window visibility.
   void SetStatsHandler(StatsHandler h) { onStats_ = std::move(h); }
@@ -333,8 +554,40 @@ class SdkHost {
   // is up, instead of falling back to local egress. Persisted in the GUI's
   // LocalState (the daemon's DeviceLocal neither persists nor restores it)
   // and re-applied over the device rpc at StartTunnel.
+  //
+  // READ ONLY, and only the SOFT leg. Every UI writer must go through
+  // SetKillSwitch below instead — a bare setRouteLocal leaves the daemon's
+  // nftables floor untouched, which is precisely the bug this replaces.
   bool GetRouteLocal();
-  void SetRouteLocal(bool routeLocal);
+
+  // ---- kill switch (the three legs; see KillSwitchStatus above) ------------
+  using KillSwitchDone = std::function<void(KillSwitchStatus)>;
+
+  // The standing preference, no daemon I/O: !routeLocal, device-preferred and
+  // falling back to LocalState (parity rule: with neither, claim the
+  // PERMISSIVE default, never the strict one). Readable signed out, with no
+  // tunnel and with no daemon — this is the toggle's position.
+  bool CurrentKillSwitch();
+  // The last snapshot published by a write or a read-back. No I/O: safe on the
+  // GTK main loop and safe to call from a build path before any daemon
+  // round trip has happened (installed_known is then false).
+  KillSwitchStatus CurrentKillSwitchStatus();
+
+  // Legs 1+2 SYNCHRONOUSLY (so an immediate CurrentKillSwitch() read-back
+  // already reflects them), then leg 3 on a worker thread. `done` runs ON THE
+  // GTK MAIN LOOP exactly once with the state READ BACK from the daemon after
+  // the write — not with the value that was asked for. It may land after the
+  // caller was destroyed, so `done` must carry its own epoch/liveness guard,
+  // the same contract as RequestReliability.
+  //
+  // Requests are queued and served in order: a rapid double-toggle costs two
+  // round trips and the LAST one wins. Nothing is ever dropped — a dropped
+  // kill-switch write is a machine left in a state nobody asked for.
+  void SetKillSwitch(bool on, KillSwitchDone done = {});
+  // Read-back only: no write, same completion contract. Call it after a
+  // tunnel state change (the floor moves between Armed and Connected on its
+  // own) and when a surface comes back on screen.
+  void RefreshKillSwitchStatus(KillSwitchDone done = {});
   std::optional<urnet::DnsResolverSettings> GetDnsResolverSettings();
   void SetDnsResolverSettings(const urnet::DnsResolverSettings& settings);
   std::optional<urnet::ThroughputPointList> ThroughputPoints();
@@ -412,9 +665,58 @@ class SdkHost {
   void SetSelectedProviderClientId(const std::string& clientId);
   void StepProviderSelection(int steps);
 
+  // ---- reliability / exits (Home's Advanced inspector + the Developer page) --
+  // The locked, BLOCKING read. Every field behind it is a synchronous device
+  // rpc over the loopback mTLS channel to urnetworkd — three for ExitsOnly,
+  // seven for Full — and the whole batch runs under mutex_, the same lock the
+  // UI-thread accessors take. So:
+  //
+  //   NEVER call this on the GTK main loop.
+  //
+  // Call it only from a thread that already exists for SDK work (the Developer
+  // page's serial FIFO bridge), or use RequestReliability below, which owns
+  // the thread and the marshal for you. Each getter is guarded individually: a
+  // throwing rpc costs its own field (which then reads as UNKNOWN), never the
+  // whole snapshot. No device is not an error — the snapshot then carries
+  // haveDevice=false, a DEFINITE "no session" the caller can render, rather
+  // than silence.
+  ReliabilitySnapshot ReadReliability(ReliabilityRead scope = ReliabilityRead::Full);
+
+  // The GTK-safe form: runs ONE ReadReliability(scope) on a worker thread and
+  // delivers the snapshot to `done` ON THE MAIN LOOP (PostToMain).
+  //
+  // SINGLE-FLIGHT for the whole host and across both scopes: while a read is
+  // outstanding this returns false IMMEDIATELY and `done` is never invoked, so
+  // a poll whose read is slower than its own interval cannot stack requests
+  // behind mutex_ — the caller simply skips that tick and asks again on the
+  // next one. Returns true when the read was started, and then `done` runs
+  // exactly once unless the main loop is gone by the time it lands.
+  //
+  // Call from the main loop. `done` must carry its OWN liveness/epoch guard:
+  // the completion can land after the calling page was destroyed, and this
+  // host has no way to know that.
+  bool RequestReliability(ReliabilityRead scope,
+                          std::function<void(ReliabilitySnapshot)> done);
+
   // Exposed so the (full-parity) UI/view models can drive the SDK directly.
   urnet::Api& api() { return *api_; }
-  bool hasDevice() { return device_.has_value(); }
+  // "There is a session I can drive", NOT "I am holding a handle".
+  //
+  // A urnet::DeviceRemote handle belongs to this process and nothing
+  // invalidates it when the daemon-side DeviceLocal disappears (a service
+  // restart or reinstall, another client's stop_tunnel, the IoLoop ending).
+  // Reporting the handle alone is what let MainWindow::ToggleConnect skip the
+  // start path entirely and drive a dead rpc: no start_tunnel was ever sent,
+  // no error was ever produced, and the daemon journal stayed empty.
+  //
+  // So it is also gated on the control session being the SAME one the device
+  // was bound over. That is an O(1) atomic read — no daemon round trip — so
+  // this stays callable from the GTK main loop and from every page that folds
+  // on it. False from here means "ask StartTunnel", and StartTunnel does the
+  // authoritative check (a `status` round trip) before it rebuilds anything.
+  bool hasDevice() {
+    return device_.has_value() && deviceControlGeneration_ == control_.SessionGeneration();
+  }
   urnet::DeviceRemote& device() { return *device_; }
   // The daemon control channel, shared with the location-override writer
   // (DaemonGeoClueWriter) — one socket, one hello, one version check.
@@ -426,6 +728,38 @@ class SdkHost {
   void HandleNetworkCreateResult(std::optional<urnet::NetworkCreateResult> result,
                                  std::optional<std::string> err,
                                  std::function<void(AuthResult)> done);
+  // The body of StartTunnel(). Requires mutex_, so the recovery inside
+  // ConnectBestAvailable can rebuild a session it has just discovered is dead
+  // without re-entering a non-recursive lock. Every outcome logs, and the
+  // failing ones leave a renderable sentence in lastTunnelError_.
+  TunnelStartResult StartTunnelLocked();
+  // ---- the two doors onto a tunnel that is ALREADY UP ----------------------
+  // Door 1. Loads the remembered session (metadata from disk, the mTLS client
+  // key and the pinned cert from the Secret Service) and, when it still
+  // describes the tunnel the daemon reports, re-adopts it with attach_tunnel
+  // instead of building a new one.
+  //
+  // nullopt means THE DOOR DID NOT OPEN — no record, an unreadable one, a
+  // locked keyring, a record for a session that is not the live one, or a
+  // daemon that refused the attach — and StartTunnelLocked must fall back to a
+  // fresh start_tunnel, which is always available and is why none of those
+  // failures can leave the user unable to connect. A value means the door was
+  // taken and is the whole result of the start. Requires mutex_.
+  std::optional<TunnelStartResult> TryAttachRememberedSessionLocked(
+      const std::string& clientJwt, const ctl::StatusReply& status);
+  // The DeviceRemote half, shared by BOTH doors: the 12025 reservation, the
+  // pinned construction, the listeners and the bind watchdog. On failure it has
+  // already torn down every partial resource and stopped the daemon-side
+  // tunnel. `rememberOnSync` arms the session to be written to the store on the
+  // first proof it works (false on the attach door, whose record is already
+  // stored). Requires mutex_.
+  TunnelStartResult BindRemoteDeviceLocked(const std::string& clientJwt,
+                                           const RpcSessionRecord& session,
+                                           bool rememberOnSync);
+  // Commits the armed session once the pinned DeviceRemote reports
+  // remote_connected. Best-effort by design — see the definition. Requires
+  // mutex_.
+  void RememberSyncedSessionLocked();
   // Tear down the device/tunnel/view-controllers without touching the stored
   // auth (Logout clears auth too; the guest upgrade only swaps the device).
   void TeardownDeviceLocked();
@@ -439,6 +773,68 @@ class SdkHost {
   void EmitDrawerEvent(DrawerEvent event);
   LiveStats ReadStats();  // read the current snapshot from the SDK getters
   void PublishStats();    // ReadStats() -> onStats_
+  // Re-reads EVERY field from the live SDK getters. Takes no lock (same
+  // contract as ReadStats): it is called from SDK listener threads, from the
+  // GTK loop, and from inside StartTunnelLocked with mutex_ already held.
+  ConnectReading ReadConnectReading();
+  void PublishConnectReading();  // ReadConnectReading() -> onReading_
+
+  // ---- kill switch internals ------------------------------------------------
+  // Requires mutex_. The soft legs, in the parity order: LocalState FIRST
+  // (persistent truth), then the device.
+  void ApplyRouteLocalLocked(bool routeLocal);
+  // Requires mutex_. !routeLocal, device-preferred, LocalState fallback.
+  bool KillSwitchRequestedLocked();
+  struct KillSwitchRequest {
+    bool apply = false;  // false = read-back only
+    bool wanted = false;
+    KillSwitchDone done;
+  };
+  void EnqueueKillSwitch(KillSwitchRequest request);
+  void RunKillSwitchRequest(KillSwitchRequest request);  // ON THE WORKER
+  void KillSwitchWorkerMain();
+  void StopKillSwitchWorker();  // destructor: drain + join
+
+  // ---- device rpc mTLS ------------------------------------------------------
+  // The construction + setRpcServer pair lives INSIDE StartTunnel's existing
+  // try on purpose (a throw from malformed material must land in the catch
+  // that already tears down and stops the daemon-side tunnel), so there is no
+  // separate Pin* helper. These three bound the case nothing throws for.
+  void ArmRpcBindWatchdogLocked();     // requires mutex_
+  void CancelRpcBindWatchdogLocked();  // requires mutex_; also bumps the epoch
+  void OnRpcBindDeadline();            // MAIN LOOP; epoch-guarded
+
+  // THE UNPINNED DIAL WINDOW, AND WHY THERE IS A SOCKET IN THIS CLASS.
+  //
+  // urnet::newDeviceRemoteWithDefaults is the ONLY DeviceRemote constructor
+  // the shipped binding exposes (urnetwork_sdk.hpp:19882 — and the .so exports
+  // exactly one such symbol, urnet_new_device_remote_with_defaults). It builds
+  // its dialer with EMPTY clientPem/serverCertPem against the SDK's built-in
+  // ctl::kDeviceRpcPort address (sdk/device_rpc.go:290 over
+  // deviceRpcDefaultAddress, :117) and starts the dial goroutine before it
+  // returns (:487). setRpcServer cannot run first — there is no object yet —
+  // and when it does run it blocks on the state lock the constructor left held
+  // for InitialLockTimeout (1 s, :134). So the plain-ws dial is not a race: it
+  // ALWAYS happens, two or three times, on every DeviceRemote we build.
+  //
+  // We cannot make the first dial pinned. We CAN make sure it has nowhere to
+  // land: bind 127.0.0.1:<kDeviceRpcPort> ourselves and never listen() on it,
+  // which reserves the address against every other process and makes each
+  // connect() to it fail immediately with ECONNREFUSED. Holding it FAILS the
+  // start when it cannot be taken, because the alternative is handing the
+  // occupant this device's rpc session — and, once synced, the account bearer
+  // token, since the DeviceRemote proxies the Api's authenticated HTTP over
+  // that same connection (sdk/device_rpc.go:437-438).
+  //
+  // NOT listen()ing is deliberate: a listening socket we never accept() from
+  // parks the dial in the accept queue until RpcConnectTimeout (30 s), and
+  // that dial holds the lock setRpcServer needs — a 30-second freeze of the
+  // GTK main loop instead of an instant refusal.
+  //
+  // Requires mutex_. Idempotent; once taken the reservation is held for the
+  // life of the process (each new DeviceRemote reopens the same window).
+  bool HoldDeviceRpcDefaultPortLocked(std::string* error);
+  void ReleaseDeviceRpcDefaultPort();
 
   std::mutex mutex_;
   std::optional<urnet::NetworkSpaceManager> spaceManager_;
@@ -465,18 +861,73 @@ class SdkHost {
   std::optional<urnet::PostQuantumIdentityViewController> pqiVc_;
   // the provider globe's selection + scroll wheel, shared across every app
   std::optional<urnet::ProviderLocationsViewController> providerLocationsVc_;
-  // GUI-only system keyring backend. Private RPC credentials never enter the
-  // metadata file or the privileged daemon.
-  SecretServiceRpcSessionStore rpcSecretStore_;
   // control channel to urnetworkd (tunnel lifecycle + location override)
   ControlClient control_;
-  std::string storageDir_;
   std::string lastTunnelError_;
   // The network-provide-key bit, cached off addProvideSecretKeysListener:
   // DeviceRemote has no getProvideSecretKeys getter (it is DeviceLocal-only),
   // so like the Windows GUI the listener feeds this atomic and ReadStats
   // reads it.
   std::atomic<bool> provideHasNetworkKey_{false};
+  // RequestReliability's worker. Two guards, deliberately separate:
+  //   * reliabilityBusy_ is the single-flight gate and is cleared BY THE WORKER
+  //     as soon as the read returns — lock-free, and never under the mutex
+  //     below (the joiner holds that one, so taking it on the worker would
+  //     deadlock). Clearing it before the marshal also means a blocked or
+  //     vanished main loop cannot wedge the next read.
+  //   * reliabilityWorkerMutex_ guards ONLY the thread object: assigning over
+  //     a still-joinable std::thread is std::terminate.
+  std::atomic<bool> reliabilityBusy_{false};
+  std::mutex reliabilityWorkerMutex_;
+  std::thread reliabilityWorker_;
+
+  // ---- kill switch ----------------------------------------------------------
+  // The last published snapshot (guarded by mutex_). Seeded requested-only at
+  // construction, so a surface built before any daemon round trip reads
+  // installed_known=false — UNKNOWN, which is the honest answer, rather than a
+  // fabricated "off".
+  KillSwitchStatus killSwitchStatus_;
+  // Leg 3 lives on ONE serial worker with a FIFO queue, deliberately not the
+  // single-flight gate the reliability read uses: a skipped reliability read
+  // costs a stale pane, a skipped kill-switch write costs a machine in a state
+  // nobody asked for. The worker is started lazily and joined in ~SdkHost.
+  std::mutex killSwitchMutex_;
+  std::condition_variable killSwitchCv_;
+  std::deque<KillSwitchRequest> killSwitchQueue_;
+  std::thread killSwitchWorker_;
+  bool killSwitchQuit_ = false;
+  // Writes accepted but not yet answered. A read-back that was already in
+  // flight when a write was issued must not publish pending=false and let the
+  // line claim the PREVIOUS request's floor for a round trip — on this control
+  // a momentary "in force" over a pending "turn it off" is exactly the lie
+  // being removed.
+  std::atomic<int> killSwitchWritesPending_{0};
+
+  // ---- device rpc mTLS ------------------------------------------------------
+  // Bumped on every DeviceRemote construction and on every teardown; the bind
+  // watchdog carries the value it was armed with and does nothing when it no
+  // longer matches, so a completed-then-restarted session cannot tear down its
+  // successor.
+  std::atomic<uint64_t> rpcSessionGeneration_{0};
+  unsigned int rpcBindWatchId_ = 0;        // g_timeout source id; 0 = unarmed
+  uint64_t rpcBindWatchGeneration_ = 0;    // the session the armed watchdog belongs to
+  std::string rpcHostPort_;                // what THIS session dialed ("" when none)
+  // A session that has been bound but has NOT yet proved it works. Written to
+  // the store (disk metadata + Secret Service secrets) by
+  // RememberSyncedSessionLocked on the first remote_connected edge, and dropped
+  // on teardown — so nothing is ever remembered that did not demonstrably
+  // pair, and a pairing that silently mismatched cannot be offered to the next
+  // launch as something to attach to. Empty on the attach door: that record is
+  // already stored.
+  std::optional<RpcSessionRecord> unsavedSession_;
+  // ControlClient::SessionGeneration() at the moment device_ was bound. A
+  // different value now means the control connection was rebuilt — the daemon
+  // restarted — so the DeviceLocal this device_ talks to is gone. Atomic
+  // because hasDevice() reads it without mutex_.
+  std::atomic<uint64_t> deviceControlGeneration_{0};
+  // The reservation described by HoldDeviceRpcDefaultPortLocked: a bound,
+  // NEVER-listening socket on 127.0.0.1:<ctl::kDeviceRpcPort>. -1 = not held.
+  int deviceRpcDefaultPortFd_ = -1;
   bool presentationActive_ = false;
   std::vector<urnet::Sub> subs_;
   std::vector<urnet::Sub> presentationSubs_;
@@ -502,7 +953,21 @@ class SdkHost {
   AuthStateHandler onAuth_;
   AuthInvalidHandler onAuthInvalid_;
   JwtRefreshedHandler onJwtRefreshed_;
-  ConnectionStatusHandler onStatus_;
+  ConnectReadingHandler onReading_;
+  // The last KNOWN connect-controller status of the CURRENT session, held as
+  // the enum's integer value. A controller reopened on window re-show reports
+  // Disconnected until its first window-monitor event
+  // (connect_view_controller.go:89), and letting that regress the reading
+  // would flash "Connecting to providers" across a carrying tunnel every time
+  // the window is shown. It is SESSION-scoped, not sticky: ReadConnectReading
+  // clears it the moment the session stops being up, so it can never outlive
+  // the thing it describes.
+  std::atomic<int> lastKnownSdk_{static_cast<int>(health::SdkStatus::Unknown)};
+  // The daemon stopped the tunnel underneath us (PollDaemonHealth saw it).
+  // Forces tunnelBound false in EVERY subsequent reading until a new
+  // start_tunnel clears it — see ReadConnectReading. Atomic because the poll
+  // runs on the GTK loop and readings are published from SDK threads.
+  std::atomic<bool> daemonTunnelGone_{false};
   StatsHandler onStats_;
   DrawerEventHandler onDrawerEvent_;
 };

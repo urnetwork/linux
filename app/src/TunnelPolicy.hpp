@@ -18,6 +18,17 @@ struct TunnelConfig {
   int prefix_v4 = 24;
   int mtu = 1440;
   std::vector<std::string> dns_servers_v4;
+  // FORK ADDITION (not upstream). Refuse to install the capture routes unless
+  // the daemon's own sockets are demonstrably steered around them. Only a dev
+  // run (URNETWORK_ALLOW_UNPROTECTED_EGRESS=1) may clear it, and clearing it is
+  // logged loudly, because the alternative is a tunnel that comes up and
+  // carries nothing while the UI says Connected. It lives here rather than in
+  // Tunnel.hpp because THIS header owns the one TunnelConfig: a second
+  // definition of urnw::TunnelConfig in Tunnel.hpp is what kept
+  // IsIpv4OnlyTunnelConfig from being callable at all (the two could never
+  // appear in one translation unit), which is how the guard came to exist
+  // without a caller. IsIpv4OnlyTunnelConfig deliberately ignores this field.
+  bool require_egress_protection = true;
 };
 
 constexpr bool IsIpv4Literal(std::string_view address) {

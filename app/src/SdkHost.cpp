@@ -1,17 +1,33 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "SdkHost.hpp"
 
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <algorithm>
-#include <atomic>
-#include <chrono>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
+#include <cstring>
+#include <fstream>
+#include <random>
+#include <sstream>
+#include <stdexcept>
 #include <string>
-#include <thread>
+#include <utility>
+
+#include <glib/gstdio.h>
 
 #include "AppPrefs.hpp"
 #include "NetworkSpaceConfig.hpp"
+// The Secret Service backend for the remembered rpc session. GUI-ONLY: this is
+// the one translation unit that links libsecret, and urnetworkd (which builds
+// in a container that has no libsecret at all) never sees this header.
+#include "SecretServiceRpcSessionStore.hpp"
+#include "Ui.hpp"  // PostToMain — the only UI dependency here, and only to marshal
 
 // The release version, threaded in via the -Dapp_version meson option (the
 // pipeline passes $VERSION); the fallback matches the option's default.
@@ -35,19 +51,275 @@ constexpr const char* kWalletSignInMessage = "Welcome to URnetwork";
 // AuthLogin{wallet_auth} blockchain ids. The server matches case-insensitively:
 // "solana" -> ed25519, urnet::TAO ("TAO") -> sr25519 (bittensor).
 constexpr const char* kSolanaBlockchain = "solana";
-constexpr const char* kRpcSessionFile = "rpc-session.json";
 
-std::string RpcSessionPath(const std::string& storageDir) {
-  return storageDir + "/" + kRpcSessionFile;
+// One rpc, guarded: a throwing getter costs its OWN field (which then reads as
+// UNKNOWN), not the whole snapshot. The failure is logged because the two bool
+// fields have no unknown state to carry — false is all they can say.
+template <typename T, typename Fn>
+T ReadGuarded(const char* what, Fn&& fn, T fallback) {
+  try {
+    return fn();
+  } catch (const std::exception& e) {
+    g_warning("sdkhost: %s threw: %s", what, e.what());
+  } catch (...) {
+    g_warning("sdkhost: %s threw", what);
+  }
+  return fallback;
 }
+
+// ---- the remembered device-rpc session -------------------------------------
+// UPSTREAM'S MODEL, ADOPTED. What is kept, and where:
+//
+//   $XDG_STATE_HOME/urnetwork/rpc/rpc_session.json  — NON-SECRET METADATA ONLY.
+//     version, state, instance_id, rpc_session_id, host_port. 0600, in the
+//     STATE dir rather than the config dir AppPrefs.hpp uses (this is a session
+//     credential, not a preference, and must not land in a synced or backed-up
+//     config tree), and in its OWN subdirectory rather than
+//     $XDG_STATE_HOME/urnetwork itself: main.cpp hands that exact directory to
+//     the SDK as its log dir and the SDK prunes it, so it is enumerated and
+//     deleted from by another component and swept up wholesale by any "send us
+//     your logs" flow.
+//
+//   the desktop Secret Service                      — THE TWO SECRETS.
+//     client_pem (this GUI's mTLS private key) and server_cert_pem (the cert
+//     it pins). RpcSessionStore.hpp's contract, and the reason this file no
+//     longer writes a private key to disk at all.
+//
+// THE FILE THAT USED TO BE HERE. Our fork wrote all six fields — including
+// BOTH private keys — as plaintext JSON at the same path, so that a relaunch
+// could re-present the whole pinning triple and be adopted by
+// TunnelHost::CanAdopt. That format has no `version` key, so RpcSessionStore
+// reads it as "corrupt", which lands on the Unreadable disposition and gets it
+// DELETED on the next launch. That deletion is not incidental: it is how two
+// private keys finally leave the disk of every machine that ever ran the old
+// build.
+//
+// BLOCKING D-BUS ON THE MAIN LOOP, deliberately and boundedly. Every call
+// below is a synchronous libsecret round trip made from the GTK main loop with
+// mutex_ held. That is upstream's shape, and it is the same trade StartTunnel
+// already makes for a synchronous start_tunnel (up to 180 s). What is NOT
+// acceptable, and what the callers below are built to guarantee, is a keyring
+// failure of any kind stopping the user connecting: every one of them falls
+// back to a fresh start_tunnel and reports the reason in the journal.
+
+RpcSessionSecretStore& SessionSecretStore() {
+  static SecretServiceRpcSessionStore store;
+  return store;
+}
+
+std::string RpcSessionPath() {
+  std::string dir = std::string(g_get_user_state_dir()) + "/urnetwork/rpc";
+  g_mkdir_with_parents(dir.c_str(), 0700);
+  return dir + "/rpc_session.json";
+}
+
+// Where the session file used to live, before it was moved out of the SDK's
+// log dir. Only ever deleted, never read: adopting one costs nothing to skip,
+// and leaving private keys behind in a directory that gets collected does.
+std::string LegacyRpcSessionPath() {
+  return std::string(g_get_user_state_dir()) + "/urnetwork/rpc_session.json";
+}
+
+// Best-effort removal of the metadata file itself, for the one disposition
+// RemoveRpcSessionRecord cannot serve: a file it cannot PARSE (the old
+// plaintext blob, a truncated write, a file that is not ours) never reaches
+// its unlink, so it would otherwise sit on disk forever. There is no keyring
+// item to orphan in that case — an unparseable file references nothing.
+void UnlinkRpcSessionFile(const char* why) {
+  const std::string path = RpcSessionPath();
+  if (g_unlink(path.c_str()) == 0) {
+    g_message("sdkhost: discarded the stored rpc session (%s)", why);
+  } else if (errno != ENOENT) {
+    g_warning("sdkhost: could not discard the stored rpc session (%s): %s", why,
+              g_strerror(errno));
+  }
+}
+
+// Drop the remembered session, both halves. Called when the session it names is
+// over (Shutdown, Logout, a bind that never synced) and when the stored record
+// is one that can never load again.
+void ForgetRpcSession() {
+  std::string diagnostic;
+  if (!RemoveRpcSessionRecord(RpcSessionPath(), SessionSecretStore(), &diagnostic)) {
+    // Two very different failures land here and only one of them may be
+    // resolved by deleting the file. If the metadata could not be PARSED there
+    // is no keyring item to strand, so the file must go. If the keyring itself
+    // refused, the reference is the only way a later run can still clean the
+    // item up, so it stays.
+    const auto fault = rpcsession::FaultFromDiagnostic(diagnostic);
+    if (fault == rpcsession::StoredSessionFault::Unreadable) {
+      UnlinkRpcSessionFile(rpcsession::Explain(fault));
+    } else {
+      g_warning("sdkhost: could not forget the stored rpc session (%s); leaving the "
+                "reference so a later run can still clean it up",
+                diagnostic.empty() ? "no detail" : diagnostic.c_str());
+    }
+  }
+  // The pre-Secret-Service file, unconditionally and every time: it holds two
+  // private keys and nothing reads it.
+  if (g_unlink(LegacyRpcSessionPath().c_str()) != 0 && errno != ENOENT) {
+    g_warning("sdkhost: could not remove the legacy rpc session file: %s", g_strerror(errno));
+  }
+}
+
+// The remembered session, or nullopt with the reason logged and the stored
+// record disposed of per rpcsession::ShouldForget. NEVER throws and never
+// blocks the caller from connecting: nullopt simply means "start a fresh
+// session", which is always available.
+std::optional<RpcSessionRecord> LoadRpcSession() {
+  std::string diagnostic;
+  auto record = LoadRpcSessionRecord(RpcSessionPath(), SessionSecretStore(), &diagnostic);
+  if (record) {
+    // Shape, separately from readability: the store proves the fields are
+    // present, rpcsession::IsUsableRecord proves they are dialable (two
+    // pairable uuids, two PEMs, and a port in our own draw range that is not
+    // the 12025 this process holds).
+    if (!rpcsession::IsUsableRecord(*record)) {
+      g_warning("sdkhost: the stored rpc session is not in a usable shape; discarding it and "
+                "starting a fresh session");
+      ForgetRpcSession();
+      return std::nullopt;
+    }
+    g_message("sdkhost: loaded the stored rpc session (%s)", diagnostic.c_str());
+    return record;
+  }
+
+  const auto fault = rpcsession::FaultFromDiagnostic(diagnostic);
+  if (fault == rpcsession::StoredSessionFault::Absent) return std::nullopt;
+  if (rpcsession::ShouldForget(fault)) {
+    g_message("sdkhost: %s; discarding it and starting a fresh session",
+              rpcsession::Explain(fault));
+    ForgetRpcSession();
+  } else {
+    // The credential may well still be good — a locked keyring at login is the
+    // ordinary case — so it is KEPT and simply not used this time. Retaining it
+    // costs one failed lookup next launch; discarding it would throw away a
+    // working credential and orphan its keyring item.
+    g_message("sdkhost: %s; keeping it and starting a fresh session this time",
+              rpcsession::Explain(fault));
+  }
+  return std::nullopt;
+}
+
+// Persist a session that has DEMONSTRABLY SYNCED. See the call site
+// (SdkHost::RememberSyncedSessionLocked): nothing is written until the pinned
+// DeviceRemote reports remote_connected, so a record on disk always describes a
+// pairing that really worked — which is the whole value of remembering one.
+// A failure here is logged and otherwise ignored: the tunnel is up and
+// carrying, and all that is lost is the ability to reattach to it next launch.
+void SaveRpcSession(const RpcSessionRecord& record) {
+  if (!rpcsession::IsUsableRecord(record)) {
+    // Refuse to write what LoadRpcSession would refuse to read: a record that
+    // cannot come back is worse than none, because we would have spent a
+    // keyring write on it for nothing.
+    g_warning("sdkhost: not persisting an unusable rpc session record (the next launch will "
+              "start a fresh session)");
+    return;
+  }
+  std::string diagnostic;
+  if (!SaveRpcSessionRecord(RpcSessionPath(), record, SessionSecretStore(), &diagnostic)) {
+    g_warning("sdkhost: could not remember this rpc session (%s); the tunnel is unaffected, "
+              "the next launch will start a fresh session instead of reattaching",
+              diagnostic.empty() ? "no detail" : diagnostic.c_str());
+    return;
+  }
+  g_message("sdkhost: remembered this rpc session for reattachment (%s)", diagnostic.c_str());
+}
+
+// The name of ONE credential generation, minted by this GUI because this GUI
+// owns half the material (client_pem and server_cert_pem never reach the
+// daemon). g_uuid_string_random draws from the CSPRNG, which is the property
+// StartTunnelRequest::rpc_session_id asks of the mint and that no wire check
+// can verify; the canonical dashed form then satisfies both the daemon's
+// ctl::LooksLikeRpcSessionId and our own tighter rpcsession::IsPairableId.
+std::string MintRpcSessionId() {
+  gchar* raw = g_uuid_string_random();
+  std::string id = raw ? raw : "";
+  g_free(raw);
+  return id;
+}
+
+// A fresh loopback listener per session, drawn from [kRpcPortMin, kRpcPortMax]
+// — a closed range that deliberately EXCLUDES ctl::kDeviceRpcPort (12025), so
+// the daemon echoing our port back can never be a coincidence against a peer
+// that ignored the pinning triple.
+std::string RandomLoopbackRpcHostPort() {
+  static std::mt19937 rng(std::random_device{}());
+  std::uniform_int_distribution<int> pick(ctl::kRpcPortMin, ctl::kRpcPortMax);
+  return "127.0.0.1:" + std::to_string(pick(rng));
+}
+
+// How long a freshly pinned DeviceRemote gets to report remote_connected
+// before the session is declared broken. This is the ONLY detector for a
+// well-formed but MISMATCHED pair: nothing throws on either side, both ends
+// bind and dial, the TLS handshake fails at connect time, and the symptom is
+// every screen empty forever. Tune against a real bring-up.
+constexpr int kRpcBindDeadlineSeconds = 8;
 }  // namespace
+
+SdkHost::~SdkHost() {
+  // Leg 3 of the kill switch runs here and holds `this`. Stop it before any
+  // member dies; it never takes mutex_ while the joiner holds it, so the join
+  // cannot deadlock.
+  StopKillSwitchWorker();
+  // The worker holds `this` and calls back into ReadReliability, so it must be
+  // finished before any member dies. It never takes reliabilityWorkerMutex_,
+  // so joining under that lock cannot deadlock. The join is NOT bounded — a
+  // read blocked on mutex_ (held across a slow StartTunnel) or on a hung
+  // daemon rpc can hold quit for seconds. That is the same trade the Developer
+  // page's bridge makes, and it is the right one against a use-after-free.
+  std::scoped_lock lock(reliabilityWorkerMutex_);
+  if (reliabilityWorker_.joinable()) reliabilityWorker_.join();
+  // Last, and unconditionally: the reservation is the only member that is a
+  // kernel resource rather than an SDK handle, and leaking it would keep the
+  // address held by a zombie fd for the rest of the process.
+  ReleaseDeviceRpcDefaultPort();
+}
+
+// See the contract on the declaration (SdkHost.hpp) for WHY this exists: the
+// binding gives no already-pinned DeviceRemote constructor, so the unpinned
+// first dial cannot be prevented — only aimed at a dead address.
+bool SdkHost::HoldDeviceRpcDefaultPortLocked(std::string* error) {
+  if (deviceRpcDefaultPortFd_ >= 0) return true;
+  const int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (fd < 0) {
+    if (error) *error = std::string("socket: ") + std::strerror(errno);
+    return false;
+  }
+  // NO SO_REUSEADDR and NO SO_REUSEPORT, on purpose: the exclusive reservation
+  // IS the mitigation, and either option would let a second process share the
+  // address with us.
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(static_cast<uint16_t>(ctl::kDeviceRpcPort));
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  if (::bind(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) != 0) {
+    const int err = errno;
+    ::close(fd);
+    if (error) {
+      *error = std::string("bind 127.0.0.1:") + std::to_string(ctl::kDeviceRpcPort) + ": " +
+               std::strerror(err);
+    }
+    return false;
+  }
+  // Deliberately no listen(): bound-but-not-listening holds the address AND
+  // makes every connect() to it fail instantly with ECONNREFUSED, which is
+  // exactly what the SDK's plaintext dialer must be given.
+  deviceRpcDefaultPortFd_ = fd;
+  return true;
+}
+
+void SdkHost::ReleaseDeviceRpcDefaultPort() {
+  if (deviceRpcDefaultPortFd_ < 0) return;
+  ::close(deviceRpcDefaultPortFd_);
+  deviceRpcDefaultPortFd_ = -1;
+}
 
 bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDir) {
   std::scoped_lock lock(mutex_);
   try {
     urnet::setLogDir(logDir);
     urnet::setMemoryLimit(kMemoryLimit);
-    storageDir_ = storageDir;
     spaceManager_ = urnet::newNetworkSpaceManager(storageDir);
     networkSpace_ = BuildUrNetworkSpace(*spaceManager_);
     api_ = networkSpace_->getApi();
@@ -373,10 +645,7 @@ bool SdkHost::ApplyNetworkServer(const std::string& hostName, const std::string&
     // A different space is a different LocalState and so a different stored
     // jwt: a running session belongs to the OLD server and cannot survive it.
     TeardownDeviceLocked();
-    // best effort — signed-out screens have none
-    if (control_.StopTunnel()) {
-      RemoveRpcSessionRecord(RpcSessionPath(storageDir_), rpcSecretStore_);
-    }
+    control_.StopTunnel();  // best effort — signed-out screens have none
     pendingWalletAuth_.reset();
     pendingInstantJwt_.reset();
 
@@ -737,9 +1006,7 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
     std::scoped_lock lock(mutex_);
     if (device_) {
       TeardownDeviceLocked();
-      if (control_.StopTunnel()) {
-        RemoveRpcSessionRecord(RpcSessionPath(storageDir_), rpcSecretStore_);
-      }
+      control_.StopTunnel();
       EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
     }
   }
@@ -790,16 +1057,37 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
 
 TunnelStartResult SdkHost::StartTunnel() {
   std::scoped_lock lock(mutex_);
+  return StartTunnelLocked();
+}
+
+TunnelStartResult SdkHost::StartTunnelLocked() {
   lastTunnelError_.clear();
-  if (device_) return TunnelStartResult::Started;
+  // A new start makes any previous "the daemon stopped it" verdict obsolete.
+  // This is the ONLY thing that clears the latch.
+  daemonTunnelGone_.store(false);
+  // EVERY outcome of this function is logged. It used to be silent on all of
+  // them, so a Connect that failed here left NOTHING to read: not in the app,
+  // not in the journal, not in the daemon (which is never reached on most of
+  // these paths). "Pressing Connect does nothing" was unanswerable as a result.
+  g_message("connect: start_tunnel requested");
   const std::string clientJwt = localState_->getByClientJwt();
   if (clientJwt.empty()) {
     lastTunnelError_ = "not signed in";
+    g_warning("connect: refused — no client jwt (not signed in)");
     return TunnelStartResult::Failed;
   }
   const std::string instanceId = localState_->getInstanceId();
+  // FROM UPSTREAM (556dca7). The daemon's ValidateStartTunnelRequest already
+  // refuses an empty instance_id, so this is not the enforcing check — it is
+  // the one that fails FAST and legibly. Without it an empty id costs a daemon
+  // connect, a hello and a version negotiation before coming back as a generic
+  // "instance_id is required" attributed to the daemon, which reads like a
+  // protocol fault rather than what it is: this process has no local device
+  // identity yet. instance_id is the DEVICE PAIRING KEY, so an empty one can
+  // never succeed and there is nothing to gain by putting it on the wire.
   if (instanceId.empty()) {
     lastTunnelError_ = "local device instance is missing";
+    g_warning("connect: refused — the local state has no instance id");
     return TunnelStartResult::Failed;
   }
 
@@ -812,175 +1100,422 @@ TunnelStartResult SdkHost::StartTunnel() {
       break;
     case DaemonSessionState::Unreachable:
       lastTunnelError_ = error;
+      g_warning("connect: daemon unreachable: %s", error.c_str());
       return TunnelStartResult::DaemonUnreachable;
     case DaemonSessionState::DaemonTooOld:
       lastTunnelError_ = error;
+      g_warning("connect: daemon too old: %s", error.c_str());
       return TunnelStartResult::DaemonTooOld;
     case DaemonSessionState::ClientTooOld:
       lastTunnelError_ = error;
+      g_warning("connect: app too old for this daemon: %s", error.c_str());
       return TunnelStartResult::AppTooOld;
     case DaemonSessionState::SdkMismatch:
       lastTunnelError_ = error;
+      g_warning("connect: app/daemon SDK build mismatch: %s", error.c_str());
       return TunnelStartResult::SdkMismatch;
     case DaemonSessionState::Error:
       lastTunnelError_ = error;
+      g_warning("connect: control session error: %s", error.c_str());
       return TunnelStartResult::Failed;
   }
 
-  // 2) Read the daemon's level state before choosing a lifecycle operation.
-  //    An Up tunnel is adopted with exact identities; start_tunnel is never
-  //    used as an adoption shortcut because TunnelHost::Start is destructive.
-  const auto daemonStatus = control_.Status(&error);
-  if (!daemonStatus) {
-    lastTunnelError_ = error.empty() ? "could not read daemon tunnel status" : error;
+  // 2) the device-RPC mTLS material.
+  //
+  //    REATTACH when the daemon still has a tunnel up AND we remember the
+  //    exact triple it was started with: TunnelHost::CanAdopt compares the
+  //    three rpc fields byte for byte, so generating fresh material on every
+  //    launch would tear down a working tunnel and rebuild it every single
+  //    time the app starts — the precise regression CanAdopt exists to
+  //    prevent. Otherwise generate.
+  //
+  //    The GUI is the generator (not the daemon) because the VERIFIER must
+  //    choose its own pin: if the daemon generated, this side would pin
+  //    whatever value arrived on the reply, and pinning to a value the peer
+  //    chose is not pinning. The private half that crosses the socket is
+  //    server_pem, travelling UP to a peer that has already authenticated us
+  //    via SO_PEERCRED — and the same request already carries by_jwt, which is
+  //    strictly more valuable than a per-session loopback server key.
+  //    ONE status read serves both decisions below (is our bound device still
+  //    real, and can this start be adopted instead of rebuilt) — it used to be
+  //    two round trips on the same lock.
+  std::string statusError;
+  const std::optional<ctl::StatusReply> status = control_.Status(&statusError);
+  if (!status) {
+    // Not fatal here: the start below reports the transport failure with a
+    // mapped, renderable state. But it must not pass unremarked, because every
+    // decision that follows is now being made on no information.
+    g_warning("connect: the daemon did not answer `status` (%s); continuing with a fresh start",
+              statusError.empty() ? "no detail" : statusError.c_str());
+  }
+  const bool daemonTunnelUp = status && status->tunnel_state == ctl::TunnelState::Up;
+
+  // 2a) IS THE DEVICE WE ALREADY HOLD STILL REAL?
+  //
+  //     A urnet::DeviceRemote handle is NOT proof of a live tunnel. The handle
+  //     belongs to this process and NOTHING invalidates it when the
+  //     daemon-side half disappears — a service restart or reinstall, another
+  //     client's stop_tunnel, the IoLoop ending. This function used to
+  //     `return Started` on `device_` alone, without one byte of daemon
+  //     traffic, which stranded the GUI permanently: the caller then drove
+  //     ConnectBestAvailable into a dead rpc, no start_tunnel was ever sent,
+  //     and no error was ever produced. "Press Connect, nothing happens", with
+  //     an empty daemon journal to match.
+  if (device_) {
+    const bool sameSession = deviceControlGeneration_ == control_.SessionGeneration();
+    if (daemonTunnelUp && status->rpc_pinned && sameSession) {
+      g_message("connect: the daemon still holds our tunnel (rpc pinned, same control "
+                "session); reusing the bound device");
+      return TunnelStartResult::Started;
+    }
+    g_warning("connect: the bound device is STALE (daemon tunnel_state=%s, rpc_pinned=%s, "
+              "same control session=%s); dropping it and starting a new session",
+              status ? ctl::ToString(status->tunnel_state) : "unknown",
+              status && status->rpc_pinned ? "yes" : "no", sameSession ? "yes" : "no");
+    // Drop it before anything else can use it, and tell the UI, so the pages
+    // that fold on hasDevice() stop rendering a session that does not exist.
+    TeardownDeviceLocked();
+    EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+    PublishConnectReading();
+  }
+
+  // ---- 2b) THE TWO DOORS ----------------------------------------------------
+  // A relaunch that finds a tunnel already up can either NAME the running
+  // session or DESCRIBE a new one, and the division between them is structural
+  // rather than a matter of which is tried first (RpcSession.hpp spells the
+  // whole argument out):
+  //
+  //   attach_tunnel — THE EXPLICIT DOOR, below. The stored record names the
+  //     live session by (instance_id, rpc_session_id); the client key and the
+  //     pinned cert come back out of the Secret Service; nothing crosses the
+  //     socket but the two identifiers.
+  //
+  //   start_tunnel  — THE FALLBACK, and the answer to EVERY failure of the
+  //     first: no record, a locked keyring, a stale entry, a session that has
+  //     since stopped, a tunnel belonging to another uid, a daemon that does
+  //     not persist sessions at all. It always exists, so no failure above can
+  //     leave the user unable to connect. The daemon may still absorb it
+  //     through TunnelHost::CanAdopt — that guard is the daemon's own
+  //     idempotency contract for any client re-sending an identical request,
+  //     and it is no longer something THIS side aims at: two thirds of the
+  //     triple CanAdopt compares are the daemon's half of the material, which
+  //     upstream's record deliberately does not keep.
+  if (daemonTunnelUp) {
+    if (auto attached = TryAttachRememberedSessionLocked(clientJwt, *status)) return *attached;
+  }
+
+  // ---- 2c) a FRESH session --------------------------------------------------
+  // One act mints all of it: the mTLS material, the loopback port, and the
+  // rpc_session_id that NAMES the three together. They are stored together too,
+  // or not at all.
+  RpcSessionRecord session;
+  // "confirmed" because nothing is written until the pairing has demonstrably
+  // worked — see RememberSyncedSessionLocked. ("pending" survives only for
+  // records migrated out of the pre-Secret-Service format, whose state this
+  // process never chose.)
+  session.state = "confirmed";
+  session.instance_id = instanceId;
+  session.rpc_session_id = MintRpcSessionId();
+  session.host_port = RandomLoopbackRpcHostPort();
+  std::string rpcServerPem;      // the daemon's half: sent, never stored
+  std::string rpcClientCertPem;  // the daemon's half: sent, never stored
+  if (!rpcsession::IsPairableId(session.rpc_session_id)) {
+    // Cannot happen (g_uuid_string_random is infallible), and is refused here
+    // anyway: the daemon's ValidateStartTunnelRequest now REQUIRES a session id
+    // alongside the pinning triple, so a blank one would come back as a generic
+    // rpc_pin_required and read like a key-material fault instead of what it is.
+    lastTunnelError_ = "a device rpc session name could not be generated";
+    g_warning("connect: refused — %s", lastTunnelError_.c_str());
     return TunnelStartResult::Failed;
   }
-
-  const std::string sessionPath = RpcSessionPath(storageDir_);
-  std::string sessionDiagnostic;
-  auto savedSession =
-      LoadRpcSessionRecord(sessionPath, rpcSecretStore_, &sessionDiagnostic);
-  RpcSessionRecord rpcSession;
-  ctl::StartTunnelReply rpcReply;
-  bool startedFresh = false;
-
-  if (daemonStatus->tunnel_state == ctl::TunnelState::Up) {
-    if (!savedSession || savedSession->instance_id != instanceId ||
-        !RpcSessionMatchesStatus(*savedSession, *daemonStatus)) {
-      lastTunnelError_ =
-          "the running tunnel could not be safely adopted (RPC session " +
-          sessionDiagnostic + "); its identity was left untouched";
-      return TunnelStartResult::Failed;
-    }
-    rpcSession = *savedSession;
-    ctl::AttachTunnelRequest attach;
-    attach.instance_id = rpcSession.instance_id;
-    attach.rpc_session_id = rpcSession.rpc_session_id;
-    if (!control_.AttachTunnel(attach, &rpcReply, &error)) {
-      lastTunnelError_ = error.empty() ? "daemon refused tunnel adoption" : error;
-      return TunnelStartResult::Failed;
-    }
-  } else if (daemonStatus->tunnel_state == ctl::TunnelState::Starting ||
-             daemonStatus->tunnel_state == ctl::TunnelState::Stopping) {
-    lastTunnelError_ = "the daemon tunnel is changing state; try again";
-    return TunnelStartResult::Failed;
-  } else {
-    // Fresh session: write PENDING material before asking the daemon to start.
-    // A process death after the daemon commits can then be recovered on the
-    // next launch. Only the public client cert crosses the control socket.
-    urnet::DeviceRpcKeyMaterial km;
-    try {
-      km = urnet::generateDeviceRpcKeyMaterial();
-      rpcSession.state = "pending";
-      rpcSession.instance_id = instanceId;
-      rpcSession.rpc_session_id = urnet::generateNonce();
-      rpcSession.client_pem = km.getClientPem();
-      rpcSession.server_cert_pem = km.getServerCertPem();
-      rpcSession.host_port =
-          "127.0.0.1:" + std::to_string(ctl::kDeviceRpcPort);
-    } catch (const std::exception& e) {
-      lastTunnelError_ = std::string("could not generate RPC credentials: ") + e.what();
-      return TunnelStartResult::Failed;
-    }
-    if (!SaveRpcSessionRecord(sessionPath, rpcSession, rpcSecretStore_,
-                              &sessionDiagnostic)) {
-      lastTunnelError_ = "could not securely persist pending RPC credentials (" +
-                         sessionDiagnostic + ")";
-      return TunnelStartResult::Failed;
-    }
-
-    // The active network space rides along (windows StartTunnel's
-    // network_space_json): the daemon must build its DeviceLocal in the SAME
-    // space, or a custom-server session would sync against a device
-    // registered on production. (mutex_ is held: read the space directly.)
-    std::string spaceJson;
-    try {
-      if (networkSpace_) spaceJson = networkSpace_->toJson();
-    } catch (const std::exception& e) {
-      std::fprintf(stderr, "[sdk] network space toJson failed: %s\n", e.what());
-    }
-
-    ctl::StartTunnelRequest start;
-    start.by_jwt = clientJwt;
-    start.instance_id = instanceId;
-    start.app_version = kAppVersion;
-    start.network_space_json = spaceJson;
-    start.rpc_session_id = rpcSession.rpc_session_id;
-    start.rpc_server_pem = km.getServerPem();
-    start.rpc_client_cert_pem = km.getClientCertPem();
-    if (!control_.StartTunnel(start, &rpcReply, &error)) {
-      // Keep the pending record. A transport failure can happen after the
-      // daemon committed the tunnel but before its reply reached this process;
-      // deleting the only client key here would make that live session
-      // permanently unadoptable. Stale pending records are harmless because a
-      // later adoption requires an exact instance/session/port match, and a
-      // fresh start atomically replaces the record.
-      lastTunnelError_ = error;
-      switch (control_.LastSessionState()) {
-        case DaemonSessionState::Unreachable:
-          return TunnelStartResult::DaemonUnreachable;
-        case DaemonSessionState::DaemonTooOld:
-          return TunnelStartResult::DaemonTooOld;
-        case DaemonSessionState::ClientTooOld:
-          return TunnelStartResult::AppTooOld;
-        case DaemonSessionState::SdkMismatch:
-          return TunnelStartResult::SdkMismatch;
-        default:
-          return TunnelStartResult::Failed;
-      }
-    }
-    startedFresh = true;
-  }
-
-  if (rpcReply.instance_id != rpcSession.instance_id ||
-      rpcReply.rpc_session_id != rpcSession.rpc_session_id || rpcReply.rpc_port <= 0 ||
-      rpcSession.host_port != "127.0.0.1:" + std::to_string(rpcReply.rpc_port)) {
-    lastTunnelError_ = "daemon returned a different RPC session identity";
-    if (startedFresh && control_.StopTunnel()) {
-      RemoveRpcSessionRecord(sessionPath, rpcSecretStore_);
-    }
-    else control_.Close();
-    return TunnelStartResult::Failed;
-  }
-
   try {
-    // 3) Construct the remote, register its listener FIRST, then point it at
-    //    the exact per-session mTLS transport. The constructor's default
-    //    unencrypted dialer cannot authenticate to the daemon's TLS listener.
-    device_ = urnet::newDeviceRemoteWithDefaults(*networkSpace_, clientJwt, instanceId);
-    auto remoteConnected = std::make_shared<std::atomic<bool>>(false);
-    subs_.push_back(device_->addRemoteChangeListener(
-        [remoteConnected](bool connected) { remoteConnected->store(connected); }));
-    device_->setRpcServer(rpcSession.client_pem, rpcSession.server_cert_pem,
-                          rpcSession.host_port);
-    remoteConnected->store(device_->getRemoteConnected());  // level check after listener
-    device_->sync();
+    urnet::DeviceRpcKeyMaterial km = urnet::generateDeviceRpcKeyMaterial();
+    // THE HANDLE-0 TRAP: urnet_generate_device_rpc_key_material can return
+    // handle 0 with NO error, and the binding maps a NULL char* to an empty
+    // string rather than throwing — so the four getters would hand back four
+    // empty PEMs silently and the session would end up unpinned. The
+    // explicit handle check plus the per-string shape gate below is the only
+    // thing standing between that and a root rpc listener anyone can drive.
+    if (!km) {
+      lastTunnelError_ = "the device rpc key material could not be generated";
+      g_warning("connect: refused — %s (the SDK returned a null key-material handle "
+                "with no error)",
+                lastTunnelError_.c_str());
+      return TunnelStartResult::Failed;
+    }
+    rpcServerPem = km.getServerPem();
+    rpcClientCertPem = km.getClientCertPem();
+    session.client_pem = km.getClientPem();
+    session.server_cert_pem = km.getServerCertPem();
+  } catch (const std::exception& e) {
+    lastTunnelError_ = std::string("the device rpc key material could not be generated: ") +
+                       e.what();
+    g_warning("connect: refused — %s", lastTunnelError_.c_str());
+    return TunnelStartResult::Failed;
+  }
+  if (!ctl::LooksLikePem(rpcServerPem) || !ctl::LooksLikePem(rpcClientCertPem) ||
+      !ctl::LooksLikePem(session.client_pem) || !ctl::LooksLikePem(session.server_cert_pem)) {
+    lastTunnelError_ = "the device rpc key material is not usable";
+    // The four lengths are the whole diagnosis (a handle-0 generate yields
+    // four zeroes; a truncated one yields a short odd man out) and they leak
+    // nothing — never log the PEMs themselves, two of them are private keys.
+    g_warning("connect: refused — %s (server=%zu client_cert=%zu client=%zu "
+              "server_cert=%zu bytes)",
+              lastTunnelError_.c_str(), rpcServerPem.size(), rpcClientCertPem.size(),
+              session.client_pem.size(), session.server_cert_pem.size());
+    return TunnelStartResult::Failed;
+  }
 
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(10);
-    while (!remoteConnected->load() && std::chrono::steady_clock::now() < deadline) {
-      const std::string syncError = device_->getSyncError();
-      if (!syncError.empty()) {
-        throw std::runtime_error("device RPC sync refused: " + syncError);
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    const std::string syncError = device_->getSyncError();
-    if (!syncError.empty()) {
-      throw std::runtime_error("device RPC sync refused: " + syncError);
-    }
-    if (!remoteConnected->load() && !device_->getRemoteConnected()) {
-      throw std::runtime_error("timed out waiting for the device RPC session");
-    }
+  // 3) start_tunnel: the daemon builds the DeviceLocal (rpc enabled, pinned to
+  //    the material above), opens the tun and wires the IoLoop. First
+  //    authenticated client wins; a tunnel owned by another live client comes
+  //    back as a plain error. The active network space rides along (windows
+  //    StartTunnel's network_space_json): the daemon must build its DeviceLocal
+  //    in the SAME space, or a custom-server session would sync against a
+  //    device registered on production. (mutex_ is held: read the space
+  //    directly.)
+  std::string spaceJson;
+  try {
+    if (networkSpace_) spaceJson = networkSpace_->toJson();
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] network space toJson failed: %s\n", e.what());
+  }
+  ControlClient::StartTunnelOptions options;
+  options.by_jwt = clientJwt;
+  // Local state's CURRENT id. The reattach path no longer comes through here —
+  // it goes through attach_tunnel above, which names the id the session was
+  // STARTED with — so there is nothing left to prefer over this one. What the
+  // daemon is ACTUALLY paired with still comes back on the reply and overrides
+  // it below, because the daemon may adopt a session started under an earlier
+  // id (RpcSession.hpp's instance-id trap).
+  options.instance_id = instanceId;
+  options.app_version = kAppVersion;
+  options.network_space_json = spaceJson;
+  // The kill switch the user has standing. The daemon reports back what it
+  // ACTUALLY installed; nothing here assumes the request took.
+  options.kill_switch = KillSwitchRequestedLocked();
+  options.rpc_server_pem = rpcServerPem;
+  options.rpc_client_cert_pem = rpcClientCertPem;
+  options.rpc_listen_hostport = session.host_port;
+  options.rpc_session_id = session.rpc_session_id;
 
-    rpcSession.state = "confirmed";
-    if (!SaveRpcSessionRecord(sessionPath, rpcSession, rpcSecretStore_,
-                              &sessionDiagnostic)) {
-      // The pre-start pending record is still complete and safely adoptable;
-      // retain the live session but make the diagnostic visible in logs.
-      std::fprintf(stderr, "[sdk] could not mark RPC session confirmed: %s\n",
-                   sessionDiagnostic.c_str());
+  // StartTunnelEx is fail-closed by construction: it validates the triple
+  // before a frame is sent, and on a synchronous start that comes back Up it
+  // requires rpc_pinned AND an echoed port equal to the one we chose —
+  // otherwise it fails the outcome and stops the daemon-side tunnel, because a
+  // running tunnel whose ROOT rpc listener is unauthenticated is worse than no
+  // tunnel. So there is no plaintext fallback to write here.
+  g_message("connect: sending start_tunnel (fresh session, rpc %s, kill switch %s)",
+            session.host_port.c_str(), options.kill_switch ? "on" : "off");
+  const ControlClient::StartTunnelOutcome outcome = control_.StartTunnelEx(options);
+  if (!outcome.ok) {
+    lastTunnelError_ = outcome.error;
+    // Whether the refusal was local (the fail-closed validator, before a byte
+    // was sent) or the daemon's own answer, it is named here — this return
+    // used to carry the reason no further than a notice the user may not have
+    // been looking at.
+    g_warning("connect: start_tunnel failed (code=%s): %s",
+              outcome.code.empty() ? "none" : outcome.code.c_str(),
+              outcome.error.empty() ? "no detail" : outcome.error.c_str());
+    // The material never bound to anything, and any PREVIOUSLY remembered
+    // session is equally not what is running now.
+    ForgetRpcSession();
+    switch (outcome.session) {
+      case DaemonSessionState::Unreachable:
+        return TunnelStartResult::DaemonUnreachable;
+      case DaemonSessionState::DaemonTooOld:
+        return TunnelStartResult::DaemonTooOld;
+      case DaemonSessionState::ClientTooOld:
+        return TunnelStartResult::AppTooOld;
+      case DaemonSessionState::SdkMismatch:
+        return TunnelStartResult::SdkMismatch;
+      default:
+        return TunnelStartResult::Failed;
     }
+  }
+
+  // WHAT THE DAEMON IS ACTUALLY PAIRED WITH, which is not always what we asked
+  // for: on its adoption path the live identity is the FIRST start's. Both the
+  // DeviceRemote we build and the record we remember must use the daemon's
+  // answer, or the rpc sync pairs against an id the DeviceLocal never had and
+  // the remote connects and never populates. Empty means a daemon predating the
+  // echo; fall back to what we sent, which then simply cannot be reattached to.
+  if (!outcome.instance_id.empty() && outcome.instance_id != session.instance_id) {
+    g_message("connect: the service adopted a session started under a different instance id; "
+              "pairing with the service's");
+    session.instance_id = outcome.instance_id;
+  }
+  if (!outcome.rpc_session_id.empty()) session.rpc_session_id = outcome.rpc_session_id;
+
+  // Remember it only once it SYNCS (RememberSyncedSessionLocked). A daemon that
+  // does not echo an rpc_session_id has no session to name, so there is nothing
+  // that could be attached to later and nothing worth writing to the keyring.
+  const bool attachableLater = !outcome.rpc_session_id.empty();
+  if (!attachableLater) {
+    g_message("connect: the service did not name this rpc session; it will be rebuilt rather "
+              "than reattached on the next launch");
+    // A previously remembered session is not this one. Drop it rather than
+    // leave a record that can only fail to match.
+    ForgetRpcSession();
+  }
+  return BindRemoteDeviceLocked(clientJwt, session, attachableLater);
+}
+
+// ---- door 1: attach_tunnel -------------------------------------------------
+// nullopt means THE DOOR DID NOT OPEN and the caller must fall back to a fresh
+// start_tunnel — which is the answer to every failure here, so none of them can
+// leave the user unable to connect. A value means the door was taken and this
+// is the whole result of StartTunnel.
+//
+// The failure inventory this is built around, each landing on a fallback:
+//   * no record at all, or one this build cannot read      -> LoadRpcSession
+//   * a locked or absent keyring                           -> LoadRpcSession
+//   * a stale entry, or one for a session that has stopped -> rpcsession::CanAttach
+//   * an entry for a tunnel owned by ANOTHER uid           -> the daemon, which
+//     charges kActionTakeOverTunnel for it and refuses with auth_not_tunnel_owner
+//     when that is not granted
+//   * a daemon that does not persist rpc sessions          -> the daemon, with
+//     kCodeRpcSessionNotPersisted
+std::optional<TunnelStartResult> SdkHost::TryAttachRememberedSessionLocked(
+    const std::string& clientJwt, const ctl::StatusReply& status) {
+  auto remembered = LoadRpcSession();
+  if (!remembered) return std::nullopt;  // LoadRpcSession has already said why
+
+  // IS IT THE TUNNEL THAT IS RUNNING? Asked HERE, before a frame is sent, and
+  // asked again by the daemon. A record that names a session other than the
+  // live one is exactly the stale/foreign case: it must fall back to a fresh
+  // start, never attach to whatever happens to be up.
+  if (!rpcsession::CanAttach(*remembered, status)) {
+    g_message("connect: the remembered rpc session is not the one the service is running "
+              "(remembered port %s, live rpc port %d); starting a fresh session",
+              remembered->host_port.c_str(), status.rpc_port);
+    // NOT forgotten. The record may still be perfectly good and simply describe
+    // a session that has ended; the fresh start below overwrites it, and if
+    // that start fails the user keeps whatever they had.
+    return std::nullopt;
+  }
+
+  g_message("connect: a tunnel is already up and this app remembers its rpc session; "
+            "attaching to it instead of rebuilding it");
+  const ControlClient::StartTunnelOutcome outcome = control_.AttachTunnel(
+      remembered->instance_id, remembered->rpc_session_id,
+      ctl::RpcPortFromHostPort(remembered->host_port));
+  if (!outcome.ok) {
+    g_warning("connect: attach_tunnel was refused (code=%s): %s; starting a fresh session",
+              outcome.code.empty() ? "none" : outcome.code.c_str(),
+              outcome.error.empty() ? "no detail" : outcome.error.c_str());
+    // WHICH REFUSALS KILL THE RECORD. A mismatch means the daemon does not have
+    // the session this record names, so it can never match again and keeping it
+    // only costs a failed attach every launch. Everything else — a daemon that
+    // does not persist sessions, a take-over that was not authorized, a
+    // transport failure, a polkit prompt the user dismissed — says nothing
+    // about whether the credential is good, and discarding it there would
+    // destroy a working credential over a temporary answer.
+    if (outcome.code == ctl::kCodeRpcSessionMismatch) ForgetRpcSession();
+    // Deliberately NOT surfaced as lastTunnelError_ and NOT returned: this is
+    // not a failure the user has to see or act on. The fresh start below is the
+    // answer, and it reports its own outcome.
+    return std::nullopt;
+  }
+
+  // Attached. From here the failure mode changes: we now OWN the daemon's
+  // tunnel and a local bind failure means nobody is driving it, so
+  // BindRemoteDeviceLocked's teardown (which stops the daemon-side tunnel) is
+  // the right ending — and this returns that result rather than falling back,
+  // because a bind failure is LOCAL (the 12025 reservation, setRpcServer) and a
+  // fresh start would meet it again.
+  //
+  // rememberOnSync is false: this record is already in the Secret Service, and
+  // re-writing it would cost a keyring round trip to store what is already
+  // there.
+  return BindRemoteDeviceLocked(clientJwt, *remembered, /*rememberOnSync=*/false);
+}
+
+// ---- the DeviceRemote half, shared by BOTH doors ---------------------------
+// Everything from here on is identical whether the session was just created or
+// just attached to, which is the point of factoring it: one pinned
+// construction, one set of listeners, one watchdog, one teardown-and-stop
+// failure path. Requires mutex_.
+TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
+                                                  const RpcSessionRecord& session,
+                                                  bool rememberOnSync) {
+  try {
+    // 4) the remote face of the daemon's device, PINNED to the other half of
+    //    the material the daemon is listening with. Same instanceId on both
+    //    sides: the rpc sync pairs on it and the daemon side rejects a
+    //    mismatch.
+    //
+    //    FIRST, THE WINDOW THIS SIDE CANNOT CLOSE. newDeviceRemoteWithDefaults
+    //    is the only DeviceRemote constructor the binding has, and it dials
+    //    127.0.0.1:12025 in PLAIN ws — no TLS, no pin — from a goroutine it
+    //    starts before it returns; setRpcServer below cannot run any earlier
+    //    and is itself blocked behind the constructor's 1 s initial lock. An
+    //    occupant of that address is handed this device's rpc sync and then
+    //    proxies the Api's authenticated HTTP, i.e. the account bearer token.
+    //    The binding has no already-pinned path (see the declaration of
+    //    HoldDeviceRpcDefaultPortLocked for the symbol evidence), so the next
+    //    best guarantee is that the address is DEAD while we use it: we hold
+    //    it ourselves, or we do not build the DeviceRemote at all.
+    //
+    //    The throw is the point — it lands in the catch below, which is the
+    //    one path that already tears down every partial resource AND stops the
+    //    daemon-side tunnel we just started.
+    if (std::string holdError; !HoldDeviceRpcDefaultPortLocked(&holdError)) {
+      // Deliberately does not name a cause it did not measure: EADDRINUSE
+      // (something is squatting the address) and any other errno are the same
+      // decision here, because both leave the unpinned first dial able to
+      // reach a peer we have not authenticated. holdError carries the errno.
+      throw std::runtime_error(
+          std::string("the device rpc cannot be started safely: this app could not "
+                      "reserve 127.0.0.1:") +
+          std::to_string(ctl::kDeviceRpcPort) +
+          ", the address its SDK dials unencrypted and unauthenticated before it can "
+          "present its certificate (" +
+          holdError + ")");
+    }
+    device_ = urnet::newDeviceRemoteWithDefaults(*networkSpace_, clientJwt,
+                                                 session.instance_id);
+    // setRpcServer BEFORE any listener registration or getter (windows
+    // SdkHost.cpp:2027-2029), and exactly once per DeviceRemote instance — the
+    // binding gives no re-entrancy contract for a second call and no way to
+    // clear a listener short of destroying the object. A throw here lands in
+    // the catch below, which tears down and stops the daemon-side tunnel.
+    const uint64_t rpcGeneration = ++rpcSessionGeneration_;
+    device_->setRpcServer(session.client_pem, session.server_cert_pem, session.host_port);
+    rpcHostPort_ = session.host_port;
+    // WHICH daemon connection this device belongs to. The daemon's DeviceLocal
+    // — the only thing on the other end of the rpc we just pinned — dies with
+    // the daemon process, so a control session that has been rebuilt since
+    // this moment means the handle below is a handle to nothing. Recorded
+    // here, checked by hasDevice() and by the revalidation at the top of this
+    // function, so nobody has to take a device handle on faith.
+    deviceControlGeneration_ = control_.SessionGeneration();
+
+    // The watchdog's cancel edge. Preferred over polling: the first
+    // remote_connected=true is proof the pinned pair agreed, and it usually
+    // lands well inside the deadline. Marshalled rather than taken inline —
+    // this callback can fire on an SDK thread while StartTunnel still holds
+    // mutex_, and re-entering a non-recursive lock is a deadlock.
+    //
+    // IT IS ALSO WHERE THE SESSION IS REMEMBERED. remote_connected turning true
+    // is the ONLY proof the pinned pair actually agreed, so nothing is written
+    // to disk or to the keyring before it: a record on disk therefore always
+    // describes a pairing that really worked, and a session that never synced
+    // is never offered to a later launch as something to attach to. The
+    // `rpcBindWatchId_ == 0` guard below makes this the FIRST connected edge
+    // only, so a session is stored exactly once however often the remote
+    // reconnects.
+    subs_.push_back(device_->addRemoteChangeListener([this, rpcGeneration](bool connected) {
+      if (!connected) return;
+      PostToMain([this, rpcGeneration] {
+        std::scoped_lock lock(mutex_);
+        if (rpcGeneration != rpcSessionGeneration_.load()) return;  // a newer session owns it
+        if (rpcBindWatchId_ == 0) return;
+        g_source_remove(rpcBindWatchId_);
+        rpcBindWatchId_ = 0;
+        RememberSyncedSessionLocked();
+      });
+    }));
 
     // The jwt refresh (which runs immediately at device creation) tells us
     // when the stored client no longer exists on the server. Only marshal from
@@ -1021,38 +1556,79 @@ TunnelStartResult SdkHost::StartTunnel() {
 
     // Connection choice is data-plane state, so keep this lightweight listener
     // alive for the tray even when every presentation controller is closed.
+    //
+    // IT PUBLISHES THE WHOLE READING, not the one bit it carries. The old
+    // handler pushed "DESTINATION_SET"/"DISCONNECTED" — a two-word vocabulary
+    // that the page then had to read as "in flight", which is why a carrying
+    // tunnel rendered "Connecting to providers" for the whole session: the
+    // destination stays selected while the tunnel carries, and no later push
+    // ever contradicted it. Re-reading everything means the page can never
+    // hold one field from this instant beside another from a previous one.
     subs_.push_back(device_->addConnectLocationChangeListener(
-        [this](std::optional<urnet::ConnectLocation> location) {
-          if (onStatus_) onStatus_(location ? "DESTINATION_SET" : "DISCONNECTED");
-        }));
+        [this](std::optional<urnet::ConnectLocation>) { PublishConnectReading(); }));
     if (presentationActive_) {
       SubscribeStats();
       SubscribeDrawer();
     }
-    if (onStatus_) {
-      onStatus_(device_->getConnectLocation() ? "DESTINATION_SET" : "DISCONNECTED");
-    }
+    PublishConnectReading();
+    // ARMED, NOT WRITTEN. The record is handed to the remote-change listener
+    // above and committed only when the pairing demonstrably syncs — see the
+    // comment there. A locked or absent keyring at that moment costs the
+    // ability to reattach next launch and nothing else; it can never fail this
+    // start, which is already up by then.
+    unsavedSession_.reset();
+    if (rememberOnSync) unsavedSession_ = session;
+    // The mismatched-but-well-formed case (§5 case D) throws on neither side:
+    // both ends bind and dial, the handshake fails at connect time, and the
+    // only evidence is getRemoteConnected() never turning true. Bound it.
+    ArmRpcBindWatchdogLocked();
     EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+    // The daemon has just decided what floor this session carries (Connected
+    // with the block-all, or Connected without it). Read it back rather than
+    // assume the request took — this is the same honesty rule the toggles now
+    // follow, applied to the start path.
+    EnqueueKillSwitch(KillSwitchRequest{});
     return TunnelStartResult::Started;
   } catch (const std::exception& e) {
     std::fprintf(stderr, "[sdk] start tunnel failed: %s\n", e.what());
     lastTunnelError_ = e.what();
+    // The material is bound to nothing now; a reattach with it could only
+    // mismatch, so forget it rather than remember a pairing that never was.
+    // ForgetRpcSession covers BOTH doors: on the fresh door it drops material
+    // that was never stored anyway plus any older record, and on the attach
+    // door it drops the record we just proved we cannot drive.
+    unsavedSession_.reset();
+    ForgetRpcSession();
+    rpcHostPort_.clear();
     // StartTunnel is retryable. Tear down every partially-created resource and
     // listener so a failed attempt cannot leave a subscription or
     // manager-owned controller behind for the next attempt, and stop the
-    // daemon-side tunnel we just started but cannot bind to. When this was an
-    // adoption attempt, never destroy the existing tunnel: close our control
-    // connection so another launch can reclaim it.
+    // daemon-side tunnel we just started but cannot bind to.
     TeardownDeviceLocked();
-    if (startedFresh) {
-      if (control_.StopTunnel()) {
-        RemoveRpcSessionRecord(sessionPath, rpcSecretStore_);
-      }
-    } else {
-      control_.Close();
-    }
+    control_.StopTunnel();
     return TunnelStartResult::Failed;
   }
+}
+
+// Commit the session that has just proved itself. Called from the FIRST
+// remote_connected edge of a freshly started session and from nowhere else:
+// the attach door does not arm it (its record is already stored), and a session
+// that never syncs never reaches here, so the store can only ever hold a
+// pairing that demonstrably worked.
+//
+// Everything about it is best-effort. This runs after the tunnel is up and
+// carrying, so a locked keyring, a cancelled unlock prompt or no Secret Service
+// at all costs exactly one thing — the next launch rebuilds the tunnel instead
+// of attaching to it — and can never fail the session the user is already
+// using. Requires mutex_.
+void SdkHost::RememberSyncedSessionLocked() {
+  if (!unsavedSession_) return;
+  const RpcSessionRecord record = *unsavedSession_;
+  // Consumed either way: a save that failed must not be retried on the next
+  // reconnect edge, where it would re-raise the same keyring prompt against a
+  // user who has already declined it once.
+  unsavedSession_.reset();
+  SaveRpcSession(record);
 }
 
 std::string SdkHost::LastTunnelError() {
@@ -1070,7 +1646,16 @@ void SdkHost::SubscribeStats() {
   connectVc_ = device_->openConnectViewController();
   connectVc_->start();
   contractVc_ = device_->openContractViewController();  // live throughput feed
-  auto pub = [this] { PublishStats(); };
+  // BOTH FEEDS, FROM ONE EVENT. The connect controller's status listener is
+  // the only place CONNECTING -> CONNECTED is ever announced, and it used to
+  // reach the stats feed alone — which the window drops while it is hidden,
+  // and which the status row never read for its verdict. It now also
+  // republishes the connect reading, ungated, so "the SDK has provider
+  // sessions" reaches the status row the moment it becomes true.
+  auto pub = [this] {
+    PublishStats();
+    PublishConnectReading();
+  };
   presentationSubs_.push_back(connectVc_->addConnectionStatusListener(pub));
   presentationSubs_.push_back(connectVc_->addGridListener(pub));  // provider window size
   presentationSubs_.push_back(connectVc_->addSelectedLocationListener(
@@ -1098,8 +1683,12 @@ void SdkHost::SubscribeStats() {
         provideHasNetworkKey_.store(hasNetworkKey);
         PublishStats();
       }));
-  presentationSubs_.push_back(device_->addTunnelChangeListener([this](bool) { PublishStats(); }));
-  PublishStats();  // initial snapshot
+  presentationSubs_.push_back(device_->addTunnelChangeListener([this](bool) {
+    PublishStats();
+    PublishConnectReading();
+  }));
+  PublishStats();           // initial snapshot
+  PublishConnectReading();  // ... and the reading it must never disagree with
 }
 
 LiveStats SdkHost::ReadStats() {
@@ -1147,6 +1736,91 @@ LiveStats SdkHost::ReadStats() {
 
 void SdkHost::PublishStats() {
   if (onStats_) onStats_(ReadStats());
+}
+
+// ---- the one connect reading -------------------------------------------------
+// EVERY field, every time, from the live getters. The defect this replaces was
+// three copies of "are we connected" with three writers and three freshnesses:
+// SdkHost::Connected() (destination selected AND the tunnel still ours),
+// LiveStats::connected (destination selected, and only applied while the window
+// was visible), and a pushed status string whose entire vocabulary was
+// {DESTINATION_SET, DISCONNECTED}. See Health.hpp.
+void SdkHost::NoteDaemonTunnelGone() {
+  daemonTunnelGone_.store(true);
+  PublishConnectReading();
+}
+
+ConnectReading SdkHost::ReadConnectReading() {
+  ConnectReading r;
+  const bool haveDevice = device_.has_value();
+  r.tunnelBound = haveDevice && deviceControlGeneration_ == control_.SessionGeneration();
+  // THE DAEMON'S VERDICT IS STICKY, AND IT HAS TO BE. When the daemon tears a
+  // session down protectively (proven-unprotected egress, an amplification
+  // storm, a DNS override it could not restore) the GUI learns it only from
+  // PollDaemonHealth. Nothing in the three getters above can see it: device_
+  // is still held and the control generation still matches, so tunnelBound
+  // reads TRUE and the very next SDK push — which arrives ~10/s during a ramp —
+  // would overwrite the verdict and put the hero back to green over a tunnel
+  // that is gone. Patching tunnelBound onto a COPY of the reading, as the
+  // caller used to, is self-reverting by construction.
+  //
+  // Cleared only by a NEW start_tunnel (StartTunnelLocked), because that is the
+  // one event that makes the old verdict obsolete.
+  if (daemonTunnelGone_.load()) r.tunnelBound = false;
+  if (connectVc_) {
+    r.rawStatus = connectVc_->getConnectionStatus();
+    r.destinationSelected = connectVc_->getConnected();
+    if (auto grid = connectVc_->getGrid()) r.providerCount = grid.getWindowCurrentSize();
+  } else if (haveDevice) {
+    // No presentation controller (the window is hidden): the destination is
+    // still the honest half, and there is simply no status to report. Left
+    // Unknown rather than fabricated — Unknown is not Disconnected.
+    r.destinationSelected = device_->getConnectLocation().has_value();
+  }
+  if (haveDevice) {
+    if (auto cs = device_->getContractStatus(); cs) r.insufficientBalance = cs->InsufficientBalance;
+  }
+
+  // The status latch, scoped to the session and to nothing else.
+  const bool sessionUp = r.destinationSelected && r.tunnelBound;
+  if (!sessionUp) {
+    // THE LATCH DIES WITH THE SESSION IT DESCRIBES. Nothing here can outlive
+    // its producer: the next reading over a new session starts from Unknown.
+    lastKnownSdk_.store(static_cast<int>(health::SdkStatus::Unknown));
+    r.sdk = health::SdkStatus::Unknown;
+    // ... and so does the token the Advanced strip shows. Reporting the
+    // controller's last word ("CONNECTING") beside a torn-down session is the
+    // same lie in miniature.
+    r.rawStatus = "DISCONNECTED";
+    return r;
+  }
+  const health::SdkStatus parsed = health::ParseSdkStatus(r.rawStatus);
+  if (parsed != health::SdkStatus::Unknown && parsed != health::SdkStatus::Disconnected) {
+    lastKnownSdk_.store(static_cast<int>(parsed));
+    r.sdk = parsed;
+    return r;
+  }
+  // Nothing usable came back this time (a controller that has just been
+  // reopened, or none at all): keep the last thing this session actually said.
+  r.sdk = static_cast<health::SdkStatus>(lastKnownSdk_.load());
+  return r;
+}
+
+void SdkHost::PublishConnectReading() {
+  if (onReading_) onReading_(ReadConnectReading());
+}
+
+// THE ONLY DEFINITION OF "ARE WE CONNECTED" LEFT IN THIS PROCESS.
+//
+// SdkHost::Connected() used to live here and answer a DIFFERENT question from
+// LiveStats::connected, which answered a different question again from the
+// status string pushed beside them — three predicates over one underlying bit,
+// and the status row had to guess which pair of them to trust. There is one
+// reading now and one decision table over it (health::Render); this is simply
+// how a caller gets a fresh copy.
+ConnectReading SdkHost::CurrentConnectReading() {
+  std::scoped_lock lock(mutex_);
+  return ReadConnectReading();
 }
 
 LiveStats SdkHost::CurrentStats() { return ReadStats(); }
@@ -1343,14 +2017,197 @@ bool SdkHost::GetRouteLocal() {
   return !localState_ || localState_->getRouteLocal();  // default true (kill switch off)
 }
 
-void SdkHost::SetRouteLocal(bool routeLocal) {
-  std::scoped_lock lock(mutex_);
-  // Persist to the GUI's local state first (unlike the blocker, the daemon's
-  // DeviceLocal neither persists nor restores routeLocal), then apply live
-  // over the device rpc; StartTunnel re-applies the persisted value at the
-  // next device creation (macOS DeviceManager.setRouteLocalInternal parity).
+// ---- kill switch -----------------------------------------------------------
+// Three legs (see KillSwitchStatus in the header). Legs 1 and 2 are the SOFT
+// ones the toggles used to drive alone; leg 3 is the nftables ruleset in
+// urnetworkd, which is what actually blocks anything.
+
+void SdkHost::ApplyRouteLocalLocked(bool routeLocal) {
+  // LocalState FIRST — it is the persistent truth (unlike the blocker, the
+  // daemon's DeviceLocal neither persists nor restores routeLocal), it is what
+  // StartTunnel replays at the next device creation, and it is what survives a
+  // crash between the two writes. macOS DeviceManager.setRouteLocalInternal
+  // orders it the same way.
   if (localState_) localState_->setRouteLocal(routeLocal);
-  if (device_) device_->setRouteLocal(routeLocal);
+  if (device_) {
+    // A throwing device rpc must not cost the persisted preference, which is
+    // already written, nor the enforcement leg, which has not run yet.
+    ReadGuarded<bool>(
+        "device setRouteLocal",
+        [&] {
+          device_->setRouteLocal(routeLocal);
+          return true;
+        },
+        false);
+  }
+}
+
+bool SdkHost::KillSwitchRequestedLocked() {
+  // Parity rule (docs/parity/settings.md §113): prefer the device, then
+  // LocalState, and with neither claim the PERMISSIVE default — never the
+  // strict one. A host that cannot read its own preference must not tell the
+  // user their traffic is being blocked.
+  if (device_) {
+    return !ReadGuarded<bool>(
+        "device getRouteLocal", [&] { return device_->getRouteLocal(); },
+        localState_ ? localState_->getRouteLocal() : true);
+  }
+  if (localState_) return !localState_->getRouteLocal();
+  return false;
+}
+
+bool SdkHost::CurrentKillSwitch() {
+  std::scoped_lock lock(mutex_);
+  return KillSwitchRequestedLocked();
+}
+
+KillSwitchStatus SdkHost::CurrentKillSwitchStatus() {
+  std::scoped_lock lock(mutex_);
+  // The preference is always live; the installed half is whatever the last
+  // round trip reported (installed_known=false until one has happened, which
+  // is UNKNOWN and deliberately not "off").
+  killSwitchStatus_.requested = KillSwitchRequestedLocked();
+  return killSwitchStatus_;
+}
+
+void SdkHost::SetKillSwitch(bool on, KillSwitchDone done) {
+  {
+    std::scoped_lock lock(mutex_);
+    ApplyRouteLocalLocked(!on);  // legs 1 + 2, synchronously
+    killSwitchStatus_.requested = on;
+    killSwitchStatus_.pending = true;
+    // The previous reading described the previous request. Do NOT carry it
+    // forward: "the switch is on and the floor from the last answer was
+    // armed" is a claim about a state that no longer exists.
+    killSwitchStatus_.installed_known = false;
+    killSwitchStatus_.in_force = false;
+    killSwitchStatus_.installed = ctl::KillSwitchState::Off;
+    killSwitchStatus_.detail.clear();
+  }
+  // The two other surfaces echo through the feed they already ride; the
+  // caller's own `done` carries the authoritative read-back.
+  EmitDrawerEvent(DrawerEvent::RouteLocal);
+  KillSwitchRequest request;
+  request.apply = true;
+  request.wanted = on;
+  request.done = std::move(done);
+  killSwitchWritesPending_.fetch_add(1);
+  EnqueueKillSwitch(std::move(request));
+}
+
+void SdkHost::RefreshKillSwitchStatus(KillSwitchDone done) {
+  KillSwitchRequest request;  // apply=false: read-back only
+  request.done = std::move(done);
+  EnqueueKillSwitch(std::move(request));
+}
+
+void SdkHost::EnqueueKillSwitch(KillSwitchRequest request) {
+  std::unique_lock<std::mutex> lock(killSwitchMutex_);
+  if (killSwitchQuit_) return;  // shutting down: nothing may block quit
+  if (!killSwitchWorker_.joinable()) {
+    killSwitchWorker_ = std::thread([this] { KillSwitchWorkerMain(); });
+  }
+  killSwitchQueue_.push_back(std::move(request));
+  lock.unlock();
+  killSwitchCv_.notify_one();
+}
+
+void SdkHost::KillSwitchWorkerMain() {
+  for (;;) {
+    KillSwitchRequest request;
+    {
+      std::unique_lock<std::mutex> lock(killSwitchMutex_);
+      killSwitchCv_.wait(lock, [this] { return killSwitchQuit_ || !killSwitchQueue_.empty(); });
+      // Quit wins even with work outstanding: the process is going away, and a
+      // completion that lands after the main loop is gone helps nobody.
+      if (killSwitchQuit_) return;
+      request = std::move(killSwitchQueue_.front());
+      killSwitchQueue_.pop_front();
+    }
+    // An escaping exception on a worker thread is std::terminate.
+    try {
+      RunKillSwitchRequest(std::move(request));
+    } catch (const std::exception& e) {
+      g_warning("sdkhost: kill switch request threw: %s", e.what());
+    } catch (...) {
+      g_warning("sdkhost: kill switch request threw");
+    }
+  }
+}
+
+void SdkHost::StopKillSwitchWorker() {
+  {
+    std::scoped_lock lock(killSwitchMutex_);
+    killSwitchQuit_ = true;
+    killSwitchQueue_.clear();
+  }
+  killSwitchCv_.notify_all();
+  if (killSwitchWorker_.joinable()) killSwitchWorker_.join();
+}
+
+// THE ENFORCEMENT LEG, on the worker. Two round trips on purpose: the write,
+// then an INDEPENDENT status read. The write's own reply carries a status too,
+// but re-reading is what makes "what is really in force" a fact about the
+// daemon rather than an echo of what we just asked for — and it is the only
+// way to catch a write that succeeded and was then undone (the reaper lifting
+// the floor, or a `nft flush ruleset` from elsewhere on the machine).
+void SdkHost::RunKillSwitchRequest(KillSwitchRequest request) {
+  std::string writeError;
+  bool wrote = true;
+  if (request.apply) {
+    ctl::StatusReply echoed;
+    wrote = control_.SetKillSwitch(request.wanted, &echoed, &writeError);
+  }
+  std::string readError;
+  const std::optional<ctl::StatusReply> fresh = control_.Status(&readError);
+  const DaemonSessionState session = control_.LastSessionState();
+
+  KillSwitchStatus out;
+  out.session = session;
+  // WHY the channel is down, not just that it is. Without this the copy for
+  // every Unreachable state collapses into "the service is not running", which
+  // on a fresh install (empty `urnetwork` group -> connect(2) EACCES) is both
+  // false and unactionable.
+  out.unreachable_reason = control_.LastUnreachableReason();
+  // Still pending while ANY write is outstanding — including one issued after
+  // this read-back was queued, whose answer has not landed yet.
+  if (request.apply) killSwitchWritesPending_.fetch_sub(1);
+  out.pending = killSwitchWritesPending_.load() > 0;
+  if (fresh) {
+    out.installed_known = true;
+    out.installed = fresh->kill_switch;
+    out.tunnel_state = fresh->tunnel_state;
+    out.detail = fresh->kill_switch_detail;
+    out.in_force = out.installed == ctl::KillSwitchState::Armed ||
+                   out.installed == ctl::KillSwitchState::Connected;
+  } else {
+    // UNKNOWN, not off. The switch may well be armed from a previous session —
+    // the nftables table is not process-bound and survives a dead daemon — so
+    // reporting "off" here would be a fabrication in the dangerous direction.
+    out.installed_known = false;
+    out.detail = readError;
+  }
+  if (!wrote && !writeError.empty()) {
+    // The write's own error wins the explanation: it is why the state is what
+    // it is, and the status read may have succeeded and say nothing at all.
+    out.detail = writeError;
+  }
+  {
+    std::scoped_lock lock(mutex_);
+    out.requested = KillSwitchRequestedLocked();
+    killSwitchStatus_ = out;
+  }
+  if (request.apply && !wrote) {
+    g_warning("sdkhost: the kill switch enforcement leg failed: %s",
+              writeError.empty() ? "(no detail)" : writeError.c_str());
+  }
+  // Same contract as every other SDK listener: emit the tag on this thread and
+  // let the window marshal. The two surfaces that ride the drawer feed re-read
+  // CurrentKillSwitchStatus() from it.
+  EmitDrawerEvent(DrawerEvent::RouteLocal);
+  if (request.done) {
+    PostToMain([done = std::move(request.done), out]() mutable { done(out); });
+  }
 }
 
 std::optional<urnet::DnsResolverSettings> SdkHost::GetDnsResolverSettings() {
@@ -1565,6 +2422,87 @@ void SdkHost::StepProviderSelection(int steps) {
   providerLocationsVc_->stepSelection(steps);
 }
 
+// ---- reliability / exits ---------------------------------------------------
+// Everything here reads the DeviceRemote's smart-routing getters, which are
+// forwarded over the loopback mTLS device rpc to the DeviceLocal in
+// urnetworkd. They are SYNCHRONOUS and they are several, which is the whole
+// reason this pair exists rather than a handful of one-line accessors: the
+// batch must be one lock hold (so the tables agree about which session they
+// describe) and it must not be on the GTK loop (so a slow daemon is a stale
+// pane, not a frozen app).
+
+ReliabilitySnapshot SdkHost::ReadReliability(ReliabilityRead scope) {
+  // ONE hold for the whole batch, deliberately. Separate holds would let the
+  // exit table and the destination table come from either side of a teardown,
+  // and the inspector's join (destination ip -> client id -> exit) would then
+  // produce a PLAUSIBLE WRONG answer — worse than "I don't know".
+  //
+  // The cost is that a slow daemon holds mutex_ for the batch, and mutex_ is
+  // what the UI-thread accessors take. That cost is why ExitsOnly exists and
+  // why neither caller may run this on the main loop.
+  std::scoped_lock lock(mutex_);
+  ReliabilitySnapshot snap;
+  if (!device_) return snap;  // no session: haveDevice false, everything UNKNOWN
+  snap.haveDevice = true;
+  snap.remoteConnected = ReadGuarded<bool>(
+      "getRemoteConnected", [&] { return device_->getRemoteConnected(); }, false);
+  snap.exits = ReadGuarded<std::optional<urnet::ExitList>>(
+      "getExits", [&] { return device_->getExits(); }, std::nullopt);
+  snap.destinationExits = ReadGuarded<std::optional<urnet::DestinationExitList>>(
+      "getDestinationExits", [&] { return device_->getDestinationExits(); }, std::nullopt);
+  if (scope == ReliabilityRead::ExitsOnly) return snap;
+  snap.settings = ReadGuarded<std::optional<urnet::ReliabilitySettings>>(
+      "getReliabilitySettings", [&] { return device_->getReliabilitySettings(); },
+      std::nullopt);
+  snap.metrics = ReadGuarded<std::optional<urnet::ReliabilityMetrics>>(
+      "getReliabilityMetrics", [&] { return device_->getReliabilityMetrics(); }, std::nullopt);
+  snap.probeSuiteRunning = ReadGuarded<bool>(
+      "probeSuiteRunning", [&] { return device_->probeSuiteRunning(); }, false);
+  snap.probeResults = ReadGuarded<std::optional<urnet::ProbeResultList>>(
+      "getProbeResults", [&] { return device_->getProbeResults(); }, std::nullopt);
+  return snap;
+}
+
+bool SdkHost::RequestReliability(ReliabilityRead scope,
+                                 std::function<void(ReliabilitySnapshot)> done) {
+  if (!done) return false;
+  bool expected = false;
+  // Single-flight. A refresh that is slower than its own tick must SKIP, never
+  // queue: queued reads stack behind mutex_ and the pane then lags by however
+  // many ticks the daemon was slow for.
+  if (!reliabilityBusy_.compare_exchange_strong(expected, true)) return false;
+
+  std::scoped_lock lock(reliabilityWorkerMutex_);
+  // The previous worker cleared reliabilityBusy_ before its final marshal, so
+  // its thread object can still be joinable here — and assigning over a
+  // joinable std::thread is std::terminate. The join returns as soon as that
+  // worker's PostToMain enqueue is done (g_idle_add, not a wait), so this does
+  // not put a daemon round trip on the main loop.
+  if (reliabilityWorker_.joinable()) reliabilityWorker_.join();
+  reliabilityWorker_ = std::thread([this, scope, done = std::move(done)]() mutable {
+    // ReadReliability guards every rpc, so nothing should escape — but an
+    // escaping exception on a worker thread is std::terminate, and a snapshot
+    // that says UNKNOWN everywhere is the honest fallback.
+    ReliabilitySnapshot snap;
+    try {
+      snap = ReadReliability(scope);
+    } catch (const std::exception& e) {
+      g_warning("sdkhost: reliability read threw: %s", e.what());
+    } catch (...) {
+      g_warning("sdkhost: reliability read threw");
+    }
+    // Cleared HERE, on the worker, BEFORE the marshal: the gate must not
+    // depend on the main loop ever running the completion. A main loop that is
+    // blocked, or gone at quit, would otherwise wedge every later read for the
+    // process lifetime and the pane would look merely stale rather than broken.
+    reliabilityBusy_.store(false);
+    PostToMain([done = std::move(done), snap = std::move(snap)]() mutable {
+      done(std::move(snap));
+    });
+  });
+  return true;
+}
+
 std::string SdkHost::PublicIdentityKeyHash() {
   std::scoped_lock lock(mutex_);
   return pqiVc_ ? pqiVc_->getPublicIdentityKeyHash() : std::string();
@@ -1578,12 +2516,74 @@ std::vector<uint8_t> SdkHost::PublicIdentityKey() {
 
 void SdkHost::ConnectBestAvailable() {
   std::scoped_lock lock(mutex_);
+  // THE CALLER GOT HERE BELIEVING THERE IS A SESSION. Verify that with the
+  // daemon before driving anything: if the service restarted (or another
+  // client stopped the tunnel), the DeviceLocal on the other end of our pinned
+  // rpc is gone, and both branches below would write into an address with
+  // nothing behind it — no traffic, no error, no journal entry, which is
+  // precisely the "I press Connect and nothing happens" this path caused.
+  //
+  // A `status` round trip, not just the cached session generation: nothing has
+  // necessarily touched the control socket since the daemon died, so the
+  // generation can still look current. The verb answers off a published
+  // snapshot, and the read is what discovers the closed socket.
+  if (device_) {
+    std::string statusError;
+    const std::optional<ctl::StatusReply> status = control_.Status(&statusError);
+    const bool live = status && status->tunnel_state == ctl::TunnelState::Up &&
+                      status->rpc_pinned &&
+                      deviceControlGeneration_ == control_.SessionGeneration();
+    if (!live) {
+      g_warning("connect: the bound device is stale "
+                "(tunnel_state=%s, rpc_pinned=%s, same control session=%s%s%s); dropping it "
+                "and starting a new session for this press",
+                status ? ctl::ToString(status->tunnel_state) : "unknown",
+                status && status->rpc_pinned ? "yes" : "no",
+                deviceControlGeneration_ == control_.SessionGeneration() ? "yes" : "no",
+                statusError.empty() ? "" : "; ", statusError.c_str());
+      TeardownDeviceLocked();
+      EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+      PublishConnectReading();
+      // AND THEN DO WHAT THE PRESS ASKED FOR. The caller skipped the start
+      // path because hasDevice() was still true when it looked (nothing had
+      // touched the control socket since the daemon died, so the cached
+      // session generation still looked current) — we are the first code to
+      // learn otherwise, and returning here would spend the user's press on
+      // discovering it. One press, one connection attempt.
+      const TunnelStartResult restarted = StartTunnelLocked();
+      if (restarted != TunnelStartResult::Started) {
+        // StartTunnelLocked has already named the reason in lastTunnelError_
+        // and in the journal; only fill in when it somehow did not.
+        if (lastTunnelError_.empty()) {
+          lastTunnelError_ =
+              "The URnetwork system service is no longer running the tunnel this app was "
+              "attached to, and a new session could not be started.";
+        }
+        g_warning("connect: could not rebuild the session after dropping the stale device: "
+                  "%s", lastTunnelError_.c_str());
+        return;
+      }
+      g_message("connect: rebuilt the session after a stale device; continuing");
+    }
+  }
   if (connectVc_) {
+    g_message("connect: connectBestAvailable via the view controller");
     connectVc_->connectBestAvailable();
   } else if (device_) {
+    g_message("connect: connectBestAvailable via the device");
     auto controller = device_->openConnectViewController();
     controller.connectBestAvailable();
     device_->closeConnectViewController(controller);
+  } else {
+    // THE SILENT NO-OP. With no view controller and no device there is nothing
+    // to ask, and this returned without a trace — the caller had already
+    // decided the tunnel was up, so the UI showed no error either.
+    if (lastTunnelError_.empty()) {
+      lastTunnelError_ =
+          "There is no connection to work with yet. Press Connect to start one.";
+    }
+    g_warning("connect: nothing to connect with (no view controller, no device) "
+              "— the tunnel is not up");
   }
 }
 
@@ -1607,12 +2607,17 @@ void SdkHost::Disconnect() {
     controller.disconnect();
     device_->closeConnectViewController(controller);
   }
-}
-
-bool SdkHost::Connected() {
-  std::scoped_lock lock(mutex_);
-  if (connectVc_) return connectVc_->getConnected();
-  return device_ && device_->getConnectLocation().has_value();
+  // AND BRING THE DAEMON'S TUNNEL DOWN. Ending the provider session does not
+  // touch the tun device or the 31 capture routes — those are the daemon's,
+  // and they are removed only by an explicit stop_tunnel. Without this the
+  // user presses Disconnect and every packet keeps being routed into a tunnel
+  // with nothing on the other end: the machine loses its internet and the UI
+  // says "Disconnected". Best effort, exactly as Logout/Shutdown do it.
+  control_.StopTunnel();
+  // Say so NOW rather than waiting for the connect-location listener: on a
+  // teardown the SDK can simply stop publishing, and a reading nobody
+  // refreshes is exactly how the row used to latch on its last word.
+  PublishConnectReading();
 }
 
 void SdkHost::SetProvideControlMode(const std::string& mode) {
@@ -1650,7 +2655,93 @@ void SdkHost::ResetProvideToNever() {
 // DeviceRemote teardown without touching the stored auth or the daemon:
 // Logout adds the auth clear + stop_tunnel; the guest upgrade only swaps the
 // device. Caller holds mutex_.
+// ---- the device-rpc bind watchdog ------------------------------------------
+// Everything else about the mTLS pairing fails LOUDLY: a malformed PEM throws
+// out of setRpcServer on whichever side sees it, a missing pin is refused by
+// ControlClient before a DeviceRemote is built, and a hostport the daemon did
+// not honour shows up as a mismatched echoed port. The one case with no
+// synchronous signal at all is a well-formed but MISMATCHED pair — two
+// different generate calls. Both ends bind, both dial, the handshake fails at
+// connect time, nothing throws, and every screen simply stays empty forever.
+// This is the detector for that, and only that.
+
+void SdkHost::ArmRpcBindWatchdogLocked() {
+  if (rpcBindWatchId_ != 0) {
+    g_source_remove(rpcBindWatchId_);
+    rpcBindWatchId_ = 0;
+  }
+  rpcBindWatchGeneration_ = rpcSessionGeneration_.load();
+  rpcBindWatchId_ = g_timeout_add_seconds(
+      kRpcBindDeadlineSeconds,
+      [](gpointer data) -> gboolean {
+        static_cast<SdkHost*>(data)->OnRpcBindDeadline();
+        return G_SOURCE_REMOVE;
+      },
+      this);
+}
+
+void SdkHost::CancelRpcBindWatchdogLocked() {
+  if (rpcBindWatchId_ != 0) {
+    g_source_remove(rpcBindWatchId_);
+    rpcBindWatchId_ = 0;
+  }
+  // Anything already queued against this session — the timeout that has
+  // already fired and is waiting on mutex_, the remote-change marshal — is
+  // stale from here on and must not act on the NEXT session.
+  ++rpcSessionGeneration_;
+}
+
+void SdkHost::OnRpcBindDeadline() {
+  std::string syncError;
+  {
+    std::scoped_lock lock(mutex_);
+    // A newer session owns rpcBindWatchId_ now; leave its watchdog alone.
+    if (rpcBindWatchGeneration_ != rpcSessionGeneration_.load()) return;
+    rpcBindWatchId_ = 0;  // this source is removing itself
+    if (!device_) return;
+    if (ReadGuarded<bool>(
+            "device getRemoteConnected", [&] { return device_->getRemoteConnected(); },
+            false)) {
+      return;  // it came up; nothing to do
+    }
+    syncError = ReadGuarded<std::string>(
+        "device getSyncError", [&] { return device_->getSyncError(); }, std::string());
+  }
+
+  // Never render as "empty": name the failure, tear the half-session down, and
+  // stop the daemon-side tunnel rather than leave one running that this app
+  // cannot drive.
+  std::string message =
+      "the local connection to the URnetwork system service never came up, so this "
+      "session was stopped";
+  if (!syncError.empty()) message += ": " + syncError;
+  g_warning("sdkhost: %s", message.c_str());
+  {
+    std::scoped_lock lock(mutex_);
+    lastTunnelError_ = message;
+    TeardownDeviceLocked();
+  }
+  // Blocking, on the main loop, bounded by the control client's receive
+  // timeout — the same trade StartTunnel's failure path already makes.
+  control_.StopTunnel();
+  // The material is bound to nothing now; remembering it could only produce a
+  // reattach that mismatches again. TeardownDeviceLocked above has already
+  // dropped the unwritten record, so this is only about a record from an
+  // EARLIER session that is equally not what is running.
+  ForgetRpcSession();
+  PublishConnectReading();
+  EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+}
+
 void SdkHost::TeardownDeviceLocked() {
+  CancelRpcBindWatchdogLocked();
+  rpcHostPort_.clear();
+  // The session this armed record describes is over before it was ever
+  // committed. Dropping it here is what stops a torn-down pairing from being
+  // written by a late remote_connected edge — CancelRpcBindWatchdogLocked bumps
+  // the generation, so such an edge returns early, but the record must not
+  // outlive the device either way.
+  unsavedSession_.reset();
   ClosePresentationLocked();
   subs_.clear();
   // close() actually stops the remote's rpc connection, sync loop and view
@@ -1668,9 +2759,10 @@ void SdkHost::Shutdown() {
   // quit brings the daemon's tunnel down like Logout does, but leaves the
   // stored auth untouched: next launch signs straight back in. see the
   // header comment — quit-as-logout destroyed guest accounts.
-  if (control_.StopTunnel()) {
-    RemoveRpcSessionRecord(RpcSessionPath(storageDir_), rpcSecretStore_);
-  }
+  control_.StopTunnel();
+  // The daemon's DeviceLocal (and its pinned listener with it) is gone, so the
+  // remembered session can no longer be attached to by anything.
+  ForgetRpcSession();
 }
 
 void SdkHost::Logout() {
@@ -1678,9 +2770,8 @@ void SdkHost::Logout() {
   TeardownDeviceLocked();
   // the session is over: bring the daemon's tunnel down too (best effort — an
   // unreachable daemon has nothing running for us anyway)
-  if (control_.StopTunnel()) {
-    RemoveRpcSessionRecord(RpcSessionPath(storageDir_), rpcSecretStore_);
-  }
+  control_.StopTunnel();
+  ForgetRpcSession();
   pendingWalletAuth_.reset();
   if (asyncLocalState_) asyncLocalState_->logout([](bool) {});
   if (onAuth_) onAuth_(false);

@@ -14,6 +14,32 @@
 # Enabling on install is correct (Debian Policy 9.3.3.1) but the daemon
 # STARTS IDLE: it never brings a tunnel up until a client authenticates on the
 # control socket and issues start_tunnel.
+#
+# ===========================================================================
+# IF THIS MACHINE IS BLOCKED AND YOU CANNOT REACH ANYTHING, READ THIS.
+#
+# The kill switch is an nftables table (`table inet urnetwork`), and nftables
+# rules are NOT tied to process lifetime the way the Windows dynamic WFP
+# session is: a daemon that is SIGKILLed while armed leaves the machine
+# blocked on purpose, and coming back up re-arms it (see
+# RuntimeDirectoryPreserve= below). To get back on the network:
+#
+#     sudo systemctl stop urnetworkd
+#     sudo /usr/lib/urnetwork/urnetworkd --revert
+#
+# --revert removes the table, the policy rules, the capture routes and the
+# armed marker, so the next start comes up open. If the binary itself is
+# broken, the firewall half alone is:
+#
+#     sudo nft delete table inet urnetwork
+#
+# Stop the service FIRST: while it runs, its reaper re-installs the ruleset
+# within seconds of anything deleting it (that is the tamper protection
+# against `systemctl restart nftables`, whose shipped Fedora/Bazzite config
+# begins with `flush ruleset`). With the daemon running, disconnecting in the
+# app is the normal way out and always works -- the app reaches the daemon
+# over a unix socket, which no rule this daemon installs can block.
+# ===========================================================================
 
 [Unit]
 Description=URnetwork VPN daemon
@@ -24,6 +50,18 @@ Documentation=https://ur.io
 After=network-pre.target
 Wants=network-pre.target
 Before=network-online.target
+
+# NO START RATE LIMIT, and this is a safety decision, not an oversight.
+# systemd's default is 5 starts in 10s; at RestartSec=2 a crash loop hits it in
+# about 8 seconds and the unit lands in `failed` -- while the kernel is still
+# holding this daemon's fail-closed table. That state has NO control socket, so
+# the app cannot toggle the kill switch off, and it does not come back by
+# itself: the machine is off the network until a human types the recovery
+# command above. A daemon that keeps restarting is strictly better: it is
+# blocked, but it is answerable, and one click in the app lifts it. Journald
+# rate-limits the log spam of a genuine crash loop.
+# (StartLimit* belong to [Unit], not [Service], since systemd 229.)
+StartLimitIntervalSec=0
 
 [Service]
 # Type=notify, NOT Type=exec: src/daemon/main.cpp speaks READY=1 directly over
@@ -37,13 +75,57 @@ ExecStart=/usr/lib/urnetwork/urnetworkd
 
 # /run/urnetwork: control socket dir. systemd creates it before start and
 # removes it on stop; maintainer scripts pre-create it only as a convenience.
-# The daemon itself chowns the dir root:urnetwork and binds the socket 0660,
-# so systemd.socket(5)'s 0666 default never applies (we never declare a
-# .socket unit). Deliberately NOT Group=urnetwork: that would change the
-# daemon's primary gid for every file it creates, which is a wider blast
-# radius than the one directory we actually want grouped.
+# Deliberately NOT Group=urnetwork: that would change the daemon's primary gid
+# for every file it creates, which is a wider blast radius than the one
+# directory we actually want grouped.
+#
+# 0755, NOT 0750, AND THE DAEMON RE-TIGHTENS IT WHEN POLKIT IS ABSENT.
+# This mode is the OUTER half of a gate whose real decision is made elsewhere:
+#
+#   polkit mode  dir 0755 root:root       sock 0666 root:root
+#   group mode   dir 0750 root:urnetwork  sock 0660 root:urnetwork
+#
+# Under polkit the socket is deliberately world-connectable, because you cannot
+# render a legible refusal from a socket you were not allowed to open: EACCES
+# at connect(2) is a bare errno with no reason and no remedy, and it is exactly
+# what made the old design report a healthy daemon as "not running". Every
+# privileged verb is authorized by polkit against the peer's SO_PEERCRED uid,
+# so DAC is no longer the boundary here -- which is why widening it is not a
+# weakening. What it buys is the thing the owner asked for: no group to join,
+# so no logging out and back in.
+#
+# This unit therefore states the PERMISSIVE mode, and urnetworkd narrows it to
+# 0750 root:urnetwork itself at start when it finds no polkit action file
+# (ControlProtocol.hpp kPolkitPolicyPath). Doing it in this direction is the
+# safe one: systemd applies this mode before the daemon has run, and an empty
+# directory with no socket in it is not a surface. The reverse -- declaring
+# 0750 and having the daemon widen it -- would leave a polkit-authorized user
+# unable to connect for as long as the daemon took to start.
+#
+# Never restore 0750 here without also changing kPolkitPolicyPath handling in
+# the daemon: the two are one decision written in two files.
 RuntimeDirectory=urnetwork
-RuntimeDirectoryMode=0750
+RuntimeDirectoryMode=0755
+# LOAD-BEARING for the kill switch. /run/urnetwork/kill-switch-armed is the
+# marker that says "this machine was armed when the daemon died", and it is
+# what makes a crash-restart come back ARMED (one atomic nft -f, no open
+# window) instead of OPEN. Without this line systemd deletes RuntimeDirectory=
+# on every stop -- including the stop half of a restart -- so the marker would
+# never survive the very event it exists for. `restart` keeps it across
+# automatic and manual restarts and still removes it on a real stop; a REBOOT
+# clears it with the rest of /run, which is deliberate (nothing comes up
+# blocked before a user has asked for anything). The control socket surviving
+# a restart is harmless: ControlServer unlinks a stale socket before bind.
+# YES, not `restart`. `restart` preserves /run/urnetwork across a restart but
+# systemd still DELETES it when the unit fully stops or fails — and a Flatpak
+# GUI bind-mounts this directory when its sandbox starts. Once the directory is
+# recreated the sandbox is left holding a mount of the dead inode, which shows
+# up in its mountinfo as `/urnetwork//deleted` and makes every connect() to the
+# control socket fail with EACCES. Measured exactly that way: the app could not
+# reach a perfectly healthy daemon, and reported it as a group-membership
+# problem, until it was relaunched. Preserving the directory keeps the inode
+# stable so a running sandbox survives a daemon upgrade.
+RuntimeDirectoryPreserve=yes
 
 # /var/lib/urnetwork: device identity (key material) + SDK storage. Root-only.
 StateDirectory=urnetwork
@@ -57,18 +139,65 @@ LogsDirectoryMode=0700
 # Beyond that, give up what we can. No ProtectSystem=: the location override
 # writes /etc/geolocation (APPIMAGE.md section 7). The daemon is headless and
 # must never read user homes.
-NoNewPrivileges=yes
+#
+# *** NoNewPrivileges IS DELIBERATELY NOT SET. *** It is the obvious hardening
+# knob and it BREAKS THIS DAEMON OUTRIGHT on every SELinux-enforcing distro
+# (Fedora, RHEL, Silverblue, Bazzite, Kinoite). Measured on Bazzite, kernel
+# audit, with NoNewPrivileges=yes:
+#
+#   avc: denied { nnp_transition } scontext=init_t tcontext=iptables_t
+#   SELINUX_ERR op=security_bounded_transition seresult=denied
+#   avc: denied { execute_no_trans } path="/usr/bin/nft" tcontext=iptables_exec_t
+#
+# Why: /usr/bin/nft is labelled iptables_exec_t and /usr/sbin/ip is
+# ifconfig_exec_t, so executing either performs a DOMAIN TRANSITION
+# (init_t -> iptables_t / ifconfig_t). NoNewPrivileges forbids any transition
+# whose target domain is not "bounded by" the source, and neither target is a
+# subset of init_t. The kernel then falls back to execute_no_trans (run the
+# tool inside init_t), which init_t is also not granted. execve() therefore
+# fails with EACCES and the tunnel can never be built: no ruleset, no routes.
+#
+# This is not theoretical and it is not recoverable in the app: with it set,
+# every single Connect fails at the first `nft -f`. A daemon whose entire job
+# is executing privileged network tools cannot also promise never to gain
+# privilege through exec — which is why no shipping VPN daemon sets this.
+# The daemon already runs as root by necessity, so the knob buys nothing here.
 ProtectHome=yes
 PrivateTmp=yes
 LimitNOFILE=65536
 
 Restart=on-failure
 RestartSec=2
+# A wedged SIGTERM teardown must not hold the machine hostage for the 90s
+# default: after this, systemd SIGKILLs the daemon and ExecStopPost below runs
+# anyway, which is what actually guarantees the table does not outlive the
+# service.
+TimeoutStopSec=45s
 # Upgrade discipline lives in packaging: stop (old binary) -> replace files ->
 # start (new binary); never an in-flight restart while a live tun fd is held.
 # If the daemon grows a lockdown-before-stop path, consider Mullvad's
 # RestartKillSignal=SIGUSR1 here -- do NOT add it before the daemon actually
 # handles SIGUSR1, or stops-for-restart lose the graceful SIGTERM teardown.
+
+# THE TEARDOWN THAT ALWAYS RUNS. The daemon removes its own table on a clean
+# SIGTERM, but "clean" is exactly the case that was never the problem: a
+# SIGKILL, an OOM kill, a stop that timed out, or an ExecStart that died before
+# it could install its signal handler all left `table inet urnetwork` in the
+# kernel with nothing left to remove it. systemd runs ExecStopPost on EVERY
+# stop path including all of those, so this is the unconditional half.
+#
+# It is idempotent: --revert-unless-armed is the same add-then-delete sweep the
+# daemon uses (a table that is not there is a successful no-op), plus the stale
+# policy rules and the capture route table, and it never fails the unit ('-').
+#
+# It is NOT unconditional about the block floor itself, and that asymmetry is
+# the design: if /run/urnetwork/kill-switch-armed says the user asked to be
+# blocked and we died unexpectedly, the floor is REPLACED with a fresh armed
+# one in a single atomic nft -f rather than lifted, so the crash does not open
+# a window. A clean stop clears that marker before exiting, so a clean stop
+# always ends with the machine open. To lift an armed floor by hand, see the
+# recovery block at the top of this file.
+ExecStopPost=-/usr/lib/urnetwork/urnetworkd --revert-unless-armed
 
 [Install]
 WantedBy=multi-user.target

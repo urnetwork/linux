@@ -1,0 +1,97 @@
+# SELinux policy module for urnetworkd.
+#
+# WHY THIS EXISTS. A daemon installed outside a distribution package carries no
+# SELinux policy, so systemd runs it in the `init_t` domain — and init_t is
+# deliberately forbidden the three things a VPN daemon must do. Measured on
+# Bazzite (Enforcing), running as root with the full capability set:
+#
+#   avc denied { read write }   name="tun"  tcontext=tun_tap_device_t chr_file
+#   avc denied { name_connect } dest=443    tcontext=http_port_t      tcp_socket
+#   avc denied { create }                   tclass=rawip_socket
+#
+# Being root with CAP_NET_ADMIN does not help: SELinux refuses before the
+# capability is consulted.
+#
+# WHAT WAS TRIED AND REJECTED: labelling the binary unconfined_exec_t so systemd
+# would transition it to unconfined_service_t. That is a common recipe and it is
+# WRONG here — Bazzite ships no unconfined module, so init_t may not even
+# execute an unconfined_exec_t file, and the daemon failed to start at all
+# (203/EXEC). Measured; do not reach for it again.
+#
+# WHAT THIS DOES, AND ITS HONEST COST: it grants the three permissions above to
+# init_t. init_t is shared by every systemd service, so these allows are not
+# scoped to us — that is a real, if narrow, widening of the system policy. The
+# properly scoped answer is a dedicated urnetworkd_t domain entered through a
+# labelled urnetworkd_exec_t, which needs the distribution's policy headers to
+# build and is tracked as follow-up. This module is the minimum that makes the
+# product work, it is auditable in one screen, and it grants nothing beyond what
+# the kernel actually denied.
+#
+# Build + install (the installer does this when checkmodule/semodule exist):
+#   checkmodule -M -m -o urnetwork.mod urnetwork.te
+#   semodule_package -o urnetwork.pp -m urnetwork.mod
+#   semodule -i urnetwork.pp
+# Remove with: semodule -r urnetwork
+
+module urnetwork 1.0;
+
+require {
+    type init_t;
+    type tun_tap_device_t;
+    type http_port_t;
+    class chr_file { read write open ioctl getattr };
+    class tcp_socket name_connect;
+    class rawip_socket { create setopt bind read write };
+    class tun_socket { create relabelfrom relabelto };
+}
+
+#============= the tun device =============
+# /dev/net/tun: opened once per tunnel and then read/written for its lifetime.
+allow init_t tun_tap_device_t:chr_file { read write open ioctl getattr };
+
+# The tun socket the kernel hands back from TUNSETIFF.
+allow init_t self:tun_socket { create relabelfrom relabelto };
+
+#============= raw sockets =============
+# The SDK's connectivity probes and the IoLoop use raw IP sockets.
+allow init_t self:rawip_socket { create setopt bind read write };
+
+#============= reaching the URnetwork API =============
+# Outbound HTTPS to the control plane. Without this the tunnel can come up and
+# still have nothing to talk to.
+allow init_t http_port_t:tcp_socket name_connect;
+
+#============= polkit (NOT GRANTED HERE -- READ THIS BEFORE SHIPPING) =========
+# urnetworkd now authorizes every privileged control-socket verb by calling
+# org.freedesktop.PolicyKit1.Authority.CheckAuthorization on the SYSTEM BUS,
+# and it reads /proc/<peer-pid>/stat to pin the subject's start time. Both are
+# new syscall surfaces for a daemon running in init_t.
+#
+# NOT ADDED, because it was NOT MEASURED. systemd itself is init_t and both
+# talks to the system bus and reads other processes' /proc entries routinely,
+# so refpolicy is expected to allow this already and adding blanket dbus allows
+# to init_t "just in case" would widen the system policy for nothing. This
+# module's whole justification is that it grants exactly what the kernel was
+# observed to deny.
+#
+# THE FAILURE MODE IF THAT EXPECTATION IS WRONG IS TOTAL AND SILENT-ISH: the
+# authorization design fails CLOSED, so every Connect returns "auth
+# unavailable" on an Enforcing host and the product looks broken rather than
+# denied. Before this reaches a user, watch the audit log across a first
+# Connect on Fedora/Bazzite/RHEL:
+#
+#   sudo ausearch -m avc -ts recent | grep -Ei 'polkit|dbus'
+#
+# and if the denials below appear, uncomment the matching rules, rebuild
+# (checkmodule + semodule_package + semodule -i) and re-measure:
+#
+#   require { type system_dbusd_t; type policykit_t;
+#             class unix_stream_socket connectto; class dbus send_msg; }
+#   allow init_t system_dbusd_t:unix_stream_socket connectto;
+#   allow init_t system_dbusd_t:dbus send_msg;
+#   allow init_t policykit_t:dbus send_msg;
+#   allow policykit_t init_t:dbus send_msg;
+#
+# Keep them commented until an AVC justifies each one: an unmeasured allow is
+# indistinguishable from a guess, and this file is the one place in the product
+# where a guess widens the whole system's policy.

@@ -47,10 +47,17 @@ option('walletconnect_project_id', type : 'string', value : '',
 # Flatpak build, where everything outside /app is read-only: the install step
 # fails outright.
 #
+# The FIFTH host-integration file, the polkit action file, is prefix-relative
+# (<datadir>/polkit-1/actions) rather than absolute, so it would not fail a
+# Flatpak install -- it is dropped anyway. A sandboxed GUI never calls polkit:
+# urnetworkd does, against a subject built from SO_PEERCRED on the connection
+# it is serving, which the GUI cannot influence. An action file inside /app is
+# read by nothing and would only suggest the GUI has a say in the decision.
+#
 # The Flatpak is GUI-only by design (docs/linux_agent_help.md §10.2 -- no VPN
 # ships its privileged daemon in a sandbox; the daemon comes from the host's
 # native package and the GUI reaches it over /run/urnetwork/control.sock). So
-# -Dhost_integration=false drops the daemon binary AND those four files, and
+# -Dhost_integration=false drops the daemon binary AND those five files, and
 # puts the vendored SDK where the GUI's own rpath ($ORIGIN/../lib) finds it.
 option('host_integration', type : 'boolean', value : true,
        description : 'Install the daemon + systemd/udev/NM/autostart integration files (false for Flatpak: GUI only)')

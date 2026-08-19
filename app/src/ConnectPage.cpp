@@ -11,6 +11,7 @@
 
 #include "Formatters.hpp"
 #include "I18n.hpp"
+#include "KillSwitchCopy.hpp"
 #include "LocationsSheet.hpp"  // PeerDisplayName — shared with the chooser
 #include "Ui.hpp"
 
@@ -327,6 +328,17 @@ ConnectPage::ConnectPage(SdkHost& host)
   });
 }
 
+ConnectPage::~ConnectPage() {
+  // Order matters: alive_ FIRST, so a reliability completion already queued on
+  // the main loop drops itself without dereferencing this page at all. The
+  // epoch bump is belt to that brace (a completion captured on the old
+  // generation is stale either way), and the clock is stopped explicitly
+  // rather than left to sigc::track_obj's teardown ordering.
+  *alive_ = false;
+  ++(*epoch_);
+  tick_.disconnect();
+}
+
 // ---- PANE A -----------------------------------------------------------------
 
 void ConnectPage::BuildPaneA() {
@@ -405,9 +417,7 @@ void ConnectPage::BuildPaneA() {
   adw_clamp_set_tightening_threshold(ADW_CLAMP(heroClamp_), kHeroAdvanced);
   adw_clamp_set_child(ADW_CLAMP(heroClamp_), GTK_WIDGET(canvas_->gobj()));
   hero_->set_child(*Glib::wrap(heroClamp_));
-  hero_->signal_clicked().connect([this] {
-    if (on_toggle_connect) on_toggle_connect();
-  });
+  hero_->signal_clicked().connect([this] { RelayConnectPress(); });
   {  // hover + keyboard focus ring (desktop affordances the phones lack)
     auto motion = Gtk::EventControllerMotion::create();
     motion->signal_enter().connect([this](double, double) { canvas_->SetHovered(true); });
@@ -471,9 +481,7 @@ void ConnectPage::BuildPaneA() {
   // you are fine (the fill IS a status channel)
   connectBtn_ = Gtk::make_managed<Gtk::Button>(T_("connect", "Connect"));
   connectBtn_->add_css_class("ur-pane-primary");
-  connectBtn_->signal_clicked().connect([this] {
-    if (on_toggle_connect) on_toggle_connect();
-  });
+  connectBtn_->signal_clicked().connect([this] { RelayConnectPress(); });
   paneAContent_->append(*connectBtn_);
 
   // "More options" disclosure (Simple only) gating provide/options/peers
@@ -601,9 +609,41 @@ void ConnectPage::BuildPaneA() {
   blockerToggle_ = addToggleRow(T_("block_ads_and_trackers", "Block ads and trackers"),
                                 host_.GetBlockerEnabled(),
                                 [this](bool on) { host_.SetBlockerEnabled(on); });
-  // the kill switch is !routeLocal (apple SettingsForm parity)
-  killSwitchToggle_ = addToggleRow(T_("kill_switch", "Kill switch"), !host_.GetRouteLocal(),
-                                   [this](bool on) { host_.SetRouteLocal(!on); });
+  // The kill switch. THREE legs behind this one control
+  // (SdkHost::SetKillSwitch): the persisted preference, the device's
+  // routeLocal, and — the leg that makes it a kill switch rather than a
+  // preference — urnetworkd's nftables ruleset. The enforcement leg is a
+  // control-socket round trip, so the completion lands later and carries what
+  // the daemon says it REALLY installed.
+  killSwitchToggle_ = addToggleRow(
+      T_("kill_switch", "Kill switch"), host_.CurrentKillSwitch(), [this](bool on) {
+        auto epoch = epoch_;
+        const uint64_t seen = *epoch_;
+        host_.SetKillSwitch(on, [this, epoch, seen, on](KillSwitchStatus) {
+          if (*epoch != seen) return;  // a newer session owns the page
+          // Read back rather than trust the write. Only a preference that did
+          // not take moves the control; a FAILED enforcement leg is disclosed
+          // in the line below, never hidden by reverting the switch.
+          if (host_.CurrentKillSwitch() != on) {
+            g_warning("connect: kill switch preference did not take (wanted %d)",
+                      static_cast<int>(on));
+          }
+          ApplyKillSwitchUi();
+        });
+        ApplyKillSwitchUi();  // "Applying…" now; the control is never inert
+      });
+  // What is REALLY in force, under the switch. A DEDICATED wrapped line rather
+  // than the row's own note: the note is trimmed to one ellipsized line, and a
+  // truncated "your traffic is NOT being blocked" is the same defect as
+  // showing nothing at all.
+  killSwitchNote_ = Gtk::make_managed<Gtk::Label>();
+  killSwitchNote_->set_xalign(0);
+  killSwitchNote_->set_wrap(true);
+  killSwitchNote_->set_margin_start(8);
+  killSwitchNote_->set_margin_end(8);
+  killSwitchNote_->set_margin_bottom(4);
+  killSwitchNote_->set_visible(false);
+  moreOptionsHost_->append(*killSwitchNote_);
 
   // §2.8 network peers: the count line over the peer rows. A group header with
   // nothing under it is exactly the HOLE §8 forbids — the group is either a
@@ -825,7 +865,7 @@ void ConnectPage::BuildDataUsageGroup() {
   CapNatural(providerCountText_, 30);
   providerCountLine_->set_child(*providerCountText_);
   providerCountLine_->signal_clicked().connect([this] {
-    if (!connected_) return;  // the globe has nothing to plot without a session
+    if (!ConnectedNow()) return;  // the globe has nothing to plot without a session
     if (on_open_provider_locations) on_open_provider_locations();
   });
   liveStatsGroup_->append(*providerCountLine_);
@@ -968,44 +1008,102 @@ void ConnectPage::BuildDnsGroup() {
   paneC_.content->append(*dnsUnavailableRow_);
 }
 
+// ---- the press, and the intent it leaves behind --------------------------------
+
+// How long a Disconnect press is allowed to hold the page on "Disconnecting…".
+// It is a CEILING, not a duration: the intent normally clears the moment the
+// reading actually reads down. The ceiling exists because a teardown can fail —
+// the daemon can be gone, StopTunnel can throw — and a UI that waits forever for
+// a completion that will never arrive is a worse lie than the one being fixed.
+constexpr gint64 kDisconnectIntentUs = 8 * G_TIME_SPAN_SECOND;
+
+bool ConnectPage::DisconnectIntentLive() {
+  if (disconnectRequestedAtUs_ == 0) return false;
+  // SETTLED, not merely observed. Once the session is actually down the intent
+  // has been honoured and must stop overriding the reading, or the page would
+  // sit on "Disconnecting…" over a genuinely disconnected session.
+  //
+  // ONE QUESTION, THE SAME ONE THE HEADLINE ASKS: is there still a session?
+  // This used to be a hand-rolled conjunction of all three copies plus two
+  // string comparisons — a fourth opinion about the state, and one that could
+  // disagree with the row it was gating.
+  const bool readsDown = !health::SessionUp(reading_.ToSignals(/*disconnectRequested=*/false));
+  if (readsDown || g_get_monotonic_time() - disconnectRequestedAtUs_ >= kDisconnectIntentUs) {
+    disconnectRequestedAtUs_ = 0;
+    return false;
+  }
+  return true;
+}
+
+void ConnectPage::ClearDisconnectIntent() {
+  if (disconnectRequestedAtUs_ == 0) return;
+  disconnectRequestedAtUs_ = 0;
+  ApplyConnectStatus();
+}
+
+// ONE HANDLER FOR THE HERO AND THE BUTTON, and the only place a press turns
+// into an action. It captures the action THAT WROTE THE LABEL (actionIsDisconnect_,
+// as of the render the user was looking at), records the intent, re-renders so
+// the page answers the press in the same frame, and only then relays.
+//
+// Relaying the action instead of a bare "toggle" is the fix for an earlier
+// report: MainWindow used to re-derive it from SdkHost::Connected(), a
+// different question from the one that wrote the button's label, and in every
+// state where they disagreed a press on a button reading "Disconnect" ran
+// StartTunnelUi() + ConnectBestAvailable(). Both sides now read one
+// health::Render() over one ConnectReading, so they can no longer disagree —
+// the relay stays because the page re-renders BEFORE relaying, and a question
+// asked after the relay would get the POST-press answer.
+void ConnectPage::RelayConnectPress() {
+  const bool disconnect = actionIsDisconnect_;
+  disconnectRequestedAtUs_ = disconnect ? g_get_monotonic_time() : 0;
+  // NOTHING IS CLEARED HERE ANY MORE. The previous fix had to drop the pushed
+  // status string on a disconnect press, because that string was the only
+  // thing keeping the button on "Disconnect" and nothing ever superseded it —
+  // a latch that had to be broken by hand. The reading has no latch to break:
+  // the button's word is health::Render()'s `action`, which is false as soon
+  // as the session is down, and SdkHost::Disconnect publishes a fresh reading
+  // the moment it has torn the session down.
+  ApplyConnectStatus();  // answer the press NOW, before the SDK says anything
+  if (on_connect_action) {
+    on_connect_action(disconnect);
+    return;
+  }
+  if (on_toggle_connect) on_toggle_connect();
+}
+
 // ---- the one status writer ----------------------------------------------------
 
 void ConnectPage::ApplyConnectStatus() {
-  // RenderHealth reconciliation: the button label and the status line must
-  // derive from ONE reading, so the hero can never lag the line above it.
-  const std::string status = UpperCopy(connectStatus_);
-  const bool connecting = (status == "CONNECTING" || status == "DESTINATION_SET");
-  const bool failed = (status == "CONNECT_FAILED");
+  // ONE READING, ONE CALL, FOUR CHANNELS OUT. The headline, the dot, the hero
+  // pose and the button's word are fields of a single health::Reading — they
+  // are not four branches that happen to agree today. Nothing below asks the
+  // SDK anything; every input is a field of reading_, sampled together.
+  //
+  // Asked once, here, because DisconnectIntentLive SETTLES the intent as a
+  // side effect and the label has to see the same answer the headline did.
+  const bool disconnecting = DisconnectIntentLive();
+  const health::Reading view = health::Render(reading_.ToSignals(disconnecting));
+  renderedState_ = view.state;
 
-  Glib::ustring text;
+  const Glib::ustring text = T_(view.textKey, view.textEnglish);
   const char* dot = kDotIdle;
-  ConnectCanvas::State heroState = ConnectCanvas::State::Disconnected;
-  bool showNotProtected = false;
-
-  if (stats_.insufficientBalance) {
-    // balance overrides the connection reading (processing wins over blocked)
-    text = T_("insufficient_balance_add_balance_or_plan",
-              "Insufficient balance — add balance or a plan");
-    dot = kDotCoral;
-    heroState = ConnectCanvas::State::Error;
-  } else if (connected_ && stats_.connected) {
-    text = T_("connected", "Connected");
-    dot = kDotGreen;
-    heroState = ConnectCanvas::State::Connected;
-  } else if (connecting) {
-    text = T_("connecting_status_indicator", "Connecting to providers");
-    dot = kDotConnecting;
-    heroState = ConnectCanvas::State::Connecting;
-  } else if (failed) {
-    text = T_("conn_failed", "Couldn't connect");
-    dot = kDotCoral;
-    heroState = ConnectCanvas::State::Error;
-  } else {
-    text = T_("disconnected", "Disconnected");
-    dot = kDotIdle;
-    heroState = ConnectCanvas::State::Disconnected;
-    showNotProtected = true;
+  switch (view.dot) {
+    case health::Dot::Green: dot = kDotGreen; break;
+    case health::Dot::Connecting: dot = kDotConnecting; break;
+    case health::Dot::Coral: dot = kDotCoral; break;
+    case health::Dot::Amber: dot = kDotAmber; break;
+    case health::Dot::Idle: dot = kDotIdle; break;
   }
+  ConnectCanvas::State heroState = ConnectCanvas::State::Disconnected;
+  switch (view.hero) {
+    case health::Hero::Connected: heroState = ConnectCanvas::State::Connected; break;
+    case health::Hero::Connecting: heroState = ConnectCanvas::State::Connecting; break;
+    case health::Hero::Error: heroState = ConnectCanvas::State::Error; break;
+    case health::Hero::Processing: heroState = ConnectCanvas::State::Processing; break;
+    case health::Hero::Disconnected: heroState = ConnectCanvas::State::Disconnected; break;
+  }
+  const bool showNotProtected = view.showNotProtected;
 
   statusText_->set_text(text);
   statusDot_->set_markup(std::string("<span size='") + std::to_string(10 * PANGO_SCALE) +
@@ -1025,11 +1123,27 @@ void ConnectPage::ApplyConnectStatus() {
 
   // the action: filled Connect vs outlined Disconnect (four channels — word,
   // fill, dot, status line)
-  const bool isDisconnect = connected_ || stats_.connected || connecting;
+  //
+  // IT CAME OUT OF THE SAME Render() CALL AS THE HEADLINE ABOVE. There is no
+  // second expression here to keep in step with the first: `view.action` is a
+  // field of the value that produced `text`, `dot` and `heroState`. Cached
+  // because it is also the answer every caller gets to "what does the next
+  // press do" (ConnectActionIsDisconnect, and the action RelayConnectPress
+  // hands to MainWindow) — deriving the action anywhere else is what let a
+  // button labelled Disconnect run the connect path.
+  const bool isDisconnect = view.action == health::Action::Disconnect;
+  actionIsDisconnect_ = isDisconnect;
   connectBtn_->set_label(isDisconnect ? T_("disconnect", "Disconnect")
                                       : T_("connect", "Connect"));
   connectBtn_->remove_css_class(isDisconnect ? "ur-pane-primary" : "ur-pane-secondary");
   connectBtn_->add_css_class(isDisconnect ? "ur-pane-secondary" : "ur-pane-primary");
+  // A teardown the user asked for is IN FLIGHT, not offered again. Leaving the
+  // control live here would let a second press — on a button still reading
+  // "Disconnect" while the reading has not caught up — take the connect branch
+  // and start a tunnel out of a disconnect. The intent expires on its own
+  // (kDisconnectIntentUs), so this can never latch off.
+  connectBtn_->set_sensitive(!disconnecting);
+  hero_->set_sensitive(!disconnecting);
 }
 
 void ConnectPage::SetDaemonNotice(const Glib::ustring& notice) {
@@ -1037,14 +1151,24 @@ void ConnectPage::SetDaemonNotice(const Glib::ustring& notice) {
   ApplyConnectStatus();
 }
 
-void ConnectPage::SetConnected(bool connected) {
-  connected_ = connected;
+// THE ONLY WRITER OF THE CONNECTION STATE ON THIS PAGE. It takes the whole
+// reading or none of it: there is no setter that can move one field forward
+// and leave its siblings behind.
+void ConnectPage::ApplyConnectReading(const ConnectReading& reading) {
+  // The 1 Hz re-read below arrives whether or not anything moved; an unchanged
+  // reading must not rebuild pane C's rows underneath the user. The intent's
+  // 8 s ceiling does not depend on this — Tick() re-renders while one is live.
+  if (reading == reading_ && renderedApplied_) return;
+  renderedApplied_ = true;
+  reading_ = reading;
   ApplyConnectStatus();
-}
-
-void ConnectPage::SetConnectionStatus(const std::string& status) {
-  connectStatus_ = status;
-  ApplyConnectStatus();
+  // Pane B/C carry gates that used to test stats_.connected — a LOOSER
+  // question than the headline's. Re-apply them against the verdict this
+  // render just produced so "Connected to N providers" cannot appear under
+  // "Connecting to providers".
+  ApplySessionRows();
+  ApplySessionCardsVisibility();
+  ApplyLiveStatsGroup();
 }
 
 void ConnectPage::ApplyStats(const LiveStats& stats) {
@@ -1057,7 +1181,7 @@ void ConnectPage::ApplyStats(const LiveStats& stats) {
   // COLLAPSES entirely rather than reading "0 bps"
   if (paneB_.meta) {
     kit::SetTextOrCollapse(*paneB_.meta,
-                           stats.connected
+                           ConnectedNow()
                                ? Glib::ustring("↓ " + FormatBitRate(stats.downBitsPerSecond) +
                                                "   ↑ " + FormatBitRate(stats.upBitsPerSecond))
                                : Glib::ustring());
@@ -1093,32 +1217,36 @@ void ConnectPage::ApplyStats(const LiveStats& stats) {
   // location per call, while ApplyStats rides every throughput sample. Both
   // ride the location reading instead (RefreshFeeds / DrawerEvent::Location).
 
-  // 4.3 the provider-count entry: gated on the AGGREGATE reading, so
-  // "Connected to N providers" can never appear under "Finding providers…"
-  if (liveStatsGroup_ && providerCountText_) {
-    liveStatsGroup_->set_visible(stats.connected);
-    const bool show = stats.connected && connected_;
-    kit::SetTextOrCollapse(
-        *providerCountText_,
-        show ? Glib::ustring(Format(TN_("connected_provider_count", "Connected to {} provider",
-                                        "Connected to {} providers",
-                                        static_cast<unsigned long>(stats.providerCount)),
-                                    stats.providerCount))
-             : Glib::ustring());
-    if (providerCountLine_) {
-      kit::SetAccessibleLabel(*providerCountLine_, providerCountText_->get_text());
-      // A row that cannot act must not claim it can. NOTE: while
-      // on_open_provider_locations is unassigned this reads as a permanently
-      // greyed row — see the TODO(wiring) on the callback in ConnectPage.hpp;
-      // the globe sheet cannot be owned here (it needs MainWindow's
-      // LocationOverrideController).
-      providerCountLine_->set_sensitive(show && on_open_provider_locations != nullptr);
-    }
-  }
-
+  ApplyLiveStatsGroup();
   ApplySessionRows();
   ApplySessionCardsVisibility();
   ApplyConnectStatus();
+}
+
+// 4.3 the provider-count entry: gated on the AGGREGATE reading (the verdict
+// ApplyConnectStatus just rendered), so "Connected to 11 providers" can never
+// appear under "Connecting to providers". It used to be gated on
+// `stats_.connected && connected_` — two of the three copies, ANDed, which is
+// a third question again.
+void ConnectPage::ApplyLiveStatsGroup() {
+  if (!liveStatsGroup_ || !providerCountText_) return;
+  const bool show = ConnectedNow();
+  liveStatsGroup_->set_visible(show);
+  kit::SetTextOrCollapse(
+      *providerCountText_,
+      show ? Glib::ustring(Format(TN_("connected_provider_count", "Connected to {} provider",
+                                      "Connected to {} providers",
+                                      static_cast<unsigned long>(stats_.providerCount)),
+                                  stats_.providerCount))
+           : Glib::ustring());
+  if (providerCountLine_) {
+    kit::SetAccessibleLabel(*providerCountLine_, providerCountText_->get_text());
+    // A row that cannot act must not claim it can: with the callback
+    // unassigned (the globe sheet cannot be owned here — it needs
+    // MainWindow's LocationOverrideController) the row stays greyed rather
+    // than swallowing the click.
+    providerCountLine_->set_sensitive(show && on_open_provider_locations != nullptr);
+  }
 }
 
 // ---- pane B: the routing-decision list ----------------------------------------
@@ -1231,7 +1359,7 @@ void ConnectPage::ApplyConnectionSelectionVisuals() {
 void ConnectPage::ApplySessionCardsVisibility() {
   if (!connectionsHost_ || !connectionsEmpty_) return;
   // the list and the sentence SWAP; the connected flag gates which
-  const bool showList = stats_.connected && connectionsHost_->get_first_child() != nullptr;
+  const bool showList = ConnectedNow() && connectionsHost_->get_first_child() != nullptr;
   connectionsHost_->set_visible(showList);
   connectionsEmpty_->set_visible(!showList);
 }
@@ -1251,9 +1379,9 @@ void ConnectPage::ApplySessionRows() {
   // an em dash is "no session", NOT a zero
   const Glib::ustring none = T_("adv_na", "—");
   add(T_("remote", "Remote"),
-      stats_.connected ? Glib::ustring("↓ " + FormatBitRate(stats_.downBitsPerSecond)) : none);
+      ConnectedNow() ? Glib::ustring("↓ " + FormatBitRate(stats_.downBitsPerSecond)) : none);
   add(T_("local", "Local"),
-      stats_.connected ? Glib::ustring("↑ " + FormatBitRate(stats_.upBitsPerSecond)) : none);
+      ConnectedNow() ? Glib::ustring("↑ " + FormatBitRate(stats_.upBitsPerSecond)) : none);
   add(T_("allowed", "Allowed"),
       blockStats_ ? Glib::ustring(FormatCountCompact(blockStats_->AllowedCount)) : none);
   add(T_("blocked", "Blocked"),
@@ -1263,16 +1391,32 @@ void ConnectPage::ApplySessionRows() {
                           static_cast<int64_t>(blockActions_->size())))
                     : none);
   if (advanced_) {
-    // Advanced sees through the simplification: the pre-clamp status.
-    // TODO(sdk-wiring): LiveStats.rawConnectionStatus / LiveStats.rpcOnly — the
-    // Linux LiveStats carries no rpc-only clamp, so this is the ONLY status the
-    // page has; it is not relabelled as something it is not.
+    // §4.3 row 6: the PRE-CLAMP connection status. This host applies NO clamp
+    // (Windows' LiveStats rewrites the status to RPC_ONLY / SERVICE_DOWN and
+    // Advanced reads the raw field through it), so stats_.connectionStatus IS
+    // the pre-clamp reading and this row is truthful exactly as written.
+    //
+    // The CLAMP that used to be missing here now lives in the reading:
+    // ConnectReading::tunnelBound is "a DeviceRemote is still bound over the
+    // CURRENT control session", an O(1) generation compare with no round trip,
+    // and health::Render refuses every non-idle row without it. So a
+    // DeviceRemote whose loopback rpc to urnetworkd has gone away can no
+    // longer hold the hero on Connected. What is STILL only approximated is a
+    // daemon that is alive but has stopped carrying: MainWindow's status poll
+    // writes that into the reading (DaemonTunnelGoneReading) rather than the
+    // SDK reporting it. This raw row is deliberately unclamped — it is the
+    // pre-clamp field, and Advanced exists to show it.
     add(T_("adv_raw_status", "Raw status"),
         stats_.connectionStatus.empty() ? Glib::ustring(T_("adv_none", "none"))
                                         : Glib::ustring(stats_.connectionStatus));
-    // TODO(sdk-wiring): Sdk().ReadReliability() — no exits table is readable on
-    // Linux, so the denominator is UNKNOWN, never 0.
-    add(T_("adv_exits", "Exits"), T_("adv_none", "none"));
+    // §4.3 row 7: the denominator behind every inspector "via exit" line.
+    // nullopt is UNKNOWN — no session, or no snapshot has landed yet / the rpc
+    // threw — and a never-read table rendered as "0" would fabricate the one
+    // number this row exists to report. A table that WAS read and is empty
+    // renders as a real 0.
+    add(T_("adv_exits", "Exits"),
+        exits_ ? Glib::ustring(FormatCountCompact(static_cast<int64_t>(exits_->size())))
+               : Glib::ustring(T_("adv_none", "none")));
   }
 }
 
@@ -1446,6 +1590,46 @@ void ConnectPage::ApplyInspectorVisibility() {
   if (inspectorGroup_) inspectorGroup_->set_visible(advanced_);
 }
 
+// The §4.1 join: the FIRST address of this action that appears in the
+// destination-exit table decides, and its ClientId is then looked up in the
+// exit table for that exit's health. Both halves are absent-capable — with no
+// snapshot (nullopt) there is nothing to join and the caller must say so
+// rather than report "not in the routing table", which would assert a lookup
+// that never ran.
+std::optional<ConnectPage::ExitRouting> ConnectPage::RoutingForAddresses(
+    const std::optional<urnet::StringList>& addresses) const {
+  if (!addresses || !destinationExits_) return std::nullopt;
+  for (const auto& ip : *addresses) {
+    for (const auto& dest : *destinationExits_) {
+      if (dest.DestinationIp != ip) continue;
+      ExitRouting out;
+      out.clientId = dest.ClientId.value_or(std::string());
+      out.flowCount = dest.FlowCount;
+      // The exit table is read separately and can be UNKNOWN while the
+      // destination table is not (each getter is guarded on its own): the
+      // routing is still reported, the health rows are simply not claimed.
+      if (exits_) {
+        for (const auto& exitRow : *exits_) {
+          if (!exitRow.ClientId || *exitRow.ClientId != out.clientId) continue;
+          out.haveExit = true;
+          out.tier = exitRow.Tier;
+          out.effectiveTier = exitRow.EffectiveTier;
+          out.exitFlowCount = exitRow.FlowCount;
+          out.dialFailureCount = exitRow.DialFailureCount;
+          out.quarantined = exitRow.Quarantined;
+          out.warning = exitRow.Warning;
+          out.warningCause = exitRow.WarningCause;
+          out.proven = exitRow.Proven;
+          out.probeAgeSeconds = exitRow.ProbeAgeSeconds;
+          break;
+        }
+      }
+      return out;
+    }
+  }
+  return std::nullopt;
+}
+
 void ConnectPage::ApplyInspector() {
   if (!inspectorGroup_ || !inspectorRows_) return;
   RemoveAllChildren(*inspectorRows_);
@@ -1530,11 +1714,46 @@ void ConnectPage::ApplyInspector() {
     add(T_("adv_last_decision", "Last decision"), RelativeTime(secondsAgo));
   }
   if (!action->Block) {
-    // TODO(sdk-wiring): Sdk().ReadReliability() — SdkHost exposes no exits /
-    // destination-exits table, so the exit-routing rows have nothing to resolve
-    // against. Absent-not-guessed: the row says the destination is not in the
-    // routing table rather than inventing an exit.
-    add(T_("adv_via_exit", "Via exit"), T_("adv_unknown_exit", "Not in the routing table"));
+    // §4.1 item 10, in THREE distinguishable readings. The middle one is the
+    // answer; the outer two are different kinds of "I don't know" and must not
+    // be collapsed into each other.
+    if (!destinationExits_) {
+      // UNKNOWN: no snapshot has landed for this session (no device, the first
+      // 5 s read has not returned, or the rpc threw). Rendering "Not in the
+      // routing table" here would assert a lookup that never ran.
+      add(T_("adv_via_exit", "Via exit"), T_("adv_none", "none"));
+    } else if (const auto routing = RoutingForAddresses(action->Ips)) {
+      addText(T_("adv_via_exit", "Via exit"), routing->clientId);
+      add(T_("adv_exit_flows", "Flows to this destination"),
+          FormatCountCompact(routing->flowCount));
+      // The exit's own health, only when the client id resolved to an exit
+      // record — a routed destination whose exit has aged out of the window
+      // reports the routing and stops there.
+      if (routing->haveExit) {
+        add(T_("adv_exit_tier", "Exit tier"),
+            Glib::ustring(std::to_string(routing->effectiveTier) + " / " +
+                          std::to_string(routing->tier)));
+        add(T_("adv_exit_flows_total", "Exit flows"), FormatCountCompact(routing->exitFlowCount));
+        add(T_("adv_exit_dial_failures", "Dial failures"),
+            FormatCountCompact(routing->dialFailureCount));
+        add(T_("adv_exit_state", "Exit state"),
+            routing->quarantined ? T_("adv_exit_quarantined", "Quarantined")
+            : routing->warning   ? T_("adv_exit_warning", "Warning")
+            : routing->proven    ? T_("adv_exit_proven", "Proven")
+                                 : T_("adv_exit_ok", "OK"));
+        if (routing->warning && !routing->warningCause.empty()) {
+          addText(T_("adv_exit_warning_cause", "Warning cause"), routing->warningCause);
+        }
+        if (routing->probeAgeSeconds > 0) {
+          add(T_("adv_probe_age", "Probe age"),
+              Glib::ustring(std::to_string(routing->probeAgeSeconds) + "s"));
+        }
+      }
+    } else {
+      // Read, and this destination is genuinely not in it — the normal reading
+      // for a host that resolved after the last refresh.
+      add(T_("adv_via_exit", "Via exit"), T_("adv_unknown_exit", "Not in the routing table"));
+    }
     if (!countryName_.empty()) {
       // labelled as the SESSION's, because per-exit geo is not bridged
       add(T_("adv_session_exit_country", "Session exit country"), countryName_);
@@ -1553,23 +1772,57 @@ void ConnectPage::ApplyInspector() {
   }
 }
 
-// The 5s exit-routing cache refresh (§4.1). SdkHost has no ReadReliability, so
-// there is nothing to run on a worker and nothing to cache; the inspector's
-// exit rows already render the real "not in the routing table" reading.
+// The 5 s exit-routing cache refresh (§4.1), fired from the clock and
+// immediately when Advanced Mode turns on.
 void ConnectPage::RefreshExitRouting() {
-  // TODO(sdk-wiring): Sdk().ReadReliability() -> exits_/destinationExits_
-  // (several synchronous device RPCs; single-flight on a worker thread, then
-  // marshal back and re-run ApplyInspector only if something is selected).
-  //
-  // The completion MUST carry the stale-async guard, because it can land after
-  // a logout, an Advanced-Mode toggle or a teardown has rebuilt the inspector:
-  //   auto epoch = epoch_; const uint64_t gen = *epoch;
-  //   ... on the worker ...
-  //   PostToMain([this, epoch, gen, result] {
-  //     if (*epoch != gen) return;        // re-checked ON ARRIVAL, not on entry
-  //     if (!advanced_ || !presenting_) return;
-  //     exits_ = ...; if (!selectedConnectionId_.empty()) ApplyInspector();
-  //   });
+  // §4.1's gate in full: Advanced Mode, this destination on screen, window
+  // presenting. A background rpc batch for a pane nobody is looking at is the
+  // cost of the feature with none of the value.
+  if (!advanced_ || !presenting_ || !pageVisible_) return;
+
+  if (!host_.hasDevice()) {
+    // No session. The tables are UNKNOWN, not empty — and the PREVIOUS
+    // session's tables must not survive here, or the inspector could join a
+    // destination ip against an exit that belonged to a device which no longer
+    // exists. Dropped inline (no rpc to make) and the two surfaces re-read.
+    if (exits_ || destinationExits_) {
+      exits_.reset();
+      destinationExits_.reset();
+      ApplySessionRows();
+      if (!selectedConnectionId_.empty()) ApplyInspector();
+    }
+    return;
+  }
+
+  // SdkHost owns the worker, the host-wide single-flight gate and the marshal
+  // back to the main loop: ReadReliability is several SYNCHRONOUS device rpcs
+  // taken under the host lock and must never run on the GTK loop. A read
+  // already in flight returns false and this tick is SKIPPED rather than
+  // queued behind the lock — the next one is 5 s away.
+  auto alive = alive_;
+  auto epoch = epoch_;
+  const uint64_t gen = *epoch_;
+  host_.RequestReliability(
+      ReliabilityRead::ExitsOnly, [this, alive, epoch, gen](ReliabilitySnapshot snap) {
+        // Re-checked ON ARRIVAL, not on entry: this lands one rpc batch later
+        // and a logout, an Advanced-Mode toggle, a resync or the page's own
+        // destruction can have happened in between. alive_ FIRST — the epoch
+        // lives inside the page.
+        if (!*alive || *epoch != gen) return;
+        const bool hadExits = exits_.has_value();
+        const size_t before = hadExits ? exits_->size() : 0;
+        // Assigned wholesale, INCLUDING a nullopt: a getter that threw makes
+        // the table unknown again, and keeping the last good reading would
+        // quietly age into a fabrication.
+        exits_ = std::move(snap.exits);
+        destinationExits_ = std::move(snap.destinationExits);
+        // The "Exits" session figure is the denominator behind every "via
+        // exit" line; it must not wait for the next stats push to catch up.
+        if (hadExits != exits_.has_value() || (exits_ && before != exits_->size())) {
+          ApplySessionRows();
+        }
+        if (advanced_ && !selectedConnectionId_.empty()) ApplyInspector();
+      });
 }
 
 // ---- provide control mode -----------------------------------------------------
@@ -1604,13 +1857,26 @@ void ConnectPage::ApplyBlockerUi() {
   updatingControls_ = false;
 }
 
+// ONE writer for both halves: the switch shows the REQUEST (local, instant),
+// the line under it shows what urnetworkd says is actually installed (a round
+// trip, and possibly a refusal). They can legitimately disagree, and the whole
+// point of splitting them is that the surface can say so instead of claiming a
+// protection that is not in force.
 void ConnectPage::ApplyKillSwitchUi() {
   if (!killSwitchToggle_) return;
-  const bool on = !host_.GetRouteLocal();  // kill switch ON = routeLocal off
-  if (killSwitchToggle_->get_active() == on) return;
-  updatingControls_ = true;
-  killSwitchToggle_->set_active(on);
-  updatingControls_ = false;
+  const KillSwitchStatus status = host_.CurrentKillSwitchStatus();
+  if (killSwitchToggle_->get_active() != status.requested) {
+    updatingControls_ = true;
+    killSwitchToggle_->set_active(status.requested);
+    updatingControls_ = false;
+  }
+  if (killSwitchNote_ == nullptr) return;
+  const KillSwitchCopy copy = KillSwitchStateLine(status);
+  killSwitchNote_->set_visible(!copy.line.empty());
+  if (copy.line.empty()) return;
+  killSwitchNote_->set_markup("<span size='small' foreground='" +
+                              HexForMarkup(copy.attention ? kUrDanger : kUrTextMuted) + "'>" +
+                              Glib::Markup::escape_text(copy.line) + "</span>");
 }
 
 // ---- connect options: the performance profile (§2.8) ---------------------------
@@ -1783,6 +2049,13 @@ void ConnectPage::PullThroughput() {
 // to nullopt with no device, and every writer renders that as its own settled
 // reading — never a spinner, never a zero.
 void ConnectPage::RefreshFeeds(bool force) {
+  // NO STATE MAY PERSIST AFTER ITS PRODUCER STOPS PUBLISHING. The SDK simply
+  // goes quiet on some teardowns — that silence is what let the old status
+  // string latch on its last word for the rest of the session — so the
+  // connection reading is RE-READ here, on the page's own clock, and not only
+  // when something pushes. Cheap: ReadConnectReading takes no lock and reads
+  // getters the stats feed already reads many times a second.
+  ApplyConnectReading(host_.CurrentConnectReading());
   {
     auto actions = host_.BlockActions();
     const uint64_t sig = BlockActionsSig(actions);
@@ -1896,28 +2169,42 @@ void ConnectPage::RefreshFeeds(bool force) {
     PullThroughput();
     ApplyInspectorVisibility();
     ApplyInspector();
+    // Ask urnetworkd what floor is REALLY installed. There is no push for
+    // this: the daemon's reaper arms the switch on its own when a tunnel drops
+    // unexpectedly, and nothing in the SDK feed knows that happened. A forced
+    // refresh is device lifecycle / tab entry / window re-show, i.e. exactly
+    // the moments this surface has to be right.
+    auto epoch = epoch_;
+    const uint64_t seen = *epoch_;
+    host_.RefreshKillSwitchStatus([this, epoch, seen](KillSwitchStatus) {
+      if (*epoch != seen) return;
+      ApplyKillSwitchUi();
+    });
   }
 }
 
 // The clock-driven fallback for the change feed.
 //
-// TODO(wiring): SdkHost::SetDrawerEventHandler is a SINGLE slot and MainWindow
-// owns it, routing every DrawerEvent to the legacy drawer only
-// (MainWindow.cpp: `if (windowVisible_ && drawer_) drawer_->OnHostEvent(event)`).
-// Until it also calls `connectPage_->OnHostEvent(event)`, OnHostEvent below is
-// unreachable and panes B and C would never see a single SDK push: the charts
-// would sit flat, the routing list would freeze on the snapshot taken when the
-// window was shown, and the contracts / split-rules / DNS surfaces would keep
-// rendering state the user has already changed. The page therefore re-reads its
-// own feeds off the clock, applying only what actually changed (each read is
-// fingerprinted, so an idle session rebuilds nothing). The moment a real event
-// lands, the poll drops to a slow safety net.
+// SdkHost::SetDrawerEventHandler is a SINGLE slot and MainWindow owns it; it
+// now fans out to both surfaces (MainWindow.cpp: `if (windowVisible_ &&
+// connectPage_) connectPage_->OnHostEvent(event)`), so OnHostEvent below is
+// reached. It is gated on the window being visible, though, and every push
+// that lands while the window is hidden is DROPPED — so the clock-driven
+// re-read stays as the safety net that closes that gap on re-show, applying
+// only what actually changed (each read is fingerprinted, so an idle session
+// rebuilds nothing). Once a real event has landed the poll steps back to 5 s.
 void ConnectPage::PollFeeds() { RefreshFeeds(false); }
 
 void ConnectPage::Resync() {
   ++(*epoch_);  // anything in flight against the old reading is stale
   SyncProvideControlMode();
   RefreshAllPanes();
+  // Seed the exit tables on entry rather than waiting up to a full 5 s tick:
+  // Resync is login / tab entry / window re-show, i.e. exactly the moments the
+  // pane comes back on screen. The tables are deliberately NOT cleared here —
+  // Resync is not a session change, and blanking them would flash the
+  // inspector's UNKNOWN reading through on every window re-show.
+  if (advanced_) RefreshExitRouting();
 }
 
 // The drawer's dispatcher, per group: re-read through the accessor, re-apply
@@ -1927,7 +2214,14 @@ void ConnectPage::OnHostEvent(DrawerEvent event) {
   eventsWired_ = true;
   switch (event) {
     case DrawerEvent::DeviceLifecycle:
+      // A new device is a new routing table. The old one must not be joined
+      // against — the ids in it belonged to a device that no longer exists, so
+      // a hit would be a plausible WRONG answer — and it is UNKNOWN until a
+      // fresh read lands, not empty.
+      exits_.reset();
+      destinationExits_.reset();
       RefreshAllPanes();
+      if (advanced_) RefreshExitRouting();
       break;
     case DrawerEvent::Throughput:
       PullThroughput();
@@ -2200,15 +2494,23 @@ void ConnectPage::Tick() {
   if (!presenting_ || !pageVisible_) return;
   canvas_->Tick();
   ++tickCount_;
+  // The disconnect intent is the one piece of page state that changes with the
+  // CLOCK rather than with a push: nothing from the SDK arrives to announce
+  // that a teardown has taken too long. Without this the ceiling would only be
+  // applied on the next unrelated event, and a wedged teardown could hold
+  // "Disconnecting…" and a dead button on screen indefinitely. Re-rendered only
+  // while an intent is actually outstanding, so an idle page costs nothing.
+  if (disconnectRequestedAtUs_ != 0) ApplyConnectStatus();
   // the charts ride the throughput feed; at 2fps the 60s window still reads
   // live and the read stays off the per-frame path
   if (tickCount_ % 5 == 0) PullThroughput();
   // every 10th tick (~1 s): re-read the feeds the page has no event path for
   // (see PollFeeds) and re-run the open split-rules sheet.
   if (tickCount_ % 10 == 0) {
-    // Once MainWindow routes DrawerEvent here this drops to a 5s safety net.
-    // A changed feed cascades into an open split-rules sheet from there (as
-    // the event path does), so the sheet is never re-read for nothing.
+    // With events reaching OnHostEvent this is already the 5 s safety net for
+    // the pushes dropped while the window was hidden. A changed feed cascades
+    // into an open split-rules sheet from there (as the event path does), so
+    // the sheet is never re-read for nothing.
     //
     // TODO(sheet): §4.5 wants the sheet's "Ns ago" captions aged on the CLOCK.
     // SplitRulesSheet has no RefreshTimes() entry point and its Refresh()

@@ -1,0 +1,49 @@
+#!/bin/sh
+# %preun for urnetwork-daemon.
+#
+# rpm scriptlet argument: $1 == 0 on erase, $1 >= 1 on upgrade (this is the
+# OLD package's %preun, run after the new package's %post).
+#
+# Hand-written %systemd_preun urnetworkd.service -- WITH THE UNIT NAME AS THE
+# ARGUMENT. systemd-rpm-macros expands it to one of:
+#
+#   systemd >= 253:
+#       if [ $1 -eq 0 ] && [ -x /usr/lib/systemd/systemd-update-helper ]; then
+#           /usr/lib/systemd/systemd-update-helper remove-system-units \
+#               urnetworkd.service || :
+#       fi
+#   older:
+#       if [ $1 -eq 0 ]; then
+#           systemctl --no-reload disable --now urnetworkd.service &>/dev/null || :
+#       fi
+#
+# Both are implemented below. `disable --now` (which is what
+# remove-system-units also does) STOPS the unit, and doing that HERE rather
+# than in %postun is a real safety property of this package, not a formality:
+#
+#   The unit's ExecStopPost= is
+#       /usr/lib/urnetwork/urnetworkd --revert-unless-armed
+#   i.e. the daemon's OWN BINARY is what removes `table inet urnetwork`, the
+#   policy rules and the capture routes on every stop path. %preun runs BEFORE
+#   rpm deletes any file, so that binary still exists when systemd runs it. If
+#   the stop were moved to %postun the binary would already be gone, ExecStopPost
+#   would fail 203/EXEC, and an erase could leave the kill-switch ruleset in the
+#   kernel with nothing left on the system able to remove it -- a machine off
+#   the network after `dnf remove`. Do not move this.
+#
+# Nothing here on upgrade: the daemon is restarted onto the new binary by
+# %systemd_postun_with_restart in scripts/postun.
+set -e
+
+UNIT='urnetworkd.service'
+SYSTEMD_UPDATE_HELPER='/usr/lib/systemd/systemd-update-helper'
+
+if [ "${1:-0}" -eq 0 ]; then
+    if [ -x "${SYSTEMD_UPDATE_HELPER}" ]; then
+        "${SYSTEMD_UPDATE_HELPER}" remove-system-units "${UNIT}" >/dev/null 2>&1 || :
+    else
+        systemctl --no-reload disable --now "${UNIT}" >/dev/null 2>&1 || :
+    fi
+fi
+
+exit 0

@@ -1,22 +1,65 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "ControlClient.hpp"
 
+#include <fstream>
+#include <sstream>
+
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/un.h>
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
 namespace urnw {
+
 namespace {
 
-// start_tunnel covers device creation + tun + route/DNS setup in the daemon;
-// everything else answers immediately. One generous bound for all verbs.
+// True when THIS process's mount of the control socket's directory refers to a
+// deleted inode. Flatpak binds /run/urnetwork into the sandbox at startup; when
+// systemd recreates the directory the mount is left dangling and every access
+// under it returns EACCES. The kernel marks such a mount with a "//deleted"
+// root in /proc/self/mountinfo, which is a fact we can read rather than infer.
+bool SocketMountIsStale() {
+  std::ifstream mounts("/proc/self/mountinfo");
+  if (!mounts) return false;
+  std::string line;
+  while (std::getline(mounts, line)) {
+    // field 4 is the root within the filesystem, field 5 the mount point
+    std::istringstream fields(line);
+    std::string ignore, root, mountPoint;
+    fields >> ignore >> ignore >> ignore >> root >> mountPoint;
+    if (mountPoint.rfind("/run/urnetwork", 0) != 0) continue;
+    if (root.find("//deleted") != std::string::npos) return true;
+  }
+  return false;
+}
+
+}  // namespace
+namespace {
+
+// Every verb except start_tunnel answers off a published snapshot and returns
+// in microseconds, so a short bound is right for them and a long one only
+// hides a wedged daemon.
 constexpr time_t kReceiveTimeoutSeconds = 30;
+// A SYNCHRONOUS start_tunnel covers device creation (a network round trip),
+// the tun, ~35 subprocesses for routes/rules/DNS and the nftables swap. 30 s
+// was not a generous bound for that, it was a restart-loop trigger. Clients
+// that ask for async never wait this long — they get `starting` and poll.
+constexpr time_t kStartTunnelReceiveTimeoutSeconds = 180;
+// MUST EXCEED THE DAEMON'S INTERACTIVE POLKIT GUARD (kPolkitInteractiveGuardMillis
+// = 120s in daemon/ControlServer.cpp). A polkit check that puts a dialog on the
+// screen is answered at human speed, and the daemon deliberately waits. With the
+// 30s default the client gave up first, closed the socket and re-sent -- so the
+// user watched the password dialog vanish and reappear, and no interactive verb
+// except start_tunnel (which already had 180s) could ever be answered. The two
+// numbers are a pair: raise the daemon guard and this has to follow.
+constexpr time_t kPolkitInteractiveReceiveTimeoutSeconds = 150;
 constexpr time_t kSendTimeoutSeconds = 10;
 constexpr size_t kMaxFrameBytes = 1 << 20;  // a reply line beyond 1 MiB is a protocol error
 
@@ -26,7 +69,38 @@ void SetTimeout(int fd, int kind, time_t seconds) {
   ::setsockopt(fd, SOL_SOCKET, kind, &tv, sizeof(tv));
 }
 
+// Tolerant reads off a raw reply frame, for the additive fields this half of
+// the change cannot add to ControlProtocol.hpp (see the TODO on authz::). An
+// absent or wrongly-typed field leaves the default, exactly like
+// ctl::detail::Get — a daemon that never learned to send them must parse as
+// "said nothing", never as a false verdict.
+std::string FrameString(const nlohmann::json& j, const char* key) {
+  if (auto it = j.find(key); it != j.end() && it->is_string()) return it->get<std::string>();
+  return {};
+}
+
+bool FrameBool(const nlohmann::json& j, const char* key) {
+  if (auto it = j.find(key); it != j.end() && it->is_boolean()) return it->get<bool>();
+  return false;
+}
+
 }  // namespace
+
+DaemonAuthOutcome AuthOutcomeFromCode(const std::string& code) {
+  if (code.empty()) return DaemonAuthOutcome::None;
+  if (code == authz::kCodeAuthDenied) return DaemonAuthOutcome::Denied;
+  if (code == authz::kCodeAuthRequired || code == authz::kCodeAuthChallengeRequired) {
+    return DaemonAuthOutcome::ChallengeRequired;
+  }
+  if (code == authz::kCodeAuthDismissed) return DaemonAuthOutcome::Dismissed;
+  if (code == authz::kCodeAuthUnavailable) return DaemonAuthOutcome::Unavailable;
+  if (code == authz::kCodeAuthCheckFailed) return DaemonAuthOutcome::CheckFailed;
+  if (code == authz::kCodeAuthTimeout) return DaemonAuthOutcome::TimedOut;
+  if (code == authz::kCodeAuthNotTunnelOwner) return DaemonAuthOutcome::NotTunnelOwner;
+  // Every pre-existing kCode* lands here: not an authorization verdict, so the
+  // tun/route/dns/pinning failures keep rendering their own copy.
+  return DaemonAuthOutcome::None;
+}
 
 ControlClient::~ControlClient() { Close(); }
 
@@ -47,11 +121,14 @@ void ControlClient::CloseLocked() {
   }
   helloOk_ = false;
   recvBuffer_.clear();
+  receiveTimeoutSeconds_ = 0;
 }
 
 bool ControlClient::ConnectLocked(std::string* error) {
   CloseLocked();
   const std::string path = SocketPath();
+  lastSocketPath_ = path;
+  lastUnreachable_ = DaemonUnreachableReason::Other;
   sockaddr_un addr{};
   addr.sun_family = AF_UNIX;
   if (path.size() >= sizeof(addr.sun_path)) {
@@ -74,18 +151,56 @@ bool ControlClient::ConnectLocked(std::string* error) {
 #endif
   SetTimeout(fd, SO_RCVTIMEO, kReceiveTimeoutSeconds);
   SetTimeout(fd, SO_SNDTIMEO, kSendTimeoutSeconds);
+  receiveTimeoutSeconds_ = kReceiveTimeoutSeconds;
 
   if (::connect(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) != 0) {
-    if (error) *error = path + ": " + std::strerror(errno);
+    const int e = errno;
+    // The Unreachable causes are different problems with different fixes, and
+    // EACCES is ambiguous between two of them, so it is DISAMBIGUATED by
+    // measurement rather than assumed:
+    //
+    //   * a stale sandbox mount — inside a Flatpak, /run/urnetwork is a bind
+    //     mount taken when the sandbox started. A daemon restart makes systemd
+    //     recreate that directory, and this process is left holding the DELETED
+    //     inode, which the kernel reports as EACCES. mountinfo says so in as
+    //     many words ("/urnetwork//deleted"), so we read it instead of guessing.
+    //     Measured: a perfectly healthy daemon, correct group membership, and
+    //     the app still could not connect until it was relaunched — and it told
+    //     the user to fix their groups, which was simply false.
+    //
+    //   * genuinely not permitted — the group case a fresh install lands in.
+    switch (e) {
+      case EACCES:
+      case EPERM:
+        lastUnreachable_ = SocketMountIsStale() ? DaemonUnreachableReason::StaleSandboxMount
+                                                : DaemonUnreachableReason::PermissionDenied;
+        break;
+      case ENOENT:
+      case ECONNREFUSED:
+        lastUnreachable_ = DaemonUnreachableReason::SocketMissing;
+        break;
+      default:
+        lastUnreachable_ = DaemonUnreachableReason::Other;
+        break;
+    }
+    if (error) *error = path + ": " + std::strerror(e);
     ::close(fd);
     return false;
   }
+  lastUnreachable_ = DaemonUnreachableReason::None;
   fd_ = fd;
   return true;
 }
 
-bool ControlClient::SendAllLocked(const std::string& data) {
+void ControlClient::SetReceiveTimeoutLocked(long seconds) {
+  if (fd_ < 0 || seconds <= 0 || seconds == receiveTimeoutSeconds_) return;
+  SetTimeout(fd_, SO_RCVTIMEO, static_cast<time_t>(seconds));
+  receiveTimeoutSeconds_ = seconds;
+}
+
+bool ControlClient::SendAllLocked(const std::string& data, size_t* sentOut) {
   size_t sent = 0;
+  if (sentOut) *sentOut = 0;
   while (sent < data.size()) {
 #ifdef MSG_NOSIGNAL
     const ssize_t n = ::send(fd_, data.data() + sent, data.size() - sent, MSG_NOSIGNAL);
@@ -97,6 +212,37 @@ bool ControlClient::SendAllLocked(const std::string& data) {
       return false;
     }
     sent += static_cast<size_t>(n);
+    // Reported as we go, not at the end, so the count is meaningful on the
+    // failure path too — "0 of 2875 bytes" and "2100 of 2875" are different
+    // diagnoses of a dead socket.
+    if (sentOut) *sentOut = sent;
+  }
+  return true;
+}
+
+// A cached fd is a memory of a connection, not a connection. urnetworkd
+// restarting (a `systemctl restart`, or the installer's reinstall) closes
+// every control connection, and a client that only notices at write time
+// spends its one non-idempotent attempt on a socket with nothing behind it.
+// That is exactly how a Connect after a daemon restart reached the daemon
+// zero times and still reported "the service is not running".
+bool ControlClient::SessionAliveLocked() {
+  if (fd_ < 0) return false;
+  pollfd pfd{};
+  pfd.fd = fd_;
+  pfd.events = POLLIN;
+  const int n = ::poll(&pfd, 1, 0);
+  if (n < 0) return errno == EINTR;  // could not tell: assume alive, the write decides
+  if (n == 0) return true;           // nothing pending: alive
+  if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) return false;
+  if (pfd.revents & POLLIN) {
+    // Readable is ambiguous: an orderly close reads as EOF, while a future
+    // daemon pushing an unsolicited event reads as data. PEEK so a real frame
+    // stays queued for RoundTripLocked.
+    char probe = 0;
+    const ssize_t r = ::recv(fd_, &probe, 1, MSG_PEEK | MSG_DONTWAIT);
+    if (r == 0) return false;  // EOF: the daemon closed on us
+    if (r < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) return false;
   }
   return true;
 }
@@ -120,9 +266,21 @@ bool ControlClient::ReadLineLocked(std::string& line) {
 }
 
 std::optional<nlohmann::json> ControlClient::RoundTripLocked(const nlohmann::json& request,
-                                                             int64_t id) {
+                                                             int64_t id, bool* frameDelivered) {
+  if (frameDelivered) *frameDelivered = false;
   if (fd_ < 0) return std::nullopt;
-  if (!SendAllLocked(ctl::EncodeFrame(request))) return std::nullopt;
+  size_t sent = 0;
+  const std::string frame = ctl::EncodeFrame(request);
+  const bool ok = SendAllLocked(frame, &sent);
+  // A frame is one LINE (EncodeFrame ends in '\n'), so a short write cannot
+  // have produced anything the daemon will decode, let alone act on. Only a
+  // complete write puts the request in the daemon's hands.
+  if (frameDelivered) *frameDelivered = ok;
+  if (!ok) {
+    std::fprintf(stderr, "[control] send failed after %zu of %zu bytes: %s\n", sent,
+                 frame.size(), std::strerror(errno));
+    return std::nullopt;
+  }
   // Read until the reply matching our id; skip anything else (a future daemon
   // may push unsolicited events — additive, so ignore them here).
   for (;;) {
@@ -149,6 +307,19 @@ DaemonSessionState ControlClient::HelloLocked(std::string* error) {
     if (error) *error = "daemon closed the connection during hello";
     CloseLocked();
     return DaemonSessionState::Unreachable;
+  }
+  // WHICH authority this daemon gates with, read off the raw frame because the
+  // field is additive within protocol v1 and ControlProtocol.hpp is not this
+  // change's to edit (see the TODO on authz::). Read on BOTH the accepting and
+  // the rejecting path: a daemon that refuses our protocol has still told us
+  // what it would have gated with, and the remediation copy differs.
+  //
+  // Absent => Group. That is not a guess, it is what a daemon predating polkit
+  // gating IS, and it is the only mode whose remediation may mention groups and
+  // signing out.
+  {
+    const std::string mode = FrameString(*reply, "auth_mode");
+    lastAuthMode_ = mode == "polkit" ? DaemonAuthMode::Polkit : DaemonAuthMode::Group;
   }
   if (!ctl::ReplyOk(*reply)) {
     // Rejection direction 1: the daemon dropped support for our protocol, or
@@ -189,13 +360,28 @@ DaemonSessionState ControlClient::HelloLocked(std::string* error) {
     return DaemonSessionState::SdkMismatch;
   }
   helloOk_ = true;
+  // A NEW connection is now live. Everything a caller cached against the
+  // previous one — most importantly a DeviceRemote bound to a DeviceLocal
+  // that died with the old daemon process — is stale from here.
+  ++sessionGeneration_;
   return DaemonSessionState::Ok;
 }
 
 DaemonSessionState ControlClient::EnsureSessionLocked(std::string* error) {
   if (fd_ >= 0 && helloOk_) {
-    lastState_ = DaemonSessionState::Ok;
-    return lastState_;
+    // NOT just `fd_ >= 0 && helloOk_`. That short-circuit believed a dead
+    // socket forever: after urnetworkd restarted, the next verb was written
+    // into a closed connection, and for the one verb that is not re-sent
+    // (start_tunnel) the Connect was lost outright — the daemon received
+    // nothing at all and the UI blamed a service that was running fine.
+    if (SessionAliveLocked()) {
+      lastState_ = DaemonSessionState::Ok;
+      return lastState_;
+    }
+    std::fprintf(stderr,
+                 "[control] the daemon closed our control session (service restarted?); "
+                 "reconnecting before the next request\n");
+    CloseLocked();
   }
   if (!ConnectLocked(error)) {
     lastState_ = DaemonSessionState::Unreachable;
@@ -220,66 +406,393 @@ std::string ControlClient::DaemonVersion() {
   return daemonVersion_;
 }
 
+DaemonUnreachableReason ControlClient::LastUnreachableReason() {
+  std::scoped_lock lock(mutex_);
+  return lastUnreachable_;
+}
+
+std::string ControlClient::LastSocketPath() {
+  std::scoped_lock lock(mutex_);
+  return lastSocketPath_.empty() ? SocketPath() : lastSocketPath_;
+}
+
+DaemonAuthOutcome ControlClient::LastAuthOutcome() {
+  std::scoped_lock lock(mutex_);
+  return lastAuth_;
+}
+
+std::string ControlClient::LastPolkitResult() {
+  std::scoped_lock lock(mutex_);
+  return lastPolkitResult_;
+}
+
+DaemonAuthMode ControlClient::LastAuthMode() {
+  std::scoped_lock lock(mutex_);
+  return lastAuthMode_;
+}
+
+void ControlClient::ResetAuthLocked() {
+  lastAuth_ = DaemonAuthOutcome::None;
+  lastPolkitResult_.clear();
+}
+
+void ControlClient::NoteReplyLocked(ctl::Verb verb, const nlohmann::json& reply) {
+  // The serial moves for EVERY reply, refusal or not. That is what lets a
+  // caller tell "this attempt produced a verdict" from "this attempt never
+  // reached the daemon and you are looking at the last one's".
+  ++replySerial_;
+  lastPolkitResult_ = FrameString(reply, "polkit_result");
+  if (ctl::ReplyOk(reply)) {
+    // A gated verb that succeeded IS an authorization: polkit said yes, or the
+    // caller is uid 0, or the daemon is on the group fallback and we are a
+    // member. An ungated verb (status/hello) says nothing either way.
+    lastAuth_ = VerbNeedsAuthorization(verb) ? DaemonAuthOutcome::Authorized
+                                             : DaemonAuthOutcome::None;
+    return;
+  }
+  lastAuth_ = AuthOutcomeFromCode(ctl::ReplyCode(reply));
+  // A dismissal is a refusal the user MADE, and it must stay silent even if the
+  // daemon spells it as a plain challenge/denial with a flag rather than as its
+  // own code. Only honoured on a reply that is already an authorization
+  // verdict, so an unrelated failure cannot mute itself.
+  if (lastAuth_ != DaemonAuthOutcome::None && FrameBool(reply, "dismissed")) {
+    lastAuth_ = DaemonAuthOutcome::Dismissed;
+  }
+  if (lastAuth_ != DaemonAuthOutcome::None) {
+    std::fprintf(stderr, "[control] %s refused on authorization (code=%s%s%s)\n",
+                 ctl::ToString(verb), ctl::ReplyCode(reply).c_str(),
+                 lastPolkitResult_.empty() ? "" : ", polkit_result=",
+                 lastPolkitResult_.c_str());
+  }
+}
+
+// The receive timeout for a verb that polkit may put a DIALOG behind. Only the
+// mutating verbs use it: Status is polled at ~4 Hz and is answered without
+// interaction, so giving it a 150s window would make a wedged daemon freeze the
+// GUI for two and a half minutes instead of failing in thirty.
+//
+// In group mode nothing can prompt, so nothing changes there — this returns 0
+// and CallLocked keeps the 30s default.
+long ControlClient::PolkitAwareTimeoutLocked() const {
+  return lastAuthMode_ == DaemonAuthMode::Polkit ? kPolkitInteractiveReceiveTimeoutSeconds : 0;
+}
+
 std::optional<nlohmann::json> ControlClient::CallLocked(ctl::Verb verb, nlohmann::json payload,
-                                                        std::string* error) {
-  for (int attempt = 0; attempt < 2; ++attempt) {
+                                                        std::string* error, bool allowRetry,
+                                                        long receiveTimeoutSeconds) {
+  constexpr int kMaxAttempts = 2;
+  // The previous request's verdict describes the previous request. Clearing it
+  // here — before EnsureSession, so it is gone even when we never get a socket —
+  // is what stops a polkit denial from one Connect being rendered under an
+  // unrelated failure of the next.
+  ResetAuthLocked();
+  for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
     if (EnsureSessionLocked(error) != DaemonSessionState::Ok) return std::nullopt;
+    SetReceiveTimeoutLocked(receiveTimeoutSeconds);
     const int64_t id = nextId_++;
-    if (auto reply = RoundTripLocked(ctl::MakeRequest(verb, id, payload), id)) {
+    bool frameDelivered = false;
+    if (auto reply =
+            RoundTripLocked(ctl::MakeRequest(verb, id, payload), id, &frameDelivered)) {
+      NoteReplyLocked(verb, *reply);
       return reply;
     }
-    // dead socket (daemon restarted?): reconnect once, then give up
+    // Dead socket. Whether we may send it again turns on ONE question: did any
+    // byte of this request reach the daemon?
     CloseLocked();
     lastState_ = DaemonSessionState::Unreachable;
     if (error) *error = "lost connection to the daemon";
+    if (attempt + 1 >= kMaxAttempts) {
+      std::fprintf(stderr, "[control] %s failed twice; giving up\n", ctl::ToString(verb));
+      break;
+    }
+    if (!allowRetry && frameDelivered) {
+      // It reached the daemon and went unanswered: the daemon may be acting on
+      // it right now, and a duplicate start_tunnel is what used to tear a
+      // half-built tunnel down and restart it. Abandon it, loudly.
+      std::fprintf(stderr,
+                   "[control] %s reached the daemon but it did not answer; NOT re-sending "
+                   "(a duplicate would restart the bring-up)\n",
+                   ctl::ToString(verb));
+      break;
+    }
+    // The frame never landed whole, so the daemon cannot have decoded it, let
+    // alone acted on it — this is not "a request that may be running", it is a
+    // request that never happened. Reconnecting and sending it once is safe
+    // even for start_tunnel, and NOT doing so is what turned the first Connect
+    // after a daemon restart into a silent no-op with an empty daemon journal.
+    std::fprintf(stderr, "[control] %s never reached the daemon; reconnecting and sending "
+                         "it once\n",
+                 ctl::ToString(verb));
   }
   return std::nullopt;
 }
 
-bool ControlClient::StartTunnel(const ctl::StartTunnelRequest& req,
-                                ctl::StartTunnelReply* result, std::string* error) {
+ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
+    const StartTunnelOptions& options) {
   std::scoped_lock lock(mutex_);
-  const auto reply = CallLocked(ctl::Verb::StartTunnel, nlohmann::json(req), error);
+  // The local fail-closed validator below can refuse before a byte is sent, and
+  // that path never reaches CallLocked's own reset. Without this, a refusal
+  // that has nothing to do with authorization would inherit the last one's
+  // verdict. The SERIAL is deliberately not bumped: no reply happened, so a
+  // caller comparing it correctly concludes "no verdict from this attempt".
+  ResetAuthLocked();
+  StartTunnelOutcome outcome;
+  ctl::StartTunnelRequest req;
+  req.by_jwt = options.by_jwt;
+  req.instance_id = options.instance_id;
+  req.app_version = options.app_version;
+  req.network_space_json = options.network_space_json;
+  req.async = options.async;
+  req.kill_switch = options.kill_switch;
+  req.rpc_server_pem = options.rpc_server_pem;
+  req.rpc_client_cert_pem = options.rpc_client_cert_pem;
+  req.rpc_listen_hostport = options.rpc_listen_hostport;
+  req.rpc_session_id = options.rpc_session_id;
+
+  // ---- gate 1: refuse before the frame is built -----------------------------
+  // The SAME pure validator the daemon runs, so the two halves can never
+  // disagree about what a valid request is, and so a caller that forgot to
+  // generate key material (or generated a handle-0 one, whose four PEM getters
+  // return empty strings with NO exception) finds out here instead of getting
+  // a root device RPC with no client pinning on it.
+  if (const auto invalid = ctl::ValidateStartTunnelRequest(req)) {
+    outcome.error = invalid->message;
+    outcome.code = invalid->code == nullptr ? std::string() : std::string(invalid->code);
+    // Not a transport problem, but the caller branches on LastSessionState()
+    // as well as on the outcome, and leaving it at Unreachable would make the
+    // UI offer "install or start the service" for what is a local refusal.
+    lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+  const int expectedRpcPort = ctl::RpcPortFromHostPort(options.rpc_listen_hostport);
+
+  // NO retry (a re-sent start_tunnel used to restart the bring-up), and an
+  // async request needs only the ordinary bound because the daemon answers as
+  // soon as it has accepted the request.
+  const auto reply = CallLocked(
+      ctl::Verb::StartTunnel, nlohmann::json(req), &outcome.error, /*allowRetry=*/false,
+      options.async ? kReceiveTimeoutSeconds : kStartTunnelReceiveTimeoutSeconds);
+  outcome.session = lastState_;
+  if (!reply) return outcome;
+  if (!ctl::ReplyOk(*reply)) {
+    outcome.error = ctl::ReplyError(*reply);
+    outcome.code = ctl::ReplyCode(*reply);
+    // A start already in progress is not a session error — the daemon is
+    // healthy and busy. Collapsing it into Error would make the UI offer
+    // "install or start the service".
+    if (outcome.code != ctl::kCodeStartInProgress) lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+  const auto payload = reply->get<ctl::StartTunnelReply>();
+  outcome.rpc_port = payload.rpc_port;
+  outcome.tunnel_state = payload.tunnel_state;
+  outcome.rpc_pinned = payload.rpc_pinned;
+  // What the daemon says the live session IS, which on its adoption path is not
+  // what we sent. See the field contract in ControlClient.hpp.
+  outcome.instance_id = payload.instance_id;
+  outcome.rpc_session_id = payload.rpc_session_id;
+
+  // ---- gate 2: a synchronous start must come back PINNED --------------------
+  // A daemon that predates this contract drops the three fields on parse,
+  // never calls setRpcServer, and answers rpc_port=12025 with rpc_pinned
+  // absent — which parses false. Refuse: do not hand the caller an outcome it
+  // could build a plaintext DeviceRemote from. The port cross-check catches
+  // the same peer a second way, because the GUI's draw range deliberately
+  // excludes 12025.
+  //
+  // Only the synchronous path can be decided here. On async the reply is
+  // `starting` with rpc_port=0 and pinning has not happened yet, so the caller
+  // MUST make the identical check against StatusReply::rpc_pinned when the
+  // tunnel reaches Up, before it constructs a DeviceRemote.
+  if (payload.tunnel_state == ctl::TunnelState::Up &&
+      (!payload.rpc_pinned || payload.rpc_port != expectedRpcPort)) {
+    // Rendered VERBATIM by the UI (MainWindow shows LastTunnelError() when it
+    // is non-empty), so these are complete sentences with a next step, not
+    // codes — and never a blank.
+    outcome.error =
+        payload.rpc_pinned
+            ? "The URnetwork system service secured the local control connection on an "
+              "unexpected port. Update the service, then try again."
+            : "The URnetwork system service did not secure the local control connection. "
+              "Update the service, then try again.";
+    outcome.code = ctl::kCodeRpcPinRequired;
+    outcome.ok = false;
+    // Leaving a running tunnel whose ROOT rpc listener is unauthenticated is
+    // worse than no tunnel: any local process that can open a TCP socket to it
+    // could drive the daemon's DeviceLocal. Tear it down on the way out.
+    //
+    // That teardown is a SECOND round trip, and NoteReplyLocked would leave the
+    // authorization verdict describing the stop rather than the start — which
+    // is how a refused stop_tunnel could displace this security refusal with an
+    // authorization sentence and hide the reason the tunnel was torn down.
+    // The start's verdict (Authorized: the daemon accepted it) is what the UI
+    // must keep seeing, so it is restored afterwards.
+    const DaemonAuthOutcome startAuth = lastAuth_;
+    std::string stopError;
+    if (!StopTunnelLocked(&stopError)) {
+      std::fprintf(stderr,
+                   "[control] could not stop the unpinned tunnel after refusing it: %s\n",
+                   stopError.c_str());
+    }
+    lastAuth_ = startAuth;
+    lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+  outcome.ok = true;
+  return outcome;
+}
+
+// See the contract on the declaration (ControlClient.hpp) for the three
+// deliberate divergences from StartTunnelEx. This is the client half of the
+// EXPLICIT reattach door: it names a live session and re-presents nothing.
+ControlClient::StartTunnelOutcome ControlClient::AttachTunnel(
+    const std::string& instanceId, const std::string& rpcSessionId,
+    int expectedRpcPort) {
+  std::scoped_lock lock(mutex_);
+  // Same reasoning as StartTunnelEx: the local validator below can refuse
+  // before a byte is sent, and that path never reaches CallLocked's own reset.
+  // The SERIAL is deliberately not bumped — no reply happened, so a caller
+  // comparing it correctly concludes "no verdict from this attempt".
+  ResetAuthLocked();
+  StartTunnelOutcome outcome;
+  ctl::AttachTunnelRequest req;
+  req.instance_id = instanceId;
+  req.rpc_session_id = rpcSessionId;
+
+  // The SAME pure validator the daemon runs, so the two halves can never
+  // disagree about what a valid attach is.
+  if (const auto invalid = ctl::ValidateAttachTunnelRequest(req)) {
+    outcome.error = *invalid;
+    // Not a transport problem, but the caller branches on LastSessionState()
+    // as well as on the outcome, and leaving it at Unreachable would make the
+    // UI offer "install or start the service" for what is a local refusal.
+    lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+
+  // NO retry. An attach is idempotent in its EFFECT — it either matches the
+  // live session or refuses — but re-sending one is not free: it can re-raise a
+  // polkit dialog the user has already answered, which is the exact "the
+  // password prompt vanished and came back" defect the interactive timeout
+  // below exists to prevent. And the caller's fallback (a fresh start_tunnel)
+  // is correct and cheap, so a single unanswered attempt costs a tunnel
+  // rebuild, never a wedge.
+  const auto reply = CallLocked(ctl::Verb::AttachTunnel, nlohmann::json(req), &outcome.error,
+                                /*allowRetry=*/false, PolkitAwareTimeoutLocked());
+  outcome.session = lastState_;
+  if (!reply) return outcome;
+  if (!ctl::ReplyOk(*reply)) {
+    outcome.error = ctl::ReplyError(*reply);
+    outcome.code = ctl::ReplyCode(*reply);
+    // DIVERGENCE 1. These two are a healthy daemon declining THIS attach, not a
+    // broken session: the stored record names a session that is not the one
+    // running, or the tunnel belongs to a client that still holds it. Both are
+    // answered by falling back to start_tunnel, and neither may reach the UI as
+    // "the service is not running".
+    //
+    // A third code used to be listed here, rpc_session_not_persisted, for a
+    // daemon that published no session generation and so could never match an
+    // attach. It is gone from the protocol, not merely unused: the daemon now
+    // latches the live (instance_id, rpc_session_id) at the up edge, so the
+    // state that code named cannot occur and a client branching on it would be
+    // branching on nothing.
+    if (outcome.code != ctl::kCodeRpcSessionMismatch &&
+        outcome.code != ctl::kCodeTunnelOwnedByOtherClient) {
+      lastState_ = DaemonSessionState::Error;
+    }
+    outcome.session = lastState_;
+    return outcome;
+  }
+  const auto payload = reply->get<ctl::StartTunnelReply>();
+  outcome.rpc_port = payload.rpc_port;
+  outcome.tunnel_state = payload.tunnel_state;
+  outcome.rpc_pinned = payload.rpc_pinned;
+  outcome.instance_id = payload.instance_id;
+  outcome.rpc_session_id = payload.rpc_session_id;
+
+  // DIVERGENCE 3. The daemon must hand back the identity we named. A reply that
+  // agrees to attach and then describes a DIFFERENT session is the one outcome
+  // this verb must never let through: the caller would dial a listener it has
+  // no way to prove is the one its stored key pins.
+  if (payload.instance_id != instanceId || payload.rpc_session_id != rpcSessionId) {
+    outcome.error =
+        "The URnetwork system service attached a different session than the one this app "
+        "asked for. Reconnect to build a new one.";
+    outcome.code = ctl::kCodeRpcSessionMismatch;
+    outcome.ok = false;
+    // A healthy daemon that answered — see divergence 1. Do not turn this into
+    // a transport state; the caller falls back to start_tunnel.
+    outcome.session = lastState_;
+    return outcome;
+  }
+
+  // The pinning gate, identical to the synchronous start's and for the identical
+  // reason: rpc_port is an ECHO, not a discovery, so agreeing on it plus
+  // rpc_pinned is the only evidence both halves mean ONE authenticated listener.
+  // An attach is never async — there is nothing to bring up — so unlike
+  // StartTunnelEx there is no case this cannot decide here.
+  if (payload.tunnel_state != ctl::TunnelState::Up || !payload.rpc_pinned ||
+      (expectedRpcPort != 0 && payload.rpc_port != expectedRpcPort)) {
+    outcome.error =
+        "The URnetwork system service could not hand this app back the local control "
+        "connection it had. Reconnect to build a new one.";
+    outcome.code = ctl::kCodeRpcPinRequired;
+    outcome.ok = false;
+    // DIVERGENCE 2. StartTunnelEx stops the tunnel here. This must NOT: the
+    // tunnel predates this call, may be carrying traffic, and may belong to a
+    // session that is working — tearing it down on the strength of a stale
+    // client's failed attach would be a denial of service against its owner.
+    outcome.session = lastState_;
+    return outcome;
+  }
+  outcome.ok = true;
+  return outcome;
+}
+
+bool ControlClient::SetKillSwitch(bool enabled, ctl::StatusReply* out, std::string* error) {
+  std::scoped_lock lock(mutex_);
+  ctl::SetKillSwitchRequest req;
+  req.enabled = enabled;
+  const auto reply = CallLocked(ctl::Verb::SetKillSwitch, nlohmann::json(req), error,
+                                /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   if (!reply) return false;
+  // The status rides on BOTH the success and the failure reply: a kill switch
+  // that could not be installed reports kill_switch=failed, which the UI must
+  // render as its own state and never as "off".
+  if (out) *out = reply->get<ctl::StatusReply>();
   if (!ctl::ReplyOk(*reply)) {
     if (error) *error = ctl::ReplyError(*reply);
-    lastState_ = DaemonSessionState::Error;
     return false;
   }
-  if (result) *result = reply->get<ctl::StartTunnelReply>();
   return true;
 }
 
-bool ControlClient::AttachTunnel(const ctl::AttachTunnelRequest& req,
-                                 ctl::StartTunnelReply* result, std::string* error) {
-  std::scoped_lock lock(mutex_);
-  const auto reply = CallLocked(ctl::Verb::AttachTunnel, nlohmann::json(req), error);
+bool ControlClient::StopTunnelLocked(std::string* error) {
+  const auto reply = CallLocked(ctl::Verb::StopTunnel, nlohmann::json::object(), error,
+                                /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   if (!reply) return false;
   if (!ctl::ReplyOk(*reply)) {
     if (error) *error = ctl::ReplyError(*reply);
-    lastState_ = DaemonSessionState::Error;
     return false;
   }
-  if (result) *result = reply->get<ctl::StartTunnelReply>();
   return true;
 }
 
 bool ControlClient::StopTunnel(std::string* error) {
   std::scoped_lock lock(mutex_);
-  const auto reply = CallLocked(ctl::Verb::StopTunnel, nlohmann::json::object(), error);
-  if (!reply) return false;
-  if (!ctl::ReplyOk(*reply)) {
-    if (error) *error = ctl::ReplyError(*reply);
-    return false;
-  }
-  return true;
+  return StopTunnelLocked(error);
 }
 
 bool ControlClient::SetProvide(const std::string& mode, std::string* error) {
   std::scoped_lock lock(mutex_);
   ctl::SetProvideRequest req;
   req.mode = mode;
-  const auto reply = CallLocked(ctl::Verb::SetProvide, nlohmann::json(req), error);
+  const auto reply = CallLocked(ctl::Verb::SetProvide, nlohmann::json(req), error,
+                                /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   if (!reply) return false;
   if (!ctl::ReplyOk(*reply)) {
     if (error) *error = ctl::ReplyError(*reply);
@@ -321,7 +834,8 @@ bool ControlClient::LocationOverrideWrite(double lat, double lon, double accurac
   req.lon = lon;
   req.accuracy_m = accuracyM;
   std::string error;
-  const auto reply = CallLocked(ctl::Verb::LocationOverrideWrite, nlohmann::json(req), &error);
+  const auto reply = CallLocked(ctl::Verb::LocationOverrideWrite, nlohmann::json(req), &error,
+                                /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   return reply && ctl::ReplyOk(*reply);
 }
 
@@ -329,7 +843,8 @@ bool ControlClient::LocationOverrideClear() {
   std::scoped_lock lock(mutex_);
   std::string error;
   const auto reply =
-      CallLocked(ctl::Verb::LocationOverrideClear, nlohmann::json::object(), &error);
+      CallLocked(ctl::Verb::LocationOverrideClear, nlohmann::json::object(), &error,
+                 /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   return reply && ctl::ReplyOk(*reply);
 }
 

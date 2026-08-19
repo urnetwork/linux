@@ -34,9 +34,10 @@ license: "MPL-2.0"
 description: |
   URnetwork tunnel daemon
   Privileged system half of URnetwork for Linux: owns /dev/net/tun, routes
-  and DNS, exposes a root/urnetwork-group-only control socket under
-  /run/urnetwork, and starts idle -- no tunnel comes up until an
-  authenticated desktop client asks. The GUI is the separate, unprivileged
+  and DNS, exposes a control socket under /run/urnetwork whose privileged
+  verbs are gated by polkit (falling back to the urnetwork group where polkit
+  is absent), and starts idle -- no tunnel comes up until an authorized
+  desktop client asks. The GUI is the separate, unprivileged
   URnetwork AppImage, which lives in a user-writable path so it can
   self-update; this package installs the stable /usr/bin/urnetwork launcher
   plus the desktop entry, urnetwork:// scheme handler, icons and autostart
@@ -51,12 +52,38 @@ depends:
   # Tunnel.cpp configures the TUN link and its capture routes with /sbin/ip.
   # Minimal Ubuntu/Debian installations do not necessarily include it.
   - "iproute2"
+  # nftables is NOT optional and was missing here while the rpm declared it.
+  # app/src/daemon/main.cpp's preflight marks `nft` required=true, and the
+  # tunnel uses it for the egress self-exclusion (without which the daemon's
+  # OWN sockets fall into its own tunnel -- a measured 3.38 Tb amplification
+  # loop, not a theoretical one), the IPv6 and DNS leak floors, and the kill
+  # switch. Debian and Ubuntu do not install it on a minimal system, so the
+  # package installed cleanly, the service started cleanly, and the first
+  # Connect failed with a message about a missing tool rather than apt saying
+  # what was needed. Declared as a dependency, which is the whole reason to
+  # ship a native package instead of a tarball.
+  - "nftables"
   # The one genuine win of the deb shape (APPIMAGE.md 11d): the GUI AppImage
   # needs libfuse2 at runtime and Ubuntu 22.04+ does not ship it by default,
   # so every AppImage-only vendor walks users through installing it by hand.
   # We just declare it. libfuse2t64 is the post-time_t-transition name
   # (Ubuntu 24.04+ / Debian 13); older releases still call it libfuse2.
   - "libfuse2t64 | libfuse2"
+# RECOMMENDS, NOT DEPENDS, and the distinction is load-bearing.
+# polkit is what removes the "join a group, log out, log back in" first run:
+# urnetworkd authorizes each privileged verb against the peer's SO_PEERCRED
+# uid through org.freedesktop.PolicyKit1, so the person at this machine's
+# screen is authorized in the session they are already in. apt installs
+# Recommends by default, so a normal desktop install gets it.
+#
+# It is not a Depends because this package must still install on a headless
+# box (see the "NO GTK" note above) and because the group fallback genuinely
+# works there: with no polkit, the daemon binds the socket 0660
+# root:urnetwork and consults the `urnetwork` group exactly as it always did.
+# polkitd is the Debian 12+/Ubuntu 23.04+ package name; policykit-1 is the
+# name every older release used.
+recommends:
+  - "polkitd | policykit-1"
 contents:
   # Assembled tree: /usr (daemon, SDK library, launcher, desktop entry,
   # icons, shared data, gettext catalogs) and /lib (systemd unit).
@@ -68,6 +95,16 @@ contents:
   # cache refresh with zero maintainer-script code. Never create them from
   # postinst -- a symlink there does not fire the trigger (IVPN's latent bug;
   # APPIMAGE.md 11d).
+  #
+  # The polkit action file rides inside this same /usr tree, at
+  # usr/share/polkit-1/actions/network.ur.urnetwork.policy, put there by
+  # linux/packaging/lib/common.sh (assemble_daemon_root), which also asserts
+  # its 0644 mode before the package is built. It is deliberately NOT given a
+  # second explicit contents entry: nfpm would then emit the path twice, and
+  # duplicated members in a .deb data archive are a packaging bug, not a
+  # stronger guarantee. A plain dpkg-owned file is also what makes `apt purge`
+  # remove it -- which matters here, because its PRESENCE is what tells
+  # urnetworkd that polkit is the authority on this machine.
   - src: "${PKGROOT}/usr"
     dst: /usr
     type: tree

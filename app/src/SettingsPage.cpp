@@ -15,6 +15,7 @@
 
 #include "AppPrefs.hpp"
 #include "I18n.hpp"
+#include "KillSwitchCopy.hpp"
 #include "PaneKit.hpp"
 #include "PostQuantumIdentity.hpp"  // ProviderIdentitiesSheet (reused as-is)
 #include "SplitRulesSheet.hpp"      // reused as-is (the split-rule editor)
@@ -790,8 +791,20 @@ void SettingsPage::ApplyLocalDeviceState() {
   // in the app's LocalState. kill switch == !routeLocal; the inversion lives
   // in SdkHost, never here.
   applyingKillSwitch_ = true;
-  killSwitch_->set_active(!host_.GetRouteLocal());
+  killSwitch_->set_active(host_.CurrentKillSwitch());
   applyingKillSwitch_ = false;
+  ApplyKillSwitchState();
+  // ...and ask the daemon what is REALLY installed. The preference is local
+  // and instant; the enforcement leg is a control-socket round trip, so it
+  // lands through the completion below rather than blocking this build path.
+  {
+    auto epoch = epoch_;
+    const uint64_t seen = *epoch_;
+    host_.RefreshKillSwitchStatus([this, epoch, seen](KillSwitchStatus) {
+      if (*epoch != seen) return;  // a newer presentation owns the page
+      ApplyKillSwitchState();
+    });
+  }
 
   // Advanced mode: the standing value, replayed. The toggle only WRITES;
   // this is the read side (and MainWindow's handler calls SetAdvancedMode).
@@ -975,6 +988,30 @@ void SettingsPage::BuildGeneralSection(Gtk::Box& host) {
 void SettingsPage::BuildConnectionsSection(Gtk::Box& host) {
   host.append(*kit::MakePaneGroupHeader(T_("site_app_connections", "Connections")).root);
 
+  // Launch behaviour, before the numbered rows: what happens when the app opens
+  // precedes what happens when a connection drops.
+  //
+  // A LOCAL preference, exactly like the updates auto-check row — no session
+  // gate, no FieldState, no echo guard, because this toggle is the only writer
+  // and nothing ever writes its state back. Read once by MainWindow's
+  // constructor; see prefs::kConnectOnLaunchKey.
+  connectOnLaunch_ = AddToggleRow(
+      host, T_("conn_connect_on_launch", "Connect automatically when the app starts"),
+      T_("conn_connect_on_launch_note",
+         "Off by default. When on, URnetwork connects to your selected provider as "
+         "soon as you open the app. This changes the next launch - it does not "
+         "connect now."));
+  connectOnLaunch_->set_active(prefs::Get<bool>(prefs::kConnectOnLaunchKey, false));
+  connectOnLaunch_->property_active().signal_changed().connect([this] {
+    // Persisted immediately (whole-file read-modify-write, so it cannot clobber
+    // the keys beside it). DELIBERATELY nothing else: turning this ON must not
+    // start a tunnel — it records a launch preference, and connecting now would
+    // be a second, unasked-for action. It is also unrelated to the tray
+    // autostart and the .desktop autostart template, which decide whether the
+    // app RUNS, not what it does once it has.
+    prefs::Set(prefs::kConnectOnLaunchKey, connectOnLaunch_->get_active());
+  });
+
   // Row 1 — the kill switch. The shipped store key site_app_kill_switch_note
   // is DELIBERATELY not used: it is wrong twice (this is not browser-only, and
   // "when disconnected" describes a bug as a feature — the switch guards only
@@ -986,6 +1023,18 @@ void SettingsPage::BuildConnectionsSection(Gtk::Box& host) {
          "letting it out unprotected."));
   killSwitch_->property_active().signal_changed().connect(
       [this] { OnKillSwitchToggled(); });
+
+  // Row 1b — WHAT IS ACTUALLY IN FORCE, as opposed to what the switch asks
+  // for. The two are different facts: the daemon can refuse to install the
+  // nftables floor, can be absent altogether, or can deliberately hold off
+  // while nothing is connected. Collapsing them into the switch position is
+  // exactly the defect this pane used to ship — a toggle reading "on" over a
+  // machine with no ruleset installed anywhere.
+  auto killState = MakeProseRow({}, kStatePadY);
+  killSwitchState_ = killState.line;
+  killSwitchStateRow_ = killState.root;
+  killSwitchStateRow_->set_visible(false);  // nothing to say while it is off
+  host.append(*killState.root);
 
   // Rows 2-3 — the two honesty disclosures. They are prose, not notes: a
   // trimmed 11px line could not carry either sentence.
@@ -1217,28 +1266,54 @@ void SettingsPage::OnProductUpdatesToggled() {
       });
 }
 
+// ONE writer for the state line under the switch. It never touches the switch
+// itself — the switch is the REQUEST, this line is what is in force, and the
+// whole point of the pair is that they can legitimately disagree.
+void SettingsPage::ApplyKillSwitchState() {
+  if (killSwitchState_ == nullptr || killSwitchStateRow_ == nullptr) return;
+  const KillSwitchCopy copy = KillSwitchStateLine(host_.CurrentKillSwitchStatus());
+  killSwitchStateRow_->set_visible(!copy.line.empty());
+  if (copy.line.empty()) return;
+  SetToned(*killSwitchState_, copy.attention ? kUrDanger : kUrTextMuted, copy.line);
+}
+
 void SettingsPage::OnKillSwitchToggled() {
   if (applyingKillSwitch_) return;  // echo guard
 
   const bool wanted = killSwitch_->get_active();
-  // TODO(sdk-wiring): SdkHost::SetKillSwitch / CurrentKillSwitch — the windows
-  // host owns the inversion AND the enforcement leg (LocalState first, then
-  // the device rpc, then the service RPC that installs the policy; Linux:
-  // nftables in urnetworkd), and returns false when ANY leg fails. This host
-  // exposes only Get/SetRouteLocal (LocalState + device), so the daemon's
-  // enforcement leg is not driven from here yet.
-  host_.SetRouteLocal(!wanted);
-
-  // READ BACK rather than trust the write: this is the toggle where a wrong
-  // state costs privacy, and SetRouteLocal reports nothing.
-  const bool actual = !host_.GetRouteLocal();
-  if (actual == wanted) return;
-  g_warning("settings: kill switch write did not take (wanted %d, actual %d)",
-            static_cast<int>(wanted), static_cast<int>(actual));
-  applyingKillSwitch_ = true;
-  killSwitch_->set_active(actual);  // show what IS, not what was asked for
-  applyingKillSwitch_ = false;
-  Snack(T_("something_went_wrong", "Something went wrong."), true);
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  // THREE legs now, not one. SdkHost writes LocalState and the device
+  // synchronously and then drives urnetworkd's nftables ruleset — the leg that
+  // makes this a kill switch rather than a preference — on a worker, because
+  // it is a control-socket round trip and this handler runs on the GTK loop.
+  host_.SetKillSwitch(wanted, [this, epoch, seen, wanted](KillSwitchStatus status) {
+    if (*epoch != seen) return;  // a newer presentation owns the page
+    // READ BACK rather than trust the write, on every leg. The soft legs are
+    // already reflected in CurrentKillSwitch(); `status` carries what the
+    // daemon says it really installed.
+    const bool actual = host_.CurrentKillSwitch();
+    if (actual != wanted) {
+      // Even the local preference did not take. THAT is the case where the
+      // switch must snap back — it is showing a request that does not exist.
+      g_warning("settings: kill switch preference did not take (wanted %d, actual %d)",
+                static_cast<int>(wanted), static_cast<int>(actual));
+      applyingKillSwitch_ = true;
+      killSwitch_->set_active(actual);
+      applyingKillSwitch_ = false;
+    }
+    ApplyKillSwitchState();
+    // A FAILED enforcement leg is made VISIBLE, not reverted. Flipping the
+    // switch back would hide the failure and would also be a lie in the other
+    // direction: the preference IS recorded and will be re-attempted at the
+    // next connection. The state line above says what is in force; the snack
+    // makes sure a user who is looking elsewhere still finds out.
+    const KillSwitchCopy copy = KillSwitchStateLine(status);
+    if (copy.attention) Snack(copy.line, true);
+  });
+  // Say something immediately — the round trip can take a moment and a control
+  // that appears to do nothing is how the old wiring read.
+  ApplyKillSwitchState();
 }
 
 void SettingsPage::SaveLogsToFile() {
@@ -1403,11 +1478,15 @@ void SettingsPage::ConfirmUninstallService() {
 // ---- feed slots -------------------------------------------------------------
 
 void SettingsPage::OnRouteLocalEvent() {
-  // routeLocal changed elsewhere (the connect surface owns a second switch).
-  // Re-read under the echo guard: the switch shows what IS.
+  // The kill switch changed elsewhere — the connect surface owns a second
+  // switch, and SdkHost also fires this after every enforcement-leg round
+  // trip. Re-read BOTH halves under the echo guard: the switch shows the
+  // request that IS, the line under it shows what is in force.
+  if (killSwitch_ == nullptr) return;
   applyingKillSwitch_ = true;
-  killSwitch_->set_active(!host_.GetRouteLocal());
+  killSwitch_->set_active(host_.CurrentKillSwitch());
   applyingKillSwitch_ = false;
+  ApplyKillSwitchState();
 }
 
 void SettingsPage::OnProviderIdentitiesEvent() {

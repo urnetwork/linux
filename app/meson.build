@@ -28,8 +28,10 @@ project('urnetwork', 'cpp',
 # -Dgui=enabled makes a missing toolkit a hard error for the AppImage build.
 gtkmm   = dependency('gtkmm-4.0', required : get_option('gui'))     # GTK4 C++ bindings (GUI only)
 adwaita = dependency('libadwaita-1', required : get_option('gui'))  # libadwaita (C API; GUI only)
-libsecret = dependency('libsecret-1', required : get_option('gui')) # Secret Service RPC credentials (GUI only)
-build_gui = gtkmm.found() and adwaita.found() and libsecret.found()
+# Secret Service backing for the GUI-owned RPC credentials (upstream's
+# RpcSessionStore/SecretServiceRpcSessionStore). GUI-only, like gtkmm.
+libsecret = dependency('libsecret-1', required : get_option('gui'))
+build_gui = gtkmm.found() and adwaita.found()
 
 gio     = dependency('gio-2.0')         # raw GDBus C API for the SNI tray (also brings glib/gobject)
 json    = dependency('nlohmann_json')
@@ -174,6 +176,7 @@ executable('urnetwork-gui',
     'src/DeveloperPage.cpp',
     'src/EarningsPage.cpp',
     'src/AccountPage.cpp',
+    'src/LogTailClient.cpp',
     'src/Tray.cpp',
     'src/Ui.cpp',
     'src/Formatters.cpp',
@@ -205,8 +208,8 @@ executable('urnetwork-gui',
   # AppDir layout: usr/bin/urnetwork-gui next to usr/lib/libURnetworkSdk.so
   install_rpath : '$ORIGIN/../lib')
 else
-  message('GTK/libadwaita/libsecret GUI dependencies not found: building the daemon half only ' +
-          '(pass -Dgui=enabled to require the GUI and Secret Service)')
+  message('gtkmm-4.0/libadwaita-1 not found: building the daemon half only ' +
+          '(pass -Dgui=enabled to require the GUI)')
 endif
 
 # ---- urnetworkd: the root daemon -------------------------------------------
@@ -232,6 +235,7 @@ executable('urnetworkd',
     'src/daemon/main.cpp',
     'src/daemon/ControlServer.cpp',
     'src/daemon/TunnelHost.cpp',
+    'src/daemon/DaemonLog.cpp',
     'src/Tunnel.cpp',
     'src/ControlClient.cpp',
     'src/LocationOverride.cpp',
@@ -272,6 +276,34 @@ endif
 if host_integration
 install_data('packaging/urnetworkd.service',
              install_dir : '/lib/systemd/system')
+endif
+
+# polkit action file: the AUTHORITY the daemon gates its privileged verbs with,
+# and the reason there is no longer a group to join or a session to log out of.
+#
+# SOURCED FROM ../packaging/polkit/, the only integration file that does NOT
+# live under app/packaging/. It is owned by the packaging workstream because
+# its *presence on disk* is a packaging-level decision, not a build one:
+# ControlProtocol.hpp's kPolkitPolicyPath makes the installed file the fallback
+# discriminator (present -> polkit is the sole authority; absent -> the legacy
+# `urnetwork` group check), so packaging/tarball/install.sh must be free to
+# withhold it on a machine that has no polkit at all. Keeping the single source
+# next to install.sh and packaging/lib/common.sh is what keeps that decision in
+# one place. Referencing it from here still installs it for `meson install
+# --destdir` consumers, so the meson tree and the packaged tree agree.
+#
+# datadir-relative, NOT the absolute '/usr/share/...' the unit above uses:
+# polkit 124+ scans /usr/share, /usr/local/share, /etc and /run action
+# directories (measured: `strings` on polkit 127's polkitd), so a --prefix
+# /usr/local install landing in /usr/local/share/polkit-1/actions is read
+# correctly rather than being wrong. 0644 root:root is enforced by packaging;
+# polkit ignores a group- or world-writable action file.
+#
+# host_integration=false (Flatpak) drops it with the rest: the GUI never calls
+# polkit — the daemon does, against a subject the GUI cannot influence.
+if host_integration
+install_data('..' / 'packaging' / 'polkit' / 'network.ur.urnetwork.policy',
+             install_dir : get_option('datadir') / 'polkit-1' / 'actions')
 endif
 
 # desktop file: the filename MUST match main.cpp's app id network.ur.urnetwork
@@ -357,9 +389,10 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/ProviderLocationRowTest.cpp',
     'tests/LocationOverrideStateTest.cpp',
     'tests/ControlProtocolTest.cpp',
-    'tests/NetworkServerUtilsTest.cpp',
     'tests/RpcSessionStoreTest.cpp',
     'tests/TunnelPolicyTest.cpp',
+    'tests/NetworkServerUtilsTest.cpp',
+    'tests/HealthTest.cpp',
     'src/GlobeGeometry.cpp',
     'src/WorldTopology.cpp',
     'src/ProviderLocationRow.cpp',
@@ -368,7 +401,12 @@ urnetwork_tests = executable('urnetwork-tests',
   ],
   include_directories : include_directories('src', 'tests'),
   dependencies : [json],
-  cpp_args : ['-DUR_ASSETS_DIR="' + meson.project_source_root() / 'assets' + '"'],
+  cpp_args : ['-DUR_ASSETS_DIR="' + meson.project_source_root() / 'assets' + '"',
+              # TunnelPolicyTest reads Tunnel.cpp to prove the IPv4-only guard
+              # still has a caller. A predicate with no call site is this
+              # project's most-repeated defect, and it is invisible to a test
+              # that only exercises the predicate.
+              '-DUR_SRC_DIR="' + meson.project_source_root() / 'src' + '"'],
   install : false)
 test('unit', urnetwork_tests, protocol : 'exitcode')
 

@@ -1,0 +1,41 @@
+# systemd preset for urnetworkd -- installed to
+# /usr/lib/systemd/system-preset/85-urnetwork.preset
+#
+# WHY THIS FILE EXISTS AT ALL, stated honestly.
+#
+# On Debian the .deb enables the unit directly (deb-systemd-helper, "enable
+# once"). On Fedora it CANNOT: %systemd_post runs `systemctl preset`, and
+# Fedora's shipped /usr/lib/systemd/system-preset/90-default.preset ends in
+#     disable *
+# so a service with no preset coverage installs DISABLED and never starts, at
+# install or at boot. Preset coverage is the only mechanism that makes a unit
+# enabled by default on Fedora -- there is no other knob. This file is that
+# coverage. 85 < 90 so it is consulted before the catch-all.
+#
+# WHAT IS AND IS NOT CLAIMED HERE:
+#
+#   * SHIPPED: this preset (enable-by-default) and, in scripts/post, a start on
+#     the initial install only. Both are the behaviour a FIRST-PARTY vendor
+#     repo wants, and both match what the .deb already does on Debian/Ubuntu,
+#     so a user gets the same product from either package.
+#
+#   * NOT CLAIMED: that this would be accepted into Fedora proper. It would
+#     not, as shipped. Fedora's packaging guidelines treat "enabled by
+#     default" as an exception needing explicit FESCo justification, and
+#     starting a service from a scriptlet is separately discouraged. A
+#     submission to Fedora, EPEL or openSUSE would DROP this file and drop the
+#     start in scripts/post; the package would then install disabled and the
+#     user would run `systemctl enable --now urnetworkd`. Nothing else in the
+#     package would have to change.
+#
+#   * ALSO NOT CLAIMED: that this overrides an admin. A preset is only ever
+#     consulted on the INITIAL install ($1 -eq 1 in %post). A later `systemctl
+#     disable urnetworkd` survives every upgrade, and an admin file in
+#     /etc/systemd/system-preset/ outranks this one.
+#
+# The product justification for enabling at all is the same one Debian Policy
+# 9.3.3.1 accepts for the .deb: urnetworkd STARTS IDLE. Being enabled costs a
+# few MB of RSS and an unread control socket; it brings up no tunnel, touches
+# no routes and installs no firewall rules until an authenticated client asks.
+
+enable urnetworkd.service

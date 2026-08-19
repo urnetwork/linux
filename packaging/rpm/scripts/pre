@@ -1,0 +1,22 @@
+#!/bin/sh
+# %pre for urnetwork-daemon.
+#
+# rpm scriptlet argument: $1 == 1 on the initial install, $1 == 2 (or more) on
+# an upgrade, and %pre never runs on erase.
+#
+# ONLY the system group, and it is here rather than in %post on purpose. The
+# unit's control socket is /run/urnetwork/urnetwork.sock, 0750 root:urnetwork,
+# and %post pre-creates that directory with -g urnetwork -- so the group has to
+# exist before any file that references it. Fedora's packaging guidelines put
+# user/group creation in %pre for exactly this ordering reason; the .deb has no
+# equivalent slot and does it first thing in postinst instead.
+#
+# The group is created on install and DELIBERATELY NEVER REMOVED on erase; see
+# scripts/postun for why.
+set -e
+
+if ! getent group urnetwork >/dev/null 2>&1; then
+    groupadd --system urnetwork >/dev/null 2>&1 || :
+fi
+
+exit 0

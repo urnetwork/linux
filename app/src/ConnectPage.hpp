@@ -42,11 +42,19 @@ namespace urnw {
 class ConnectPage : public Gtk::Box {
  public:
   explicit ConnectPage(SdkHost& host);
+  // Orphans every marshaled completion (see alive_) before any member dies:
+  // SdkHost::RequestReliability delivers on the main loop and cannot know this
+  // page is gone.
+  ~ConnectPage() override;
 
   // live feeds (MainWindow relays; all already marshaled to the GTK loop)
   void ApplyStats(const LiveStats& stats);
-  void SetConnected(bool connected);
-  void SetConnectionStatus(const std::string& status);
+  // THE CONNECTION FEED, AND THE ONLY ONE. It replaced SetConnected(bool) +
+  // SetConnectionStatus(string): two setters, two members, two freshnesses,
+  // and a third copy in stats_.connected beside them — which is how the status
+  // row came to describe a session none of the three was looking at. See
+  // Health.hpp for what those three actually meant.
+  void ApplyConnectReading(const ConnectReading& reading);
   // The daemon-session line under the status row ("" = healthy).
   // TODO(wiring): MainWindow owns the SCM/daemon probe and still renders it in
   // the LEGACY column's daemonStatusLabel_; it must relay every change here
@@ -66,19 +74,41 @@ class ConnectPage : public Gtk::Box {
   void SetPresentationActive(bool active);
   void Tick();  // the shared ~10fps clock: canvas dot transitions
 
-  // the connect toggle, shared by the hero, the button and the tray
+  // What will the next press DO? This is the same expression that writes the
+  // button's label, cached by ApplyConnectStatus, so the word on the button and
+  // the action behind it are one reading and cannot drift. The tray asks this;
+  // the button does not need to, because its press carries the answer.
+  bool ConnectActionIsDisconnect() const { return actionIsDisconnect_; }
+
+  // Retire an outstanding Disconnect intent. The page's own presses do this for
+  // themselves; this exists for the presses that never touch a page widget —
+  // the tray's Connect item — which would otherwise start a session while the
+  // page still held "Disconnecting…" over it.
+  void ClearDisconnectIntent();
+
+  // Is a Disconnect the user asked for still in flight? Read by MainWindow so
+  // an EXPECTED teardown is not reported to the user as the daemon dropping
+  // the session on its own.
+  bool DisconnectPending() const { return disconnectRequestedAtUs_ != 0; }
+
+  // THE PRESS CARRIES ITS OWN ACTION. `disconnect` is the action that wrote the
+  // label the user actually clicked, captured at press time — not something the
+  // window re-derives afterwards. It has to be, because this page consumes the
+  // press and re-renders BEFORE relaying it, so any question asked after the
+  // relay gets the POST-press reading, a different answer to the one the user
+  // gave by clicking a labelled button. Prefer this over on_toggle_connect.
+  std::function<void(bool disconnect)> on_connect_action;
+  // the legacy void toggle: still used by the tray, which has no button in
+  // front of the user and must therefore ask (ConnectActionIsDisconnect).
+  // Only consulted when on_connect_action is unwired.
   std::function<void()> on_toggle_connect;
   // the selected-provider row opens the chooser (owned by MainWindow)
   std::function<void()> on_open_locations;
   // pane C's "Connected to N providers" row opens the globe sheet, which
-  // MainWindow owns (it carries the GeoClue location-override controller).
-  // TODO(wiring): MainWindow::BuildHome assigns on_toggle_connect and
-  // on_open_locations but NOT this one, so the row stays insensitive and
-  // ProviderLocationsSheet (with the whole location-override surface) has no
-  // door on Home. One line beside the others:
-  //   connectPage_->on_open_provider_locations = [this] { OpenProviderLocations(); };
-  // The page cannot own that sheet itself: it needs MainWindow's
-  // LocationOverrideController.
+  // MainWindow owns (it carries the GeoClue location-override controller); the
+  // page cannot own that sheet itself. Assigned in MainWindow::BuildHome
+  // beside the other two (MainWindow.cpp: on_open_provider_locations ->
+  // OpenProviderLocations).
   std::function<void()> on_open_provider_locations;
 
  private:
@@ -100,6 +130,14 @@ class ConnectPage : public Gtk::Box {
   DnsStatusRow MakeDnsStatusRow(const Glib::ustring& title);
 
   void ApplyConnectStatus();       // THE one writer
+  // The hero and the button share one press handler: it captures the action
+  // that wrote the label, records a disconnect intent when that action is
+  // "disconnect", re-renders, and only then relays.
+  void RelayConnectPress();
+  // Is a Disconnect press still in flight? Settles the intent as a side effect
+  // (clears it once the reading really is down, or after kDisconnectIntentUs so
+  // a teardown that never completes cannot freeze the page on "Disconnecting").
+  bool DisconnectIntentLive();
   void ApplyMoreOptionsVisibility();
   void SyncProvideControlMode();
   void ApplyProvideControlMode();
@@ -124,12 +162,57 @@ class ConnectPage : public Gtk::Box {
   void SelectConnection(const std::string& id);
   void ApplySessionCardsVisibility();
   void ApplySessionRows();
+  void ApplyLiveStatsGroup();  // pane C's "Connected to N providers" entry
+  // THE SAME VERDICT THE HEADLINE RENDERED, for every surface that used to ask
+  // its own looser version of the question (stats_.connected, connected_, or
+  // the two ANDed). Never re-derived — it is what the last ApplyConnectStatus
+  // put on screen.
+  // "IS THERE A LIVE SESSION TO SHOW NUMBERS FOR?" — deliberately NOT
+  // `state == Connected`. Blocked (out of balance) and Disconnecting are both
+  // states in which the tunnel is STILL CARRYING, so gating the globe, the
+  // connections list and the throughput readouts on Connected alone blanked
+  // every live-session surface the moment the balance ran out, and again for
+  // up to 8s during every teardown — while bytes were still moving.
+  // Evaluating and Connecting are excluded on purpose: there is no provider
+  // attached yet, so there is genuinely nothing to plot.
+  bool ConnectedNow() const {
+    return renderedState_ == health::State::Connected ||
+           renderedState_ == health::State::Blocked ||
+           renderedState_ == health::State::Disconnecting;
+  }
   void ApplyContractsList();
   void ApplySplitRuleCount();
   void ApplyDnsCard();
   void ApplyDnsRecommendationPill();
   void ApplyInspector();
   void ApplyInspectorVisibility();
+  // The exit a destination ip routed through, and that exit's health, joined
+  // out of the reliability snapshot (DestinationExit.DestinationIp ->
+  // ClientId -> Exit). nullopt = "no recorded address of this action is in the
+  // snapshot", the normal case for a host that resolved after the last
+  // refresh. Absent, never guessed: an inspector that answers "which exit"
+  // with a plausible WRONG exit is worse than one that says it does not know.
+  struct ExitRouting {
+    std::string clientId;
+    int32_t flowCount = 0;
+    bool haveExit = false;  // the clientId was also found in exits_
+    int32_t tier = 0;
+    int32_t effectiveTier = 0;
+    int32_t exitFlowCount = 0;
+    int32_t dialFailureCount = 0;
+    bool quarantined = false;
+    bool warning = false;
+    std::string warningCause;
+    bool proven = false;
+    int64_t probeAgeSeconds = 0;
+  };
+  std::optional<ExitRouting> RoutingForAddresses(
+      const std::optional<urnet::StringList>& addresses) const;
+  // Refresh the two tables the inspector joins against, via
+  // SdkHost::RequestReliability (ExitsOnly): the host owns the worker, the
+  // host-wide single-flight gate and the marshal back to the main loop, so
+  // nothing here may call ReadReliability directly — it is several synchronous
+  // device rpcs taken under the host lock.
   void RefreshExitRouting();
   void PullThroughput();
   // Re-read every feed and apply ONLY the surfaces whose reading changed.
@@ -160,11 +243,16 @@ class ConnectPage : public Gtk::Box {
   // so a refresh in flight across a logout / mode toggle / teardown cannot
   // write into a surface that has since been rebuilt (see RefreshExitRouting).
   std::shared_ptr<uint64_t> epoch_ = std::make_shared<uint64_t>(0);
+  // The other half of the guard. epoch_ alone is NOT enough for a completion
+  // marshaled back from a worker: reading the epoch means dereferencing a
+  // member of this page, so a completion that lands after the page is
+  // destroyed would already have touched freed memory to discover it is late.
+  // alive_ is held by the completion itself and is tested FIRST.
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 
   bool advanced_ = false;
   bool presenting_ = false;
   bool pageVisible_ = false;  // this destination is the mapped stack child
-  bool connected_ = false;
   bool moreOptionsExpanded_ = false;
   // set the first time a real DrawerEvent lands: the clock-driven poll then
   // drops to a slow safety net instead of carrying the page on its own.
@@ -172,7 +260,31 @@ class ConnectPage : public Gtk::Box {
   int widthDip_ = 1120;
   int foldWidth_ = -1;  // the pane-grid width the current fold was taken on
   bool foldRecheckPending_ = false;
-  std::string connectStatus_ = "DISCONNECTED";
+  // THE ONE READING pane A renders from. Every field of it was sampled at one
+  // instant by SdkHost::ReadConnectReading, so no part of the status row can
+  // describe a different moment than any other part.
+  ConnectReading reading_;
+  // The one health verdict the LAST render produced, cached so the pane B/C
+  // gates that used to test stats_.connected ask the SAME question the
+  // headline answered instead of a looser one beside it.
+  health::State renderedState_ = health::State::Disconnected;
+  // Has a reading ever been applied? Without it the FIRST push — which for a
+  // signed-out or idle app equals the default-constructed reading — would be
+  // skipped as "unchanged" and the panes would never be seeded.
+  bool renderedApplied_ = false;
+  // The action the LAST render put on the button, and the answer any caller
+  // gets from ConnectActionIsDisconnect(). Written by ApplyConnectStatus from
+  // the very expression that sets the label — one reading, one answer.
+  bool actionIsDisconnect_ = false;
+  // THE USER'S INTENT, WHICH THE SDK'S CONNECTION TOKEN DOES NOT CARRY.
+  // g_get_monotonic_time() microseconds at the moment a Disconnect press was
+  // relayed, or 0 for "no disconnect in flight". Until the session actually
+  // reads down, this is the ONLY thing on the page that knows a teardown was
+  // asked for: the SDK keeps reporting a selected destination right through a
+  // teardown, which is how a Disconnect press used to land on "Connecting to
+  // providers". It is the one input to health::Render that does not come from
+  // the SDK — and it is bounded (DisconnectIntentLive), so it cannot latch.
+  gint64 disconnectRequestedAtUs_ = 0;
   LiveStats stats_;
   Glib::ustring daemonNotice_;
   std::string selectedConnectionId_;
@@ -185,6 +297,14 @@ class ConnectPage : public Gtk::Box {
   std::optional<urnet::ContractPeerRowList> contractRows_;
   std::optional<urnet::BlockActionOverrideList> splitRules_;
   std::optional<urnet::DnsResolverSettings> dnsSettings_;
+  // §4.1's exit-routing cache, refreshed every 5 s in Advanced Mode. Carried
+  // with the SNAPSHOT's own optionality, because on this surface a fabricated
+  // zero is the failure mode: nullopt = "no session, or nothing has been read
+  // yet / the rpc threw" (UNKNOWN); an EMPTY list is the real answer "this
+  // device has no exits". The inspector and the "Exits" figure render those
+  // two differently. UI thread only.
+  std::optional<urnet::ExitList> exits_;
+  std::optional<urnet::DestinationExitList> destinationExits_;
   std::string countryCode_;  // lowercased connected country (dns pill)
   std::string countryName_;
   std::optional<urnet::NetworkPeerList> peers_;  // nullopt = discovery down
@@ -247,6 +367,10 @@ class ConnectPage : public Gtk::Box {
   Gtk::Box* peersHost_ = nullptr;
   Gtk::Switch* blockerToggle_ = nullptr;
   Gtk::Switch* killSwitchToggle_ = nullptr;
+  // What urnetworkd says is REALLY in force, under the switch. A dedicated
+  // wrapped line: the row's own note is trimmed to one ellipsized line, and a
+  // truncated failure disclosure is the same defect as no disclosure.
+  Gtk::Label* killSwitchNote_ = nullptr;
   // ONE echo guard around every programmatic control write (§2.8): each
   // handler returns while it is set, so a feed-driven write cannot loop back
   // into the SDK.

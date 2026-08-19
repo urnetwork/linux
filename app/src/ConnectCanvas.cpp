@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "UrMotion.hpp"
+
 namespace urnw {
 namespace {
 
@@ -51,7 +53,16 @@ struct Argb {
 constexpr Argb kDotColors[] = {
     {1.0, 0xEF / 255.0, 0xF7 / 255.0, 0xBB / 255.0},  // InEvaluation  kAccent
     {1.0, 0xFF / 255.0, 0x6C / 255.0, 0x58 / 255.0},  // EvaluationFailed  coral
-    {1.0, 0xFF / 255.0, 0x6C / 255.0, 0x58 / 255.0},  // NotAdded  coral
+    // NOT the same coral as EvaluationFailed, which is what it used to be.
+    // NotAdded is the NORMAL outcome for most evaluated providers: the SDK
+    // requests roughly double the window target (evaluationpoolmultiple=2) and
+    // adds the best of them, so every surplus provider is healthy and simply
+    // lost the race. Painting it identically to a failure made a WORKING full
+    // window read as a wall of errors — the owner reported "they keep turning
+    // red" on a session that was carrying traffic, and raising the window from
+    // 2 to 6 tripled how many of these exist. Muted slate: present, evaluated,
+    // not chosen.
+    {1.0, 0x6B / 255.0, 0x72 / 255.0, 0x80 / 255.0},  // NotAdded  slate
     {1.0, 0x87 / 255.0, 0xFB / 255.0, 0x67 / 255.0},  // Added  green
     {0.0, 0x10 / 255.0, 0x10 / 255.0, 0x10 / 255.0},  // Removed  urBlack @ 0
 };
@@ -84,12 +95,11 @@ ConnectCanvas::ConnectCanvas() {
   ShuffleBlobs();
 }
 
-bool ConnectCanvas::AnimationsEnabled() {
-  if (auto settings = Gtk::Settings::get_default()) {
-    return settings->property_gtk_enable_animations().get_value();
-  }
-  return true;
-}
+// The ONE reduce-motion choke point (UrMotion.hpp): GNOME's
+// enable-animations, surfaced to GTK as gtk-enable-animations, true on any
+// read failure. Off means motion GONE, not slower — every gated path here
+// renders an instant, fully correct final state.
+bool ConnectCanvas::AnimationsEnabled() { return motion::ShouldAnimate(); }
 
 // width is the driven dimension; the canvas writes its own height
 void ConnectCanvas::measure_vfunc(Gtk::Orientation orientation, int for_size, int& minimum,
@@ -113,7 +123,19 @@ void ConnectCanvas::SetState(State state) {
   const bool leavingLive = (state_ == State::Connecting || state_ == State::Connected);
   const bool enteringLive = (state == State::Connecting || state == State::Connected);
   if (leavingLive && !enteringLive) ClearPoints();
+  const bool wasConnecting = (state_ == State::Connecting);
   state_ = state;
+  // ENTERING Connecting: fold in the grid that is already in hand. The page
+  // pushes the grid before the state, so without this the dots wait for the
+  // NEXT SDK push — and on a session whose grid has settled (the feed goes
+  // quiet once the window stops changing) that push may never come, leaving a
+  // bare lattice under "Connecting to providers" for the whole session.
+  if (state == State::Connecting && !wasConnecting) ApplyGrid();
+  // Connected FREEZES the grid (§7.1): SetGrid stops taking pushes, so settle
+  // what is on the canvas — the connected state then costs nothing per tick,
+  // and the last frame before the circles slide over it is a complete grid
+  // rather than one caught half grown-in.
+  if (state == State::Connected) SettleDots();
 
   // fade targets (500ms ease-in-out crossfade)
   idleFadeFrom_ = idleOpacity_;
@@ -149,6 +171,7 @@ void ConnectCanvas::SetState(State state) {
     glyphOpacity_ = glyphShown_ ? 1.0 : 0.0;
     blobProgress_ = blobsIn_ ? 1.0 : 0.0;
     blobsVisible_ = blobsIn_;
+    SettleDots();  // the dot layer snaps with everything else
     queue_draw();
     return;
   }
@@ -157,10 +180,62 @@ void ConnectCanvas::SetState(State state) {
 
 void ConnectCanvas::SetGrid(const std::vector<urnet::ProviderGridPoint>& points,
                             int64_t gridWidth, int64_t gridHeight) {
+  // ALWAYS CACHE, EVEN OUTSIDE Connecting. The dots are the only part of this
+  // canvas carrying live SDK data, and they were being dropped on the exact
+  // frame that matters: ConnectPage::ApplyStats pushes the grid first and the
+  // state last, so the push that arrives as the hero turns Connecting saw the
+  // OLD state here and was discarded. Caching makes the order irrelevant.
+  lastPoints_ = points;
+  lastGridWidth_ = gridWidth;
+  lastGridHeight_ = gridHeight;
+  haveLastGrid_ = true;
+  // ONE line, once per process, naming the three numbers that decide whether a
+  // dot can be drawn at all. Without it "I see no provider dots" is not
+  // falsifiable from a journal: an empty list, a zero-sized grid and a state
+  // that never reaches Connecting all render the same bare lattice.
+  if (!loggedFirstGrid_ && !points.empty()) {
+    loggedFirstGrid_ = true;
+    g_message("hero: first provider grid — points=%zu dims=%" G_GINT64_FORMAT "x%" G_GINT64_FORMAT
+              " canvas_state=%d (dots draw only in state 1 = Connecting)",
+              points.size(), gridWidth, gridHeight, static_cast<int>(state_));
+  }
   // iOS freezes the grid the instant the connection lands
   if (state_ != State::Connecting) return;
-  gridWidth_ = gridWidth;
-  gridHeight_ = gridHeight;
+  ApplyGrid();
+}
+
+void ConnectCanvas::ApplyGrid() {
+  if (!haveLastGrid_) return;
+  const std::vector<urnet::ProviderGridPoint>& points = lastPoints_;
+  gridWidth_ = lastGridWidth_;
+  gridHeight_ = lastGridHeight_;
+  // A ZERO-SIZED GRID MUST NOT SILENTLY ERASE A POPULATED ONE. The draw path
+  // sizes cells by max(gridWidth_, gridHeight_) and skips the whole dot loop
+  // when that is 0, so a feed that reports points but no dimensions (the
+  // DeviceRemote path has no obligation to fill them, and a 0 is what an
+  // unset int64 marshals as) renders a fully populated grid as the BARE
+  // LATTICE — indistinguishable from "no providers". Derive the extent from
+  // the points themselves, which is the one source that cannot be missing
+  // when there is anything to draw.
+  if (gridWidth_ <= 0 && gridHeight_ <= 0) {
+    int64_t maxX = 0, maxY = 0;
+    for (const auto& p : points) {
+      maxX = std::max<int64_t>(maxX, p.X);
+      maxY = std::max<int64_t>(maxY, p.Y);
+    }
+    gridWidth_ = maxX + 1;
+    gridHeight_ = maxY + 1;
+  }
+
+  // The reduce-motion / not-presenting rule (§5's fade-helper semantics) as it
+  // applies to the dot layer. A dot is born at scale 0 and grown in by Tick()
+  // — and Tick() is the page's shared ~10 fps clock, which runs under EXACTLY
+  // the condition below (ConnectPage::UpdateClock drives Tick() and
+  // SetPresentationActive from one boolean). So off that condition the
+  // grow-in has nothing to advance it, and a fully populated grid draws as the
+  // BARE LATTICE, indefinitely — the reported "no provider dots at all".
+  // Snapping is also what motion-off means: an instant, fully correct state.
+  const bool animate = presenting_ && AnimationsEnabled();
 
   // the diff: key by ClientId else "x,y"
   std::map<std::string, const urnet::ProviderGridPoint*> incoming;
@@ -187,26 +262,46 @@ void ConnectCanvas::SetGrid(const std::vector<urnet::ProviderGridPoint>& points,
       dot.y = p->Y;
       dot.state = dot.previous = parseState(p->State);
       dot.colorProgress = 1.0;
-      dot.sizeProgress = 0.0;  // grow-in
+      dot.sizeProgress = animate ? 0.0 : 1.0;  // grow-in, or born settled
       dots_.emplace(key, dot);
     } else {
       it->second.x = p->X;
       it->second.y = p->Y;
       const PointState next = parseState(p->State);
       if (next != it->second.state) {
-        it->second.previous = it->second.state;
+        // unanimated, the blend has no frames to run through: land on the new
+        // colour outright rather than leaving a stranded previous state
+        it->second.previous = animate ? it->second.state : next;
         it->second.state = next;
-        it->second.colorProgress = 0.0;
+        it->second.colorProgress = animate ? 0.0 : 1.0;
       }
     }
   }
   // missing keys fade out through Removed rather than vanishing between frames
-  for (auto& [key, dot] : dots_) {
-    if (incoming.find(key) == incoming.end() && dot.state != PointState::Removed) {
+  for (auto it = dots_.begin(); it != dots_.end();) {
+    Dot& dot = it->second;
+    if (incoming.find(it->first) != incoming.end()) {
+      ++it;
+      continue;
+    }
+    if (!animate) {
+      // no frames to fade through, and nothing would ever delete it
+      it = dots_.erase(it);
+      continue;
+    }
+    if (dot.state != PointState::Removed) {
       dot.previous = dot.state;
       dot.state = PointState::Removed;
       dot.colorProgress = 0.0;
     }
+    ++it;
+  }
+  if (!animate) {
+    // the whole layer is already at its pose (and any transition left over
+    // from a presenting spell earlier is not going to be advanced either)
+    SettleDots();
+    queue_draw();
+    return;
   }
   dotsAnimating_ = false;
   for (const auto& [key, dot] : dots_) {
@@ -239,6 +334,32 @@ void ConnectCanvas::Tick() {
 
 void ConnectCanvas::ClearPoints() {
   dots_.clear();
+  dotsAnimating_ = false;
+  // and the cache with them: §5 wants the next connect to grow the grid in
+  // FROM NOTHING, so a replay must never resurrect the previous session's
+  // providers on the next Connecting.
+  lastPoints_.clear();
+  lastGridWidth_ = lastGridHeight_ = 0;
+  haveLastGrid_ = false;
+}
+
+// Every dot at its settled pose, nothing left to animate. Used wherever a dot
+// transition would otherwise be stranded mid-flight with no clock to finish
+// it: motion off, the canvas not presenting, the window coming back from the
+// tray (settle, never replay — §8's rule for the circles, same doctrine), and
+// the Connected freeze, which §7.1 wants settling to zero per-tick work.
+void ConnectCanvas::SettleDots() {
+  for (auto it = dots_.begin(); it != dots_.end();) {
+    Dot& dot = it->second;
+    if (dot.state == PointState::Removed) {
+      it = dots_.erase(it);  // its entire transition WAS the fade-out
+      continue;
+    }
+    dot.previous = dot.state;
+    dot.colorProgress = 1.0;
+    dot.sizeProgress = 1.0;
+    ++it;
+  }
   dotsAnimating_ = false;
 }
 
@@ -275,6 +396,11 @@ void ConnectCanvas::SetPresentationActive(bool active) {
   if (!active) {
     pulseBurstsLeft_ = 0;
     pulseOpacity_ = 0.0;
+    // The page's clock stops with the presentation, so a dot left mid-flight
+    // here would still be mid-flight on the next frame anyone renders (a tray
+    // thumbnail, the frame before the re-show settle). Land it now: dots
+    // animate only while this canvas is presenting.
+    SettleDots();
     return;
   }
   // re-shown: settle (never replay the blob entrance), then re-arm the pulse
@@ -283,6 +409,7 @@ void ConnectCanvas::SetPresentationActive(bool active) {
   blobProgress_ = blobsIn_ ? 1.0 : 0.0;
   blobsVisible_ = blobsIn_;
   glyphOpacity_ = glyphShown_ ? 1.0 : 0.0;
+  SettleDots();  // a grid pushed while hidden is complete on return, not growing
   if (state_ == State::Disconnected) StartIdlePulse();
   EnsureAnimClock();
   queue_draw();
@@ -323,6 +450,23 @@ void ConnectCanvas::RunBlobs(bool in) {
 // ---- the animation clock ----------------------------------------------------
 
 void ConnectCanvas::EnsureAnimClock() {
+  // INVALIDATE FIRST, ALWAYS. Every animated path (SetState, RunBlobs,
+  // StartIdlePulse, SetHovered) ends here and paints NOTHING itself: the new
+  // pose reaches the screen only through the tick callback below. GTK4 caches
+  // this widget's render node, so a state change that never gets a frame keeps
+  // the PREVIOUS pose on screen while the rest of the page repaints — measured
+  // on the owner's first auto-connect: the headline read "Connected" over a
+  // hero still drawing the Connecting lattice, with the blobs parked at
+  // progress 0 (outside the globe clip, i.e. invisible).
+  //
+  // It is also the only thing that can rescue an arming that latched:
+  // animClockActive_ goes true the moment a callback is ADDED and is cleared
+  // only from inside a callback that has RUN, so between those two points
+  // every EnsureAnimClock() is a no-op that installs nothing and — without
+  // this line — schedules nothing either. queue_draw() requests the frame
+  // whose UPDATE phase runs the pending callback, so a stranded animation
+  // resumes on the next frame instead of never.
+  queue_draw();
   if (animClockActive_) return;
   animClockActive_ = true;
   add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>& clock) -> bool {

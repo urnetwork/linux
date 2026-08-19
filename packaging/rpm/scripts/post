@@ -1,0 +1,198 @@
+#!/bin/sh
+# %post for urnetwork-daemon.
+#
+# rpm scriptlet argument: $1 == 1 initial install, $1 >= 2 upgrade.
+#
+# nfpm does not expand rpm macros, so the systemd half of this script is a
+# hand-written %systemd_post urnetworkd.service -- WITH THE UNIT NAME AS THE
+# ARGUMENT, which is the part packages get wrong. systemd-rpm-macros expands
+# %systemd_post to one of two shapes depending on the systemd version:
+#
+#   systemd >= 253 (Fedora 38+, RHEL 10):
+#       if [ $1 -eq 1 ] && [ -x /usr/lib/systemd/systemd-update-helper ]; then
+#           /usr/lib/systemd/systemd-update-helper install-system-units \
+#               urnetworkd.service || :
+#       fi
+#   older (RHEL 8/9, Fedora <= 37, openSUSE):
+#       if [ $1 -eq 1 ]; then
+#           systemctl --no-reload preset urnetworkd.service &>/dev/null || :
+#       fi
+#
+# Both are implemented below, newer first, so this package behaves correctly on
+# either. The semantics that matter and are preserved exactly:
+#   - PRESET, not `enable`. The unit is enabled only if preset policy says so,
+#     and only on the INITIAL install ($1 -eq 1) -- an admin's later
+#     `systemctl disable` is never undone by an upgrade. That is the rpm
+#     equivalent of the .deb's deb-systemd-helper "enable once" state file.
+#   - %systemd_post NEVER STARTS the unit. See "THE ONE DELIBERATE ADDITION"
+#     below for the one thing this script does beyond the macro, and why.
+#
+# On an UPGRADE this script runs BEFORE the old package's %postun (rpm's
+# order is: new %pre, install, new %post, old %preun, remove, old %postun), so
+# the running daemon is restarted by %systemd_postun_with_restart in
+# scripts/postun -- not here.
+#
+# Deliberately absent, and this mirrors the .deb: nothing touching
+# /usr/share/applications or /usr/share/icons. Those ship as plain rpm files
+# precisely so desktop-file-utils' and gtk's %transfiletriggerin file triggers
+# refresh mimeinfo.cache and the icon cache.
+set -e
+
+UNIT='urnetworkd.service'
+SYSTEMD_UPDATE_HELPER='/usr/lib/systemd/systemd-update-helper'
+SELINUX_PKGDIR='/usr/share/selinux/packages/urnetwork'
+
+# --- the human in the group --------------------------------------------------
+# The control socket is 0750 root:urnetwork, so a user who is not a member gets
+# EACCES on connect(2) and the app can only report "the service is not running"
+# -- which is false, and unfixable from the UI. Creating the group (scripts/pre)
+# and adding nobody to it is the single most likely way a correct install still
+# cannot connect. Identical behaviour and identical wording to the .deb's
+# postinst.
+#
+# `sudo dnf install` runs as root with SUDO_USER set and rpm scriptlets inherit
+# dnf's environment; pkexec sets PKEXEC_UID. A PackageKit/GNOME Software install
+# has NEITHER (PackageKit is a system daemon, not a child of the user's
+# session), and a plain root shell has neither either -- root needs no
+# membership. In that case say so rather than guessing at a user.
+RPM_TARGET_USER=""
+if [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != root ]; then
+    RPM_TARGET_USER="${SUDO_USER}"
+elif [ -n "${PKEXEC_UID:-}" ]; then
+    RPM_TARGET_USER="$(getent passwd "${PKEXEC_UID}" 2>/dev/null | cut -d: -f1)"
+fi
+if [ -n "${RPM_TARGET_USER}" ]; then
+    if id -nG "${RPM_TARGET_USER}" 2>/dev/null | tr ' ' '\n' | grep -qx urnetwork; then
+        :
+    elif command -v usermod >/dev/null 2>&1; then
+        usermod -aG urnetwork "${RPM_TARGET_USER}" || :
+        echo "urnetwork: added ${RPM_TARGET_USER} to the 'urnetwork' group -- log out and back in before starting the app."
+    elif command -v gpasswd >/dev/null 2>&1; then
+        gpasswd -a "${RPM_TARGET_USER}" urnetwork || :
+        echo "urnetwork: added ${RPM_TARGET_USER} to the 'urnetwork' group -- log out and back in before starting the app."
+    fi
+else
+    echo "urnetwork: could not tell which user to add to the 'urnetwork' group. Run: sudo usermod -aG urnetwork <you>"
+fi
+
+# --- /run/urnetwork ----------------------------------------------------------
+# The unit's RuntimeDirectory=urnetwork (0750, RuntimeDirectoryPreserve=yes) is
+# the real owner; pre-create it so the control path exists before first start.
+if [ -d /run ]; then
+    install -d -m 0750 -o root -g urnetwork /run/urnetwork 2>/dev/null || :
+fi
+
+# --- NetworkManager / udev markings ------------------------------------------
+# Must be live before the first tunnel comes up. Neither call touches existing
+# connections.
+if command -v nmcli >/dev/null 2>&1; then
+    nmcli general reload conf >/dev/null 2>&1 || :
+fi
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload >/dev/null 2>&1 || :
+fi
+
+# --- SELinux policy module ---------------------------------------------------
+# THIS IS THE FEDORA-FAMILY PACKAGE, SO THIS BLOCK IS LOAD-BEARING, NOT
+# DEFENSIVE. Measured on Bazzite (Enforcing), running as root with the full
+# capability set, with no policy module installed:
+#
+#   avc denied { read write }   name="tun"  tcontext=tun_tap_device_t chr_file
+#   avc denied { name_connect } dest=443    tcontext=http_port_t      tcp_socket
+#   avc denied { create }                   tclass=rawip_socket
+#
+# A daemon that carries no policy of its own is run by systemd in the init_t
+# domain, and init_t is denied all three. Root and CAP_NET_ADMIN do not help:
+# the MAC layer refuses before the capability is consulted. Without this
+# module the daemon starts, the app connects, and every Connect fails at
+# /dev/net/tun -- which reads as a broken build.
+#
+# DO NOT "fix" this by labelling the binary unconfined_exec_t. That is the
+# common recipe and it is wrong here: Bazzite ships no unconfined module, so
+# init_t may not even execute such a file and the daemon fails to start with
+# 203/EXEC. Tried, measured, reverted. See packaging/selinux/urnetwork.te.
+#
+# Priority 200 is the convention for a third-party module, and it is what
+# scripts/postun removes. Runs on upgrades too: semodule -i is idempotent and
+# an upgrade may carry a new policy.
+ur_selinux=0
+if command -v selinuxenabled >/dev/null 2>&1; then
+    # `if <cmd>` does not trip set -e when <cmd> fails, unlike `<cmd> && x=1`.
+    if selinuxenabled >/dev/null 2>&1; then ur_selinux=1; fi
+elif [ -f /sys/fs/selinux/enforce ]; then
+    # libselinux-utils is not installed; the selinuxfs mount is the fact.
+    ur_selinux=1
+fi
+if [ "${ur_selinux}" = 1 ] && command -v semodule >/dev/null 2>&1; then
+    ur_sepol_ok=0
+    if [ -f "${SELINUX_PKGDIR}/urnetwork.pp" ]; then
+        if semodule -X 200 -i "${SELINUX_PKGDIR}/urnetwork.pp" >/dev/null 2>&1; then
+            ur_sepol_ok=1
+        fi
+    fi
+    # Fallback: compile from the shipped source. This covers the one real
+    # portability hazard of shipping a prebuilt .pp -- a module built by a
+    # libsepol NEWER than the target's is rejected, and the build host is not
+    # always older than the installing host.
+    if [ "${ur_sepol_ok}" = 0 ] && [ -f "${SELINUX_PKGDIR}/urnetwork.te" ] && \
+       command -v checkmodule >/dev/null 2>&1 && command -v semodule_package >/dev/null 2>&1; then
+        ur_sepol_tmp="$(mktemp -d /tmp/urnetwork-selinux.XXXXXX 2>/dev/null)" || ur_sepol_tmp=''
+        if [ -n "${ur_sepol_tmp}" ]; then
+            if checkmodule -M -m -o "${ur_sepol_tmp}/urnetwork.mod" "${SELINUX_PKGDIR}/urnetwork.te" >/dev/null 2>&1 && \
+               semodule_package -o "${ur_sepol_tmp}/urnetwork.pp" -m "${ur_sepol_tmp}/urnetwork.mod" >/dev/null 2>&1 && \
+               semodule -X 200 -i "${ur_sepol_tmp}/urnetwork.pp" >/dev/null 2>&1; then
+                ur_sepol_ok=1
+            fi
+            rm -rf "${ur_sepol_tmp}"
+        fi
+    fi
+    if [ "${ur_sepol_ok}" = 0 ]; then
+        echo "urnetwork: WARNING -- the SELinux policy module could not be installed."
+        echo "urnetwork: the daemon will run, but the tunnel cannot open /dev/net/tun."
+        echo "urnetwork: fix with: sudo semodule -X 200 -i ${SELINUX_PKGDIR}/urnetwork.pp"
+        echo "urnetwork: diagnose with: sudo journalctl -t audit | grep 'denied.*tun'"
+    fi
+    unset ur_sepol_ok ur_sepol_tmp
+elif [ "${ur_selinux}" = 1 ]; then
+    echo "urnetwork: WARNING -- SELinux is enabled but semodule is missing (policycoreutils)."
+    echo "urnetwork: the daemon will run, but the tunnel cannot open /dev/net/tun."
+    echo "urnetwork: fix with: sudo dnf install policycoreutils && sudo semodule -X 200 -i ${SELINUX_PKGDIR}/urnetwork.pp"
+fi
+unset ur_selinux
+
+# --- %systemd_post urnetworkd.service ----------------------------------------
+if [ "${1:-0}" -eq 1 ]; then
+    if [ -x "${SYSTEMD_UPDATE_HELPER}" ]; then
+        "${SYSTEMD_UPDATE_HELPER}" install-system-units "${UNIT}" >/dev/null 2>&1 || :
+    else
+        systemctl --no-reload preset "${UNIT}" >/dev/null 2>&1 || :
+    fi
+fi
+
+# The unit file is new or replaced either way; systemd-update-helper reloads
+# for us, the older path does not.
+if [ ! -x "${SYSTEMD_UPDATE_HELPER}" ] && [ -d /run/systemd/system ]; then
+    systemctl daemon-reload >/dev/null 2>&1 || :
+fi
+
+# --- THE ONE DELIBERATE ADDITION: start on first install ---------------------
+# %systemd_post enables (via preset) but never starts, and Fedora's guidelines
+# call starting a service from a scriptlet "generally discouraged". This package
+# starts it anyway on the INITIAL install only, for the same reason the .deb
+# does and Debian Policy 9.3.3.1 permits it: urnetworkd STARTS IDLE. It brings
+# no tunnel up, changes no routes and installs no firewall rules until a client
+# authenticates on the control socket and issues start_tunnel. The alternative
+# is that `dnf install` leaves a machine where the app truthfully reports "the
+# service is not running" until the next reboot -- which is the exact confusion
+# the group-membership message above exists to avoid.
+#
+# Guarded three ways: initial install only, a booted systemd only, and only if
+# the unit came out of preset ENABLED -- so a site that ships a preset override
+# disabling urnetworkd gets a package that installs and stays quiet.
+if [ "${1:-0}" -eq 1 ] && [ -d /run/systemd/system ]; then
+    if systemctl is-enabled "${UNIT}" >/dev/null 2>&1; then
+        systemctl start "${UNIT}" >/dev/null 2>&1 || :
+    fi
+fi
+
+exit 0

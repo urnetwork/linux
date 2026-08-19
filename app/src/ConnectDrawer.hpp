@@ -49,11 +49,19 @@ namespace urnw {
 class ConnectDrawer : public Gtk::Box {
  public:
   ConnectDrawer(SdkHost& host, Gtk::Window& parent, SubscriptionBalanceStore& balance);
+  // Bumps epoch_ so a kill-switch completion still in flight against the
+  // daemon cannot land on a destroyed drawer.
+  ~ConnectDrawer() override;
 
   // SdkHost drawer events, already marshalled onto the GTK main loop.
   void OnHostEvent(DrawerEvent event);
   // Full resync (device lifecycle changes, window re-shown).
   void RefreshAll();
+  // The daemon's real DNS verdict (StatusReply::dns_applied / dns_detail),
+  // pushed in by MainWindow's 5s daemon poll. The drawer cannot fetch this
+  // itself: ControlClient::Status() is a blocking socket round-trip and this
+  // widget refreshes off SDK change events.
+  void SetTunnelDnsState(bool connected, bool applied, const Glib::ustring& detail);
 
   // Balance store change feed (GTK main loop): plan card + banner + sheets.
   void OnBalanceChanged();
@@ -108,9 +116,15 @@ class ConnectDrawer : public Gtk::Box {
   Gtk::Switch* anonSwitch_ = nullptr;
   Gtk::Switch* pqeSwitch_ = nullptr;
   bool updatingControls_ = false;
-  // kill switch (inverted routeLocal; own handler — not a profile control)
+  // kill switch (own handler — not a profile control). The switch is the
+  // REQUEST; the note under it is what urnetworkd says is actually in force,
+  // and the two can legitimately disagree.
   Gtk::Switch* killSwitch_ = nullptr;
+  Gtk::Label* killSwitchNote_ = nullptr;
   bool updatingKillSwitch_ = false;
+  // Stale-completion guard for the kill-switch write, which round-trips to the
+  // daemon on a worker and can land after this drawer is gone.
+  std::shared_ptr<uint64_t> epoch_ = std::make_shared<uint64_t>(0);
 
   // stats cards
   TransferChart* remoteChart_ = nullptr;
@@ -125,6 +139,9 @@ class ConnectDrawer : public Gtk::Box {
   };
   Gtk::Box* dnsRowsBox_ = nullptr;
   Gtk::Label* dnsUnavailable_ = nullptr;
+  // The daemon's ACTUAL DNS verdict, as opposed to the four preference rows
+  // above it. Fed by MainWindow's daemon poll; see SetTunnelDnsState.
+  Gtk::Label* dnsTunnelState_ = nullptr;
   Gtk::Box* dnsPill_ = nullptr;       // the recommendation nudge capsule (hidden when applied)
   Gtk::Label* dnsPillDot_ = nullptr;  // country-color dot (only for a regional recommendation)
   Gtk::Label* dnsPillText_ = nullptr;

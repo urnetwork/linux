@@ -38,7 +38,17 @@ class MainWindow : public Gtk::ApplicationWindow {
  public:
   explicit MainWindow(SdkHost& host);
 
-  void ToggleConnect();  // driven by the tray too
+  // THE ACTION IS A PARAMETER. `disconnect` is the action that wrote the label
+  // the user clicked, carried with the press by ConnectPage::on_connect_action.
+  // It is not re-derived here, because this window's own answer (connected_ =
+  // SdkHost::Connected(), which additionally requires the DeviceRemote to be
+  // bound to the CURRENT control session) is a different, stricter question
+  // than the one the page put on the button — and in every state where they
+  // disagree, re-deriving turns a Disconnect press into a connection attempt.
+  void ToggleConnect(bool disconnect);
+  // The no-argument form is for callers with NO button in front of the user —
+  // the tray menu — which must therefore ask the page what the press means.
+  void ToggleConnect();
   bool connected() const { return connected_; }
   std::function<void(bool connected)> on_connected_change;
 
@@ -52,7 +62,12 @@ class MainWindow : public Gtk::ApplicationWindow {
   // StartTunnel + render the daemon session state. "Daemon unreachable" and
   // "daemon too old" are DISTINCT actionable lines (MIGRATION.md) — the same
   // gray treatment as the app's other unavailable states, never a blank.
-  TunnelStartResult StartTunnelUi();
+  // connectDestination: after the tunnel is up, also point it at a provider —
+  // the SELECTED one, or best-available when nothing is chosen. Defaults true
+  // because a tunnel with no destination installs routes, DNS and the filter
+  // and then carries NOTHING, while looking identical to a working one. Only
+  // ToggleConnect passes false, because it issues its own connect.
+  TunnelStartResult StartTunnelUi(bool connectDestination = true);
   void RefreshPeersStatus();  // home-screen peers status line (dot + "{n} peers")
   void ApplyProvideControlMode();  // picker -> host (guarded during sync)
   void SyncProvideControlMode();   // host -> picker
@@ -76,6 +91,13 @@ class MainWindow : public Gtk::ApplicationWindow {
   // out to every destination so their pane folds actually fire (each page owns
   // its own thresholds; the window only measures).
   void ApplyPageBreakpoint(int widthDip);
+  // Poll the daemon's own view of the tunnel. Nothing else does: the app learns
+  // about the daemon only when the user presses something, so a session the
+  // daemon tore down PROTECTIVELY (proven-unprotected traffic, or an
+  // amplification storm) never reached the user while they sat idle — they kept
+  // a green "Connected" while blocked or unprotected. This is the consumer for
+  // that state.
+  bool PollDaemonHealth();
 
  protected:
   // GTK4 has no size-allocate signal; the window's own vfunc is the only place
@@ -94,7 +116,13 @@ class MainWindow : public Gtk::ApplicationWindow {
   void NavigateCreate(CreateNetworkPage::Mode mode, const std::string& userAuth, bool fromHome);
   void NavigateVerify(const std::string& userAuth);
   void ApplyAuthState(bool loggedIn);
-  void SetConnected(bool connected);
+  // ONE READING IN, EVERY WINDOW SURFACE OUT. There is no SetConnected(bool)
+  // any more: a bool is what let this window's copy of "connected" age
+  // independently of the page's, and of the stats copy beside it.
+  void ApplyConnectReading(const ConnectReading& reading);
+  // The current reading with tunnelBound forced down: what the daemon status
+  // poll has just proven when it finds urnetworkd no longer carrying.
+  ConnectReading DaemonTunnelGoneReading();
   void ApplyStats(const LiveStats& stats);  // live provider count / throughput / provide
   void OpenProviderLocations();             // the "Connected to N providers" entry point
   // Keep the device-location override pointed at the oldest connected provider
@@ -203,6 +231,15 @@ class MainWindow : public Gtk::ApplicationWindow {
   ResetPasswordPage* resetPage_ = nullptr;
   bool createPageFromHome_ = false;  // guest upgrade backs out to home, not login
 
+  // The last reading, and the one bit every window surface derives from it:
+  // "there is a session to disconnect from" (health::SessionUp). The tray's
+  // label and the tray's action both read it, so they cannot disagree.
+  ConnectReading reading_;
+  // Has a reading ever been applied / pushed to the tray? Without these the
+  // FIRST reading — which for an idle app equals the default-constructed one —
+  // would be skipped as "unchanged" and no surface would ever be seeded.
+  bool readingApplied_ = false;
+  bool trayConnectedPushed_ = false;
   bool connected_ = false;
   // the free -> Pro provide reset ran for this session's upgrade detection
   // (the store's flag stays up all session; the reset must apply exactly once

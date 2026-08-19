@@ -6,6 +6,7 @@
 
 #include <cstdio>
 
+#include "AppPrefs.hpp"
 #include "BrandIcons.hpp"
 #include "Formatters.hpp"
 #include "UrTheme.hpp"
@@ -38,6 +39,69 @@ constexpr bool WindowPresentationShouldRun(bool visible, bool mapped) {
 static_assert(WindowPresentationShouldRun(true, true));
 static_assert(!WindowPresentationShouldRun(true, false));
 static_assert(!WindowPresentationShouldRun(false, true));
+
+// The copy for a daemon that ANSWERED and refused on authorization grounds.
+//
+// THE POINT OF THIS FUNCTION: none of these may ever reach the user as "The
+// URnetwork system service is not running. Install or start it, then try
+// again." The service is running — it is running well enough to have made a
+// policy decision about this account and told us so. Sending the user to
+// `systemctl start` for a polkit denial is the single worst outcome available
+// here, which is why the authorization verdict is checked BEFORE the generic
+// failure copy and why it is carried on its own enum rather than folded into
+// DaemonUnreachableReason (ControlClient.hpp says why at length).
+//
+// `detail` is the daemon's own message, appended only where it adds a fact the
+// sentence cannot carry.
+Glib::ustring DaemonAuthRefusalCopy(DaemonAuthOutcome outcome, const std::string& detail) {
+  switch (outcome) {
+    case DaemonAuthOutcome::Denied:
+      return T_("daemon_auth_denied",
+                "This device's policy does not allow this account to connect through "
+                "URnetwork. An administrator can change that.");
+    case DaemonAuthOutcome::ChallengeRequired:
+      return T_("daemon_auth_required",
+                "Connecting from this session needs administrator permission. Press "
+                "Connect again to be asked, or use the session at this device's screen.");
+    case DaemonAuthOutcome::Dismissed:
+      // DELIBERATELY EMPTY, and this is the whole behaviour, not an omission.
+      // The user was shown the polkit dialog and closed it: they changed their
+      // mind. Rendering a banner (or emitting a g_warning) for a decision the
+      // user just made is the product's own documented mistake —
+      // docs/parity/settings.md:130, "User-declined elevation = SILENCE (the
+      // user changed their mind), not an error." Any copy here is a bug.
+      return {};
+    case DaemonAuthOutcome::Unavailable:
+      return T_("daemon_auth_unavailable",
+                "This device has no polkit authorization service, so the URnetwork "
+                "system service falls back to the 'urnetwork' group. Add your user to "
+                "it and sign out and back in.");
+    case DaemonAuthOutcome::CheckFailed: {
+      Glib::ustring notice =
+          T_("daemon_auth_check_failed",
+             "The URnetwork system service could not check whether this account is "
+             "allowed to connect, so it did not connect. Try again.");
+      // The daemon's detail names the actual failure (bus error, polkitd gone,
+      // an unreadable /proc entry) and there is no way to guess it from here.
+      if (!detail.empty()) notice += " (" + detail + ")";
+      return notice;
+    }
+    case DaemonAuthOutcome::TimedOut:
+      return T_("daemon_auth_timeout",
+                "The permission request was not answered, so nothing was connected. "
+                "Press Connect to try again.");
+    case DaemonAuthOutcome::NotTunnelOwner:
+      return T_("daemon_tunnel_owned_by_other_user",
+                "Another user on this device is connected through URnetwork. Disconnect "
+                "it from their session, or take it over with administrator permission.");
+    case DaemonAuthOutcome::None:
+    case DaemonAuthOutcome::Authorized:
+      // Not a refusal: the caller must not have asked (IsAuthRefusal gates it)
+      // and falls through to the ordinary failure copy.
+      break;
+  }
+  return {};
+}
 
 }  // namespace
 
@@ -78,7 +142,10 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     if (developerPage_) developerPage_->SetPresenting(windowVisible_);
     if (windowVisible_) {
       status_.set_text(lastStatus_);
-      SetConnected(host_.Connected());
+      // RE-READ, never replay: SetPresentationActive(true) above has just
+      // reopened the connect controller, so the reading the window was last
+      // pushed describes a moment when there was no controller to ask.
+      ApplyConnectReading(host_.CurrentConnectReading());
       ApplyStats(lastStats_);
       if (drawer_) drawer_->RefreshAll();  // drawer events are dropped while hidden
     }
@@ -144,15 +211,13 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   host_.SetJwtRefreshedHandler([this] {
     PostToMain([this] { balance_.OnJwtRefreshed(); });
   });
-  host_.SetConnectionStatusHandler([this](std::string status) {
-    PostToMain([this, status] {
-      lastStatus_ = status;
-      if (connectPage_) connectPage_->SetConnectionStatus(status);
-      // the tray must reflect state even while hidden; the window label only
-      // when visible (resynced on show)
-      SetConnected(host_.Connected());
-      if (windowVisible_) status_.set_text(status);
-    });
+  // THE CONNECTION FEED, AND IT IS NOT GATED ON VISIBILITY. That asymmetry —
+  // this push ungated beside a stats push gated on windowVisible_ — is how two
+  // copies of one fact came to describe two different moments. There is one
+  // copy now, and it carries every field, so there is nothing left to age
+  // independently.
+  host_.SetConnectReadingHandler([this](ConnectReading reading) {
+    PostToMain([this, reading] { ApplyConnectReading(reading); });
   });
   // Live stats (provider count / throughput / provide). Same visibility gate:
   // cache always, but only touch widgets while the window is shown.
@@ -212,7 +277,17 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       std::make_unique<DaemonGeoClueWriter>(host_.Control()));
 
   if (host_.IsLoggedIn()) {
-    StartTunnelUi();
+    // AUTO-CONNECT IS OPT IN, DEFAULT OFF. Being signed in is not a request to
+    // connect: this ran on every launch of a signed-in account and brought the
+    // tunnel up — urnet0, capture routes, DNS — before the user touched
+    // anything. The preference is device-local (AppPrefs, not the account
+    // preferences API: launch behaviour is per-device and must not wait on a
+    // network round trip) and gates ONLY this call.
+    //
+    // Nothing about StartTunnelUi changes, and no other path to it moves. The
+    // post-login handlers still connect on a fresh sign-in — that is a user
+    // action with an obvious intent, not a launch.
+    if (prefs::Get<bool>(prefs::kConnectOnLaunchKey, false)) StartTunnelUi();
     ApplyAuthState(true);
   } else {
     ApplyAuthState(false);
@@ -272,47 +347,156 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
 // problems with different fixes, and none of them may render as a blank or a
 // zero — the same doctrine as the gray "discovery disabled" the RPC-hosted
 // stats use.
-TunnelStartResult MainWindow::StartTunnelUi() {
+//
+// A REFUSAL IS NOT AN ABSENCE. "The service is not running" and "the service
+// ran your request and said no" are opposite facts, and the second one arrives
+// through TunnelStartResult::Failed with an authorization verdict on the
+// control client (DaemonAuthOutcome). It is rendered from its own copy table
+// below and never through the DaemonUnreachable arm.
+TunnelStartResult MainWindow::StartTunnelUi(bool connectDestination) {
+  // Snapshot the reply counter BEFORE the attempt. LastAuthOutcome() describes
+  // the last reply this client processed, and StartTunnel() has failure paths
+  // that never send anything (not signed in; unusable device-rpc key material).
+  // Without this guard a polkit denial from an earlier Connect would be
+  // rendered under an unrelated failure — a confidently wrong sentence, which
+  // is worse than the generic one. Only a verdict this attempt produced counts.
+  const uint64_t replySerialBefore = host_.Control().ReplySerial();
   const TunnelStartResult result = host_.StartTunnel();
+  const DaemonAuthOutcome authOutcome = host_.Control().ReplySerial() != replySerialBefore
+                                            ? host_.Control().LastAuthOutcome()
+                                            : DaemonAuthOutcome::None;
+  // ONE text, TWO sinks. These strings used to be written only to
+  // daemonStatusLabel_, which lives in the legacy single-column home that the
+  // nav shell never shows — so every daemon failure was invisible and pressing
+  // Connect looked like a silent no-op. ConnectPage::SetDaemonNotice is the
+  // surface the user actually sees; the legacy label is kept in sync until the
+  // legacy column is deleted.
+  Glib::ustring notice;
   switch (result) {
     case TunnelStartResult::Started:
-      daemonStatusLabel_.set_text("");
-      daemonStatusLabel_.set_visible(false);
-      break;
+      break;  // empty notice clears both
     case TunnelStartResult::DaemonUnreachable:
-      daemonStatusLabel_.set_text(
-          T_("daemon_unreachable",
-             "The URnetwork system service is not running. Install or start it, then try "
-             "again."));
-      daemonStatusLabel_.set_visible(true);
+      // "Unreachable" is three different problems with three different fixes.
+      // Collapsing them into "not running" actively misleads: against a
+      // group-gated daemon the service IS running and the user simply is not
+      // in the urnetwork group, and telling them to start a running service
+      // sends them nowhere. Every arm here is a transport failure — the daemon
+      // was never reached — which is what separates them from the
+      // authorization refusals under Failed.
+      switch (host_.Control().LastUnreachableReason()) {
+        case DaemonUnreachableReason::StaleSandboxMount:
+          notice = T_("daemon_stale_sandbox_mount",
+                      "The URnetwork system service restarted while this app was open. "
+                      "Close the app and open it again to reconnect to it.");
+          break;
+        case DaemonUnreachableReason::PermissionDenied:
+          // EACCES at connect(2) NARROWED to one cause. A polkit-gated daemon
+          // makes the socket world-connectable and refuses per action with a
+          // reason on a live connection, so it can never produce this; only a
+          // group-gated daemon can (an old build, or a machine with no polkit
+          // where it re-tightens the socket to 0660 root:urnetwork). That is
+          // the one and only case where telling the user to join a group and
+          // sign out again is still true.
+          //
+          // NOTE: the key id changed (daemon_permission_denied ->
+          // daemon_legacy_group_auth) because that id was in use at TWO sites
+          // with two DIFFERENT English strings — here and KillSwitchCopy.hpp:82
+          // — and appears zero times in app/po/en.po, so both rendered fallback
+          // English and contradicted each other. KillSwitchCopy.hpp is outside
+          // this change; it must adopt this key and this exact string.
+          notice = T_("daemon_legacy_group_auth",
+                      "The URnetwork system service on this device is an older version "
+                      "that still requires group membership. Update the service, or add "
+                      "your user to the 'urnetwork' group and sign out and back in.");
+          break;
+        case DaemonUnreachableReason::Other: {
+          // LastTunnelError() is EnsureSession's own out-param, which already
+          // carries strerror for this case.
+          const std::string detail = host_.LastTunnelError();
+          notice = Glib::ustring(T_("daemon_unreachable_detail",
+                                    "Could not reach the URnetwork system service"));
+          if (!detail.empty()) notice += ": " + detail;
+          break;
+        }
+        case DaemonUnreachableReason::SocketMissing:
+        case DaemonUnreachableReason::None:
+          notice = T_("daemon_unreachable",
+                      "The URnetwork system service is not running. Install or start it, "
+                      "then try again.");
+          break;
+      }
       break;
     case TunnelStartResult::DaemonTooOld:
-      daemonStatusLabel_.set_text(
-          T_("daemon_too_old",
-             "The URnetwork system service is out of date. Update it to connect."));
-      daemonStatusLabel_.set_visible(true);
+      notice = T_("daemon_too_old",
+                  "The URnetwork system service is out of date. Update it to connect.");
       break;
     case TunnelStartResult::AppTooOld:
-      daemonStatusLabel_.set_text(
-          T_("app_too_old_for_daemon",
-             "This app is older than the installed URnetwork system service. Update the app "
-             "to connect."));
-      daemonStatusLabel_.set_visible(true);
+      notice = T_("app_too_old_for_daemon",
+                  "This app is older than the installed URnetwork system service. Update "
+                  "the app to connect.");
       break;
     case TunnelStartResult::SdkMismatch:
-      daemonStatusLabel_.set_text(
-          T_("daemon_sdk_mismatch",
-             "The app and the URnetwork system service are different builds. Update both to "
-             "the same version."));
-      daemonStatusLabel_.set_visible(true);
+      notice = T_("daemon_sdk_mismatch",
+                  "The app and the URnetwork system service are different builds. Update "
+                  "both to the same version.");
       break;
     case TunnelStartResult::Failed: {
       const std::string error = host_.LastTunnelError();
-      daemonStatusLabel_.set_text(
-          error.empty() ? T_("tunnel_start_failed", "Could not start the connection")
-                        : error);
-      daemonStatusLabel_.set_visible(true);
+      // AUTHORIZATION FIRST. A refusal arrives here — the daemon was reached,
+      // hello succeeded, and it answered a verb with a code — so without this
+      // branch a polkit denial would render as the daemon's raw diagnostic, and
+      // a daemon that omitted one would render as "Could not start the
+      // connection", which says nothing about the only thing the user can act
+      // on. TunnelStartResult has no enumerator for these (SdkHost.hpp is
+      // outside this change), so the verdict is read from the control client
+      // instead; see the serial guard at the top of this function.
+      if (IsAuthRefusal(authOutcome)) {
+        notice = DaemonAuthRefusalCopy(authOutcome, error);
+        break;
+      }
+      notice = error.empty() ? Glib::ustring(T_("tunnel_start_failed",
+                                                "Could not start the connection"))
+                             : Glib::ustring(error);
       break;
+    }
+  }
+  // Empty means "say nothing", and for DaemonAuthOutcome::Dismissed that is the
+  // required behaviour, not an accident: no banner AND no g_warning for a user
+  // who closed the password dialog themselves.
+  if (!notice.empty()) g_warning("connect: %s", notice.c_str());
+  daemonStatusLabel_.set_text(notice);
+  daemonStatusLabel_.set_visible(!notice.empty());
+  if (connectPage_) connectPage_->SetDaemonNotice(notice);
+
+  // A TUNNEL WITHOUT A DESTINATION CARRIES NOTHING, AND LOOKS EXACTLY LIKE ONE
+  // THAT DOES. This is the "Connect doesn't actually forward real traffic" bug,
+  // measured on the owner's machine: urnet0 up, 31 capture routes installed,
+  // DNS pinned, egress witness passing, UI green — and 166 seconds with not one
+  // [rel], [contract], [multi] or firstload line in the daemon journal, because
+  // no provider session existed. The instant ConnectBestAvailable ran, the
+  // relay came up 0.6s later.
+  //
+  // The cause was pairing: StartTunnelUi() has TEN call sites and exactly ONE
+  // of them (ToggleConnect) also called host_.ConnectBestAvailable(). Every
+  // other path — including the constructor's auto-start for an already
+  // signed-in account, which is what most launches take — brought the tunnel up
+  // with no destination. Pairing them here rather than at nine call sites is
+  // the point: a rule that has to be remembered ten times is a rule that will
+  // be missed again.
+  //
+  // SelectedLocation() is respected: a user who has chosen a specific provider
+  // must not be silently moved to "best available". Only an empty selection
+  // asks the SDK to pick.
+  if (result == TunnelStartResult::Started && connectDestination) {
+    // Honour an explicit choice. ConnectBestAvailable() always asks the SDK to
+    // pick, so using it unconditionally would silently move a user off the
+    // provider they selected.
+    if (const auto selected = host_.SelectedLocation(); selected.has_value()) {
+      g_message("connect: routing to the selected provider");
+      host_.Connect(selected);
+    } else {
+      g_message("connect: no destination selected, choosing the best available");
+      host_.ConnectBestAvailable();
     }
   }
   return result;
@@ -615,6 +799,62 @@ void MainWindow::size_allocate_vfunc(int width, int height, int baseline) {
 // The signed-in breakpoint fan-out. Every destination owns its own thresholds
 // (Connect folds at 1000/640, Network/Settings/Earnings at their own); the
 // window only reports the width it was actually given.
+// Every few seconds while we believe a tunnel exists, ask the daemon what it
+// thinks. A protective teardown publishes tunnel_state=Error with a reason and a
+// code, and until now NOTHING in the app ever read it: the only Status() calls
+// are on a connect press, the stale-device check, and the kill-switch read-back.
+// A user sitting idle would keep a green "Connected" while the daemon had
+// already stopped the session and possibly armed the kill switch.
+bool MainWindow::PollDaemonHealth() {
+  if (!connected_) {
+    // Nothing claimed, nothing to contradict — but the DNS verdict from the
+    // last session must not outlive it on screen.
+    if (drawer_) drawer_->SetTunnelDnsState(false, false, {});
+    return true;
+  }
+  const auto status = host_.Control().Status();
+  if (!status) return true;      // unreachable is StartTunnelUi's business
+  // Feed the drawer the daemon's own DNS verdict. Until this existed, the DNS
+  // card was drawn entirely from the SDK's resolver PREFERENCES and could sit
+  // green while dns_applied was false — the daemon knew, said so in
+  // dns_detail, and nothing on screen read it.
+  if (drawer_) {
+    drawer_->SetTunnelDnsState(true, status->dns_applied, status->dns_detail);
+  }
+  if (status->tunnel_state != ctl::TunnelState::Error &&
+      status->tunnel_state != ctl::TunnelState::Stopped) {
+    return true;
+  }
+  // …UNLESS WE ARE THE ONES WHO ASKED. A user disconnect ends with
+  // SdkHost::Disconnect -> control_.StopTunnel(), so the daemon's very next
+  // status reads Stopped — indistinguishable, from here, from the protective
+  // teardown this poll exists to surface. Reporting it would answer a Disconnect
+  // press with "The connection stopped.", a scary notice for the thing the user
+  // just asked for. The page holds the intent (it is what renders
+  // "Disconnecting…"), so it is the one that can tell the two apart; settle the
+  // window's own state and say nothing.
+  if (connectPage_ && connectPage_->DisconnectPending()) {
+    ApplyConnectReading(DaemonTunnelGoneReading());
+    return true;
+  }
+  // The daemon stopped carrying traffic without us asking. Say so, verbatim —
+  // the daemon composes the plain-language reason (including whether the machine
+  // is now blocked and how to lift it), and inventing our own wording here would
+  // be a third place that can disagree about what happened.
+  const Glib::ustring detail =
+      status->error.empty()
+          ? Glib::ustring(T_("tunnel_stopped_unexpectedly", "The connection stopped."))
+          : Glib::ustring(status->error);
+  g_warning("connect: the daemon stopped the session (%s): %s",
+            status->error_code.empty() ? "no code" : status->error_code.c_str(),
+            status->error.c_str());
+  ApplyConnectReading(DaemonTunnelGoneReading());
+  if (connectPage_) connectPage_->SetDaemonNotice(detail);
+  daemonStatusLabel_.set_text(detail);
+  daemonStatusLabel_.set_visible(true);
+  return true;
+}
+
 void MainWindow::ApplyPageBreakpoint(int widthDip) {
   if (connectPage_) connectPage_->ApplyBreakpoint(widthDip);
   if (networkPage_) networkPage_->ApplyBreakpoint(widthDip);
@@ -1028,7 +1268,11 @@ void MainWindow::BuildHome() {
 
   connectBtn_.add_css_class("suggested-action");
   connectBtn_.add_css_class("pill");
-  connectBtn_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::ToggleConnect));
+  // The legacy column's own button. It is labelled from connected_ (ApplyConnectReading
+  // below), not from the page's reading, so it has no action to carry and takes
+  // the ask-the-page path — and `sigc::mem_fun` can no longer name an overloaded
+  // member anyway.
+  connectBtn_.signal_clicked().connect([this] { ToggleConnect(); });
   box->append(connectBtn_);
 
   // network peers status line, right under the connect button: a dot (green when
@@ -1148,7 +1392,11 @@ void MainWindow::BuildHome() {
   // legacy single-column drawer stays in the tree under "connect-legacy"
   // until every drawer surface has been relocated into panes B/C.
   connectPage_ = Gtk::make_managed<ConnectPage>(host_);
-  connectPage_->on_toggle_connect = [this] { ToggleConnect(); };
+  // on_connect_action, NOT on_toggle_connect: the press carries the action that
+  // wrote the label the user actually clicked. Binding the void toggle here is
+  // what left the window re-deriving the action from a stricter reading, and a
+  // button reading "Disconnect" starting a tunnel.
+  connectPage_->on_connect_action = [this](bool disconnect) { ToggleConnect(disconnect); };
   connectPage_->on_open_locations = [this] {
     if (drawer_) drawer_->OpenLocationChooser();
   };
@@ -1259,6 +1507,9 @@ void MainWindow::BuildHome() {
     }
   };
   shell_->Navigate("connect");
+  // 5s: slow enough to cost nothing on a local socket, fast enough that a
+  // protective teardown is not sat on.
+  Glib::signal_timeout().connect(sigc::mem_fun(*this, &MainWindow::PollDaemonHealth), 5000);
 
   // Advanced Mode (D5): bind-then-replay — the handler is bound before the
   // stored value is replayed, so a restored-from-disk true cannot be lost.
@@ -1559,7 +1810,7 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
   provideResetOnUpgrade_ = false;
   if (loggedIn) {
     SyncProvideControlMode();
-    SetConnected(host_.Connected());
+    ApplyConnectReading(host_.CurrentConnectReading());
     // (re)seed the balance/plan store from the (possibly new) jwt: login,
     // guest upgrade, and app start all land here
     balance_.SetWindowVisible(windowVisible_);
@@ -1572,7 +1823,9 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
     if (connectPage_) connectPage_->Resync();
     if (shell_ && shell_->on_navigate) shell_->on_navigate(shell_->CurrentTag());
   } else {
-    SetConnected(false);
+    // A signed-out window has no session at all: the DEFAULT reading, not a
+    // bool poked into a copy of the last one.
+    ApplyConnectReading(ConnectReading{});
     balance_.Stop();
     if (earningsPage_) earningsPage_->Load();  // settles every panel on empty
     if (settingsPage_) settingsPage_->Load();
@@ -1587,28 +1840,115 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
   }
 }
 
+// The tray has no button in front of the user, so it must ask the page — the
+// same reading that writes the on-screen label, never a second opinion. With no
+// page yet (the login view), connected_ is the only answer there is.
 void MainWindow::ToggleConnect() {
-  if (connected_) {
-    host_.Disconnect();
-    return;
-  }
-  // No device yet (daemon was missing at startup, or a start failed): retry
-  // the session first, so "install/start the service, then hit Connect" works
-  // without restarting the app. The banner re-renders either way.
-  if (!host_.hasDevice() && StartTunnelUi() != TunnelStartResult::Started) return;
-  host_.ConnectBestAvailable();
-  // status handler + SetConnected reflect the real state as it changes
+  // THE TRAY'S ENTRY POINT, and it must decide from what the TRAY IS SHOWING.
+  // The tray's label is set from on_connected_change, i.e. from connected_
+  // alone (main.cpp). ConnectPage's button uses a wider predicate — connected
+  // OR connecting — so routing the tray through the page's predicate made the
+  // two disagree for the whole connecting window: the menu said "Connect"
+  // while pressing it disconnected. The page still gets its richer behaviour;
+  // it passes its own intent explicitly through ToggleConnect(bool).
+  ToggleConnect(connected_);
 }
 
-void MainWindow::SetConnected(bool connected) {
-  connected_ = connected;
-  connectBtn_.set_label(connected ? T_("disconnect", "Disconnect") : T_("connect", "Connect"));
-  // the status strip's state field: dot color per state (§8.1 connect dots)
-  if (shell_) {
-    shell_->SetStatusState(lastStatus_, connected ? "#87FB67" : "#2A60FF");
+void MainWindow::ToggleConnect(bool disconnect) {
+  g_message("connect: toggle pressed (action=%s, connected=%s, hasDevice=%s)",
+            disconnect ? "disconnect" : "connect", connected_ ? "yes" : "no",
+            host_.hasDevice() ? "yes" : "no");
+  if (disconnect) {
+    // NOT gated on connected_. That gate is the defect: connected_ is
+    // SdkHost::Connected() = sdkConnected && the DeviceRemote still bound to the
+    // current control session, while the button says "Disconnect" whenever the
+    // page reads connected OR connecting. Whenever those disagreed — the entire
+    // connecting phase, and every moment after the daemon dropped the tunnel
+    // while the SDK still reported provider sessions — the press fell through to
+    // the start path below, and the status line the user got back was
+    // "Connecting to providers".
+    //
+    // Disconnect is safe to run unconditionally: SdkHost::Disconnect asks the
+    // view controller to disconnect and then stops the daemon's tunnel, both
+    // best-effort, both no-ops when there is nothing to stop.
+    host_.Disconnect();
+    // Re-read every window surface once, now. The page is already showing
+    // "Disconnecting…" from its own intent; this keeps the tray, the legacy
+    // headline and the status strip from holding "Connected" until whatever the
+    // SDK sends next — which, on a teardown, may be nothing at all.
+    ApplyConnectReading(host_.CurrentConnectReading());
+    return;
   }
-  if (connectPage_) connectPage_->SetConnected(connected);
-  if (on_connected_change) on_connected_change(connected);
+  // A connect press retires any disconnect the user is no longer waiting on, so
+  // the page cannot hold "Disconnecting…" over a connection it has just started.
+  // The page's own presses already do this; a TRAY press arrives here without
+  // passing through ConnectPage::RelayConnectPress, so it has to be said again.
+  if (connectPage_) connectPage_->ClearDisconnectIntent();
+  // ALWAYS run the start path and let SdkHost decide whether the existing
+  // session can be reused. This used to be gated on !hasDevice(), which meant a
+  // stale handle — one bound over a control connection the daemon has since
+  // closed, e.g. after a service upgrade — skipped the start entirely and sent
+  // the press into a device with nothing behind it. StartTunnel is cheap when
+  // the session is genuinely live (one status read) and self-heals when it is
+  // not; the caller is not the right place to guess.
+  // false: this path issues its own connect immediately below, deliberately
+  // unconditional so a Connect press also self-heals a stale session.
+  if (StartTunnelUi(/*connectDestination=*/false) != TunnelStartResult::Started) return;
+  host_.ConnectBestAvailable();
+  // the connect-reading feed reflects the real state as it changes
+}
+
+// THE DAEMON'S OWN VERDICT, WRITTEN INTO THE READING. The status poll has just
+// learned that urnetworkd is not running our tunnel any more; `tunnelBound` is
+// precisely that fact, so it is set here rather than answered with a separate
+// boolean beside the reading. (The SDK's next push re-reads it, exactly as the
+// old SetConnected(false) was overwritten by the next status push.)
+ConnectReading MainWindow::DaemonTunnelGoneReading() {
+  // The verdict is recorded IN THE PRODUCER, not stamped onto a copy here.
+  // Setting tunnelBound=false on a local copy lasted exactly until the next
+  // SDK push (~10/s during a ramp) re-derived it from getters that cannot see
+  // the daemon — so the hero flipped back to green over a stopped tunnel. The
+  // latch clears on the next start_tunnel and nowhere else.
+  host_.NoteDaemonTunnelGone();
+  return host_.CurrentConnectReading();
+}
+
+// ONE READING IN, EVERY WINDOW SURFACE OUT — and the page gets the SAME value,
+// not a boolean summary of it. Nothing below re-derives anything from the SDK:
+// one health::Render() call answers the label, the strip and the tray together.
+void MainWindow::ApplyConnectReading(const ConnectReading& reading) {
+  // The feed fires on every grid step during a connect ramp (~10/s). An
+  // unchanged reading must not re-emit the tray's NewIcon/LayoutUpdated DBus
+  // pair or rebuild the page's panes underneath the user.
+  if (reading == reading_ && readingApplied_) return;
+  readingApplied_ = true;
+  const bool wasConnected = connected_;
+  reading_ = reading;
+  const health::Signals signals = reading.ToSignals(/*disconnectRequested=*/false);
+  const health::Reading view = health::Render(signals);
+  // "There is a session to disconnect from." Exactly what SdkHost::Connected()
+  // used to be asked for, now asked once: the tray's label, the tray's action
+  // and this window's press logging all read this one bit, so the menu can no
+  // longer say "Connect" over a press that disconnects.
+  connected_ = view.action == health::Action::Disconnect;
+  connectBtn_.set_label(connected_ ? T_("disconnect", "Disconnect") : T_("connect", "Connect"));
+  // The strip's raw status field carries the controller's OWN token now
+  // (CONNECTING/CONNECTED/CONNECT_FAILED), not the two-word destination
+  // vocabulary the old push could produce.
+  lastStatus_ = reading.rawStatus.empty() ? std::string("DISCONNECTED") : reading.rawStatus;
+  // the status strip's state field: dot color per state (§8.1 connect dots).
+  // Green only for the state the hero calls Connected — the strip used to go
+  // green the moment a destination was picked.
+  if (shell_) {
+    shell_->SetStatusState(
+        lastStatus_, view.state == health::State::Connected ? "#87FB67" : "#2A60FF");
+  }
+  if (windowVisible_) status_.set_text(lastStatus_);
+  if (connectPage_) connectPage_->ApplyConnectReading(reading);
+  if (on_connected_change && (connected_ != wasConnected || !trayConnectedPushed_)) {
+    trayConnectedPushed_ = true;
+    on_connected_change(connected_);
+  }
 }
 
 void MainWindow::OpenProviderLocations() {
