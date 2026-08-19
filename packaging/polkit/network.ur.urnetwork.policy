@@ -59,9 +59,13 @@
   <vendor_url>https://ur.io</vendor_url>
   <icon_name>urnetwork</icon_name>
 
-  <!-- start_tunnel / stop_tunnel / set_provide / location_override_*.
-       The everyday action. allow_active=yes is the whole point: the person
-       at the screen presses Connect and nothing is asked. -->
+  <!-- start_tunnel / attach_tunnel / stop_tunnel / set_provide /
+       location_override_*. The everyday action. allow_active=yes is the whole
+       point: the person at the screen presses Connect and nothing is asked.
+       attach_tunnel belongs HERE and not under take-over-tunnel: re-adopting
+       your OWN uid's running tunnel is what start_tunnel already does when the
+       request matches the live session, and only a tunnel started by a
+       DIFFERENT uid escalates (ctl::ActionIdForVerb). -->
   <action id="network.ur.urnetwork.control-tunnel">
     <description>Connect or disconnect the URnetwork VPN</description>
     <message>Authentication is required to route this device's traffic through URnetwork.</message>
@@ -87,8 +91,8 @@
     </defaults>
   </action>
 
-  <!-- Adopting, stopping or reconfiguring a tunnel that a DIFFERENT uid
-       started. This is the action that replaces "everyone in the urnetwork
+  <!-- Adopting, attaching to, stopping or reconfiguring a tunnel that a
+       DIFFERENT uid started. This is the action that replaces "everyone in the urnetwork
        group is interchangeable": any active local user may run their own
        tunnel, nobody takes over someone else's without proving admin. -->
   <action id="network.ur.urnetwork.take-over-tunnel">

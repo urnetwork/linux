@@ -1642,6 +1642,10 @@ void ControlServer::DispatchAuthorized(uint64_t connId, int64_t id, ctl::Verb ve
         reply(HandleStartTunnel(conn, id, request, authorizedCrossUid));
         return;
 
+      case ctl::Verb::AttachTunnel:
+        reply(HandleAttachTunnel(conn, id, request, authorizedCrossUid));
+        return;
+
       case ctl::Verb::StopTunnel: {
         nlohmann::json denied;
         bool crossUid = false;
@@ -1867,7 +1871,51 @@ nlohmann::json ControlServer::HandleStartTunnel(Connection* conn, int64_t id,
     // for. Reporting it is what lets the client dial after a reattach instead
     // of refusing its own working tunnel.
     payload.rpc_pinned = status.rpc_pinned;
+    // Same echo attach_tunnel would have produced, from the same source. This
+    // IS our adoption path, so it answers with the live identity too — a
+    // client must never have to guess which of the two doors it came through.
+    payload.instance_id = status.instance_id;
+    payload.rpc_session_id = status.rpc_session_id;
     return ctl::MakeReply(id, true, nlohmann::json(payload));
+  }
+
+  // A LIVE GENERATION MAY NOT BE RE-POINTED AT DIFFERENT MATERIAL.
+  //
+  // We are past CanAdopt, so this request does NOT describe the running
+  // session — and yet it claims that session's NAME. Falling through would
+  // tear a working tunnel down and rebuild it under the same
+  // (instance_id, rpc_session_id) with a different key pair, and any other
+  // holder of the older pair — a second GUI, a stale keyring record — would
+  // afterwards attach BY NAME and be handed a port it cannot dial. That is the
+  // silent "connects and never populates" failure, manufactured by us.
+  //
+  // So the working tunnel stays up and the caller is told what to do instead:
+  // mint a new generation (name AND material, together) and start again, which
+  // terminates because the new name cannot collide with the live one. This is
+  // upstream's kCodeTunnelAlreadyRunning, emitted on a narrower case than
+  // upstream's — upstream refuses EVERY start while a tunnel runs, having no
+  // adoption path — and it is the daemon's half of "the session id changes
+  // whenever the RPC material changes": the client mints, the daemon refuses to
+  // let one live name mean two different credentials.
+  {
+    const ctl::StatusReply live = tunnel_.Status();
+    if (live.tunnel_state == ctl::TunnelState::Up &&
+        live.instance_id == req.instance_id &&
+        live.rpc_session_id == req.rpc_session_id) {
+      // The id itself is deliberately NOT logged: it is the name an attach is
+      // granted on, and the journal is a wider audience than this session.
+      std::fprintf(stderr,
+                   "[control] refusing start_tunnel from uid=%lld: it re-uses the running "
+                   "session's identity with different rpc material; the running tunnel is "
+                   "kept\n",
+                   static_cast<long long>(conn->peer.uid));
+      return ctl::MakeErrorReply(
+          id,
+          "a tunnel is already running under this rpc session id with different pinning "
+          "material; attach to it with its live identity, or start a new session with a "
+          "freshly generated rpc session id and key material",
+          ctl::kCodeTunnelAlreadyRunning);
+    }
   }
 
   const ctl::StatusReply status = tunnel_.Start(req);
@@ -1898,6 +1946,129 @@ nlohmann::json ControlServer::HandleStartTunnel(Connection* conn, int64_t id,
   // false on the async path (the bring-up has not reached setRpcServer yet) —
   // the client reads StatusReply::rpc_pinned at the transition to Up instead.
   payload.rpc_pinned = status.rpc_pinned;
+  // Echoed from the LIVE session, never from the request: on the adoption path
+  // above and here alike, what the client needs back is the identity the
+  // daemon is actually paired with. BOTH ARE EMPTY ON THE ASYNC PATH — the
+  // identity is latched at the up edge and this reply is written while the
+  // bring-up is still running — exactly like rpc_pinned beside them, and the
+  // client reads them from `status` at the transition to Up.
+  payload.instance_id = status.instance_id;
+  payload.rpc_session_id = status.rpc_session_id;
+  return ctl::MakeReply(id, true, nlohmann::json(payload));
+}
+
+// attach_tunnel — re-adopt the running session by NAMING it.
+//
+// Upstream's verb, and now ours on the same terms: a GUI relaunch loads
+// (instance_id, rpc_session_id) out of its record — metadata on disk, the
+// client key and pinned server cert in the Secret Service — and re-attaches
+// without re-sending by_jwt or any key material. The shape is upstream's: owner gate, validate,
+// compare against the live session, claim ownership, reply with the same
+// StartTunnelReply a successful start produces.
+//
+// TWO THINGS ARE OURS, and both are deliberate.
+//
+// 1. THE OWNER GATE IS OUR SIGNATURE, NOT UPSTREAM'S. Upstream calls
+//    CheckTunnelOwner(conn, id, &denied); ours also takes the crossUid out-
+//    param and, critically, authorizedTakeOver IN. That last flag is the
+//    crossUid value that SELECTED the polkit action back in Dispatch, threaded
+//    through DispatchAuthorized and handed here UNCHANGED. It is never
+//    re-derived, because re-deriving it is precisely the TOCTOU the polkit fix
+//    closed: an interactive check can sit on screen for minutes, and if no
+//    foreign tunnel existed when the action was chosen, what completed was the
+//    everyday control-tunnel check — often with no prompt at all. Should
+//    another user's tunnel appear in that window, a re-derived crossUid would
+//    let this take it over on the strength of an admin check that never
+//    happened. attach_tunnel is exactly the verb where that would matter most,
+//    since taking over is its whole job.
+//
+// 2. THE REFUSALS ARE SPLIT WHERE UPSTREAM FOLDS THEM. Upstream answers "no
+//    tunnel is up" and "that is not the session running" with one comparison
+//    and one sentence. Both still carry kCodeRpcSessionMismatch here — the
+//    client's move is the same for either, build a session with start_tunnel —
+//    but they get different messages, because "nothing is running" and "what is
+//    running is not the one you named" send a maintainer reading a bug report
+//    in completely different directions.
+//
+//    THIS HANDLER USED TO BE UNCONDITIONALLY DEAD, and the write-up that stood
+//    here blamed the fork's design for it. That was wrong on the facts. It
+//    tested `status.rpc_session_id.empty()` and answered a fork-local
+//    "this daemon does not persist rpc sessions" code, and that test could
+//    never be false because NOTHING IN THE DAEMON EVER SET THE FIELD — not
+//    because a regenerating credential model is incompatible with attaching.
+//    The missing piece was daemon state, and it is now here: start_tunnel
+//    requires rpc_session_id, TunnelHost latches it with instance_id at the up
+//    edge, and Status() publishes both. The comparison below therefore has two
+//    real halves to test, the fork-local code is DELETED rather than left to
+//    document an unreachable path, and the three wrong ways out stay closed —
+//    no fabricated session id, no attach accepted without a match, and no
+//    "your credentials are stale" for a daemon that simply had none to compare.
+//
+//    A STALE RECORD FAILS SAFELY AND LEGIBLY, which is the property that
+//    matters most on this path: the identity must match in BOTH halves before
+//    ownership moves, the refusal names no part of the live identity back to
+//    the caller (a mismatch must not become an oracle for guessing one), and a
+//    refused client keeps a running tunnel and a working fallback. Nobody is
+//    wedged and nobody is silently attached to somebody else's session.
+nlohmann::json ControlServer::HandleAttachTunnel(Connection* conn, int64_t id,
+                                                 const nlohmann::json& request,
+                                                 bool authorizedCrossUid) {
+  nlohmann::json denied;
+  bool crossUid = false;
+  if (!CheckTunnelOwner(conn, id, &denied, &crossUid, authorizedCrossUid)) return denied;
+
+  const auto req = request.get<ctl::AttachTunnelRequest>();
+  if (const auto invalid = ctl::ValidateAttachTunnelRequest(req)) {
+    return ctl::MakeErrorReply(id, *invalid);
+  }
+
+  const ctl::StatusReply status = tunnel_.Status();
+
+  // Its own branch, not folded into the identity comparison below: an idle
+  // machine and a stale record are the same code (build a session with
+  // start_tunnel) but not the same sentence, and the second one is the only
+  // one that means the caller's stored session is worthless.
+  //
+  // It is also the liveness half of the gate. A tunnel that is `starting`
+  // names nothing yet — TunnelHost clears the identity at the head of every
+  // bring-up and latches it in the same locked block that publishes Up — so an
+  // attach can never land on a half-built session.
+  if (status.tunnel_state != ctl::TunnelState::Up) {
+    return ctl::MakeErrorReply(
+        id, "there is no running tunnel to attach to", ctl::kCodeRpcSessionMismatch);
+  }
+
+  // Upstream's identity check, and now it has both halves to test. BOTH
+  // matter: instance_id is the device pairing key the DeviceLocal was born
+  // with, and rpc_session_id is the credential generation — matching one
+  // without the other would hand back a live rpc_port for a session the client
+  // cannot actually drive.
+  //
+  // The message names NEITHER value and does not say which half failed. A
+  // refusal that reported "the instance id matched but the session did not"
+  // would turn this verb into an oracle for guessing a live session name, and
+  // the caller has nothing to do with the answer either way: its record does
+  // not describe the running tunnel, so it starts a new session.
+  if (status.instance_id != req.instance_id ||
+      status.rpc_session_id != req.rpc_session_id) {
+    std::fprintf(stderr,
+                 "[control] attach_tunnel from uid=%lld refused: the named session is not the "
+                 "one running\n",
+                 static_cast<long long>(conn->peer.uid));
+    return ctl::MakeErrorReply(id, "running tunnel identity or RPC session does not match",
+                               ctl::kCodeRpcSessionMismatch);
+  }
+
+  ClaimTunnelOwnership(conn);
+  std::fprintf(stderr, "[control] attached the running tunnel to uid=%lld%s\n",
+               static_cast<long long>(conn->peer.uid),
+               crossUid ? " (authorized take-over from another user)" : "");
+  ctl::StartTunnelReply payload;
+  payload.rpc_port = status.rpc_port;
+  payload.tunnel_state = status.tunnel_state;
+  payload.rpc_pinned = status.rpc_pinned;
+  payload.instance_id = status.instance_id;
+  payload.rpc_session_id = status.rpc_session_id;
   return ctl::MakeReply(id, true, nlohmann::json(payload));
 }
 

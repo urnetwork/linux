@@ -123,12 +123,26 @@ Verbs (request `{"verb":…,"id":N,…}` → reply `{"id":N,"ok":bool,…}`):
 |---|---|---|
 | `hello` | `protocol_version`, `sdk_version` | `protocol_version`, `sdk_version`, `daemon_version` |
 | `status` | — | `tunnel_state`, `rpc_port`, `client_id`, `error` |
-| `start_tunnel` | `by_jwt`, `instance_id`, `app_version` | `ok`, `rpc_port` |
+| `start_tunnel` | `by_jwt`, `instance_id`, `app_version` | `ok`, `rpc_port`, `instance_id`, `rpc_session_id` |
+| `attach_tunnel` | `instance_id`, `rpc_session_id` | `ok`, `rpc_port`, `instance_id`, `rpc_session_id` |
 | `stop_tunnel` | — | `ok` |
 | `set_provide` | `mode` | `ok` |
 | `location_override_available` | — | `available`, `reason` |
 | `location_override_write` | `lat`, `lon`, `accuracy_m` | `ok` |
 | `location_override_clear` | — | `ok` |
+
+`attach_tunnel` re-adopts a tunnel that is already up by NAMING the live session
+(`instance_id` + `rpc_session_id`) instead of re-describing it, and answers with the
+same reply body `start_tunnel` does. It is authorized exactly as `start_tunnel` is —
+`control-tunnel` for your own uid's tunnel, `take-over-tunnel` when the live tunnel
+belongs to another uid. **On this fork it cannot succeed yet**: the daemon regenerates
+the device-RPC mTLS material every session instead of persisting it, so
+`status.rpc_session_id` is always empty and the verb answers
+`rpc_session_not_persisted` — deliberately a different code from
+`rpc_session_mismatch`, so a client can tell "this daemon does not do attach" from
+"your saved credentials are stale". Reattachment meanwhile happens inside
+`start_tunnel`, which adopts a live session whose pinning material matches byte for
+byte.
 
 **`sdk_version` must match EXACTLY, and this is a second, independent check.**
 `protocol_version` guards *our* JSON control socket; the **device RPC has no version

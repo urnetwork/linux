@@ -326,6 +326,41 @@ class TunnelHost {
   mutable std::mutex statusMutex_;
   ctl::StatusReply status_;
 
+  // ---- THE LIVE SESSION'S IDENTITY (upstream TunnelHost.hpp:70-71) ---------
+  // The two values attach_tunnel names a session by. Held as their own members
+  // rather than written straight into status_ so the lifetime is stated once
+  // and in one shape: ONE site sets them (the up edge in RunStart), two clear
+  // them (Start's transition to Starting and StopInternalLocked's tail), and
+  // Status() assembles them into every reply the way it already assembles
+  // owner_connected.
+  //
+  // NEITHER IS MINTED HERE, AND THAT IS THE DESIGN DECISION. Both arrive on the
+  // accepted start_tunnel and are LATCHED: instance_id is the device pairing
+  // key this DeviceLocal was constructed with, and rpc_session_id is the name
+  // the GUI gave the credential generation it minted — in the same act, from
+  // its own CSPRNG, and stored with it (metadata in a 0600 file, the client key
+  // and pinned server cert in the Secret Service).
+  //
+  // Minting the session id daemon-side was considered and rejected. The client
+  // has to persist the name BESIDE the half of the mTLS material that never
+  // leaves it; a name invented after the tunnel is already up arrives too late
+  // for that record, so the GUI would have to write it twice and would hold a
+  // credential it cannot name if it died in between. What the daemon owes
+  // instead is that the name always describes THIS session, and that it changes
+  // whenever the material does:
+  //   * set in the same locked block that publishes Up, so no client can read
+  //     Up with a half-empty identity;
+  //   * cleared on every teardown and at the head of every bring-up, so a
+  //     stopped or starting tunnel names nothing and an attach cannot match it;
+  //   * never re-pointed at different material while it is live — CanAdopt
+  //     compares the name along with the material, and a start_tunnel that
+  //     re-uses the live name with a different generation is refused
+  //     (ControlServer::HandleStartTunnel, kCodeTunnelAlreadyRunning).
+  // Guarded by statusMutex_ (short-held), never by opMutex_: `status` must
+  // answer in microseconds at every phase of a bring-up.
+  std::string instanceId_;    // exact live DeviceLocal pairing identity
+  std::string rpcSessionId_;  // the generation name attach_tunnel matches
+
   std::mutex opMutex_;
   std::thread worker_;
   std::atomic<bool> busy_{false};

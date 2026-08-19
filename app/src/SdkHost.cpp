@@ -23,6 +23,10 @@
 
 #include "AppPrefs.hpp"
 #include "NetworkSpaceConfig.hpp"
+// The Secret Service backend for the remembered rpc session. GUI-ONLY: this is
+// the one translation unit that links libsecret, and urnetworkd (which builds
+// in a container that has no libsecret at all) never sees this header.
+#include "SecretServiceRpcSessionStore.hpp"
 #include "Ui.hpp"  // PostToMain — the only UI dependency here, and only to marshal
 
 // The release version, threaded in via the -Dapp_version meson option (the
@@ -63,21 +67,45 @@ T ReadGuarded(const char* what, Fn&& fn, T fallback) {
   return fallback;
 }
 
-// ---- the device-rpc reattach blob ------------------------------------------
-// $XDG_STATE_HOME/urnetwork/rpc/rpc_session.json — the STATE dir, not the
-// config dir AppPrefs.hpp uses: this is an ephemeral session credential, not a
-// preference, and it must not end up in a synced/backed-up config tree.
+// ---- the remembered device-rpc session -------------------------------------
+// UPSTREAM'S MODEL, ADOPTED. What is kept, and where:
 //
-// And its OWN subdirectory inside the state dir, NOT $XDG_STATE_HOME/urnetwork
-// itself: main.cpp hands that exact directory to the SDK as its log dir, and
-// the SDK prunes it ("Found 5 log files in ...", "Removed old log file ...").
-// A file holding two private keys does not belong in a directory another
-// component enumerates and deletes from — or that a "send us your logs" flow
-// would collect wholesale.
+//   $XDG_STATE_HOME/urnetwork/rpc/rpc_session.json  — NON-SECRET METADATA ONLY.
+//     version, state, instance_id, rpc_session_id, host_port. 0600, in the
+//     STATE dir rather than the config dir AppPrefs.hpp uses (this is a session
+//     credential, not a preference, and must not land in a synced or backed-up
+//     config tree), and in its OWN subdirectory rather than
+//     $XDG_STATE_HOME/urnetwork itself: main.cpp hands that exact directory to
+//     the SDK as its log dir and the SDK prunes it, so it is enumerated and
+//     deleted from by another component and swept up wholesale by any "send us
+//     your logs" flow.
 //
-// Directory 0700, file 0600, created with that mode rather than chmod'ed
-// afterwards so it is never briefly world-readable.
-constexpr size_t kMaxRpcSessionBytes = 128 * 1024;  // a real blob is ~3 KB
+//   the desktop Secret Service                      — THE TWO SECRETS.
+//     client_pem (this GUI's mTLS private key) and server_cert_pem (the cert
+//     it pins). RpcSessionStore.hpp's contract, and the reason this file no
+//     longer writes a private key to disk at all.
+//
+// THE FILE THAT USED TO BE HERE. Our fork wrote all six fields — including
+// BOTH private keys — as plaintext JSON at the same path, so that a relaunch
+// could re-present the whole pinning triple and be adopted by
+// TunnelHost::CanAdopt. That format has no `version` key, so RpcSessionStore
+// reads it as "corrupt", which lands on the Unreadable disposition and gets it
+// DELETED on the next launch. That deletion is not incidental: it is how two
+// private keys finally leave the disk of every machine that ever ran the old
+// build.
+//
+// BLOCKING D-BUS ON THE MAIN LOOP, deliberately and boundedly. Every call
+// below is a synchronous libsecret round trip made from the GTK main loop with
+// mutex_ held. That is upstream's shape, and it is the same trade StartTunnel
+// already makes for a synchronous start_tunnel (up to 180 s). What is NOT
+// acceptable, and what the callers below are built to guarantee, is a keyring
+// failure of any kind stopping the user connecting: every one of them falls
+// back to a fresh start_tunnel and reports the reason in the journal.
+
+RpcSessionSecretStore& SessionSecretStore() {
+  static SecretServiceRpcSessionStore store;
+  return store;
+}
 
 std::string RpcSessionPath() {
   std::string dir = std::string(g_get_user_state_dir()) + "/urnetwork/rpc";
@@ -85,109 +113,130 @@ std::string RpcSessionPath() {
   return dir + "/rpc_session.json";
 }
 
-// Where the blob used to live, before it was moved out of the SDK's log dir.
-// Only ever deleted, never read: adopting one costs nothing to skip, and
-// leaving private keys behind in a directory that gets collected does.
+// Where the session file used to live, before it was moved out of the SDK's
+// log dir. Only ever deleted, never read: adopting one costs nothing to skip,
+// and leaving private keys behind in a directory that gets collected does.
 std::string LegacyRpcSessionPath() {
   return std::string(g_get_user_state_dir()) + "/urnetwork/rpc_session.json";
 }
 
-void ClearRpcSession() {
-  for (const std::string& path : {RpcSessionPath(), LegacyRpcSessionPath()}) {
-    if (g_unlink(path.c_str()) != 0 && errno != ENOENT) {
-      g_warning("sdkhost: could not remove the rpc session blob: %s", g_strerror(errno));
-    }
+// Best-effort removal of the metadata file itself, for the one disposition
+// RemoveRpcSessionRecord cannot serve: a file it cannot PARSE (the old
+// plaintext blob, a truncated write, a file that is not ours) never reaches
+// its unlink, so it would otherwise sit on disk forever. There is no keyring
+// item to orphan in that case — an unparseable file references nothing.
+void UnlinkRpcSessionFile(const char* why) {
+  const std::string path = RpcSessionPath();
+  if (g_unlink(path.c_str()) == 0) {
+    g_message("sdkhost: discarded the stored rpc session (%s)", why);
+  } else if (errno != ENOENT) {
+    g_warning("sdkhost: could not discard the stored rpc session (%s): %s", why,
+              g_strerror(errno));
   }
 }
 
-void SaveRpcSession(const rpcsession::Blob& blob) {
-  // Refuse to write what Parse would refuse to read: a blob that cannot come
-  // back is worse than none, because the reattach path would treat a partial
-  // read as "no memory" anyway and we would have spent the disk write leaking
-  // key material for nothing.
-  if (!rpcsession::IsUsable(blob)) {
-    g_warning("sdkhost: not persisting an unusable rpc session blob (adoption will rebuild)");
-    ClearRpcSession();
-    return;
-  }
-  const std::string path = RpcSessionPath();
-  // WRITE THEN RENAME. The old in-place O_TRUNC write contradicted the
-  // contract two lines above: it truncated the live file first, so a short
-  // write or a crash left a partial blob on disk that IsUsable had never seen.
-  // rename(2) within one directory is atomic, so a reader sees the old blob or
-  // the new one and never half of either.
-  const std::string tmp = path + ".tmp";
-  const std::string text = rpcsession::Serialize(blob);
-  const int fd =
-      ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC | O_NOFOLLOW, 0600);
-  if (fd < 0) {
-    g_warning("sdkhost: could not write the rpc session blob: %s", g_strerror(errno));
-    return;
-  }
-  bool ok = true;
-  size_t written = 0;
-  while (written < text.size()) {
-    const ssize_t n = ::write(fd, text.data() + written, text.size() - written);
-    if (n <= 0) {
-      if (errno == EINTR) continue;
-      g_warning("sdkhost: short write of the rpc session blob: %s", g_strerror(errno));
-      ok = false;
-      break;
+// Drop the remembered session, both halves. Called when the session it names is
+// over (Shutdown, Logout, a bind that never synced) and when the stored record
+// is one that can never load again.
+void ForgetRpcSession() {
+  std::string diagnostic;
+  if (!RemoveRpcSessionRecord(RpcSessionPath(), SessionSecretStore(), &diagnostic)) {
+    // Two very different failures land here and only one of them may be
+    // resolved by deleting the file. If the metadata could not be PARSED there
+    // is no keyring item to strand, so the file must go. If the keyring itself
+    // refused, the reference is the only way a later run can still clean the
+    // item up, so it stays.
+    const auto fault = rpcsession::FaultFromDiagnostic(diagnostic);
+    if (fault == rpcsession::StoredSessionFault::Unreadable) {
+      UnlinkRpcSessionFile(rpcsession::Explain(fault));
+    } else {
+      g_warning("sdkhost: could not forget the stored rpc session (%s); leaving the "
+                "reference so a later run can still clean it up",
+                diagnostic.empty() ? "no detail" : diagnostic.c_str());
     }
-    written += static_cast<size_t>(n);
   }
-  if (ok && ::fsync(fd) != 0) {
-    g_warning("sdkhost: could not flush the rpc session blob: %s", g_strerror(errno));
-    ok = false;
-  }
-  ::close(fd);
-  if (!ok || ::rename(tmp.c_str(), path.c_str()) != 0) {
-    if (ok) {
-      g_warning("sdkhost: could not commit the rpc session blob: %s", g_strerror(errno));
-    }
-    g_unlink(tmp.c_str());
+  // The pre-Secret-Service file, unconditionally and every time: it holds two
+  // private keys and nothing reads it.
+  if (g_unlink(LegacyRpcSessionPath().c_str()) != 0 && errno != ENOENT) {
+    g_warning("sdkhost: could not remove the legacy rpc session file: %s", g_strerror(errno));
   }
 }
 
-std::optional<rpcsession::Blob> LoadRpcSession() {
-  const std::string path = RpcSessionPath();
-  const int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
-  if (fd < 0) {
-    if (errno != ENOENT) {
-      g_warning("sdkhost: could not open the rpc session blob: %s", g_strerror(errno));
+// The remembered session, or nullopt with the reason logged and the stored
+// record disposed of per rpcsession::ShouldForget. NEVER throws and never
+// blocks the caller from connecting: nullopt simply means "start a fresh
+// session", which is always available.
+std::optional<RpcSessionRecord> LoadRpcSession() {
+  std::string diagnostic;
+  auto record = LoadRpcSessionRecord(RpcSessionPath(), SessionSecretStore(), &diagnostic);
+  if (record) {
+    // Shape, separately from readability: the store proves the fields are
+    // present, rpcsession::IsUsableRecord proves they are dialable (two
+    // pairable uuids, two PEMs, and a port in our own draw range that is not
+    // the 12025 this process holds).
+    if (!rpcsession::IsUsableRecord(*record)) {
+      g_warning("sdkhost: the stored rpc session is not in a usable shape; discarding it and "
+                "starting a fresh session");
+      ForgetRpcSession();
+      return std::nullopt;
     }
-    return std::nullopt;
+    g_message("sdkhost: loaded the stored rpc session (%s)", diagnostic.c_str());
+    return record;
   }
-  // BOUNDED BEFORE IT IS READ. This runs on the GTK main loop, under mutex_,
-  // on the connect path; the 64 KiB-per-PEM cap inside the validator only
-  // applies after the whole file has been slurped and parsed, so an absurd
-  // file there used to be a UI freeze rather than an O(1) rejection.
-  struct stat st {};
-  if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size <= 0 ||
-      static_cast<uint64_t>(st.st_size) > kMaxRpcSessionBytes) {
-    g_warning("sdkhost: ignoring an implausible rpc session blob (%lld bytes); the service "
-              "will rebuild the tunnel instead of adopting it",
-              static_cast<long long>(st.st_size));
-    ::close(fd);
-    return std::nullopt;
+
+  const auto fault = rpcsession::FaultFromDiagnostic(diagnostic);
+  if (fault == rpcsession::StoredSessionFault::Absent) return std::nullopt;
+  if (rpcsession::ShouldForget(fault)) {
+    g_message("sdkhost: %s; discarding it and starting a fresh session",
+              rpcsession::Explain(fault));
+    ForgetRpcSession();
+  } else {
+    // The credential may well still be good — a locked keyring at login is the
+    // ordinary case — so it is KEPT and simply not used this time. Retaining it
+    // costs one failed lookup next launch; discarding it would throw away a
+    // working credential and orphan its keyring item.
+    g_message("sdkhost: %s; keeping it and starting a fresh session this time",
+              rpcsession::Explain(fault));
   }
-  std::string text(static_cast<size_t>(st.st_size), '\0');
-  size_t got = 0;
-  while (got < text.size()) {
-    const ssize_t n = ::read(fd, text.data() + got, text.size() - got);
-    if (n <= 0) {
-      if (n < 0 && errno == EINTR) continue;
-      break;
-    }
-    got += static_cast<size_t>(n);
+  return std::nullopt;
+}
+
+// Persist a session that has DEMONSTRABLY SYNCED. See the call site
+// (SdkHost::RememberSyncedSessionLocked): nothing is written until the pinned
+// DeviceRemote reports remote_connected, so a record on disk always describes a
+// pairing that really worked — which is the whole value of remembering one.
+// A failure here is logged and otherwise ignored: the tunnel is up and
+// carrying, and all that is lost is the ability to reattach to it next launch.
+void SaveRpcSession(const RpcSessionRecord& record) {
+  if (!rpcsession::IsUsableRecord(record)) {
+    // Refuse to write what LoadRpcSession would refuse to read: a record that
+    // cannot come back is worse than none, because we would have spent a
+    // keyring write on it for nothing.
+    g_warning("sdkhost: not persisting an unusable rpc session record (the next launch will "
+              "start a fresh session)");
+    return;
   }
-  ::close(fd);
-  if (got != text.size()) {
-    g_warning("sdkhost: short read of the rpc session blob (%zu of %zu bytes)", got,
-              text.size());
-    return std::nullopt;
+  std::string diagnostic;
+  if (!SaveRpcSessionRecord(RpcSessionPath(), record, SessionSecretStore(), &diagnostic)) {
+    g_warning("sdkhost: could not remember this rpc session (%s); the tunnel is unaffected, "
+              "the next launch will start a fresh session instead of reattaching",
+              diagnostic.empty() ? "no detail" : diagnostic.c_str());
+    return;
   }
-  return rpcsession::Parse(text);
+  g_message("sdkhost: remembered this rpc session for reattachment (%s)", diagnostic.c_str());
+}
+
+// The name of ONE credential generation, minted by this GUI because this GUI
+// owns half the material (client_pem and server_cert_pem never reach the
+// daemon). g_uuid_string_random draws from the CSPRNG, which is the property
+// StartTunnelRequest::rpc_session_id asks of the mint and that no wire check
+// can verify; the canonical dashed form then satisfies both the daemon's
+// ctl::LooksLikeRpcSessionId and our own tighter rpcsession::IsPairableId.
+std::string MintRpcSessionId() {
+  gchar* raw = g_uuid_string_random();
+  std::string id = raw ? raw : "";
+  g_free(raw);
+  return id;
 }
 
 // A fresh loopback listener per session, drawn from [kRpcPortMin, kRpcPortMax]
@@ -1130,63 +1179,91 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
     PublishConnectReading();
   }
 
-  rpcsession::Blob rpc;
-  bool reattaching = false;
+  // ---- 2b) THE TWO DOORS ----------------------------------------------------
+  // A relaunch that finds a tunnel already up can either NAME the running
+  // session or DESCRIBE a new one, and the division between them is structural
+  // rather than a matter of which is tried first (RpcSession.hpp spells the
+  // whole argument out):
+  //
+  //   attach_tunnel — THE EXPLICIT DOOR, below. The stored record names the
+  //     live session by (instance_id, rpc_session_id); the client key and the
+  //     pinned cert come back out of the Secret Service; nothing crosses the
+  //     socket but the two identifiers.
+  //
+  //   start_tunnel  — THE FALLBACK, and the answer to EVERY failure of the
+  //     first: no record, a locked keyring, a stale entry, a session that has
+  //     since stopped, a tunnel belonging to another uid, a daemon that does
+  //     not persist sessions at all. It always exists, so no failure above can
+  //     leave the user unable to connect. The daemon may still absorb it
+  //     through TunnelHost::CanAdopt — that guard is the daemon's own
+  //     idempotency contract for any client re-sending an identical request,
+  //     and it is no longer something THIS side aims at: two thirds of the
+  //     triple CanAdopt compares are the daemon's half of the material, which
+  //     upstream's record deliberately does not keep.
   if (daemonTunnelUp) {
-    if (auto blob = LoadRpcSession()) {
-      rpc = std::move(*blob);
-      reattaching = true;
-      g_message("connect: a tunnel is already up and we remember its rpc session; "
-                "asking the service to adopt it");
-    } else {
-      // Honest and logged rather than papered over: the daemon will rebuild
-      // instead of adopting, which costs a reconnect, not correctness.
-      g_warning(
-          "sdkhost: a tunnel is up but this app does not remember its rpc session; "
-          "the service will rebuild the tunnel instead of adopting it");
-    }
+    if (auto attached = TryAttachRememberedSessionLocked(clientJwt, *status)) return *attached;
   }
-  if (!reattaching) {
-    ClearRpcSession();
-    try {
-      urnet::DeviceRpcKeyMaterial km = urnet::generateDeviceRpcKeyMaterial();
-      // THE HANDLE-0 TRAP: urnet_generate_device_rpc_key_material can return
-      // handle 0 with NO error, and the binding maps a NULL char* to an empty
-      // string rather than throwing — so the four getters would hand back four
-      // empty PEMs silently and the session would end up unpinned. The
-      // explicit handle check plus the per-string shape gate below is the only
-      // thing standing between that and a root rpc listener anyone can drive.
-      if (!km) {
-        lastTunnelError_ = "the device rpc key material could not be generated";
-        g_warning("connect: refused — %s (the SDK returned a null key-material handle "
-                  "with no error)",
-                  lastTunnelError_.c_str());
-        return TunnelStartResult::Failed;
-      }
-      rpc.server_pem = km.getServerPem();
-      rpc.client_cert_pem = km.getClientCertPem();
-      rpc.client_pem = km.getClientPem();
-      rpc.server_cert_pem = km.getServerCertPem();
-    } catch (const std::exception& e) {
-      lastTunnelError_ = std::string("the device rpc key material could not be generated: ") +
-                         e.what();
-      g_warning("connect: refused — %s", lastTunnelError_.c_str());
+
+  // ---- 2c) a FRESH session --------------------------------------------------
+  // One act mints all of it: the mTLS material, the loopback port, and the
+  // rpc_session_id that NAMES the three together. They are stored together too,
+  // or not at all.
+  RpcSessionRecord session;
+  // "confirmed" because nothing is written until the pairing has demonstrably
+  // worked — see RememberSyncedSessionLocked. ("pending" survives only for
+  // records migrated out of the pre-Secret-Service format, whose state this
+  // process never chose.)
+  session.state = "confirmed";
+  session.instance_id = instanceId;
+  session.rpc_session_id = MintRpcSessionId();
+  session.host_port = RandomLoopbackRpcHostPort();
+  std::string rpcServerPem;      // the daemon's half: sent, never stored
+  std::string rpcClientCertPem;  // the daemon's half: sent, never stored
+  if (!rpcsession::IsPairableId(session.rpc_session_id)) {
+    // Cannot happen (g_uuid_string_random is infallible), and is refused here
+    // anyway: the daemon's ValidateStartTunnelRequest now REQUIRES a session id
+    // alongside the pinning triple, so a blank one would come back as a generic
+    // rpc_pin_required and read like a key-material fault instead of what it is.
+    lastTunnelError_ = "a device rpc session name could not be generated";
+    g_warning("connect: refused — %s", lastTunnelError_.c_str());
+    return TunnelStartResult::Failed;
+  }
+  try {
+    urnet::DeviceRpcKeyMaterial km = urnet::generateDeviceRpcKeyMaterial();
+    // THE HANDLE-0 TRAP: urnet_generate_device_rpc_key_material can return
+    // handle 0 with NO error, and the binding maps a NULL char* to an empty
+    // string rather than throwing — so the four getters would hand back four
+    // empty PEMs silently and the session would end up unpinned. The
+    // explicit handle check plus the per-string shape gate below is the only
+    // thing standing between that and a root rpc listener anyone can drive.
+    if (!km) {
+      lastTunnelError_ = "the device rpc key material could not be generated";
+      g_warning("connect: refused — %s (the SDK returned a null key-material handle "
+                "with no error)",
+                lastTunnelError_.c_str());
       return TunnelStartResult::Failed;
     }
-    rpc.host_port = RandomLoopbackRpcHostPort();
-    rpc.instance_id = instanceId;
-    if (!ctl::LooksLikePem(rpc.server_pem) || !ctl::LooksLikePem(rpc.client_cert_pem) ||
-        !ctl::LooksLikePem(rpc.client_pem) || !ctl::LooksLikePem(rpc.server_cert_pem)) {
-      lastTunnelError_ = "the device rpc key material is not usable";
-      // The four lengths are the whole diagnosis (a handle-0 generate yields
-      // four zeroes; a truncated one yields a short odd man out) and they leak
-      // nothing — never log the PEMs themselves, two of them are private keys.
-      g_warning("connect: refused — %s (server=%zu client_cert=%zu client=%zu "
-                "server_cert=%zu bytes)",
-                lastTunnelError_.c_str(), rpc.server_pem.size(), rpc.client_cert_pem.size(),
-                rpc.client_pem.size(), rpc.server_cert_pem.size());
-      return TunnelStartResult::Failed;
-    }
+    rpcServerPem = km.getServerPem();
+    rpcClientCertPem = km.getClientCertPem();
+    session.client_pem = km.getClientPem();
+    session.server_cert_pem = km.getServerCertPem();
+  } catch (const std::exception& e) {
+    lastTunnelError_ = std::string("the device rpc key material could not be generated: ") +
+                       e.what();
+    g_warning("connect: refused — %s", lastTunnelError_.c_str());
+    return TunnelStartResult::Failed;
+  }
+  if (!ctl::LooksLikePem(rpcServerPem) || !ctl::LooksLikePem(rpcClientCertPem) ||
+      !ctl::LooksLikePem(session.client_pem) || !ctl::LooksLikePem(session.server_cert_pem)) {
+    lastTunnelError_ = "the device rpc key material is not usable";
+    // The four lengths are the whole diagnosis (a handle-0 generate yields
+    // four zeroes; a truncated one yields a short odd man out) and they leak
+    // nothing — never log the PEMs themselves, two of them are private keys.
+    g_warning("connect: refused — %s (server=%zu client_cert=%zu client=%zu "
+              "server_cert=%zu bytes)",
+              lastTunnelError_.c_str(), rpcServerPem.size(), rpcClientCertPem.size(),
+              session.client_pem.size(), session.server_cert_pem.size());
+    return TunnelStartResult::Failed;
   }
 
   // 3) start_tunnel: the daemon builds the DeviceLocal (rpc enabled, pinned to
@@ -1205,19 +1282,22 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
   }
   ControlClient::StartTunnelOptions options;
   options.by_jwt = clientJwt;
-  // On the reattach path this is the id the session was STARTED with, not the
-  // one LocalState holds now: the SDK rotates the instance id whenever the
-  // by-client JWT string changes (a refresh re-signs the same client), and
-  // DeviceLocalRpc.Sync refuses forever an id that is not its own.
-  options.instance_id = reattaching ? rpc.instance_id : instanceId;
+  // Local state's CURRENT id. The reattach path no longer comes through here —
+  // it goes through attach_tunnel above, which names the id the session was
+  // STARTED with — so there is nothing left to prefer over this one. What the
+  // daemon is ACTUALLY paired with still comes back on the reply and overrides
+  // it below, because the daemon may adopt a session started under an earlier
+  // id (RpcSession.hpp's instance-id trap).
+  options.instance_id = instanceId;
   options.app_version = kAppVersion;
   options.network_space_json = spaceJson;
   // The kill switch the user has standing. The daemon reports back what it
   // ACTUALLY installed; nothing here assumes the request took.
   options.kill_switch = KillSwitchRequestedLocked();
-  options.rpc_server_pem = rpc.server_pem;
-  options.rpc_client_cert_pem = rpc.client_cert_pem;
-  options.rpc_listen_hostport = rpc.host_port;
+  options.rpc_server_pem = rpcServerPem;
+  options.rpc_client_cert_pem = rpcClientCertPem;
+  options.rpc_listen_hostport = session.host_port;
+  options.rpc_session_id = session.rpc_session_id;
 
   // StartTunnelEx is fail-closed by construction: it validates the triple
   // before a frame is sent, and on a synchronous start that comes back Up it
@@ -1225,9 +1305,8 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
   // otherwise it fails the outcome and stops the daemon-side tunnel, because a
   // running tunnel whose ROOT rpc listener is unauthenticated is worse than no
   // tunnel. So there is no plaintext fallback to write here.
-  g_message("connect: sending start_tunnel (%s, rpc %s, kill switch %s)",
-            reattaching ? "adopting the running session" : "fresh session",
-            rpc.host_port.c_str(), options.kill_switch ? "on" : "off");
+  g_message("connect: sending start_tunnel (fresh session, rpc %s, kill switch %s)",
+            session.host_port.c_str(), options.kill_switch ? "on" : "off");
   const ControlClient::StartTunnelOutcome outcome = control_.StartTunnelEx(options);
   if (!outcome.ok) {
     lastTunnelError_ = outcome.error;
@@ -1238,9 +1317,9 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
     g_warning("connect: start_tunnel failed (code=%s): %s",
               outcome.code.empty() ? "none" : outcome.code.c_str(),
               outcome.error.empty() ? "no detail" : outcome.error.c_str());
-    // The material never bound to anything: do not keep it for a reattach that
-    // could only mismatch.
-    ClearRpcSession();
+    // The material never bound to anything, and any PREVIOUSLY remembered
+    // session is equally not what is running now.
+    ForgetRpcSession();
     switch (outcome.session) {
       case DaemonSessionState::Unreachable:
         return TunnelStartResult::DaemonUnreachable;
@@ -1255,6 +1334,111 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
     }
   }
 
+  // WHAT THE DAEMON IS ACTUALLY PAIRED WITH, which is not always what we asked
+  // for: on its adoption path the live identity is the FIRST start's. Both the
+  // DeviceRemote we build and the record we remember must use the daemon's
+  // answer, or the rpc sync pairs against an id the DeviceLocal never had and
+  // the remote connects and never populates. Empty means a daemon predating the
+  // echo; fall back to what we sent, which then simply cannot be reattached to.
+  if (!outcome.instance_id.empty() && outcome.instance_id != session.instance_id) {
+    g_message("connect: the service adopted a session started under a different instance id; "
+              "pairing with the service's");
+    session.instance_id = outcome.instance_id;
+  }
+  if (!outcome.rpc_session_id.empty()) session.rpc_session_id = outcome.rpc_session_id;
+
+  // Remember it only once it SYNCS (RememberSyncedSessionLocked). A daemon that
+  // does not echo an rpc_session_id has no session to name, so there is nothing
+  // that could be attached to later and nothing worth writing to the keyring.
+  const bool attachableLater = !outcome.rpc_session_id.empty();
+  if (!attachableLater) {
+    g_message("connect: the service did not name this rpc session; it will be rebuilt rather "
+              "than reattached on the next launch");
+    // A previously remembered session is not this one. Drop it rather than
+    // leave a record that can only fail to match.
+    ForgetRpcSession();
+  }
+  return BindRemoteDeviceLocked(clientJwt, session, attachableLater);
+}
+
+// ---- door 1: attach_tunnel -------------------------------------------------
+// nullopt means THE DOOR DID NOT OPEN and the caller must fall back to a fresh
+// start_tunnel — which is the answer to every failure here, so none of them can
+// leave the user unable to connect. A value means the door was taken and this
+// is the whole result of StartTunnel.
+//
+// The failure inventory this is built around, each landing on a fallback:
+//   * no record at all, or one this build cannot read      -> LoadRpcSession
+//   * a locked or absent keyring                           -> LoadRpcSession
+//   * a stale entry, or one for a session that has stopped -> rpcsession::CanAttach
+//   * an entry for a tunnel owned by ANOTHER uid           -> the daemon, which
+//     charges kActionTakeOverTunnel for it and refuses with auth_not_tunnel_owner
+//     when that is not granted
+//   * a daemon that does not persist rpc sessions          -> the daemon, with
+//     kCodeRpcSessionNotPersisted
+std::optional<TunnelStartResult> SdkHost::TryAttachRememberedSessionLocked(
+    const std::string& clientJwt, const ctl::StatusReply& status) {
+  auto remembered = LoadRpcSession();
+  if (!remembered) return std::nullopt;  // LoadRpcSession has already said why
+
+  // IS IT THE TUNNEL THAT IS RUNNING? Asked HERE, before a frame is sent, and
+  // asked again by the daemon. A record that names a session other than the
+  // live one is exactly the stale/foreign case: it must fall back to a fresh
+  // start, never attach to whatever happens to be up.
+  if (!rpcsession::CanAttach(*remembered, status)) {
+    g_message("connect: the remembered rpc session is not the one the service is running "
+              "(remembered port %s, live rpc port %d); starting a fresh session",
+              remembered->host_port.c_str(), status.rpc_port);
+    // NOT forgotten. The record may still be perfectly good and simply describe
+    // a session that has ended; the fresh start below overwrites it, and if
+    // that start fails the user keeps whatever they had.
+    return std::nullopt;
+  }
+
+  g_message("connect: a tunnel is already up and this app remembers its rpc session; "
+            "attaching to it instead of rebuilding it");
+  const ControlClient::StartTunnelOutcome outcome = control_.AttachTunnel(
+      remembered->instance_id, remembered->rpc_session_id,
+      ctl::RpcPortFromHostPort(remembered->host_port));
+  if (!outcome.ok) {
+    g_warning("connect: attach_tunnel was refused (code=%s): %s; starting a fresh session",
+              outcome.code.empty() ? "none" : outcome.code.c_str(),
+              outcome.error.empty() ? "no detail" : outcome.error.c_str());
+    // WHICH REFUSALS KILL THE RECORD. A mismatch means the daemon does not have
+    // the session this record names, so it can never match again and keeping it
+    // only costs a failed attach every launch. Everything else — a daemon that
+    // does not persist sessions, a take-over that was not authorized, a
+    // transport failure, a polkit prompt the user dismissed — says nothing
+    // about whether the credential is good, and discarding it there would
+    // destroy a working credential over a temporary answer.
+    if (outcome.code == ctl::kCodeRpcSessionMismatch) ForgetRpcSession();
+    // Deliberately NOT surfaced as lastTunnelError_ and NOT returned: this is
+    // not a failure the user has to see or act on. The fresh start below is the
+    // answer, and it reports its own outcome.
+    return std::nullopt;
+  }
+
+  // Attached. From here the failure mode changes: we now OWN the daemon's
+  // tunnel and a local bind failure means nobody is driving it, so
+  // BindRemoteDeviceLocked's teardown (which stops the daemon-side tunnel) is
+  // the right ending — and this returns that result rather than falling back,
+  // because a bind failure is LOCAL (the 12025 reservation, setRpcServer) and a
+  // fresh start would meet it again.
+  //
+  // rememberOnSync is false: this record is already in the Secret Service, and
+  // re-writing it would cost a keyring round trip to store what is already
+  // there.
+  return BindRemoteDeviceLocked(clientJwt, *remembered, /*rememberOnSync=*/false);
+}
+
+// ---- the DeviceRemote half, shared by BOTH doors ---------------------------
+// Everything from here on is identical whether the session was just created or
+// just attached to, which is the point of factoring it: one pinned
+// construction, one set of listeners, one watchdog, one teardown-and-stop
+// failure path. Requires mutex_.
+TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
+                                                  const RpcSessionRecord& session,
+                                                  bool rememberOnSync) {
   try {
     // 4) the remote face of the daemon's device, PINNED to the other half of
     //    the material the daemon is listening with. Same instanceId on both
@@ -1290,15 +1474,15 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
           holdError + ")");
     }
     device_ = urnet::newDeviceRemoteWithDefaults(*networkSpace_, clientJwt,
-                                                 options.instance_id);
+                                                 session.instance_id);
     // setRpcServer BEFORE any listener registration or getter (windows
     // SdkHost.cpp:2027-2029), and exactly once per DeviceRemote instance — the
     // binding gives no re-entrancy contract for a second call and no way to
     // clear a listener short of destroying the object. A throw here lands in
     // the catch below, which tears down and stops the daemon-side tunnel.
     const uint64_t rpcGeneration = ++rpcSessionGeneration_;
-    device_->setRpcServer(rpc.client_pem, rpc.server_cert_pem, rpc.host_port);
-    rpcHostPort_ = rpc.host_port;
+    device_->setRpcServer(session.client_pem, session.server_cert_pem, session.host_port);
+    rpcHostPort_ = session.host_port;
     // WHICH daemon connection this device belongs to. The daemon's DeviceLocal
     // — the only thing on the other end of the rpc we just pinned — dies with
     // the daemon process, so a control session that has been rebuilt since
@@ -1312,6 +1496,15 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
     // lands well inside the deadline. Marshalled rather than taken inline —
     // this callback can fire on an SDK thread while StartTunnel still holds
     // mutex_, and re-entering a non-recursive lock is a deadlock.
+    //
+    // IT IS ALSO WHERE THE SESSION IS REMEMBERED. remote_connected turning true
+    // is the ONLY proof the pinned pair actually agreed, so nothing is written
+    // to disk or to the keyring before it: a record on disk therefore always
+    // describes a pairing that really worked, and a session that never synced
+    // is never offered to a later launch as something to attach to. The
+    // `rpcBindWatchId_ == 0` guard below makes this the FIRST connected edge
+    // only, so a session is stored exactly once however often the remote
+    // reconnects.
     subs_.push_back(device_->addRemoteChangeListener([this, rpcGeneration](bool connected) {
       if (!connected) return;
       PostToMain([this, rpcGeneration] {
@@ -1320,6 +1513,7 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
         if (rpcBindWatchId_ == 0) return;
         g_source_remove(rpcBindWatchId_);
         rpcBindWatchId_ = 0;
+        RememberSyncedSessionLocked();
       });
     }));
 
@@ -1377,11 +1571,13 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
       SubscribeDrawer();
     }
     PublishConnectReading();
-    // Remember the triple so the NEXT launch is adopted instead of rebuilding
-    // this tunnel. Written only now, after the daemon accepted it and this
-    // side bound to it, so a blob on disk always describes a pairing that
-    // really existed.
-    SaveRpcSession(rpc);
+    // ARMED, NOT WRITTEN. The record is handed to the remote-change listener
+    // above and committed only when the pairing demonstrably syncs — see the
+    // comment there. A locked or absent keyring at that moment costs the
+    // ability to reattach next launch and nothing else; it can never fail this
+    // start, which is already up by then.
+    unsavedSession_.reset();
+    if (rememberOnSync) unsavedSession_ = session;
     // The mismatched-but-well-formed case (§5 case D) throws on neither side:
     // both ends bind and dial, the handshake fails at connect time, and the
     // only evidence is getRemoteConnected() never turning true. Bound it.
@@ -1398,7 +1594,11 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
     lastTunnelError_ = e.what();
     // The material is bound to nothing now; a reattach with it could only
     // mismatch, so forget it rather than remember a pairing that never was.
-    ClearRpcSession();
+    // ForgetRpcSession covers BOTH doors: on the fresh door it drops material
+    // that was never stored anyway plus any older record, and on the attach
+    // door it drops the record we just proved we cannot drive.
+    unsavedSession_.reset();
+    ForgetRpcSession();
     rpcHostPort_.clear();
     // StartTunnel is retryable. Tear down every partially-created resource and
     // listener so a failed attempt cannot leave a subscription or
@@ -1408,6 +1608,27 @@ TunnelStartResult SdkHost::StartTunnelLocked() {
     control_.StopTunnel();
     return TunnelStartResult::Failed;
   }
+}
+
+// Commit the session that has just proved itself. Called from the FIRST
+// remote_connected edge of a freshly started session and from nowhere else:
+// the attach door does not arm it (its record is already stored), and a session
+// that never syncs never reaches here, so the store can only ever hold a
+// pairing that demonstrably worked.
+//
+// Everything about it is best-effort. This runs after the tunnel is up and
+// carrying, so a locked keyring, a cancelled unlock prompt or no Secret Service
+// at all costs exactly one thing — the next launch rebuilds the tunnel instead
+// of attaching to it — and can never fail the session the user is already
+// using. Requires mutex_.
+void SdkHost::RememberSyncedSessionLocked() {
+  if (!unsavedSession_) return;
+  const RpcSessionRecord record = *unsavedSession_;
+  // Consumed either way: a save that failed must not be retried on the next
+  // reconnect edge, where it would re-raise the same keyring prompt against a
+  // user who has already declined it once.
+  unsavedSession_.reset();
+  SaveRpcSession(record);
 }
 
 std::string SdkHost::LastTunnelError() {
@@ -2504,8 +2725,10 @@ void SdkHost::OnRpcBindDeadline() {
   // timeout — the same trade StartTunnel's failure path already makes.
   control_.StopTunnel();
   // The material is bound to nothing now; remembering it could only produce a
-  // reattach that mismatches again.
-  ClearRpcSession();
+  // reattach that mismatches again. TeardownDeviceLocked above has already
+  // dropped the unwritten record, so this is only about a record from an
+  // EARLIER session that is equally not what is running.
+  ForgetRpcSession();
   PublishConnectReading();
   EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
 }
@@ -2513,6 +2736,12 @@ void SdkHost::OnRpcBindDeadline() {
 void SdkHost::TeardownDeviceLocked() {
   CancelRpcBindWatchdogLocked();
   rpcHostPort_.clear();
+  // The session this armed record describes is over before it was ever
+  // committed. Dropping it here is what stops a torn-down pairing from being
+  // written by a late remote_connected edge — CancelRpcBindWatchdogLocked bumps
+  // the generation, so such an edge returns early, but the record must not
+  // outlive the device either way.
+  unsavedSession_.reset();
   ClosePresentationLocked();
   subs_.clear();
   // close() actually stops the remote's rpc connection, sync loop and view
@@ -2532,8 +2761,8 @@ void SdkHost::Shutdown() {
   // header comment — quit-as-logout destroyed guest accounts.
   control_.StopTunnel();
   // The daemon's DeviceLocal (and its pinned listener with it) is gone, so the
-  // remembered triple can no longer be adopted by anything.
-  ClearRpcSession();
+  // remembered session can no longer be attached to by anything.
+  ForgetRpcSession();
 }
 
 void SdkHost::Logout() {
@@ -2542,7 +2771,7 @@ void SdkHost::Logout() {
   // the session is over: bring the daemon's tunnel down too (best effort — an
   // unreachable daemon has nothing running for us anyway)
   control_.StopTunnel();
-  ClearRpcSession();
+  ForgetRpcSession();
   pendingWalletAuth_.reset();
   if (asyncLocalState_) asyncLocalState_->logout([](bool) {});
   if (onAuth_) onAuth_(false);

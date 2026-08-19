@@ -58,6 +58,23 @@
 // different UID it additionally costs ctl::kActionTakeOverTunnel, which is
 // auth_admin_keep even at the console. root may always act.
 //
+// attach_tunnel enters through that SAME gate, on purpose. It re-adopts a
+// running tunnel by naming its live identity, which is the act start_tunnel's
+// adoption path already performs after comparing the request against the live
+// session — so it is authorized identically: ctl::kActionControlTunnel for
+// your own uid's tunnel, ctl::kActionTakeOverTunnel when the live tunnel
+// belongs to another uid (ctl::ActionIdForVerb carries the full argument).
+// Pricing the verb itself as a take-over would only push clients back onto
+// start_tunnel to dodge the admin prompt, which protects nobody.
+//
+// attach_tunnel SUCCEEDS when the caller names the session that is actually
+// running. TunnelHost latches the accepted start_tunnel's instance_id and
+// rpc_session_id at the up edge and publishes both in ctl::StatusReply, so the
+// handler has a live identity to compare a request against; anything else —
+// no tunnel, a different device, a different credential generation — is
+// refused with ctl::kCodeRpcSessionMismatch and leaves the running tunnel
+// untouched. HandleAttachTunnel carries the reasoning.
+//
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
@@ -201,6 +218,12 @@ class ControlServer {
   nlohmann::json HandleHello(Connection* conn, int64_t id, const nlohmann::json& request);
   nlohmann::json HandleStartTunnel(Connection* conn, int64_t id, const nlohmann::json& request,
                                    bool authorizedCrossUid);
+  // attach_tunnel: re-adopt the LIVE session by naming it, instead of
+  // re-describing it. Takes authorizedCrossUid for the same reason
+  // HandleStartTunnel does — it is the crossUid value that SELECTED the polkit
+  // action, and CheckTunnelOwner must never re-derive it.
+  nlohmann::json HandleAttachTunnel(Connection* conn, int64_t id,
+                                    const nlohmann::json& request, bool authorizedCrossUid);
   // Frame-rate bucket; false => the peer is flooding and is dropped.
   bool AllowFrame(Connection* conn);
   // Only under polkit, and only for a peer that is neither root nor the uid

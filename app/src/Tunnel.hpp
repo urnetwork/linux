@@ -9,7 +9,7 @@
 // separated without shipping a tunnel that carries nothing:
 //
 //   1. RunCommand — fork/execvp with a real argv and a decoded wait status.
-//      NEVER a shell: local_addr and dns_servers come back from the device
+//      NEVER a shell: local_addr_v4 and dns_servers_v4 come back from the device
 //      over the user-editable DNS sheet, so std::system() was a root
 //      injection surface (audit R: Tunnel.cpp:18).
 //
@@ -103,6 +103,13 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+// The ONE definition of urnw::TunnelConfig, and the IPv4-only predicate
+// Tunnel::Open enforces against it. Upstream's Tunnel.hpp includes it here for
+// the same reason; this fork briefly carried a second, differently-named copy
+// of the struct in this header, which made IsIpv4OnlyTunnelConfig impossible to
+// call from Tunnel.cpp.
+#include "TunnelPolicy.hpp"
 
 namespace urnw {
 
@@ -889,19 +896,10 @@ bool RestoreDirectResolvConf(std::string* detail);
 
 // ---- the tun ---------------------------------------------------------------
 
-struct TunnelConfig {
-  std::string name = "urnet0";
-  std::string local_addr = "169.254.2.1";
-  int prefix = 24;
-  int mtu = 1440;
-  std::vector<std::string> dns_servers;
-  // Refuse to install the capture routes unless the daemon's own sockets are
-  // demonstrably steered around them. Only a dev run
-  // (URNETWORK_ALLOW_UNPROTECTED_EGRESS=1) may clear this, and it is logged
-  // loudly, because the alternative is a tunnel that comes up and carries
-  // nothing while the UI says Connected.
-  bool require_egress_protection = true;
-};
+// TunnelConfig lives in TunnelPolicy.hpp (included above) together with
+// IsIpv4OnlyTunnelConfig, which Tunnel::Open refuses on. Keeping the struct and
+// the predicate that validates it in one header is what makes the guard
+// callable; do not re-declare the struct here.
 
 // What is ACTUALLY in force, as opposed to what was attempted. Every field
 // here is reported through ctl::StatusReply so the UI can say "routes are in

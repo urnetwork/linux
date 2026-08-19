@@ -2043,6 +2043,40 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg, TunnelError* err) 
     return std::unique_ptr<Tunnel>();
   };
 
+  // --- UPSTREAM'S IPv4-ONLY CONFIG FLOOR, first, before any device exists.
+  //     Same predicate, same placement and same [tun] diagnostic as upstream
+  //     (upstream app/src/Tunnel.cpp:32); the fork adds the ctl error code so
+  //     the refusal reaches the UI as something other than "could not open or
+  //     configure the tun device".
+  //
+  //     IT IS NOT REDUNDANT WITH OUR RUNTIME IPv6 FLOORS, which is why it is
+  //     kept rather than folded into the field checks below:
+  //       * NetFilter's `meta nfproto ipv6 counter reject` and IsIpv6OnlyNetwork
+  //         are RUNTIME floors over packets and over the host's default routes.
+  //         They say nothing about the ADDRESSES the device handed us, and they
+  //         are armed AFTER the link is up. This runs before ::open.
+  //       * The per-field checks below are stricter than upstream on the
+  //         address (inet_pton rejects the leading-zero forms IsIpv4Literal
+  //         accepts) but were LOOSER in two places upstream catches:
+  //           - prefix 0 was accepted here, and a /0 on the tun installs a
+  //             connected route covering the whole IPv4 space;
+  //           - a non-IPv4 resolver was dropped silently AFTER the device was
+  //             created (see the filter loop below), so a device that offered
+  //             only IPv6 resolvers brought a tunnel up with no DNS at all.
+  //         Upstream refuses the configuration outright for both. That is the
+  //         fail-closed direction, so upstream wins here and the checks below
+  //         stay as the more specific message for the cases they do catch.
+  if (!IsIpv4OnlyTunnelConfig(cfg)) {
+    std::fprintf(stderr,
+                 "[tun] refusing non-IPv4 tunnel configuration "
+                 "(addr=%s/%d, dns-count=%zu)\n",
+                 cfg.local_addr_v4.c_str(), cfg.prefix_v4, cfg.dns_servers_v4.size());
+    return fail("tun_config_invalid",
+                "refusing a non-IPv4 tunnel configuration: address '" + cfg.local_addr_v4 + "/" +
+                    std::to_string(cfg.prefix_v4) +
+                    "' and every tunnel resolver must be an IPv4 literal");
+  }
+
   // --- validate every value that came back from the device BEFORE it reaches
   //     any command line. The daemon must not rely on the GUI's client-side
   //     inet_pton (Formatters.cpp): the DNS sheet is user-editable and the
@@ -2050,13 +2084,15 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg, TunnelError* err) 
   if (!ValidInterfaceName(cfg.name)) {
     return fail("tun_config_invalid", "invalid tun interface name '" + cfg.name + "'");
   }
-  if (!IsIpv4Address(cfg.local_addr)) {
+  if (!IsIpv4Address(cfg.local_addr_v4)) {
     return fail("tun_config_invalid",
-                "the device reported an invalid tunnel address '" + cfg.local_addr + "'");
+                "the device reported an invalid tunnel address '" + cfg.local_addr_v4 + "'");
   }
-  if (cfg.prefix < 0 || cfg.prefix > 32) {
+  // >= 1, not >= 0: agrees with IsIpv4OnlyTunnelConfig so the two guards can
+  // never disagree about what a legal prefix is if their order ever changes.
+  if (cfg.prefix_v4 < 1 || cfg.prefix_v4 > 32) {
     return fail("tun_config_invalid",
-                "invalid tunnel prefix length " + std::to_string(cfg.prefix));
+                "invalid tunnel prefix length " + std::to_string(cfg.prefix_v4));
   }
   if (cfg.mtu < 576 || cfg.mtu > 65535) {
     return fail("tun_config_invalid", "invalid tunnel mtu " + std::to_string(cfg.mtu));
@@ -2122,7 +2158,11 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg, TunnelError* err) 
   t->fd_ = fd;
   t->name_ = ifr.ifr_name;  // the actual assigned name
   t->report_.interface = t->name_;
-  for (const auto& dns : cfg.dns_servers) {
+  // Second floor, and still doing real work after the guard above: inet_pton is
+  // stricter than IsIpv4Literal (it rejects "010.0.0.1", which the constexpr
+  // literal check accepts), and dnsServers_ is what the pinned-DNS nft permit
+  // and the resolved override are both filled from.
+  for (const auto& dns : cfg.dns_servers_v4) {
     if (IsIpv4Address(dns)) {
       t->dnsServers_.push_back(dns);
     } else {
@@ -2140,7 +2180,7 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg, TunnelError* err) 
   std::fprintf(stderr,
                "[tun] up %s addr=%s/%d mtu=%d dns=%s (routes=%d egress_protected=%d "
                "dns_applied=%d)\n",
-               t->name_.c_str(), cfg.local_addr.c_str(), cfg.prefix, cfg.mtu, dnsList.c_str(),
+               t->name_.c_str(), cfg.local_addr_v4.c_str(), cfg.prefix_v4, cfg.mtu, dnsList.c_str(),
                t->report_.routes_installed ? 1 : 0, t->report_.egress_protected ? 1 : 0,
                t->report_.dns_applied ? 1 : 0);
   return t;
@@ -2148,10 +2188,10 @@ std::unique_ptr<Tunnel> Tunnel::Open(const TunnelConfig& cfg, TunnelError* err) 
 
 bool Tunnel::Configure(const TunnelConfig& cfg, TunnelError* err) {
   const std::string ip = FindTool("ip");
-  const std::string addr = cfg.local_addr + "/" + std::to_string(cfg.prefix);
+  const std::string addr = cfg.local_addr_v4 + "/" + std::to_string(cfg.prefix_v4);
   // Leg A of the witness compares the source address the kernel picks for our
   // own socket against this, so it has to survive Configure().
-  localAddr_ = cfg.local_addr;
+  localAddr_ = cfg.local_addr_v4;
   // Order matters (wg-quick order: mtu/addr first, up second): NetworkManager
   // only protects an externally-created tun WHILE THE LINK IS DOWN
   // (APPIMAGE.md §10c), so do every link-down configuration before `up`. The

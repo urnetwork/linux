@@ -733,6 +733,33 @@ class SdkHost {
   // without re-entering a non-recursive lock. Every outcome logs, and the
   // failing ones leave a renderable sentence in lastTunnelError_.
   TunnelStartResult StartTunnelLocked();
+  // ---- the two doors onto a tunnel that is ALREADY UP ----------------------
+  // Door 1. Loads the remembered session (metadata from disk, the mTLS client
+  // key and the pinned cert from the Secret Service) and, when it still
+  // describes the tunnel the daemon reports, re-adopts it with attach_tunnel
+  // instead of building a new one.
+  //
+  // nullopt means THE DOOR DID NOT OPEN — no record, an unreadable one, a
+  // locked keyring, a record for a session that is not the live one, or a
+  // daemon that refused the attach — and StartTunnelLocked must fall back to a
+  // fresh start_tunnel, which is always available and is why none of those
+  // failures can leave the user unable to connect. A value means the door was
+  // taken and is the whole result of the start. Requires mutex_.
+  std::optional<TunnelStartResult> TryAttachRememberedSessionLocked(
+      const std::string& clientJwt, const ctl::StatusReply& status);
+  // The DeviceRemote half, shared by BOTH doors: the 12025 reservation, the
+  // pinned construction, the listeners and the bind watchdog. On failure it has
+  // already torn down every partial resource and stopped the daemon-side
+  // tunnel. `rememberOnSync` arms the session to be written to the store on the
+  // first proof it works (false on the attach door, whose record is already
+  // stored). Requires mutex_.
+  TunnelStartResult BindRemoteDeviceLocked(const std::string& clientJwt,
+                                           const RpcSessionRecord& session,
+                                           bool rememberOnSync);
+  // Commits the armed session once the pinned DeviceRemote reports
+  // remote_connected. Best-effort by design — see the definition. Requires
+  // mutex_.
+  void RememberSyncedSessionLocked();
   // Tear down the device/tunnel/view-controllers without touching the stored
   // auth (Logout clears auth too; the guest upgrade only swaps the device).
   void TeardownDeviceLocked();
@@ -885,6 +912,14 @@ class SdkHost {
   unsigned int rpcBindWatchId_ = 0;        // g_timeout source id; 0 = unarmed
   uint64_t rpcBindWatchGeneration_ = 0;    // the session the armed watchdog belongs to
   std::string rpcHostPort_;                // what THIS session dialed ("" when none)
+  // A session that has been bound but has NOT yet proved it works. Written to
+  // the store (disk metadata + Secret Service secrets) by
+  // RememberSyncedSessionLocked on the first remote_connected edge, and dropped
+  // on teardown — so nothing is ever remembered that did not demonstrably
+  // pair, and a pairing that silently mismatched cannot be offered to the next
+  // launch as something to attach to. Empty on the attach door: that record is
+  // already stored.
+  std::optional<RpcSessionRecord> unsavedSession_;
   // ControlClient::SessionGeneration() at the moment device_ was bound. A
   // different value now means the control connection was rebuilt — the daemon
   // restarted — so the DeviceLocal this device_ talks to is gone. Atomic

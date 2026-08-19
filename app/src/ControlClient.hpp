@@ -175,6 +175,9 @@ inline bool IsAuthRefusal(DaemonAuthOutcome outcome) {
 inline bool VerbNeedsAuthorization(ctl::Verb verb) {
   switch (verb) {
     case ctl::Verb::StartTunnel:
+    // Gated exactly as start_tunnel is (ctl::ActionIdForVerb puts them in one
+    // row), so a successful attach_tunnel is equally proof of a grant.
+    case ctl::Verb::AttachTunnel:
     case ctl::Verb::StopTunnel:
     case ctl::Verb::SetProvide:
     case ctl::Verb::SetKillSwitch:
@@ -289,6 +292,12 @@ class ControlClient {
     std::string rpc_server_pem;
     std::string rpc_client_cert_pem;
     std::string rpc_listen_hostport;
+    // The NAME of the generation the three fields above belong to, minted by
+    // the caller (SdkHost draws a uuid from g_uuid_string_random) and required
+    // by ValidateStartTunnelRequest alongside them. It is what the daemon
+    // echoes back and what attach_tunnel names on a LATER launch, so a start
+    // that omits it produces a session nothing can ever reattach to.
+    std::string rpc_session_id;
   };
   struct StartTunnelOutcome {
     bool ok = false;
@@ -308,6 +317,24 @@ class ControlClient {
     // reply is `starting` and this is necessarily false; the caller must gate
     // on StatusReply::rpc_pinned at the transition to Up instead.
     bool rpc_pinned = false;
+
+    // THE LIVE SESSION'S IDENTITY, AS THE DAEMON REPORTS IT — which is not
+    // always what was asked for, and that difference is the point.
+    //
+    // On the daemon's ADOPTION path (TunnelHost::CanAdopt absorbs a start that
+    // re-describes the running session) the identity the DeviceLocal is
+    // actually paired with is the FIRST start's, not this request's. The SDK
+    // rotates the local instance id whenever the by-client JWT string changes,
+    // and a refresh re-signs the same client, so "what local state holds now"
+    // and "what the daemon is paired with" genuinely diverge — and
+    // DeviceLocalRpc.Sync refuses forever an id that is not its own, with no
+    // synchronous signal at all (see RpcSession.hpp's instance-id trap).
+    //
+    // So the caller must build its DeviceRemote with THESE, and remember THESE,
+    // rather than with what it sent. Empty is a daemon predating the fields:
+    // the caller falls back to what it sent and simply cannot reattach later.
+    std::string instance_id;
+    std::string rpc_session_id;
   };
   // Fail-closed by construction. Beyond the transport it enforces two things
   // the caller can no longer forget:
@@ -319,6 +346,56 @@ class ControlClient {
   //      is worse than no tunnel.
   // The async path cannot be gated here; see StartTunnelOutcome::rpc_pinned.
   StartTunnelOutcome StartTunnelEx(const StartTunnelOptions& options);
+
+  // ---- attach_tunnel --------------------------------------------------------
+  // Re-adopt the tunnel that is ALREADY UP by NAMING it, instead of describing
+  // it again. The caller supplies the two identifiers of the session it
+  // believes is running — read out of its stored RpcSessionRecord, i.e. the
+  // Secret Service, never guessed from local state — and no key material
+  // crosses the socket at all.
+  //
+  // It answers in the SAME StartTunnelOutcome a start does, because the daemon
+  // replies with the same StartTunnelReply: one caller-side code path handles
+  // both doors, and the pinning check below is literally the start path's.
+  //
+  // THREE DIVERGENCES FROM StartTunnelEx, each deliberate.
+  //
+  // 1. A REFUSAL IS NOT A SESSION ERROR. kCodeRpcSessionMismatch and
+  //    kCodeTunnelOwnedByOtherClient are a healthy daemon saying "no" to this
+  //    particular attach. Collapsing them into DaemonSessionState::Error would
+  //    make the UI offer "install or start the service" for a daemon that is
+  //    plainly running and answering — the same reasoning that already exempts
+  //    kCodeStartInProgress. The caller's correct response to both is to fall
+  //    back to start_tunnel, and it must not be handed a transport verdict to
+  //    render on the way.
+  //
+  // 2. IT NEVER STOPS THE TUNNEL. StartTunnelEx tears the daemon's session down
+  //    when the pinning gate fails, because IT created that session and an
+  //    unauthenticated root rpc listener is worse than no tunnel. An attach
+  //    created nothing: the tunnel predates the call and may be carrying
+  //    traffic for a session that is working perfectly. Stopping it on a gate
+  //    failure would turn a stale client into a denial of service against the
+  //    tunnel's rightful owner. It refuses, and leaves what it found alone.
+  //
+  // 3. THE REPLY'S IDENTITY IS CHECKED. The daemon must echo back the exact
+  //    instance_id and rpc_session_id that were asked for. Anything else means
+  //    the session on the other end is not the one being named, and dialling it
+  //    would be attaching to a tunnel we cannot prove is ours — the failure this
+  //    whole verb exists to make impossible.
+  //
+  // Ownership across uids is NOT decided here and must not be: the daemon
+  // charges kActionTakeOverTunnel for an attach onto another uid's tunnel, off
+  // the crossUid value frozen in Dispatch. A refusal arrives as
+  // kCodeAuthNotTunnelOwner, which LastAuthOutcome() reports as NotTunnelOwner.
+  //
+  // `expectedRpcPort` is the port the caller will actually dial (from the
+  // stored host_port). A successful attach must echo it, for the same reason a
+  // synchronous start must: rpc_port is an ECHO, not a discovery, so agreeing
+  // on it is the only evidence both halves mean one listener. Pass 0 to skip
+  // the cross-check (no caller should).
+  StartTunnelOutcome AttachTunnel(const std::string& instanceId,
+                                  const std::string& rpcSessionId,
+                                  int expectedRpcPort);
 
   bool StopTunnel(std::string* error = nullptr);
   bool SetProvide(const std::string& mode, std::string* error = nullptr);

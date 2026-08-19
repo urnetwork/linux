@@ -64,8 +64,9 @@ UR_TEST(controlFrameUnknownVerbAndMissingIdAreExplicit) {
 UR_TEST(controlVerbNamesRoundTrip) {
   const ctl::Verb verbs[] = {
       ctl::Verb::Hello,          ctl::Verb::Status,
-      ctl::Verb::StartTunnel,    ctl::Verb::StopTunnel,
-      ctl::Verb::SetProvide,     ctl::Verb::LocationOverrideAvailable,
+      ctl::Verb::StartTunnel,    ctl::Verb::AttachTunnel,
+      ctl::Verb::StopTunnel,     ctl::Verb::SetProvide,
+      ctl::Verb::LocationOverrideAvailable,
       ctl::Verb::LocationOverrideWrite, ctl::Verb::LocationOverrideClear,
   };
   for (const ctl::Verb v : verbs) {
@@ -75,6 +76,7 @@ UR_TEST(controlVerbNamesRoundTrip) {
   UR_EXPECT_TRUE(ctl::VerbFromString("hello") == ctl::Verb::Hello);
   UR_EXPECT_TRUE(ctl::VerbFromString("status") == ctl::Verb::Status);
   UR_EXPECT_TRUE(ctl::VerbFromString("start_tunnel") == ctl::Verb::StartTunnel);
+  UR_EXPECT_TRUE(ctl::VerbFromString("attach_tunnel") == ctl::Verb::AttachTunnel);
   UR_EXPECT_TRUE(ctl::VerbFromString("stop_tunnel") == ctl::Verb::StopTunnel);
   UR_EXPECT_TRUE(ctl::VerbFromString("set_provide") == ctl::Verb::SetProvide);
   UR_EXPECT_TRUE(ctl::VerbFromString("location_override_available") ==
@@ -187,6 +189,9 @@ UR_TEST(controlStartTunnelInstanceIdIsThePairingContract) {
   sent.rpc_server_pem = "-----BEGIN CERTIFICATE-----\nserver\n-----END CERTIFICATE-----\n";
   sent.rpc_client_cert_pem = "-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n";
   sent.rpc_listen_hostport = "127.0.0.1:12042";
+  // ...and so is the NAME of that generation, which is what attach_tunnel
+  // matches later and what the daemon latches into StatusReply.
+  sent.rpc_session_id = "7c9f0b2a-4e51-4d0a-9c33-6a1f5e2b8d40";
   // what the daemon's ControlServer parses and TunnelHost constructs with
   const auto received = ctl::DecodeFrame(ctl::EncodeFrame(
       ctl::MakeRequest(ctl::Verb::StartTunnel, 1, nlohmann::json(sent))))
@@ -212,11 +217,12 @@ UR_TEST(controlStartTunnelInstanceIdIsThePairingContract) {
   // drops any one of them must be REFUSED, never quietly served over an
   // unpinned plaintext listener. This is the assertion whose absence let the
   // stale version of this test pass while the pin was not enforced at all.
-  for (int part = 0; part < 3; ++part) {
+  for (int part = 0; part < 4; ++part) {
     ctl::StartTunnelRequest noPin = sent;
     if (part == 0) noPin.rpc_server_pem.clear();
     if (part == 1) noPin.rpc_client_cert_pem.clear();
     if (part == 2) noPin.rpc_listen_hostport.clear();
+    if (part == 3) noPin.rpc_session_id.clear();
     UR_EXPECT_TRUE(ctl::ValidateStartTunnelRequest(noPin).has_value());
   }
   // A non-loopback listener must be refused outright — the pin is worthless if
@@ -229,6 +235,192 @@ UR_TEST(controlStartTunnelInstanceIdIsThePairingContract) {
   ctl::StartTunnelRequest badPem = sent;
   badPem.rpc_server_pem = "not a pem";
   UR_EXPECT_TRUE(ctl::ValidateStartTunnelRequest(badPem).has_value());
+}
+
+// THE GENERATION IS ATOMIC — name and material are minted together, travel
+// together and are validated together. That coupling is the whole reason a
+// session can be re-attached to by name at all: the daemon latches this id
+// beside the material it pinned, so an id that arrives without material would
+// name a listener that was never created, and material that arrives without an
+// id would build a session no relaunched GUI could ever ask for again (it would
+// silently rebuild the tunnel instead, which is exactly what adoption exists to
+// prevent).
+UR_TEST(controlStartTunnelSessionIdTravelsWithTheMaterial) {
+  ctl::StartTunnelRequest sent;
+  sent.by_jwt = "jwt";
+  sent.instance_id = "3f2a8c1e-instance";
+  sent.app_version = "1.0.0";
+  sent.rpc_server_pem = "-----BEGIN CERTIFICATE-----\nserver\n-----END CERTIFICATE-----\n";
+  sent.rpc_client_cert_pem = "-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----\n";
+  sent.rpc_listen_hostport = "127.0.0.1:12042";
+  sent.rpc_session_id = "7c9f0b2a-4e51-4d0a-9c33-6a1f5e2b8d40";
+  UR_EXPECT_FALSE(ctl::ValidateStartTunnelRequest(sent).has_value());
+
+  // it survives the wire, or the daemon would latch an empty name onto a live
+  // session and every later attach would miss
+  const auto received = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeRequest(ctl::Verb::StartTunnel, 2, nlohmann::json(sent))))
+      ->get<ctl::StartTunnelRequest>();
+  UR_EXPECT_TRUE(received.rpc_session_id == sent.rpc_session_id);
+
+  // material with no name: refused, and with the SAME code as a missing pin —
+  // the client's fix is identical, generate a whole generation
+  ctl::StartTunnelRequest unnamed = sent;
+  unnamed.rpc_session_id.clear();
+  const auto unnamedError = ctl::ValidateStartTunnelRequest(unnamed);
+  UR_EXPECT_TRUE(unnamedError.has_value());
+  UR_EXPECT_TRUE(unnamedError->code == ctl::kCodeRpcPinRequired);
+  UR_EXPECT_TRUE(unnamedError->message.find("rpc_session_id") != std::string::npos);
+
+  // a name with no material: refused too. This is the direction that would
+  // otherwise ask the daemon to publish an identity for a listener it never
+  // pinned.
+  ctl::StartTunnelRequest nameOnly;
+  nameOnly.by_jwt = "jwt";
+  nameOnly.instance_id = "3f2a8c1e-instance";
+  nameOnly.rpc_session_id = sent.rpc_session_id;
+  UR_EXPECT_TRUE(ctl::ValidateStartTunnelRequest(nameOnly).has_value());
+
+  // SHAPE, not entropy: nothing on the wire can prove a value was drawn from a
+  // CSPRNG, but a control byte or an unbounded blob is not an identifier. The
+  // newline case is the one with teeth — the daemon writes refusals to a
+  // line-oriented journal.
+  for (const std::string& bad : {std::string("with space"), std::string("line\nbreak"),
+                                std::string("nul\0byte", 8), std::string(129, 'a')}) {
+    ctl::StartTunnelRequest malformed = sent;
+    malformed.rpc_session_id = bad;
+    const auto error = ctl::ValidateStartTunnelRequest(malformed);
+    UR_EXPECT_TRUE(error.has_value());
+    UR_EXPECT_TRUE(error->code == ctl::kCodeRpcPinInvalid);
+  }
+  // and the alphabet stays open: uuid, hex and base64url all pass, so this
+  // gate never dictates the client's format
+  for (const std::string& good : {std::string("7c9f0b2a-4e51-4d0a-9c33-6a1f5e2b8d40"),
+                                 std::string(64, 'f'), std::string("a-_9AZ=="),
+                                 std::string(128, 'x')}) {
+    UR_EXPECT_TRUE(ctl::LooksLikeRpcSessionId(good));
+  }
+  UR_EXPECT_FALSE(ctl::LooksLikeRpcSessionId(""));
+}
+
+// ---- attach_tunnel ---------------------------------------------------------
+
+// Upstream's own contract, restored: an attach names a session, so BOTH
+// identifiers are load-bearing and neither may default to empty. A half-named
+// attach would either pair with whatever is up under the same instance id
+// after a credential rotation, or pin a session without pinning the device.
+UR_TEST(controlAttachTunnelRequiresBothLiveIdentifiers) {
+  ctl::AttachTunnelRequest sent;
+  sent.instance_id = "3f2a8c1e-instance";
+  sent.rpc_session_id = "session-1";
+  const auto back = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeRequest(ctl::Verb::AttachTunnel, 3, nlohmann::json(sent))))
+                        ->get<ctl::AttachTunnelRequest>();
+  UR_EXPECT_TRUE(back.instance_id == sent.instance_id);
+  UR_EXPECT_TRUE(back.rpc_session_id == sent.rpc_session_id);
+  UR_EXPECT_FALSE(ctl::ValidateAttachTunnelRequest(back).has_value());
+
+  ctl::AttachTunnelRequest noSession = back;
+  noSession.rpc_session_id.clear();
+  UR_EXPECT_TRUE(ctl::ValidateAttachTunnelRequest(noSession).has_value());
+  ctl::AttachTunnelRequest noInstance = back;
+  noInstance.instance_id.clear();
+  UR_EXPECT_TRUE(ctl::ValidateAttachTunnelRequest(noInstance).has_value());
+}
+
+// THE POLKIT DECISION, pinned. attach_tunnel takes over a running tunnel, so
+// the tempting rule is "always kActionTakeOverTunnel". It is deliberately the
+// same row as start_tunnel instead: reattaching to your OWN uid's tunnel is
+// what start_tunnel's adoption path already does under control-tunnel, and
+// charging an admin password for the verb that says so out loud would only
+// teach clients to use the other door. The take-over price applies to the case
+// that IS one — a live tunnel under a different uid.
+UR_TEST(controlAttachTunnelIsPricedLikeStartNotAlwaysAsTakeOver) {
+  UR_EXPECT_TRUE(ctl::ActionIdForVerb(ctl::Verb::AttachTunnel, /*is_log_tail=*/false,
+                                      /*cross_uid=*/false) ==
+                 std::string(ctl::kActionControlTunnel));
+  UR_EXPECT_TRUE(ctl::ActionIdForVerb(ctl::Verb::AttachTunnel, /*is_log_tail=*/false,
+                                      /*cross_uid=*/true) ==
+                 std::string(ctl::kActionTakeOverTunnel));
+  // identical to start_tunnel in both slots — that is the claim
+  for (const bool cross : {false, true}) {
+    UR_EXPECT_TRUE(std::string(ctl::ActionIdForVerb(ctl::Verb::AttachTunnel, false, cross)) ==
+                   std::string(ctl::ActionIdForVerb(ctl::Verb::StartTunnel, false, cross)));
+  }
+  // a human pressed something, so the agent dialog is allowed to appear
+  UR_EXPECT_TRUE(ctl::VerbWantsInteraction(ctl::Verb::AttachTunnel, /*is_log_tail=*/false));
+  // and a log_tail frame is still read-log whatever verb name it carries
+  UR_EXPECT_TRUE(std::string(ctl::ActionIdForVerb(ctl::Verb::AttachTunnel, true, false)) ==
+                 std::string(ctl::kActionReadLog));
+}
+
+// THREE REFUSALS A CLIENT MUST BE ABLE TO TELL APART, because each one has a
+// different next move and getting them confused destroys either a working
+// tunnel or a good credential:
+//   rpc_session_mismatch      — the session you named is not the one running.
+//                               Your record is stale: discard it and build a
+//                               new session with start_tunnel.
+//   tunnel_already_running    — you named the LIVE session but presented
+//                               different material. Do NOT retry as sent and do
+//                               NOT expect a rebuild: mint a new generation
+//                               (name and material together) and start again.
+//   tunnel_owned_by_other_client — an ownership refusal, nothing to do with
+//                               credentials at all.
+// The code this test used to pin, rpc_session_not_persisted, is deliberately
+// gone: the daemon now latches and publishes the live generation, so the state
+// it named ("a tunnel is up and has no identity to compare") cannot occur.
+UR_TEST(controlAttachTunnelRefusalsAreDistinguishable) {
+  UR_EXPECT_TRUE(std::string(ctl::kCodeRpcSessionMismatch) !=
+                 std::string(ctl::kCodeTunnelAlreadyRunning));
+  UR_EXPECT_TRUE(std::string(ctl::kCodeTunnelAlreadyRunning) !=
+                 std::string(ctl::kCodeTunnelOwnedByOtherClient));
+  UR_EXPECT_TRUE(std::string(ctl::kCodeTunnelAlreadyRunning) == "tunnel_already_running");
+
+  const auto mismatch = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeErrorReply(6, "running tunnel identity or RPC session does not match",
+                          ctl::kCodeRpcSessionMismatch)));
+  UR_EXPECT_TRUE(mismatch.has_value());
+  UR_EXPECT_FALSE(ctl::ReplyOk(*mismatch));
+  UR_EXPECT_TRUE(ctl::ReplyCode(*mismatch) == "rpc_session_mismatch");
+  // the mismatch message must not report WHICH half differed — that would make
+  // the verb an oracle for guessing a live session name
+  UR_EXPECT_TRUE(ctl::ReplyError(*mismatch).find("instance_id") == std::string::npos);
+
+  const auto alreadyRunning = ctl::DecodeFrame(ctl::EncodeFrame(ctl::MakeErrorReply(
+      5, "a tunnel is already running under this rpc session id with different pinning "
+         "material", ctl::kCodeTunnelAlreadyRunning)));
+  UR_EXPECT_TRUE(alreadyRunning.has_value());
+  UR_EXPECT_FALSE(ctl::ReplyOk(*alreadyRunning));
+  UR_EXPECT_TRUE(ctl::ReplyCode(*alreadyRunning) == "tunnel_already_running");
+}
+
+// The attach reply IS the start reply, so the live identity has to survive the
+// round trip on both. And an absent rpc_session_id — what a daemon predating
+// the fields sends, and what an ACCEPTED ASYNC START still sends, since the
+// identity is latched at the up edge — must parse as empty rather than as
+// anything a client could mistake for a session to send back.
+UR_TEST(controlStartTunnelReplyCarriesTheLiveIdentity) {
+  ctl::StartTunnelReply reply;
+  reply.rpc_port = 12042;
+  reply.tunnel_state = ctl::TunnelState::Up;
+  reply.rpc_pinned = true;
+  reply.instance_id = "3f2a8c1e-instance";
+  reply.rpc_session_id = "session-1";
+  const auto back = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeReply(7, true, nlohmann::json(reply))))->get<ctl::StartTunnelReply>();
+  UR_EXPECT_TRUE(back.instance_id == "3f2a8c1e-instance");
+  UR_EXPECT_TRUE(back.rpc_session_id == "session-1");
+  UR_EXPECT_TRUE(back.rpc_pinned);
+
+  // a daemon predating the fields and an async start that has been accepted but
+  // has not reached its up edge are indistinguishable on the wire, and both
+  // parse empty — which a client must read as "nothing to attach to yet", never
+  // as a session named ""
+  const auto older = ctl::DecodeFrame("{\"id\":7,\"ok\":true,\"rpc_port\":12042}")
+                         ->get<ctl::StartTunnelReply>();
+  UR_EXPECT_TRUE(older.instance_id.empty());
+  UR_EXPECT_TRUE(older.rpc_session_id.empty());
+  UR_EXPECT_EQ(12042, older.rpc_port);
 }
 
 UR_TEST(controlStatusReplyRoundTrip) {

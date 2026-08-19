@@ -547,6 +547,7 @@ ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
   req.rpc_server_pem = options.rpc_server_pem;
   req.rpc_client_cert_pem = options.rpc_client_cert_pem;
   req.rpc_listen_hostport = options.rpc_listen_hostport;
+  req.rpc_session_id = options.rpc_session_id;
 
   // ---- gate 1: refuse before the frame is built -----------------------------
   // The SAME pure validator the daemon runs, so the two halves can never
@@ -588,6 +589,10 @@ ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
   outcome.rpc_port = payload.rpc_port;
   outcome.tunnel_state = payload.tunnel_state;
   outcome.rpc_pinned = payload.rpc_pinned;
+  // What the daemon says the live session IS, which on its adoption path is not
+  // what we sent. See the field contract in ControlClient.hpp.
+  outcome.instance_id = payload.instance_id;
+  outcome.rpc_session_id = payload.rpc_session_id;
 
   // ---- gate 2: a synchronous start must come back PINNED --------------------
   // A daemon that predates this contract drops the three fields on parse,
@@ -633,6 +638,114 @@ ControlClient::StartTunnelOutcome ControlClient::StartTunnelEx(
     }
     lastAuth_ = startAuth;
     lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+  outcome.ok = true;
+  return outcome;
+}
+
+// See the contract on the declaration (ControlClient.hpp) for the three
+// deliberate divergences from StartTunnelEx. This is the client half of the
+// EXPLICIT reattach door: it names a live session and re-presents nothing.
+ControlClient::StartTunnelOutcome ControlClient::AttachTunnel(
+    const std::string& instanceId, const std::string& rpcSessionId,
+    int expectedRpcPort) {
+  std::scoped_lock lock(mutex_);
+  // Same reasoning as StartTunnelEx: the local validator below can refuse
+  // before a byte is sent, and that path never reaches CallLocked's own reset.
+  // The SERIAL is deliberately not bumped — no reply happened, so a caller
+  // comparing it correctly concludes "no verdict from this attempt".
+  ResetAuthLocked();
+  StartTunnelOutcome outcome;
+  ctl::AttachTunnelRequest req;
+  req.instance_id = instanceId;
+  req.rpc_session_id = rpcSessionId;
+
+  // The SAME pure validator the daemon runs, so the two halves can never
+  // disagree about what a valid attach is.
+  if (const auto invalid = ctl::ValidateAttachTunnelRequest(req)) {
+    outcome.error = *invalid;
+    // Not a transport problem, but the caller branches on LastSessionState()
+    // as well as on the outcome, and leaving it at Unreachable would make the
+    // UI offer "install or start the service" for what is a local refusal.
+    lastState_ = DaemonSessionState::Error;
+    outcome.session = lastState_;
+    return outcome;
+  }
+
+  // NO retry. An attach is idempotent in its EFFECT — it either matches the
+  // live session or refuses — but re-sending one is not free: it can re-raise a
+  // polkit dialog the user has already answered, which is the exact "the
+  // password prompt vanished and came back" defect the interactive timeout
+  // below exists to prevent. And the caller's fallback (a fresh start_tunnel)
+  // is correct and cheap, so a single unanswered attempt costs a tunnel
+  // rebuild, never a wedge.
+  const auto reply = CallLocked(ctl::Verb::AttachTunnel, nlohmann::json(req), &outcome.error,
+                                /*allowRetry=*/false, PolkitAwareTimeoutLocked());
+  outcome.session = lastState_;
+  if (!reply) return outcome;
+  if (!ctl::ReplyOk(*reply)) {
+    outcome.error = ctl::ReplyError(*reply);
+    outcome.code = ctl::ReplyCode(*reply);
+    // DIVERGENCE 1. These two are a healthy daemon declining THIS attach, not a
+    // broken session: the stored record names a session that is not the one
+    // running, or the tunnel belongs to a client that still holds it. Both are
+    // answered by falling back to start_tunnel, and neither may reach the UI as
+    // "the service is not running".
+    //
+    // A third code used to be listed here, rpc_session_not_persisted, for a
+    // daemon that published no session generation and so could never match an
+    // attach. It is gone from the protocol, not merely unused: the daemon now
+    // latches the live (instance_id, rpc_session_id) at the up edge, so the
+    // state that code named cannot occur and a client branching on it would be
+    // branching on nothing.
+    if (outcome.code != ctl::kCodeRpcSessionMismatch &&
+        outcome.code != ctl::kCodeTunnelOwnedByOtherClient) {
+      lastState_ = DaemonSessionState::Error;
+    }
+    outcome.session = lastState_;
+    return outcome;
+  }
+  const auto payload = reply->get<ctl::StartTunnelReply>();
+  outcome.rpc_port = payload.rpc_port;
+  outcome.tunnel_state = payload.tunnel_state;
+  outcome.rpc_pinned = payload.rpc_pinned;
+  outcome.instance_id = payload.instance_id;
+  outcome.rpc_session_id = payload.rpc_session_id;
+
+  // DIVERGENCE 3. The daemon must hand back the identity we named. A reply that
+  // agrees to attach and then describes a DIFFERENT session is the one outcome
+  // this verb must never let through: the caller would dial a listener it has
+  // no way to prove is the one its stored key pins.
+  if (payload.instance_id != instanceId || payload.rpc_session_id != rpcSessionId) {
+    outcome.error =
+        "The URnetwork system service attached a different session than the one this app "
+        "asked for. Reconnect to build a new one.";
+    outcome.code = ctl::kCodeRpcSessionMismatch;
+    outcome.ok = false;
+    // A healthy daemon that answered — see divergence 1. Do not turn this into
+    // a transport state; the caller falls back to start_tunnel.
+    outcome.session = lastState_;
+    return outcome;
+  }
+
+  // The pinning gate, identical to the synchronous start's and for the identical
+  // reason: rpc_port is an ECHO, not a discovery, so agreeing on it plus
+  // rpc_pinned is the only evidence both halves mean ONE authenticated listener.
+  // An attach is never async — there is nothing to bring up — so unlike
+  // StartTunnelEx there is no case this cannot decide here.
+  if (payload.tunnel_state != ctl::TunnelState::Up || !payload.rpc_pinned ||
+      (expectedRpcPort != 0 && payload.rpc_port != expectedRpcPort)) {
+    outcome.error =
+        "The URnetwork system service could not hand this app back the local control "
+        "connection it had. Reconnect to build a new one.";
+    outcome.code = ctl::kCodeRpcPinRequired;
+    outcome.ok = false;
+    // DIVERGENCE 2. StartTunnelEx stops the tunnel here. This must NOT: the
+    // tunnel predates this call, may be carrying traffic, and may belong to a
+    // session that is working — tearing it down on the strength of a stale
+    // client's failed attach would be a denial of service against its owner.
     outcome.session = lastState_;
     return outcome;
   }

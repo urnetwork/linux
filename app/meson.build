@@ -401,7 +401,12 @@ urnetwork_tests = executable('urnetwork-tests',
   ],
   include_directories : include_directories('src', 'tests'),
   dependencies : [json],
-  cpp_args : ['-DUR_ASSETS_DIR="' + meson.project_source_root() / 'assets' + '"'],
+  cpp_args : ['-DUR_ASSETS_DIR="' + meson.project_source_root() / 'assets' + '"',
+              # TunnelPolicyTest reads Tunnel.cpp to prove the IPv4-only guard
+              # still has a caller. A predicate with no call site is this
+              # project's most-repeated defect, and it is invisible to a test
+              # that only exercises the predicate.
+              '-DUR_SRC_DIR="' + meson.project_source_root() / 'src' + '"'],
   install : false)
 test('unit', urnetwork_tests, protocol : 'exitcode')
 

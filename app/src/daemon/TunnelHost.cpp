@@ -197,6 +197,13 @@ ctl::StatusReply TunnelHost::Status() const {
   std::scoped_lock lock(statusMutex_);
   ctl::StatusReply s = status_;
   s.owner_connected = ownerConnected_.load();
+  // The live session's identity, published on EVERY status — this is what
+  // attach_tunnel compares against and what a relaunching GUI matches its
+  // stored record to (RpcSessionMatchesStatus). Both are empty unless a tunnel
+  // is up; see the members' comment for the single set site and the two clear
+  // sites that guarantee it.
+  s.instance_id = instanceId_;
+  s.rpc_session_id = rpcSessionId_;
   return s;
 }
 
@@ -210,6 +217,12 @@ bool TunnelHost::CanAdopt(const ctl::StartTunnelRequest& config) const {
   if (status_.tunnel_state != ctl::TunnelState::Up) return false;
   if (activeConfig_.instance_id.empty()) return false;
   return activeConfig_.instance_id == config.instance_id &&
+         // The generation NAME is part of what must match. Adoption may not
+         // silently rename a live session: the name is what `status` publishes
+         // and what every other holder of this generation would attach by, so
+         // adopting under a new one would leave the daemon telling two
+         // different clients two different truths about one listener.
+         activeConfig_.rpc_session_id == config.rpc_session_id &&
          activeConfig_.by_jwt == config.by_jwt &&
          activeConfig_.network_space_json == config.network_space_json &&
          activeConfig_.rpc_server_pem == config.rpc_server_pem &&
@@ -374,6 +387,12 @@ ctl::StatusReply TunnelHost::Start(const ctl::StartTunnelRequest& config) {
     // has not sent yet.
     status_.rpc_pinned = false;
     status_.client_id.clear();
+    // Cleared for the same reason rpc_pinned is: a client polling through an
+    // async bring-up must never see the PREVIOUS session's identity attached to
+    // a tunnel that is starting. Empty means "there is nothing to attach to",
+    // which is the truth from here until the up edge below re-latches it.
+    instanceId_.clear();
+    rpcSessionId_.clear();
   }
   if (config.async) {
     worker_ = std::thread(&TunnelHost::RunStart, this, config);
@@ -621,24 +640,52 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
 
       // --- 5) the tun (address/dns from the device) -------------------------
       TunnelConfig cfg;
-      cfg.local_addr = device_->tunnelLocalAddress();
-      if (!IsIpv4Address(cfg.local_addr)) {
-        if (!cfg.local_addr.empty()) {
+      cfg.local_addr_v4 = device_->tunnelLocalAddress();
+      if (!IsIpv4Address(cfg.local_addr_v4)) {
+        if (!cfg.local_addr_v4.empty()) {
           std::fprintf(stderr, "[tunnel] the device reported an unusable tunnel address '%s'\n",
-                       cfg.local_addr.c_str());
+                       cfg.local_addr_v4.c_str());
         }
-        cfg.local_addr = "169.254.2.1";
+        cfg.local_addr_v4 = "169.254.2.1";
       }
       // dns from the device: the dns settings' unencrypted local servers when
       // set, otherwise the distinct plain-DNS UpgradeMux mask. Always plain
       // :53, never OS-level encrypted DNS: the mux performs the
       // unencrypted-DNS -> DoH upgrade in-tunnel. The tunnel is ipv4-only.
-      if (auto dns = device_->tunnelDnsAddressesIpv4(); dns && !dns->empty()) {
-        cfg.dns_servers = *dns;
-      } else {
+      //
+      // SANITISED HERE, not inside Tunnel::Open, because Open now refuses the
+      // WHOLE configuration when any resolver is not an IPv4 literal (upstream's
+      // IsIpv4OnlyTunnelConfig floor). Open used to drop a bad resolver silently
+      // and carry on, so leaving the device's list unfiltered would have turned
+      // "the device named one resolver we cannot use" into "the tunnel will not
+      // start" — a regression dressed as a fix. Dropping happens where the value
+      // enters the daemon, the guard stays the fail-closed floor behind it, and
+      // the diagnostic still names the resolver that was thrown away.
+      if (auto dns = device_->tunnelDnsAddressesIpv4(); dns) {
+        for (const auto& server : *dns) {
+          if (IsIpv4Address(server)) {
+            cfg.dns_servers_v4.push_back(server);
+          } else {
+            std::fprintf(stderr, "[tunnel] ignoring an unusable tunnel resolver '%s'\n",
+                         server.c_str());
+          }
+        }
+      }
+      if (cfg.dns_servers_v4.empty()) {
         // Keep the exceptional fallback coupled to the SDK's separately tested
-        // URnetwork-owned UpgradeMux identity.
-        cfg.dns_servers = {urnet::getDefaultTunnelDnsAddressIpv4()};
+        // URnetwork-owned UpgradeMux identity -- but never hand Open something
+        // it must refuse: a fallback that is not IPv4 leaves the tunnel with no
+        // resolver (which the guard permits, and which the nft DNS floor and
+        // status.dns_detail both already describe) rather than no tunnel.
+        std::string fallback = urnet::getDefaultTunnelDnsAddressIpv4();
+        if (IsIpv4Address(fallback)) {
+          cfg.dns_servers_v4 = {std::move(fallback)};
+        } else {
+          std::fprintf(stderr,
+                       "[tunnel] the sdk default tunnel resolver '%s' is not an IPv4 literal; "
+                       "the tunnel will come up with no resolver of its own\n",
+                       fallback.c_str());
+        }
       }
       cfg.require_egress_protection = !allowUnprotectedEgress_;
 
@@ -755,6 +802,13 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
         status_.rpc_pinned = rpcPinned;
         status_.up_since_millis = UnixMillis();
         activeConfig_ = config;  // what a later start_tunnel is compared against
+        // THE UP EDGE IS THE ONLY PLACE THIS IS SET. Latched from the accepted
+        // request, in the same locked block that flips the state to Up, so the
+        // published identity and the published state can never disagree: a
+        // client that sees Up sees a session it can name, and attach_tunnel
+        // (which requires Up) always has both halves to compare.
+        instanceId_ = config.instance_id;
+        rpcSessionId_ = config.rpc_session_id;
         try {
           status_.client_id = device_->getClientId();
         } catch (const std::exception&) {
@@ -935,6 +989,12 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
     status_.rpc_port = 0;
     status_.rpc_pinned = false;  // the listener died with the DeviceLocal
     status_.client_id.clear();
+    // The session is over, so its name names nothing. Leaving either behind
+    // would let an attach_tunnel match a tunnel that is no longer running (the
+    // Up gate would catch it today, but the identity is the thing being
+    // compared and it must not outlive what it identifies).
+    instanceId_.clear();
+    rpcSessionId_.clear();
     activeConfig_ = ctl::StartTunnelRequest();
     status_.routes_installed = false;
     status_.egress_protected = false;

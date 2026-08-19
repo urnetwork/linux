@@ -36,6 +36,31 @@ namespace urnw::ctl {
 
 // Bump ONLY on incompatible wire-format changes, decoupled from the app
 // version (hello negotiates it; see the enforcement note above).
+//
+// attach_tunnel DOES NOT BUMP IT, and the reasoning is recorded here because
+// "we added a verb, surely that is a new protocol" is the tempting wrong
+// answer:
+//   * A new verb is additive in BOTH directions. An old daemon meets
+//     attach_tunnel as Verb::Unknown and answers `unknown verb` — a normal
+//     error frame the client can fall back from, not a dropped connection. A
+//     new daemon meets a client that never sends it and behaves exactly as
+//     before. Same for the two StartTunnelReply fields: every payload here is
+//     parsed with the tolerant detail::Get, so absent is a default and unknown
+//     is ignored.
+//   * The version numbers are a MINIMUM gate, not a feature flag. Raising
+//     kControlProtocolVersion to 2 without raising the minimums buys nothing;
+//     raising the MINIMUMS would refuse every currently-installed pair — the
+//     daemon shipped by apt/install.sh and the AppImage/Flatpak GUI update on
+//     independent schedules, which is the whole reason this check has teeth —
+//     to gain a verb that a v1 peer already declines gracefully.
+//   * The hello gate is unchanged and needs no exception: attach_tunnel is a
+//     post-hello verb like every other, so it is refused with
+//     kCodeHelloRequired before authorization exactly as start_tunnel is, and
+//     the SDK exact-version match still runs first.
+// NOTE FOR THE MERGE: upstream's copy of this header reads 2/2/2 where ours
+// reads 1/1/1, for reasons unrelated to this verb. The number that ships is
+// upstream's to choose — this fork deliberately does not renumber a shared
+// wire contract from a branch.
 inline constexpr int kControlProtocolVersion = 1;
 // The daemon refuses a client hello carrying a protocol_version below this.
 inline constexpr int kMinSupportedClientProtocol = 1;
@@ -134,6 +159,13 @@ inline constexpr int kRpcPortMax = 12125;
 // LINE, not the individual field, so without this a single start_tunnel could
 // hand the root daemon two ~500 KiB "PEMs" to parse.
 inline constexpr size_t kMaxRpcPemBytes = 64 * 1024;
+
+// Cap on rpc_session_id, for the same reason: the 1 MiB frame bound limits the
+// LINE. An identifier is a name, not a payload — a uuid is 36 bytes and 32
+// random bytes are 64 in hex — so 128 is generous and still bounds a value the
+// daemon copies into every `status` reply (polled at ~4 Hz) and holds for the
+// life of a session.
+inline constexpr size_t kMaxRpcSessionIdBytes = 128;
 
 // ---- version negotiation (pure, unit-tested) -------------------------------
 // One direction each; together they cover both rejection directions. A peer
@@ -292,12 +324,33 @@ inline bool LooksLikePem(const std::string& pem) {
   return pem.find("-----END ") != std::string::npos;
 }
 
+// SHAPE gate for rpc_session_id: non-empty, bounded, and printable ASCII with
+// no space and no control byte. NOT an entropy check — nothing on the wire can
+// prove a value was drawn from a CSPRNG, and the mint is the client's job (see
+// StartTunnelRequest::rpc_session_id). What it does buy:
+//   * a NUL or a newline can never reach the daemon's stderr, where the journal
+//     is line-oriented and a forged line is a real (if minor) way to lie to
+//     whoever reads a bug report;
+//   * an unbounded identifier can never be latched for the life of a session
+//     and re-copied into every status reply.
+// Deliberately permissive about the ALPHABET: a uuid, hex, base64 and base64url
+// all pass, so this cannot dictate the client's format.
+inline bool LooksLikeRpcSessionId(const std::string& id) {
+  if (id.empty() || id.size() > kMaxRpcSessionIdBytes) return false;
+  for (const char c : id) {
+    const unsigned char u = static_cast<unsigned char>(c);
+    if (u <= 0x20 || u >= 0x7f) return false;
+  }
+  return true;
+}
+
 // ---- verbs -----------------------------------------------------------------
 
 enum class Verb {
   Hello,
   Status,
   StartTunnel,
+  AttachTunnel,
   StopTunnel,
   SetProvide,
   SetKillSwitch,
@@ -312,6 +365,7 @@ inline const char* ToString(Verb v) {
     case Verb::Hello: return "hello";
     case Verb::Status: return "status";
     case Verb::StartTunnel: return "start_tunnel";
+    case Verb::AttachTunnel: return "attach_tunnel";
     case Verb::StopTunnel: return "stop_tunnel";
     case Verb::SetProvide: return "set_provide";
     case Verb::SetKillSwitch: return "set_kill_switch";
@@ -327,6 +381,7 @@ inline Verb VerbFromString(const std::string& s) {
   if (s == "hello") return Verb::Hello;
   if (s == "status") return Verb::Status;
   if (s == "start_tunnel") return Verb::StartTunnel;
+  if (s == "attach_tunnel") return Verb::AttachTunnel;
   if (s == "stop_tunnel") return Verb::StopTunnel;
   if (s == "set_provide") return Verb::SetProvide;
   if (s == "set_kill_switch") return Verb::SetKillSwitch;
@@ -353,6 +408,28 @@ inline const char* ActionIdForVerb(Verb verb, bool is_log_tail, bool cross_uid) 
   if (is_log_tail) return kActionReadLog;
   switch (verb) {
     case Verb::StartTunnel:
+    // attach_tunnel SITS IN THE SAME ROW AS start_tunnel, DELIBERATELY, and
+    // this is the one place the choice is worth defending. It is tempting to
+    // read "attach takes over a running tunnel" as "attach is always a
+    // take-over" and hard-wire kActionTakeOverTunnel. That is wrong twice:
+    //   * The everyday attach is a GUI relaunching against ITS OWN uid's
+    //     tunnel. That is the identical act start_tunnel's adoption path
+    //     already performs (ControlServer::HandleStartTunnel -> CanAdopt)
+    //     under kActionControlTunnel. Charging auth_admin_keep for the verb
+    //     that says out loud what start_tunnel does silently would mean the
+    //     honest verb costs a root password and the roundabout one does not —
+    //     which does not protect anything, it just teaches every client to
+    //     avoid attach_tunnel.
+    //   * The case that IS a take-over is exactly the case cross_uid already
+    //     names: a tunnel live under a DIFFERENT uid. There it gets
+    //     kActionTakeOverTunnel (auth_admin_keep in all three slots) on the
+    //     same terms as stop_tunnel and set_provide.
+    // So the security boundary here is whose tunnel it is, never which verb
+    // asked — and knowing the live instance_id + rpc_session_id is NOT part of
+    // that boundary. Those identifiers are a pairing key, not a capability:
+    // polkit decides, and a foreign uid that somehow learned them still faces
+    // the admin prompt.
+    case Verb::AttachTunnel:
     case Verb::StopTunnel:
     case Verb::SetProvide:
     case Verb::LocationOverrideWrite:
@@ -380,6 +457,9 @@ inline bool VerbWantsInteraction(Verb verb, bool is_log_tail) {
   if (is_log_tail) return false;
   switch (verb) {
     case Verb::StartTunnel:
+    // A human just launched the app or pressed Connect; an attach is that
+    // press arriving at a tunnel that is already up.
+    case Verb::AttachTunnel:
     case Verb::StopTunnel:
     case Verb::SetProvide:
     case Verb::SetKillSwitch:
@@ -560,6 +640,40 @@ struct StartTunnelRequest {
   std::string rpc_server_pem;       // server KEY+CERT the daemon presents
   std::string rpc_client_cert_pem;  // client CERT the daemon pins
   std::string rpc_listen_hostport;  // "127.0.0.1:<port>", GUI-chosen
+
+  // THE NAME OF THIS GENERATION — upstream's field, restored, and the value
+  // attach_tunnel names later. It is minted in the SAME act as the three
+  // fields above and stored with them: RpcSessionStore writes instance_id +
+  // rpc_session_id + host_port to disk and puts the client private key and the
+  // pinned server cert in the Secret Service, one record, one generation.
+  //
+  // WHO MINTS IT, AND WHY IT IS THE CLIENT. Half of the material this names
+  // never reaches the daemon at all — client_pem and server_cert_pem stay in
+  // the GUI — so only the GUI is in a position to name a generation and store
+  // the name beside the secrets it belongs to. The daemon LATCHES what it is
+  // given (TunnelHost::rpcSessionId_) and echoes it back on every reply; it
+  // never invents one, because an id the client did not choose could not be
+  // saved with the half it keeps, and an id minted per bring-up would be
+  // unknown to the client until after the tunnel was already up.
+  //
+  // TWO PROPERTIES ARE REQUIRED OF THE MINT. Both are the client's to uphold
+  // and only one of them can be checked from here:
+  //   * UNGUESSABLE. Draw it from the CSPRNG — never a counter, a pid, a
+  //     timestamp or the instance id. polkit is the security boundary (see the
+  //     pairing-key note in ActionIdForVerb) and a foreign uid still faces the
+  //     admin prompt, but a predictable name invites a SAME-uid process to
+  //     attach to a session it did not create, and same-uid is the one place
+  //     policy has nothing left to say.
+  //   * IT CHANGES WHENEVER THE MATERIAL CHANGES. One generation, one name.
+  //     The daemon enforces this for the LIVE session and nowhere else: a
+  //     start_tunnel that re-uses the running generation's name while
+  //     presenting different material is refused with
+  //     kCodeTunnelAlreadyRunning rather than quietly rebuilt, because two key
+  //     pairs answering to one name is exactly how a client ends up attached
+  //     to a listener it cannot dial. Once a session is over the daemon
+  //     forgets it, so re-use across sessions is unpoliced by anything but
+  //     this contract.
+  std::string rpc_session_id;
 };
 inline void to_json(nlohmann::json& j, const StartTunnelRequest& v) {
   j["by_jwt"] = v.by_jwt;
@@ -571,6 +685,7 @@ inline void to_json(nlohmann::json& j, const StartTunnelRequest& v) {
   if (!v.rpc_server_pem.empty()) j["rpc_server_pem"] = v.rpc_server_pem;
   if (!v.rpc_client_cert_pem.empty()) j["rpc_client_cert_pem"] = v.rpc_client_cert_pem;
   if (!v.rpc_listen_hostport.empty()) j["rpc_listen_hostport"] = v.rpc_listen_hostport;
+  if (!v.rpc_session_id.empty()) j["rpc_session_id"] = v.rpc_session_id;
 }
 inline void from_json(const nlohmann::json& j, StartTunnelRequest& v) {
   detail::Get(j, "by_jwt", v.by_jwt);
@@ -582,6 +697,7 @@ inline void from_json(const nlohmann::json& j, StartTunnelRequest& v) {
   detail::Get(j, "rpc_server_pem", v.rpc_server_pem);
   detail::Get(j, "rpc_client_cert_pem", v.rpc_client_cert_pem);
   detail::Get(j, "rpc_listen_hostport", v.rpc_listen_hostport);
+  detail::Get(j, "rpc_session_id", v.rpc_session_id);
 }
 
 // A rejected start_tunnel, with the machine-readable code attached. The code
@@ -604,32 +720,54 @@ struct StartTunnelRejection {
 // remote that connects but never populates. An empty id must therefore fail
 // loudly here, never fall back to a daemon-generated one.
 //
-// The rpc pinning triple is REQUIRED. This is a deliberate BEHAVIOUR change
-// inside protocol v1 (the wire is still purely additive): an old GUI's
-// start_tunnel now fails with kCodeRpcPinRequired instead of quietly getting
-// an unpinned root listener on 127.0.0.1:12025. Per the hello exact-version
-// match, a mismatched shipped pair is already refused before start_tunnel is
-// reachable, so this branch turns "should be unreachable" into "is".
+// The rpc GENERATION is REQUIRED, all four parts of it. This is a deliberate
+// BEHAVIOUR change inside protocol v1 (the wire is still purely additive): an
+// old GUI's start_tunnel now fails with kCodeRpcPinRequired instead of quietly
+// getting an unpinned root listener on 127.0.0.1:12025. Per the hello
+// exact-version match, a mismatched shipped pair is already refused before
+// start_tunnel is reachable, so this branch turns "should be unreachable" into
+// "is".
+//
+// rpc_session_id joined the other three here rather than sitting beside
+// by_jwt, and that placement IS the contract: the name and the material are
+// one atomic generation. A start that carries key material with no name
+// produces a session no client can ever attach to (the identity in `status`
+// would be half-empty); a start that carries a name with no material asks the
+// daemon to publish an identity for a listener it never pinned. Validating
+// them together is what makes "it changes whenever the material changes"
+// checkable at all — the two are minted, sent, latched and forgotten as a
+// unit.
 inline std::optional<StartTunnelRejection> ValidateStartTunnelRequest(
     const StartTunnelRequest& req) {
   if (req.by_jwt.empty()) return StartTunnelRejection{"by_jwt is required", nullptr};
   if (req.instance_id.empty()) return StartTunnelRejection{"instance_id is required", nullptr};
   const int rpcParts = (req.rpc_server_pem.empty() ? 0 : 1) +
                        (req.rpc_client_cert_pem.empty() ? 0 : 1) +
-                       (req.rpc_listen_hostport.empty() ? 0 : 1);
+                       (req.rpc_listen_hostport.empty() ? 0 : 1) +
+                       (req.rpc_session_id.empty() ? 0 : 1);
   if (rpcParts == 0) {
     return StartTunnelRejection{
         "this start_tunnel carries no device-rpc pinning material; the daemon will not run "
         "an unauthenticated local rpc listener",
         kCodeRpcPinRequired};
   }
-  if (rpcParts != 3) {
+  if (rpcParts != 4) {
     // A half-supplied pair would make the daemon listen with a pinned server
     // while the GUI dials with the SDK default (or the reverse), which
-    // presents as a DeviceRemote that connects and never populates.
+    // presents as a DeviceRemote that connects and never populates. A
+    // half-supplied IDENTITY is the same failure one step later: a session
+    // that cannot be named cannot be re-attached to, so the next GUI launch
+    // silently rebuilds a working tunnel instead.
     return StartTunnelRejection{
-        "rpc_server_pem, rpc_client_cert_pem and rpc_listen_hostport must be sent together",
+        "rpc_session_id, rpc_server_pem, rpc_client_cert_pem and rpc_listen_hostport must be "
+        "sent together",
         kCodeRpcPinRequired};
+  }
+  if (!LooksLikeRpcSessionId(req.rpc_session_id)) {
+    return StartTunnelRejection{
+        "rpc_session_id must be 1..128 printable ASCII bytes with no space or control "
+        "character",
+        kCodeRpcPinInvalid};
   }
   if (!LooksLikePem(req.rpc_server_pem)) {
     return StartTunnelRejection{"rpc_server_pem is not a usable PEM", kCodeRpcPinInvalid};
@@ -644,6 +782,58 @@ inline std::optional<StartTunnelRejection> ValidateStartTunnelRequest(
         "rpc_listen_hostport must be 127.0.0.1:<port> with 1024 <= port <= 65535",
         kCodeRpcPinInvalid};
   }
+  return std::nullopt;
+}
+
+// ---- attach_tunnel ---------------------------------------------------------
+// Re-adopt a tunnel that is ALREADY UP, by naming the live session rather than
+// re-describing it. The client sends the two identifiers of the session it
+// believes is running; the daemon replies with the same StartTunnelReply a
+// successful start would have produced (so one client-side code path handles
+// both), or refuses. Nothing is torn down and nothing is rebuilt: this verb
+// either matches the live session or it fails.
+//
+// It exists because the alternative — "start it again and hope the daemon
+// notices it is the same session" — makes the client re-send by_jwt and the
+// whole mTLS triple just to be told nothing changed.
+//
+// IT SUCCEEDS WHEN THE NAMED SESSION IS THE LIVE ONE. The daemon latches the
+// accepted start_tunnel's (instance_id, rpc_session_id) at the up edge and
+// publishes them in `status`, so ControlServer::HandleAttachTunnel has a real
+// identity to compare against; the GUI keeps the same pair in its
+// RpcSessionStore record, beside the client key and pinned server cert the
+// Secret Service holds, and re-presents it after a relaunch.
+//
+// TWO DOORS, ONE OUTCOME, and they are not redundant. attach_tunnel names the
+// session and sends NO key material, which is what a GUI that still has its
+// Secret Service entry should use. start_tunnel's adoption path
+// (TunnelHost::CanAdopt) re-describes the session in full and is what a GUI
+// with no usable entry falls back to — it re-sends by_jwt and the whole
+// generation and is adopted only if every byte matches. Both answer with the
+// same StartTunnelReply and both leave the running tunnel untouched.
+struct AttachTunnelRequest {
+  std::string instance_id;
+  std::string rpc_session_id;
+};
+inline void to_json(nlohmann::json& j, const AttachTunnelRequest& v) {
+  j["instance_id"] = v.instance_id;
+  j["rpc_session_id"] = v.rpc_session_id;
+}
+inline void from_json(const nlohmann::json& j, AttachTunnelRequest& v) {
+  detail::Get(j, "instance_id", v.instance_id);
+  detail::Get(j, "rpc_session_id", v.rpc_session_id);
+}
+// BOTH identifiers are required, and neither may be defaulted. instance_id
+// alone would let a client attach to whatever session happens to be up under
+// the same pairing key after a credential rotation; rpc_session_id alone would
+// not pin the DEVICE. Kept as upstream's optional<std::string> rather than
+// converted to the StartTunnelRejection shape our start-tunnel validator grew:
+// these two are plain field errors with no actionable client branch, which is
+// exactly the case that shape reserves a nullptr code for.
+inline std::optional<std::string> ValidateAttachTunnelRequest(
+    const AttachTunnelRequest& req) {
+  if (req.instance_id.empty()) return "instance_id is required";
+  if (req.rpc_session_id.empty()) return "rpc_session_id is required";
   return std::nullopt;
 }
 
@@ -663,11 +853,32 @@ struct StartTunnelReply {
   // for the bound address), so the client's check is
   // rpc_pinned && rpc_port == RpcPortFromHostPort(the hostport it sent).
   bool rpc_pinned = false;
+
+  // THE LIVE SESSION'S IDENTITY, echoed back. Upstream fields, restored: this
+  // is the reply attach_tunnel shares with start_tunnel, so the client learns
+  // the two identifiers it must send to re-attach LATER from the reply that
+  // created (or adopted) the session — never from its own local guess. That
+  // matters most on the adoption path, where the id the daemon is actually
+  // paired with is the id the FIRST start used, which is not necessarily the
+  // one localState_ holds now (see RpcSession.hpp's instance-id trap).
+  //
+  // Absent parses "" on both, which is what a daemon predating the fields is —
+  // and also what a daemon that has just ACCEPTED an ASYNC start sends, since
+  // the identity is latched at the up edge and that reply is written while the
+  // bring-up is still running (tunnel_state=starting, rpc_port=0). Same rule
+  // as rpc_pinned beside it: on the async path the answer exists only in
+  // `status` at the transition to Up. A client must never persist an empty
+  // rpc_session_id as something to attach to later — that is a session it
+  // cannot name, not a session named "".
+  std::string instance_id;
+  std::string rpc_session_id;
 };
 inline void to_json(nlohmann::json& j, const StartTunnelReply& v) {
   j["rpc_port"] = v.rpc_port;
   j["tunnel_state"] = ToString(v.tunnel_state);
   j["rpc_pinned"] = v.rpc_pinned;
+  j["instance_id"] = v.instance_id;
+  j["rpc_session_id"] = v.rpc_session_id;
 }
 inline void from_json(const nlohmann::json& j, StartTunnelReply& v) {
   detail::Get(j, "rpc_port", v.rpc_port);
@@ -677,6 +888,8 @@ inline void from_json(const nlohmann::json& j, StartTunnelReply& v) {
   // completed start
   v.tunnel_state = state.empty() ? TunnelState::Up : TunnelStateFromString(state);
   detail::Get(j, "rpc_pinned", v.rpc_pinned);  // absent = false = fails closed
+  detail::Get(j, "instance_id", v.instance_id);
+  detail::Get(j, "rpc_session_id", v.rpc_session_id);
 }
 
 struct SetKillSwitchRequest {
@@ -706,12 +919,23 @@ struct StatusReply {
   TunnelState tunnel_state = TunnelState::Stopped;
   int rpc_port = 0;          // 0 while the tunnel is down
   std::string client_id;     // the DeviceLocal's client id ("" while down)
-  // UPSTREAM FIELDS, kept so upstream's RpcSessionStore /
-  // SecretServiceRpcSessionStore compile against this protocol. Our fork
-  // regenerates the device-RPC material per session rather than persisting it
-  // through the Secret Service, so nothing here populates rpc_session_id yet;
-  // reconciling the two credential lifetimes is a maintainer decision and is
-  // called out in the PR rather than resolved unilaterally.
+  // THE LIVE SESSION'S IDENTITY — and THE FIELDS attach_tunnel COMPARES
+  // AGAINST. Both are latched from the accepted start_tunnel at the up edge
+  // (TunnelHost::instanceId_ / rpcSessionId_, published in the same locked
+  // block that flips the state to Up) and cleared on teardown. Two invariants
+  // follow, and both are load-bearing: this daemon cannot publish Up with a
+  // half-empty identity, and an attach can never match a session that is
+  // merely `starting`.
+  //
+  // They are also what upstream's RpcSessionStore matches its stored record
+  // against (RpcSessionMatchesStatus), which is how a relaunching GUI decides
+  // between attaching and building a new session.
+  //
+  // NOT SHIPPED TO A FOREIGN UID: RedactStatusForForeignUid keeps four fields
+  // and drops everything else, these two included. The socket is
+  // world-connectable under polkit, and while polkit — not knowledge of the
+  // name — is what gates the attach, handing every local process the attach
+  // name of somebody else's session is a leak with no purpose.
   std::string instance_id;    // exact live DeviceLocal identity ("" while down)
   std::string rpc_session_id; // opaque per-tunnel RPC credential generation
   std::string error;         // last start error ("" when none)
@@ -872,6 +1096,51 @@ inline constexpr const char* kCodeClientProtocolTooOld = "client_protocol_too_ol
 inline constexpr const char* kCodeSdkVersionMismatch = "sdk_version_mismatch";
 inline constexpr const char* kCodeHelloRequired = "hello_required";
 inline constexpr const char* kCodeTunnelOwnedByOtherClient = "tunnel_owned_by_other_client";
+
+// ---- start_tunnel names the LIVE generation, with the wrong material -------
+// UPSTREAM'S CODE, restored, with a NARROWER emission than upstream's — and
+// the narrowing is the interesting part. Upstream refuses every start_tunnel
+// while a tunnel runs ("attach with its live identity"); this fork adopts
+// instead (ControlServer::HandleStartTunnel -> TunnelHost::CanAdopt), so a
+// start that matches the live session byte for byte succeeds and one that
+// names a different session rebuilds. That leaves exactly one case where
+// refusing beats both:
+//
+//   a tunnel is UP, the request carries the SAME instance_id and the SAME
+//   rpc_session_id, and the material differs — the caller claims to BE the
+//   running generation while presenting credentials that generation was not
+//   built with.
+//
+// Rebuilding there would republish ONE name over TWO different key pairs, and
+// any holder of the older pair — a second GUI, a stale keyring record — would
+// afterwards attach BY NAME and be handed a port it cannot dial: the silent
+// "connects and never populates" failure this header exists to make
+// impossible. So the daemon keeps the working tunnel and says why.
+//
+// THE CLIENT'S RESPONSE IS TO MINT A NEW GENERATION — a new rpc_session_id AND
+// new material, together — and start again; that terminates, because the new
+// name cannot collide with the live one. Retrying the identical request cannot
+// help, and this is NOT an ownership refusal: kCodeTunnelOwnedByOtherClient and
+// kCodeAuthNotTunnelOwner are the codes for that, and they are answered before
+// this one is reached.
+inline constexpr const char* kCodeTunnelAlreadyRunning = "tunnel_already_running";
+
+// ---- attach_tunnel refusals ------------------------------------------------
+// UPSTREAM'S CODE, restored verbatim: the attach names a session that is not
+// the one running — a different instance_id, a different RPC session
+// generation, or no live tunnel at all. The honest client response is to fall
+// back to start_tunnel and build a session; the stored record that produced
+// the refusal names nothing that exists and may be discarded.
+//
+// It is this verb's ONLY refusal beyond authorization and the two empty-field
+// errors, and that is now the whole story. There used to be a second code,
+// rpc_session_not_persisted, for a daemon that never published a session
+// generation and therefore had nothing to compare an attach against; it is
+// DELETED rather than kept for compatibility, because the state it described
+// cannot occur any more (start_tunnel requires rpc_session_id, and the daemon
+// latches it before it publishes Up) and a code no reachable path can emit is
+// a documented lie about what the daemon does.
+inline constexpr const char* kCodeRpcSessionMismatch = "rpc_session_mismatch";
 
 // ---- authorization refusals ------------------------------------------------
 // These arrive over a SUCCESSFUL connection, from a daemon that answered. They
