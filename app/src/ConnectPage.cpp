@@ -702,6 +702,20 @@ void ConnectPage::BuildPaneB() {
   if (auto* inner = RowInner(chartRow)) inner->append(*remoteChart_);
   paneB_.content->append(*chartRow);
 
+  // the remote traffic of the window by transport, directly under the remote
+  // chart on its own natural-height pane row (the legend/footer wrap on a
+  // narrow pane), lined up with the plot by the row's 12px inset. The whole
+  // bar is the tap target for the transport settings sheet.
+  auto* transportRow = kit::MakePaneRow(-1);
+  transportBar_ = Gtk::make_managed<TransportBar>();
+  transportBar_->set_hexpand(true);
+  transportBar_->set_margin_top(10);
+  transportBar_->set_margin_bottom(10);
+  transportBar_->SetSurfaceColor(kUrBackground);  // the pane fill, not the card
+  transportBar_->on_activate = [this] { OpenTransportSheet(); };
+  if (auto* inner = RowInner(transportRow)) inner->append(*transportBar_);
+  paneB_.content->append(*transportRow);
+
   // 3.3 the connections group header; its meta is the FULL feed count even
   // though the list caps at 200 rows
   auto connectionsHeader = kit::MakePaneGroupHeader(T_("connections", "Connections"));
@@ -2043,6 +2057,9 @@ void ConnectPage::PullThroughput() {
   if (remoteChart_) remoteChart_->SetPoints(points, window);
   if (blockedChart_) blockedChart_->SetPoints(points, window);
   if (localChart_) localChart_->SetPoints(points, window);
+  // the transport distribution rides the same throughput tick as the points
+  // (and the same 2fps clock pull); the bar dedups by value
+  if (transportBar_) transportBar_->SetDistribution(host_.ClientTransportDistribution());
 }
 
 // Re-read every feed and re-apply ONLY what changed. Every read below degrades
@@ -2258,6 +2275,15 @@ void ConnectPage::OnHostEvent(DrawerEvent event) {
       dnsSettings_ = host_.GetDnsResolverSettings();
       ApplyDnsCard();
       break;
+    case DrawerEvent::TransportSettings:
+      // the enabled flags behind the bar's unused footer follow the policy;
+      // re-read the distribution so the footer does not wait for a tick
+      if (transportBar_) transportBar_->SetDistribution(host_.ClientTransportDistribution());
+      break;
+    case DrawerEvent::ProviderTransportSettings:
+      // no provider stats surface on this page (the provider bar would live
+      // under a provider Local chart)
+      break;
     case DrawerEvent::Blocker:
       ApplyBlockerUi();
       break;
@@ -2356,6 +2382,18 @@ void ConnectPage::OpenDnsSheet() {
   // that produces nothing cannot happen. Re-decide here too: the feed may have
   // gone away between the last reading and the press.
   if (!dnsSheet_->Open() && dnsEditButton_) dnsEditButton_->set_sensitive(false);
+}
+
+void ConnectPage::OpenTransportSheet() {
+  auto* parent = RootWindow();
+  if (!parent) return;
+  if (!transportSheet_) {
+    transportSheet_ =
+        std::make_unique<TransportSheet>(*parent, host_, TransportSheet::Kind::Client);
+  }
+  // always presentable: with no device the draft comes from the GUI's mirror
+  // or the SDK default, and the edit is applied at the next tunnel start
+  transportSheet_->Open();
 }
 
 // ---- structure ----------------------------------------------------------------
@@ -2465,6 +2503,7 @@ void ConnectPage::SetPresentationActive(bool active) {
     if (contractsSheet_) contractsSheet_->hide();
     if (splitRulesSheet_) splitRulesSheet_->hide();
     if (dnsSheet_) dnsSheet_->hide();
+    if (transportSheet_) transportSheet_->hide();
   }
   UpdateClock();
 }

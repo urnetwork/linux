@@ -34,6 +34,9 @@ inline constexpr Rgba kUrCoral{0xFF / 255.0, 0x6C / 255.0, 0x58 / 255.0, 1.0};  
 inline constexpr Rgba kUrMutedCoral{0xC8 / 255.0, 0x60 / 255.0, 0x4F / 255.0, 1.0};  // #C8604F
 inline constexpr Rgba kUrAmber{0xF5 / 255.0, 0xC2 / 255.0, 0x42 / 255.0, 1.0};  // #F5C242 (idle/none)
 inline constexpr Rgba kUrElectricBlue{0x00 / 255.0, 0x39 / 255.0, 0xDE / 255.0, 1.0};  // #0039DE
+// transport bar carriers (apple urLightBlue / urYellow): H1 and whodis pump
+inline constexpr Rgba kUrLightBlue{0xD6 / 255.0, 0xE6 / 255.0, 0xF4 / 255.0, 1.0};  // #D6E6F4
+inline constexpr Rgba kUrYellow{0xE6 / 255.0, 0xEA / 255.0, 0x23 / 255.0, 1.0};     // #E6EA23
 // Surfaces and text:
 inline constexpr Rgba kUrBackground{0x10 / 255.0, 0x10 / 255.0, 0x10 / 255.0, 1.0};  // #101010
 inline constexpr Rgba kUrCardBackground{0x1C / 255.0, 0x1C / 255.0, 0x1C / 255.0, 1.0};  // #1C1C1C

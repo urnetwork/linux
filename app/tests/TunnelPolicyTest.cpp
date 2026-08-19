@@ -46,6 +46,8 @@ UR_TEST(tunnelPolicyHasNoIpv6ConfigurationSurface) {
   // This guards the defaults as the remote-provider contract evolves.
   UR_EXPECT_TRUE(config.local_addr_v4 == "169.254.2.1");
   UR_EXPECT_EQ(config.prefix_v4, 24);
+  UR_EXPECT_EQ(config.mtu, urnw::kTunnelMtu);
+  UR_EXPECT_EQ(config.mtu, 1100);
   UR_EXPECT_TRUE(config.dns_servers_v4.empty());
 }
 

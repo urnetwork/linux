@@ -181,6 +181,9 @@ executable('urnetwork-gui',
     'src/Ui.cpp',
     'src/Formatters.cpp',
     'src/TransferChart.cpp',
+    'src/TransportPresentation.cpp',
+    'src/TransportBar.cpp',
+    'src/TransportSheet.cpp',
     'src/ConnectDrawer.cpp',
     'src/PostQuantumIdentity.cpp',
     'src/ContractsSheet.cpp',
@@ -375,7 +378,8 @@ install_data('assets/carousel/LoginCarousel1.jpg',
 
 # ---- unit tests -------------------------------------------------------------
 # The pure-logic modules (orthographic projection math, the TopoJSON decoder,
-# the provider row/label helpers, the location-override state machine and the
+# the provider row/label helpers, the location-override state machine, the
+# transport bar's boundary-tween geometry and the
 # daemon control protocol: framing, version negotiation in both directions,
 # SDK-build agreement, peer-credential authorization) carry no GTK, libadwaita
 # or SDK dependency on purpose, so this binary builds and runs anywhere a
@@ -393,6 +397,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/TunnelPolicyTest.cpp',
     'tests/NetworkServerUtilsTest.cpp',
     'tests/HealthTest.cpp',
+    'tests/TransportBarGeometryTest.cpp',
     'src/GlobeGeometry.cpp',
     'src/WorldTopology.cpp',
     'src/ProviderLocationRow.cpp',

@@ -3,8 +3,10 @@
 //   Pane A  CONNECT     330dip rail: status row, the hero canvas, the selected
 //                       provider row, the connect action, provide + connect
 //                       options, network peers.
-//   Pane B  ACTIVITY    star: live throughput header + the routing-decision
-//                       list (selectable in Advanced Mode).
+//   Pane B  ACTIVITY    star: live throughput header, the transport
+//                       distribution bar under it (opens the transport
+//                       settings editor) + the routing-decision list
+//                       (selectable in Advanced Mode).
 //   Pane C  STATISTICS  380dip: session figures, contracts, split rules, DNS
 //                       (and the connection inspector in Advanced Mode).
 //
@@ -36,6 +38,8 @@
 #include "SdkHost.hpp"
 #include "SplitRulesSheet.hpp"
 #include "TransferChart.hpp"
+#include "TransportBar.hpp"
+#include "TransportSheet.hpp"
 
 namespace urnw {
 
@@ -234,6 +238,7 @@ class ConnectPage : public Gtk::Box {
   void OpenContractsSheet();
   void OpenSplitRulesSheet();
   void OpenDnsSheet();
+  void OpenTransportSheet();  // the client transport policy editor
   Gtk::Window* RootWindow();
 
   SdkHost& host_;
@@ -382,6 +387,9 @@ class ConnectPage : public Gtk::Box {
   kit::Pane paneB_;
   kit::Pane paneC_;
   TransferChart* remoteChart_ = nullptr;
+  // the window's remote traffic by transport, directly under the remote
+  // chart; its click opens the transport settings sheet
+  TransportBar* transportBar_ = nullptr;
   Gtk::Label* connectionsCount_ = nullptr;
   Gtk::Box* connectionsArea_ = nullptr;
   Gtk::Box* connectionsHost_ = nullptr;
@@ -426,6 +434,7 @@ class ConnectPage : public Gtk::Box {
   std::unique_ptr<ContractsSheet> contractsSheet_;
   std::unique_ptr<SplitRulesSheet> splitRulesSheet_;
   std::unique_ptr<DnsSheet> dnsSheet_;
+  std::unique_ptr<TransportSheet> transportSheet_;
 
   // The shared ~10fps clock (windows: one drawer clock at 100ms): advances the
   // hero's grid-dot transitions, feeds the charts, and drives the feed poll.

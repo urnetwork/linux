@@ -71,6 +71,7 @@ ConnectDrawer::ConnectDrawer(SdkHost& host, Gtk::Window& parent,
   splitRulesSheet_ = std::make_unique<SplitRulesSheet>(parent_, host_);
   locationsSheet_ = std::make_unique<LocationsSheet>(parent_, host_);
   dnsSheet_ = std::make_unique<DnsSheet>(parent_, host_);
+  transportSheet_ = std::make_unique<TransportSheet>(parent_, host_, TransportSheet::Kind::Client);
   redeemSheet_ = std::make_unique<RedeemCodeSheet>(parent_, host_, balance_);
   upgradeSheet_ = std::make_unique<UpgradeSheet>(parent_, host_, balance_);
 
@@ -330,6 +331,12 @@ void ConnectDrawer::BuildClientStatsCard() {
   remoteChart_ = Gtk::make_managed<TransferChart>(T_("remote", "Remote"),
                                                   TransferChart::Route::Remote, kUrGreen, kUrPink);
   card->append(*remoteChart_);
+  // the remote traffic of the window by transport, full width under the
+  // remote plot (the card's 12px spacing is the gap on both sides). Tap opens
+  // the transport settings; the bar's own click wins over the card's tap.
+  transportBar_ = Gtk::make_managed<TransportBar>();
+  transportBar_->on_activate = [this] { transportSheet_->Open(); };
+  card->append(*transportBar_);
   blockChart_ = Gtk::make_managed<TransferChart>(T_("blocked", "Blocked"),
                                                  TransferChart::Route::Block, kUrCoral,
                                                  kUrMutedCoral);
@@ -526,6 +533,15 @@ void ConnectDrawer::OnHostEvent(DrawerEvent event) {
       break;
     case DrawerEvent::DnsSettings:
       RefreshDnsCard();
+      break;
+    case DrawerEvent::TransportSettings:
+      // the enabled flags behind the bar's unused footer follow the policy;
+      // re-read the distribution so the footer does not wait for a tick
+      RefreshTransportBar();
+      break;
+    case DrawerEvent::ProviderTransportSettings:
+      // no provider stats surface in the drawer (the provider bar would live
+      // under a provider Local chart); nothing to refresh here
       break;
     case DrawerEvent::Blocker:
       RefreshBlocker();
@@ -728,6 +744,13 @@ void ConnectDrawer::PullThroughput() {
   remoteChart_->SetPoints(points, window);
   blockChart_->SetPoints(points, window);
   localChart_->SetPoints(points, window);
+  // the distribution rides the same throughput tick as the points (the
+  // contract view controller's listener fires for both); the bar dedups
+  RefreshTransportBar();
+}
+
+void ConnectDrawer::RefreshTransportBar() {
+  if (transportBar_) transportBar_->SetDistribution(host_.ClientTransportDistribution());
 }
 
 void ConnectDrawer::RefreshSplitRuleCount() {

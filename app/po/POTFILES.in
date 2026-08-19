@@ -28,6 +28,9 @@ src/DeveloperPage.cpp
 src/SettingsPage.cpp
 src/SplitRulesSheet.cpp
 src/SupportPage.cpp
+src/TransportBar.cpp
+src/TransportPresentation.cpp
+src/TransportSheet.cpp
 src/Tray.cpp
 src/UpgradeSheet.cpp
 src/UsageBar.cpp

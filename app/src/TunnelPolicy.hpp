@@ -12,11 +12,15 @@
 
 namespace urnw {
 
+// Mirrors sdk.GetDefaultTunnelMtu/connect.DefaultMtu. One full encrypted
+// tunnel packet plus the UR envelope fits one initial H3 QUIC DATAGRAM.
+inline constexpr int kTunnelMtu = 1100;
+
 struct TunnelConfig {
   std::string name = "urnet0";
   std::string local_addr_v4 = "169.254.2.1";
   int prefix_v4 = 24;
-  int mtu = 1440;
+  int mtu = kTunnelMtu;
   std::vector<std::string> dns_servers_v4;
   // FORK ADDITION (not upstream). Refuse to install the capture routes unless
   // the daemon's own sockets are demonstrably steered around them. Only a dev

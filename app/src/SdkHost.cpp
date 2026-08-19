@@ -1554,6 +1554,19 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
     // creation). LocalState defaults to true — kill switch off.
     device_->setRouteLocal(localState_->getRouteLocal());
 
+    // Restore the persisted transport policies (client + provider) the same
+    // way. The daemon's DeviceLocal persists and restores its own copy, but
+    // the GUI and the daemon do not share local state, so an edit made while
+    // the tunnel was down lives only in the GUI mirror until it is applied
+    // here (apple DeviceManager.initDevice parity). nullopt = never edited:
+    // the daemon's persisted or default policy stands.
+    if (auto settings = localState_->getTransportSettings(); settings) {
+      device_->setTransportSettings(settings);
+    }
+    if (auto settings = localState_->getProviderTransportSettings(); settings) {
+      device_->setProviderTransportSettings(settings);
+    }
+
     // Connection choice is data-plane state, so keep this lightweight listener
     // alive for the tray even when every presentation controller is closed.
     //
@@ -1851,6 +1864,17 @@ void SdkHost::SubscribeDrawer() {
   presentationSubs_.push_back(device_->addDnsResolverSettingsChangeListener(
       [this](std::optional<urnet::DnsResolverSettings>) {
         EmitDrawerEvent(DrawerEvent::DnsSettings);
+      }));
+  // transport policies (dns-settings pattern): fired by the daemon's device on
+  // change, forwarded over the rpc, re-fired with the daemon's truth on every
+  // sync, and locally by the device remote for an edit queued while offline
+  presentationSubs_.push_back(device_->addTransportSettingsChangeListener(
+      [this](std::optional<urnet::TransportSettings>) {
+        EmitDrawerEvent(DrawerEvent::TransportSettings);
+      }));
+  presentationSubs_.push_back(device_->addProviderTransportSettingsChangeListener(
+      [this](std::optional<urnet::TransportSettings>) {
+        EmitDrawerEvent(DrawerEvent::ProviderTransportSettings);
       }));
   presentationSubs_.push_back(device_->addBlockerEnabledChangeListener(
       [this](bool) { EmitDrawerEvent(DrawerEvent::Blocker); }));
@@ -2235,6 +2259,63 @@ std::optional<urnet::ThroughputPointList> SdkHost::ThroughputPoints() {
 int64_t SdkHost::ThroughputWindowSeconds() {
   std::scoped_lock lock(mutex_);
   return contractVc_ ? contractVc_->getWindowDurationSeconds() : 60;
+}
+
+std::optional<urnet::TransportDistribution> SdkHost::ClientTransportDistribution() {
+  std::scoped_lock lock(mutex_);
+  if (!contractVc_) return std::nullopt;
+  return contractVc_->getTransportDistribution();
+}
+
+std::optional<urnet::TransportDistribution> SdkHost::ProviderTransportDistribution() {
+  std::scoped_lock lock(mutex_);
+  if (!contractVc_) return std::nullopt;
+  return contractVc_->getProviderTransportDistribution();
+}
+
+std::optional<urnet::TransportSettings> SdkHost::GetTransportSettings() {
+  std::scoped_lock lock(mutex_);
+  if (device_) {
+    if (auto settings = device_->getTransportSettings(); settings) return settings;
+  }
+  if (localState_) return localState_->getTransportSettings();
+  return std::nullopt;
+}
+
+void SdkHost::SetTransportSettings(const urnet::TransportSettings& settings) {
+  std::scoped_lock lock(mutex_);
+  // apply live over the device rpc (the daemon persists it in its own local
+  // state) AND mirror into the GUI local state: with the tunnel down the
+  // mirror is the only copy, and StartTunnel seeds the device from it
+  if (device_) device_->setTransportSettings(settings);
+  if (localState_) {
+    try {
+      localState_->setTransportSettings(settings);
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] persist transport settings failed: %s\n", e.what());
+    }
+  }
+}
+
+std::optional<urnet::TransportSettings> SdkHost::GetProviderTransportSettings() {
+  std::scoped_lock lock(mutex_);
+  if (device_) {
+    if (auto settings = device_->getProviderTransportSettings(); settings) return settings;
+  }
+  if (localState_) return localState_->getProviderTransportSettings();
+  return std::nullopt;
+}
+
+void SdkHost::SetProviderTransportSettings(const urnet::TransportSettings& settings) {
+  std::scoped_lock lock(mutex_);
+  if (device_) device_->setProviderTransportSettings(settings);
+  if (localState_) {
+    try {
+      localState_->setProviderTransportSettings(settings);
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] persist provider transport settings failed: %s\n", e.what());
+    }
+  }
 }
 
 std::optional<urnet::BlockActionList> SdkHost::BlockActions() {

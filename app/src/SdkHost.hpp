@@ -77,6 +77,8 @@ enum class DrawerEvent {
   BlockStats,       // allowed/blocked counts changed
   Overrides,        // block action overrides ("split rules") changed
   DnsSettings,      // dns resolver settings changed
+  TransportSettings,          // client transport policy changed (transport bar footer + editor)
+  ProviderTransportSettings,  // provider transport policy changed
   Blocker,          // block-ads-and-trackers toggle changed
   RouteLocal,       // routeLocal changed (the kill switch, inverted)
   Contracts,        // egress/ingress contract details changed
@@ -590,8 +592,29 @@ class SdkHost {
   void RefreshKillSwitchStatus(KillSwitchDone done = {});
   std::optional<urnet::DnsResolverSettings> GetDnsResolverSettings();
   void SetDnsResolverSettings(const urnet::DnsResolverSettings& settings);
+  // Transport policy (client: the carrier this device uses to reach providers;
+  // provider: the carrier it uses while providing for others). Reads come from
+  // the device when present (the daemon's truth over the rpc, the pending /
+  // last-known policy offline), else the GUI's persisted mirror; nullopt =
+  // never edited (the editor drafts from the SDK default). Writes apply over
+  // the device rpc AND mirror into the GUI's LocalState -- the daemon's
+  // DeviceLocal persists its own copy, but the two processes do not share
+  // local state, so StartTunnel seeds the device from the mirror (an edit made
+  // with the tunnel down survives a relaunch and lands on the next start; the
+  // apple TransportSettingsStore/DeviceManager.initDevice pattern). Changes
+  // arrive as DrawerEvent::TransportSettings / ProviderTransportSettings.
+  std::optional<urnet::TransportSettings> GetTransportSettings();
+  void SetTransportSettings(const urnet::TransportSettings& settings);
+  std::optional<urnet::TransportSettings> GetProviderTransportSettings();
+  void SetProviderTransportSettings(const urnet::TransportSettings& settings);
   std::optional<urnet::ThroughputPointList> ThroughputPoints();
   int64_t ThroughputWindowSeconds();
+  // The window's remote traffic partitioned by transport, ready to render (the
+  // SDK's TransportDistribution: shares in the stable order with cumulative
+  // boundaries, whole percents, used/enabled flags). Read on the same
+  // Throughput tick as the points; nullopt with the tunnel down.
+  std::optional<urnet::TransportDistribution> ClientTransportDistribution();
+  std::optional<urnet::TransportDistribution> ProviderTransportDistribution();
   std::optional<urnet::BlockActionList> BlockActions();
   std::optional<urnet::BlockStats> BlockStatsSnapshot();
   std::optional<urnet::BlockActionOverrideList> BlockActionOverrides();

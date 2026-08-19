@@ -8,9 +8,10 @@
 //      profile, window type "auto" for Auto, so the orthogonal toggles persist
 //      in every mode — plus the Kill switch, the inverted device routeLocal,
 //      which is not part of the profile),
-//   3. the three stats cards (Client statistics with the remote + blocked
-//      charts, Local statistics with the local chart + split-rule count,
-//      Custom DNS status), each opening its detail sheet,
+//   3. the three stats cards (Client statistics with the remote chart, the
+//      transport distribution bar (opening the transport settings editor) and
+//      the blocked chart, Local statistics with the local chart + split-rule
+//      count, Custom DNS status), each opening its detail sheet,
 //   4. the "Block ads and trackers" switch card, and
 //   5. the plan + usage card (apple ConnectActions:169-204): the Guest/Free/
 //      Pro plan label, the used/pending/available usage bar with the daily
@@ -41,6 +42,8 @@
 #include "SplitRulesSheet.hpp"
 #include "SubscriptionBalance.hpp"
 #include "TransferChart.hpp"
+#include "TransportBar.hpp"
+#include "TransportSheet.hpp"
 #include "UpgradeSheet.hpp"
 #include "UsageBar.hpp"
 
@@ -89,7 +92,8 @@ class ConnectDrawer : public Gtk::Box {
 
   void RefreshControls();      // selected location + performance profile
   void ApplyControls();        // performance profile <- control states
-  void PullThroughput();       // feed the three charts
+  void PullThroughput();       // feed the three charts + the transport bar
+  void RefreshTransportBar();  // the window's transport distribution (client)
   void RefreshSplitRuleCount();
   void RefreshDnsCard();
   // The "unapplied recommended settings" nudge pill atop the Custom DNS card:
@@ -128,6 +132,7 @@ class ConnectDrawer : public Gtk::Box {
 
   // stats cards
   TransferChart* remoteChart_ = nullptr;
+  TransportBar* transportBar_ = nullptr;  // under the remote chart; opens the transport sheet
   TransferChart* blockChart_ = nullptr;
   TransferChart* localChart_ = nullptr;
   Gtk::Label* splitRuleCount_ = nullptr;
@@ -172,6 +177,7 @@ class ConnectDrawer : public Gtk::Box {
   std::unique_ptr<SplitRulesSheet> splitRulesSheet_;
   std::unique_ptr<LocationsSheet> locationsSheet_;
   std::unique_ptr<DnsSheet> dnsSheet_;
+  std::unique_ptr<TransportSheet> transportSheet_;  // the client transport policy editor
   std::unique_ptr<RedeemCodeSheet> redeemSheet_;
   std::unique_ptr<UpgradeSheet> upgradeSheet_;
 };

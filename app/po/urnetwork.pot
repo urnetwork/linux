@@ -1898,6 +1898,16 @@ msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr ""
 
+#. Section header of the per-transport enable toggles shown when the transport mode is Auto.
+msgctxt "enabled_under_auto"
+msgid "Enabled under Auto"
+msgstr ""
+
+#. Footer of the Auto transports section explaining the fixed preference order.
+msgctxt "enabled_under_auto_footer"
+msgid "Listed in preference order: H3 and H1 first, then whodis, then whodis pump. The order is fixed. At least one transport stays enabled."
+msgstr ""
+
 #. Call to action
 msgctxt "enjoying_urnetwork"
 msgid "Enjoying URnetwork?"
@@ -3422,6 +3432,11 @@ msgctxt "provider_statistics"
 msgid "Provider statistics"
 msgstr ""
 
+#. Title of the transport settings editor for the provider transport policy.
+msgctxt "provider_transports"
+msgid "Provider transports"
+msgstr ""
+
 #. Used in Main/Account/Wallets/WalletsView.swift.
 msgctxt "providing"
 msgid "Providing"
@@ -3740,6 +3755,11 @@ msgstr ""
 #. A section header for the DNS resolvers.
 msgctxt "resolvers"
 msgid "Resolvers"
+msgstr ""
+
+#. Button that resets the transport settings draft to the SDK default policy.
+msgctxt "restore_default_transports"
+msgid "Restore default transports"
 msgstr ""
 
 #. dns settings
@@ -5396,6 +5416,61 @@ msgstr ""
 #. Transfer Submitted Overlay
 msgctxt "transfer_submitted_details"
 msgid "Your transfer has been initiated and will complete once the transaction is processed on chain."
+msgstr ""
+
+#. Section header of the transport mode selection (Auto or a single transport).
+msgctxt "transport"
+msgid "Transport"
+msgstr ""
+
+#. Subtitle of the Auto transport mode row.
+msgctxt "transport_auto_description"
+msgid "Recommended. Uses the enabled transports below."
+msgstr ""
+
+#. Footer of the client transport mode section.
+msgctxt "transport_client_footer"
+msgid "The transport this device uses to reach providers. Auto tries the enabled transports in preference order and keeps every healthy transport of the same tier connected in parallel."
+msgstr ""
+
+#. One line description of the whodis (DNS) transport in the transport settings editor.
+msgctxt "transport_dns_description"
+msgid "Disguised as DNS traffic. For networks that filter direct connections."
+msgstr ""
+
+#. One line description of the whodis pump (DNS pump) transport in the transport settings editor.
+msgctxt "transport_dnspump_description"
+msgid "Disguised as DNS traffic with a constant reply pump. Lowest bandwidth, highest availability."
+msgstr ""
+
+#. One line description of the H1 transport in the transport settings editor.
+msgctxt "transport_h1_description"
+msgid "Direct over TLS. Works on most networks."
+msgstr ""
+
+#. One line description of the H3 transport in the transport settings editor.
+msgctxt "transport_h3_description"
+msgid "Direct over QUIC. Fastest where it is not filtered."
+msgstr ""
+
+#. Footer of the provider transport mode section.
+msgctxt "transport_provider_footer"
+msgid "The transport this device uses while providing for others. Auto tries the enabled transports in preference order and keeps every healthy transport of the same tier connected in parallel."
+msgstr ""
+
+#. Transport bar label for traffic admitted for sending but not yet attributed to a physical transport.
+msgctxt "transport_queued"
+msgid "queued"
+msgstr ""
+
+#. Prefix of the transport bar footer listing the enabled transports that carried no traffic in the stats window.
+msgctxt "transport_unused"
+msgid "unused"
+msgstr ""
+
+#. Title of the transport distribution bar under the client statistics chart and of the transport settings editor.
+msgctxt "transports"
+msgid "Transports"
 msgstr ""
 
 #. Used in Shared/Views/Introduction/IntroductionView.swift.
