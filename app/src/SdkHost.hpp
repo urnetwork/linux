@@ -607,6 +607,10 @@ class SdkHost {
   void SetTransportSettings(const urnet::TransportSettings& settings);
   std::optional<urnet::TransportSettings> GetProviderTransportSettings();
   void SetProviderTransportSettings(const urnet::TransportSettings& settings);
+  // Runtime Auto capability from the daemon process that owns the memory
+  // budget. Nil while no device/last-known status exists.
+  std::optional<urnet::TransportStatus> GetTransportStatus();
+  std::optional<urnet::TransportStatus> GetProviderTransportStatus();
   std::optional<urnet::ThroughputPointList> ThroughputPoints();
   int64_t ThroughputWindowSeconds();
   // The window's remote traffic partitioned by transport, ready to render (the

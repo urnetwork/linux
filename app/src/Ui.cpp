@@ -22,6 +22,8 @@ constexpr const char* kDrawerCss = R"(
 window.background { background-color: #101010; color: #f8f8f8; }
 .dim-label { color: #989898; opacity: 1; }
 .ur-label-faint { color: #5a5a5a; }
+/* amber for runtime constraint warnings (kUrAmber); symbolic icons follow it */
+.ur-amber { color: #f5c242; }
 /* cards: radius 12, padding 16, tinted #1c1c1c; tappable cards lighten on hover */
 .ur-card { background-color: #1c1c1c; border: 1px solid alpha(#ffffff, .12);
   border-radius: 12px; padding: 16px; }

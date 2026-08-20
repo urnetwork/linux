@@ -1905,8 +1905,8 @@ msgstr "Enabled under Auto"
 
 #. Footer of the Auto transports section explaining the fixed preference order.
 msgctxt "enabled_under_auto_footer"
-msgid "Listed in preference order: H3 and H1 first, then whodis, then whodis pump. The order is fixed. At least one transport stays enabled."
-msgstr "Listed in preference order: H3 and H1 first, then whodis, then whodis pump. The order is fixed. At least one transport stays enabled."
+msgid "Listed in preference order: H1 first, then H3, whodis, and whodis pump. The order is fixed. At least one transport stays enabled."
+msgstr "Listed in preference order: H1 first, then H3, whodis, and whodis pump. The order is fixed. At least one transport stays enabled."
 
 #. Call to action
 msgctxt "enjoying_urnetwork"
@@ -5423,6 +5423,16 @@ msgctxt "transport"
 msgid "Transport"
 msgstr "Transport"
 
+#. Generic warning banner in the transport settings editor when the Auto policy is degraded for a constraint this app version does not recognize (the SDK may report new constraint kinds; "memory" has its own banner).
+msgctxt "transport_auto_degraded"
+msgid "Auto is degraded because system constraints prevent some enabled transports from running."
+msgstr "Auto is degraded because system constraints prevent some enabled transports from running."
+
+#. Warning banner in the transport settings editor when the Auto policy is degraded because the platform memory budget cannot admit every enabled transport.
+msgctxt "transport_auto_degraded_memory"
+msgid "Auto is degraded because system memory limits prevent some enabled transports from running."
+msgstr "Auto is degraded because system memory limits prevent some enabled transports from running."
+
 #. Subtitle of the Auto transport mode row.
 msgctxt "transport_auto_description"
 msgid "Recommended. Uses the enabled transports below."
@@ -5462,6 +5472,11 @@ msgstr "The transport this device uses while providing for others. Auto tries th
 msgctxt "transport_queued"
 msgid "queued"
 msgstr "queued"
+
+#. Accessibility label / tooltip on the warning icon next to a transport that is enabled under Auto but not currently eligible under a system constraint (for example the platform memory budget). A runtime warning, not a settings restriction: the toggle stays editable.
+msgctxt "transport_unavailable_system_constraints"
+msgid "Unavailable due to system constraints"
+msgstr "Unavailable due to system constraints"
 
 #. Prefix of the transport bar footer listing the enabled transports that carried no traffic in the stats window.
 msgctxt "transport_unused"

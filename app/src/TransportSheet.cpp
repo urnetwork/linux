@@ -5,6 +5,7 @@
 
 #include "I18n.hpp"
 #include "TransportPresentation.hpp"
+#include "TransportStatusPresentation.hpp"
 #include "Ui.hpp"
 
 namespace urnw {
@@ -62,6 +63,8 @@ std::optional<urnet::TransportSettings> TransportSheet::CurrentSettings() const 
 void TransportSheet::Open() {
   original_ = CurrentSettings();
   draft_ = original_;
+  status_ = kind_ == Kind::Client ? host_.GetTransportStatus()
+                                  : host_.GetProviderTransportStatus();
   SyncFromDraft();
   present();
 }
@@ -108,6 +111,21 @@ void TransportSheet::BuildUi() {
   // while Auto is selected)
   autoSection_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
   autoSection_->append(*MakeCaption(T_("enabled_under_auto", "Enabled under Auto")));
+  degradedNotice_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  auto* degradedIcon = Gtk::make_managed<Gtk::Image>();
+  degradedIcon->set_from_icon_name("dialog-warning-symbolic");
+  degradedIcon->add_css_class("ur-amber");
+  degradedIcon->set_valign(Gtk::Align::START);
+  degradedNotice_->append(*degradedIcon);
+  // the copy is set in SyncFromDraft: memory has its own wording, any other
+  // constraint the generic system-constraint wording
+  degradedText_ = MakeFooter(T_(
+      "transport_auto_degraded_memory",
+      "Auto is degraded because system memory limits prevent some enabled transports from "
+      "running."));
+  degradedText_->set_hexpand(true);
+  degradedNotice_->append(*degradedText_);
+  autoSection_->append(*degradedNotice_);
   auto* autoCard = MakeCard(10);
   for (const auto& mode : modes_) {
     auto* row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 10);
@@ -131,6 +149,21 @@ void TransportSheet::BuildUi() {
       draft_ = urnet::transportSettingsWithAutoModeEnabled(draft_, modeCopy, toggle->get_active());
       SyncFromDraft();
     });
+    // a runtime warning, not an editing restriction: the toggle stays editable
+    autoRow.constrained = Gtk::make_managed<Gtk::Image>();
+    autoRow.constrained->set_from_icon_name("dialog-warning-symbolic");
+    autoRow.constrained->add_css_class("ur-amber");
+    const Glib::ustring constraintLabel = T_(
+        "transport_unavailable_system_constraints", "Unavailable due to system constraints");
+    autoRow.constrained->set_tooltip_text(constraintLabel);
+    // announce the reason to screen readers too; color + tooltip alone are
+    // not discoverable
+    Glib::Value<Glib::ustring> constraintValue;
+    constraintValue.init(Glib::Value<Glib::ustring>::value_type());
+    constraintValue.set(constraintLabel);
+    autoRow.constrained->update_property(Gtk::Accessible::Property::LABEL, constraintValue);
+    autoRow.constrained->set_valign(Gtk::Align::CENTER);
+    row->append(*autoRow.constrained);
     row->append(*autoRow.toggle);
     autoCard->append(*row);
     autoRows_.push_back(autoRow);
@@ -138,8 +171,8 @@ void TransportSheet::BuildUi() {
   autoSection_->append(*autoCard);
   autoSection_->append(*MakeFooter(
       T_("enabled_under_auto_footer",
-         "Listed in preference order: H3 and H1 first, then whodis, then whodis pump. The "
-         "order is fixed. At least one transport stays enabled.")));
+         "Listed in preference order: H1 first, then H3, whodis, and whodis pump. The order "
+         "is fixed. At least one transport stays enabled.")));
   form->append(*autoSection_);
 
   // restore the SDK default policy (only while the draft differs from it)
@@ -245,6 +278,26 @@ void TransportSheet::SyncFromDraft() {
   // selected), read through the sdk
   urnet::StringList autoModes;
   if (auto modes = urnet::transportSettingsAutoModes(draft_)) autoModes = std::move(*modes);
+  // the status was fetched at Open() paired with the applied policy of that
+  // moment (original_), so decorations render only while the draft equals it:
+  // a status must never be interpreted against an unrelated draft
+  urnet::StringList eligibleModes;
+  if (status_ && status_->auto_eligible_modes) eligibleModes = *status_->auto_eligible_modes;
+  const TransportStatusPresentation decorations = TransportStatusDecorations(
+      IsAuto(), urnet::transportSettingsEqual(draft_, original_), autoModes,
+      status_.has_value(), status_ && status_->auto_degraded, eligibleModes,
+      status_ ? status_->auto_constraint : "");
+  degradedNotice_->set_visible(decorations.showBanner);
+  if (decorations.showBanner) {
+    degradedText_->set_text(
+        decorations.memoryConstraint
+            ? T_("transport_auto_degraded_memory",
+                 "Auto is degraded because system memory limits prevent some enabled "
+                 "transports from running.")
+            : T_("transport_auto_degraded",
+                 "Auto is degraded because system constraints prevent some enabled "
+                 "transports from running."));
+  }
   for (auto& row : autoRows_) {
     const bool on = Contains(autoModes, row.mode);
     if (row.toggle->get_active() != on) row.toggle->set_active(on);
@@ -252,6 +305,7 @@ void TransportSheet::SyncFromDraft() {
     // an empty auto policy would resolve to the full default), so show it
     // disabled
     row.toggle->set_sensitive(!(on && autoModes.size() == 1));
+    row.constrained->set_visible(decorations.constrainedModes.count(row.mode) != 0);
   }
   autoSection_->set_visible(IsAuto());
   restoreSection_->set_visible(!urnet::transportSettingsEqual(draft_, DefaultSettings()));

@@ -2318,6 +2318,16 @@ void SdkHost::SetProviderTransportSettings(const urnet::TransportSettings& setti
   }
 }
 
+std::optional<urnet::TransportStatus> SdkHost::GetTransportStatus() {
+  std::scoped_lock lock(mutex_);
+  return device_ ? device_->getTransportStatus() : std::nullopt;
+}
+
+std::optional<urnet::TransportStatus> SdkHost::GetProviderTransportStatus() {
+  std::scoped_lock lock(mutex_);
+  return device_ ? device_->getProviderTransportStatus() : std::nullopt;
+}
+
 std::optional<urnet::BlockActionList> SdkHost::BlockActions() {
   std::scoped_lock lock(mutex_);
   if (!blockActionVc_) return std::nullopt;

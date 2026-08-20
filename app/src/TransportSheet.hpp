@@ -48,6 +48,7 @@ class TransportSheet : public Gtk::Window {
   struct AutoRow {
     std::string mode;
     Gtk::Switch* toggle = nullptr;
+    Gtk::Image* constrained = nullptr;
   };
 
   void BuildUi();
@@ -62,12 +63,15 @@ class TransportSheet : public Gtk::Window {
   Kind kind_;
   std::optional<urnet::TransportSettings> draft_;
   std::optional<urnet::TransportSettings> original_;
+  std::optional<urnet::TransportStatus> status_;
   urnet::StringList modes_;  // the selectable modes, SDK order
   bool updating_ = false;    // guards switch handlers during widget sync
 
   std::vector<ModeRow> modeRows_;
   std::vector<AutoRow> autoRows_;
   Gtk::Box* autoSection_ = nullptr;
+  Gtk::Box* degradedNotice_ = nullptr;
+  Gtk::Label* degradedText_ = nullptr;
   Gtk::Box* restoreSection_ = nullptr;
   Gtk::Button* updateBtn_ = nullptr;
 };

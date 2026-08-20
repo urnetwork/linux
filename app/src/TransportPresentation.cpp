@@ -48,7 +48,9 @@ Rgba Color(const std::string& transportType) {
   if (transportType == urnet::TransportTypeDns) return kUrPink;
   if (transportType == urnet::TransportTypeDnsPump) return kUrYellow;
   if (transportType == urnet::TransportTypeP2p) return kUrElectricBlue;
-  return kUrTextMuted;  // queued, and anything this app does not know
+  // queued, and anything this app does not know: a dark neutral -- muted gray
+  // read too close to the pale H1 blue in the bar
+  return kUrTextFaint;
 }
 
 Gtk::DrawingArea* MakeDot(const std::string& transportType, int size, bool hollow) {

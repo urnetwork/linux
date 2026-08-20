@@ -122,7 +122,9 @@ void WrapRow::size_allocate_vfunc(int width, int /*height*/, int /*baseline*/) {
 // One row walk for both measure and allocate: items flow left to right at
 // their natural size and wrap when the next one would overflow `width` (a
 // negative width is unconstrained: one line); each row is as tall as its
-// tallest item and items center vertically in it. Returns the total height.
+// tallest item and items share the row's bottom edge, so the labels sit on
+// one common text baseline (they share a font size; bottom is the closest
+// portable proxy for baseline alignment). Returns the total height.
 int WrapRow::Layout(int width, bool place) const {
   struct Slot {
     Gtk::Widget* child = nullptr;
@@ -138,7 +140,7 @@ int WrapRow::Layout(int width, bool place) const {
       int cx = 0;
       for (const Slot& slot : row) {
         slot.child->size_allocate(
-            Gtk::Allocation(cx, y + (rowHeight - slot.height) / 2, slot.width, slot.height),
+            Gtk::Allocation(cx, y + rowHeight - slot.height, slot.width, slot.height),
             -1);
         cx += slot.width + horizontalSpacing_;
       }
@@ -368,11 +370,16 @@ void TransportBar::RebuildLegend(const std::vector<const urnet::TransportShare*>
     item->append(*transport::MakeDot(share->TransportType, kDotSize, /*hollow=*/false));
     auto* name = Gtk::make_managed<Gtk::Label>(transport::DisplayName(share->TransportType));
     name->add_css_class("ur-caption-11");
+    // bottom-align the labels within the chip: the mono percent face has
+    // different metrics from the caption face, so centering would skew their
+    // baselines against each other
+    name->set_valign(Gtk::Align::END);
     item->append(*name);
     // monospace digits so a rolling percent does not jitter its neighbours
     auto* percent = Gtk::make_managed<Gtk::Label>(PercentText(*share));
     percent->add_css_class("ur-mono-11");
     percent->add_css_class("dim-label");
+    percent->set_valign(Gtk::Align::END);
     item->append(*percent);
     legendPercents_.push_back(percent);
     legend_->Append(*item);
@@ -403,6 +410,7 @@ void TransportBar::RebuildUnused(const std::vector<const urnet::TransportShare*>
       auto* name = Gtk::make_managed<Gtk::Label>(transport::DisplayName(share->TransportType));
       name->add_css_class("ur-caption-11");
       name->add_css_class("ur-label-faint");
+      name->set_valign(Gtk::Align::END);
       item->append(*name);
       unused_->Append(*item);
       if (std::find(previous.begin(), previous.end(), share->TransportType) == previous.end()) {
