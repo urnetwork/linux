@@ -1905,7 +1905,7 @@ msgstr ""
 
 #. Footer of the Auto transports section explaining the fixed preference order.
 msgctxt "enabled_under_auto_footer"
-msgid "Listed in preference order: H1 first, then H3, whodis, and whodis pump. The order is fixed. At least one transport stays enabled."
+msgid "Listed in preference order: H3 and H1 first, then whodis, then whodis pump. The order is fixed. At least one transport stays enabled."
 msgstr ""
 
 #. Call to action
