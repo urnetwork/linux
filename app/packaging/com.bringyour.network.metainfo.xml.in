@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AppStream metadata. Required by Flathub, and read by GNOME Software / KDE
+  Discover for every other channel too. The component id MUST equal the .desktop
+  basename and the GTK application id in src/main.cpp (com.bringyour.network) or
+  the store shows a nameless entry and D-Bus activation misses.
+
+  project_license is the CODE license (MPL-2.0). The four commercial brand
+  faces under assets/fonts are separately licensed and NOT MPL — they are
+  declared here as a non-free content attribute rather than folded into the
+  project license, because claiming MPL over them would be false.
+
+  SPDX-License-Identifier: MPL-2.0
+-->
+<component type="desktop-application">
+  <id>com.bringyour.network</id>
+
+  <name>URnetwork</name>
+  <summary>Private, decentralized VPN powered by a peer network</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+
+  <developer id="ur.io">
+    <name>URnetwork</name>
+  </developer>
+
+  <description>
+    <p>
+      URnetwork routes your traffic through a decentralized network of peers
+      instead of a single provider's servers. Choose a country or let the app
+      pick the best available provider, and connect.
+    </p>
+    <p>
+      Provide bandwidth back to the network and earn payouts in USDC. Track
+      what you have provided, what you are owed, and where your network ranks.
+    </p>
+    <p>
+      A kill switch blocks traffic if the tunnel drops, IPv6 is closed off
+      rather than leaked, and DNS is pinned to the tunnel so lookups cannot
+      escape it.
+    </p>
+    <p>
+      Setup takes one extra step: URnetwork installs a small system service
+      that owns the network tunnel. The app detects your distribution and
+      shows you the exact command — a package for Debian, Ubuntu, Fedora and
+      other RPM distributions, or a portable installer that works anywhere
+      else, including immutable systems such as Silverblue and SteamOS.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">com.bringyour.network.desktop</launchable>
+
+  <!-- Flathub mirrors screenshots at build time, so the URL must be reachable
+       from a build host; a repo-relative path does NOT work, which is why the
+       file is both committed here and linked by raw URL. width and height must
+       match the file exactly. Flathub's linter checks them, and a mismatch is a
+       submission failure rather than a warning, so update both if the
+       screenshot is ever retaken. -->
+  <screenshots>
+    <screenshot type="default">
+      <caption>Connected, showing live per-host activity and transport health</caption>
+      <image type="source" width="1600" height="970">https://raw.githubusercontent.com/urnetwork/linux/main/app/packaging/screenshots/connected.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://ur.io</url>
+  <url type="bugtracker">https://github.com/urnetwork/linux/issues</url>
+  <url type="vcs-browser">https://github.com/urnetwork/linux</url>
+  <url type="help">https://ur.xyz</url>
+
+  <!-- Store-page accent. Taken from the app's own connected-state green and
+       the dark surface the UI is drawn on, so the listing matches the product. -->
+  <branding>
+    <color type="primary" scheme_preference="light">#87fb67</color>
+    <color type="primary" scheme_preference="dark">#101010</color>
+  </branding>
+
+  <categories>
+    <category>Network</category>
+    <category>Security</category>
+  </categories>
+
+  <keywords>
+    <keyword>VPN</keyword>
+    <keyword>privacy</keyword>
+    <keyword>proxy</keyword>
+    <keyword>decentralized</keyword>
+  </keywords>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+
+  <requires>
+    <display_length compare="ge">480</display_length>
+  </requires>
+
+  <!-- Explicit rather than empty: an empty element validates but reads as
+       "not assessed". A VPN client hosts none of the rated categories. -->
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-info">mild</content_attribute>
+  </content_rating>
+
+  <!-- STAMPED AT BUILD TIME. app/meson.build configure_file()s this
+       template, deriving both attributes from -Dapp_version. Do not
+       hardcode a version here: the file used to say 2026.8.19 while the
+       pipeline shipped 2026.8.20, and this is what GNOME Software, KDE
+       Discover and the Flathub page read. -->
+  <releases>
+    <release version="@APPSTREAM_VERSION@" date="@APPSTREAM_DATE@">
+      <description>
+        <p>First public release of the URnetwork desktop client for Linux.</p>
+        <ul>
+          <li>Connect through the peer network, with provider selection and live status</li>
+          <li>Kill switch, IPv6 leak protection and DNS pinned to the tunnel</li>
+          <li>Provide bandwidth back to the network and track earnings</li>
+          <li>Authorization through polkit, so no group membership or re-login is needed</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>
