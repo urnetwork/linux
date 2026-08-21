@@ -162,7 +162,7 @@ DNS_WARNING=''
 # legacy `urnetwork` group check stays in force.
 POLKIT_PRESENT=0
 POLKIT_VERSION=''
-POLICY_REL='/usr/share/polkit-1/actions/network.ur.urnetwork.policy'
+POLICY_REL='/usr/share/polkit-1/actions/com.bringyour.network.policy'
 
 log()  { printf '%s\n' "$*"; }
 note() { printf -- '- %s\n' "$*"; }
@@ -1339,7 +1339,7 @@ if [ "${POLKIT_PRESENT}" = 1 ]; then
         #
         # MEASURED on Bazzite: after a clean install the daemon correctly
         # reported `authorization: polkit`, and `pkaction --action-id
-        # network.ur.urnetwork.control-tunnel` answered "No action with action
+        # com.bringyour.network.control-tunnel` answered "No action with action
         # id" -- polkitd had been up since the previous boot, two days earlier.
         # Every authorization check would have been made against an action
         # polkit did not know, so Connect would have failed on a host the

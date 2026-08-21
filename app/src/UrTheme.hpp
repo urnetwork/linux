@@ -34,10 +34,20 @@ void LoadBrandFonts();
 // Install the brand CSS provider once per display. Safe to call repeatedly.
 void EnsureBrandCss();
 
+// The app icon's basename AND its icon-theme name: the packaging installs
+// <datadir>/icons/hicolor/<size>/apps/<kAppIconName>.png, and the .desktop's
+// Icon= key names the same string. It lives here as ONE constant because it was
+// previously spelled as a literal in two places -- the by-path load in
+// UrTheme.cpp and the by-name fallback in MainWindow.cpp -- and the rename to
+// the reverse-DNS app id caught only the packaging, so both lookups missed and
+// the title-bar logo went blank with no error. Flatpak additionally REQUIRES
+// this to equal the app id, or it exports no icon at all.
+inline constexpr const char* kAppIconName = "com.bringyour.network";
+
 // Register the app's hicolor icon directory with the default icon theme so
-// the icon NAME "urnetwork" resolves (window icon, tray, .desktop matching)
+// the icon NAME "com.bringyour.network" resolves (window icon, tray, .desktop matching)
 // even when the app runs from a build tree or a relocated AppImage. Without
-// this, set_from_icon_name("urnetwork") silently renders a BLANK image —
+// this, set_from_icon_name("com.bringyour.network") silently renders a BLANK image —
 // which is exactly how the title-bar logo came out empty. Idempotent.
 void RegisterBrandIcons();
 

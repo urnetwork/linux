@@ -1803,7 +1803,7 @@ single-process model existed only under Snap and is dead). ~17.8k lines of C++ a
   `urnetwork_sdk.hpp` wrapper as Windows. Holds `urnet::DeviceRemote` + a control-socket
   client. Ships as a **user AppImage in a user-writable path** with a `/usr/bin/urnetwork`
   launcher-script indirection; never installed by a package (meson `install_rpath
-  '$ORIGIN/../lib'`). App id `network.ur.urnetwork`; GApplication HANDLES_OPEN deep links;
+  '$ORIGIN/../lib'`). App id `com.bringyour.network`; GApplication HANDLES_OPEN deep links;
   hide-to-tray; forces `ADW_COLOR_SCHEME_FORCE_DARK`; runtime-resolved `bindtextdomain`.
 - **`urnetworkd`** — root daemon, **no GTK of any kind** (glib GMainLoop + gio + json + SDK;
   `-static-libstdc++ -static-libgcc`). Holds `DeviceLocal(enable_rpc=true)`, opens
@@ -1898,8 +1898,8 @@ replacing it, keeping its version/SDK-match enforcement.
   `urnetworkd.service` (Type=notify, After/Wants `network-pre.target`,
   `RuntimeDirectory=urnetwork` 0750, `StateDirectory`/`LogsDirectory` 0700,
   `NoNewPrivileges`, `ProtectHome`, `Restart=on-failure`/`RestartSec=2`),
-  `network.ur.urnetwork.desktop` (`Exec=urnetwork %u`,
-  `MimeType=x-scheme-handler/urnetwork;`, `StartupWMClass=network.ur.urnetwork`),
+  `com.bringyour.network.desktop` (`Exec=urnetwork %u`,
+  `MimeType=x-scheme-handler/urnetwork;`, `StartupWMClass=com.bringyour.network`),
   `urnetwork-launcher` (installed `/usr/bin/urnetwork`; search order `$URNETWORK_APPIMAGE` →
   `~/.local/lib/urnetwork/URnetwork.AppImage` → `~/Applications/URnetwork*.AppImage` newest →
   `/usr/lib/urnetwork/URnetwork.AppImage` → `urnetwork-gui` on PATH; exit 127 with install
@@ -1947,7 +1947,7 @@ Files that ARE snap support (delete):
 - `linux:app/snap/snapcraft.yaml` — the whole file (114 lines). Already carries a SUPERSEDED
   banner ("NOT BUILT, NOT SHIPPED... describes the SINGLE-PROCESS architecture... Do not
   resurrect as-is"); it is also **broken** — it organizes `packaging/urnetwork.desktop`,
-  which was renamed to `network.ur.urnetwork.desktop`, and its `version: "0.0.0"` sed
+  which was renamed to `com.bringyour.network.desktop`, and its `version: "0.0.0"` sed
   stamping mechanism is gone. It was retained only because "Snap Store as secondary channel"
   was left open (`APPIMAGE.md` §8 item 5); that door is now closed.
 - `linux:app/.gitignore` lines 8–11: `*.snap`, `parts/`, `prime/`, `stage/`.
@@ -2139,7 +2139,7 @@ EOL ~yearly — plan an annual runtime bump.
 - polkit: actions as XML `.policy` in `/usr/share/polkit-1/actions/`; the daemon checks each
   privileged request via `CheckAuthorization` (CLI form `pkcheck`), passing request variables
   so admins can write rules. Proposed action split (tiering idiom is standard; names are our
-  proposal): `network.ur.urnetwork.connect`/`.disconnect` → `allow_active=yes`;
+  proposal): `com.bringyour.network.connect`/`.disconnect` → `allow_active=yes`;
   `.install-daemon`, `.set-killswitch`, `.clear-blocking` → `auth_admin_keep`. Simpler
   alternative used by Mullvad/Tailscale: socket file mode + group membership (already the
   linux: model — group `urnetwork`); reasonable default, with polkit/pkexec reserved for the

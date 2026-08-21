@@ -124,11 +124,11 @@ assemble_daemon_root() {
     # --- static integration files: canonical sources in app/packaging -------
     local src="${APP_PACKAGING_DIR}"
     local f
-    for f in urnetwork-launcher urnetworkd.service network.ur.urnetwork.desktop \
-             autostart/network.ur.urnetwork.desktop 95-urnetwork.conf \
+    for f in urnetwork-launcher urnetworkd.service com.bringyour.network.desktop \
+             autostart/com.bringyour.network.desktop 95-urnetwork.conf \
              85-urnetwork-unmanaged.rules \
-             icons/hicolor/48x48/apps/urnetwork.png \
-             icons/hicolor/256x256/apps/urnetwork.png; do
+             icons/hicolor/48x48/apps/com.bringyour.network.png \
+             icons/hicolor/256x256/apps/com.bringyour.network.png; do
         [ -f "${src}/${f}" ] || die "packaging source missing: ${src}/${f}"
     done
 
@@ -140,17 +140,17 @@ assemble_daemon_root() {
     cp "${src}/urnetworkd.service" "${root}/lib/systemd/system/urnetworkd.service"
 
     install -d "${root}/usr/share/applications"
-    cp "${src}/network.ur.urnetwork.desktop" "${root}/usr/share/applications/"
+    cp "${src}/com.bringyour.network.desktop" "${root}/usr/share/applications/"
 
     install -d "${root}/usr/share/icons/hicolor/48x48/apps" \
                "${root}/usr/share/icons/hicolor/256x256/apps"
-    cp "${src}/icons/hicolor/48x48/apps/urnetwork.png" \
-        "${root}/usr/share/icons/hicolor/48x48/apps/urnetwork.png"
-    cp "${src}/icons/hicolor/256x256/apps/urnetwork.png" \
-        "${root}/usr/share/icons/hicolor/256x256/apps/urnetwork.png"
+    cp "${src}/icons/hicolor/48x48/apps/com.bringyour.network.png" \
+        "${root}/usr/share/icons/hicolor/48x48/apps/com.bringyour.network.png"
+    cp "${src}/icons/hicolor/256x256/apps/com.bringyour.network.png" \
+        "${root}/usr/share/icons/hicolor/256x256/apps/com.bringyour.network.png"
 
     install -d "${root}/etc/urnetwork/autostart"
-    cp "${src}/autostart/network.ur.urnetwork.desktop" "${root}/etc/urnetwork/autostart/"
+    cp "${src}/autostart/com.bringyour.network.desktop" "${root}/etc/urnetwork/autostart/"
 
     install -d "${root}/etc/NetworkManager/conf.d"
     cp "${src}/95-urnetwork.conf" "${root}/etc/NetworkManager/conf.d/"
@@ -174,11 +174,11 @@ assemble_daemon_root() {
     # world-writable .policy file, so a wrong mode here does not fail loudly,
     # it silently drops every action back to its built-in default. The mode
     # normalization below sets it; the assertion after it proves it.
-    [ -f "${PACKAGING_DIR}/polkit/network.ur.urnetwork.policy" ] || \
-        die "packaging source missing: ${PACKAGING_DIR}/polkit/network.ur.urnetwork.policy"
+    [ -f "${PACKAGING_DIR}/polkit/com.bringyour.network.policy" ] || \
+        die "packaging source missing: ${PACKAGING_DIR}/polkit/com.bringyour.network.policy"
     install -d "${root}/usr/share/polkit-1/actions"
-    cp "${PACKAGING_DIR}/polkit/network.ur.urnetwork.policy" \
-        "${root}/usr/share/polkit-1/actions/network.ur.urnetwork.policy"
+    cp "${PACKAGING_DIR}/polkit/com.bringyour.network.policy" \
+        "${root}/usr/share/polkit-1/actions/com.bringyour.network.policy"
 
     # Normalize modes: directories 0755; everything except the two
     # executables 0644 (shared libraries ship 0644 on Debian).
@@ -191,7 +191,7 @@ assemble_daemon_root() {
     # and skips the file), and the visible symptom would be "every Connect asks
     # for an admin password" long after the build.
     local policy_mode
-    policy_mode="$(_file_mode_octal "${root}/usr/share/polkit-1/actions/network.ur.urnetwork.policy")"
+    policy_mode="$(_file_mode_octal "${root}/usr/share/polkit-1/actions/com.bringyour.network.policy")"
     [ "${policy_mode}" = '644' ] || \
         die "polkit action file is mode ${policy_mode}, must be 644 (polkit ignores a group- or world-writable .policy)"
 }

@@ -1094,7 +1094,7 @@ cd urnetwork-linux
 ### 10.2 Run it
 
 ```bash
-flatpak run network.ur.urnetwork
+flatpak run com.bringyour.network
 ```
 
 ### 10.3 What is different from the AppImage — and what to test because of it
@@ -1121,7 +1121,7 @@ inode, and every `connect()` fails with `EACCES` — which historically got repo
 as a group-membership problem. The app now detects this and says so instead. To test it:
 
 ```bash
-flatpak run network.ur.urnetwork &          # leave it running
+flatpak run com.bringyour.network &          # leave it running
 sudo systemctl restart urnetworkd
 # now press Connect in the Flatpak GUI
 ```
@@ -1187,7 +1187,7 @@ Plus, separately:
 * **The full `--selftest-egress` output and its exit code** (§5.2). Always.
 * **The app's own log** — the `connect:` lines. From a terminal launch that is `gui.log` from
   §7.1; otherwise `journalctl --user -b | grep -E 'urnetwork|connect:'`, or for the Flatpak,
-  `flatpak run network.ur.urnetwork 2>&1 | tee flatpak-gui.log`.
+  `flatpak run com.bringyour.network 2>&1 | tee flatpak-gui.log`.
 * **The installer's full output** (§4 dry-run and §6 real run).
 
 **Use `stat -c %C`, never `ls -Z`.** On a machine with no SELinux, `ls -Z` prints `?` and
@@ -1208,7 +1208,7 @@ tunnel addresses (`169.254.x.x`) are fine and are useful to us.
 sudo systemctl stop urnetworkd
 sudo /usr/lib/urnetwork/uninstall.sh          # add --purge to also remove state + group
 rm -f ~/.local/lib/urnetwork/URnetwork.AppImage
-flatpak uninstall --user network.ur.urnetwork
+flatpak uninstall --user com.bringyour.network
 ```
 
 Then confirm the machine is back to normal:

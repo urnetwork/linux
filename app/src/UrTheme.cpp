@@ -369,7 +369,8 @@ Glib::RefPtr<Gdk::Texture> BrandLogoTexture() {
   const std::string dir = BrandIconDir();
   if (dir.empty()) return cached;
   for (const char* size : {"256x256", "48x48"}) {
-    const std::string path = dir + "/hicolor/" + size + "/apps/urnetwork.png";
+    const std::string path =
+        dir + "/hicolor/" + size + "/apps/" + kAppIconName + ".png";
     if (!g_file_test(path.c_str(), G_FILE_TEST_IS_REGULAR)) continue;
     try {
       cached = Gdk::Texture::create_from_filename(path);
@@ -378,7 +379,7 @@ Glib::RefPtr<Gdk::Texture> BrandLogoTexture() {
       g_warning("brand logo: %s failed to load: %s", path.c_str(), e.what());
     }
   }
-  g_warning("brand logo: no urnetwork.png under %s", dir.c_str());
+  g_warning("brand logo: no %s.png under %s", kAppIconName, dir.c_str());
   return cached;
 }
 

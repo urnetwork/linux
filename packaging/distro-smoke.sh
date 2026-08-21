@@ -347,7 +347,7 @@ if have flatpak; then
     FP_REMOTES="${FP_REMOTES%% }"
     check 2.2 ok "flatpak" "present; remotes: ${FP_REMOTES:-<none>}"
     note "No .flatpak bundle is published in the release yet either -- the manifest"
-    note "at packaging/flatpak/network.ur.urnetwork.yml builds one locally."
+    note "at packaging/flatpak/com.bringyour.network.yml builds one locally."
 else
     check 2.2 n/a "flatpak" "not installed (only matters for the GUI, never the daemon)"
 fi
@@ -922,8 +922,8 @@ fi
 GUI_FOUND=''
 [ -x /usr/bin/urnetwork ] && GUI_FOUND="/usr/bin/urnetwork"
 [ -x /usr/local/bin/urnetwork ] && GUI_FOUND="${GUI_FOUND} /usr/local/bin/urnetwork"
-if have flatpak && flatpak list --app --columns=application 2>/dev/null | grep -qx 'network.ur.urnetwork'; then
-    GUI_FOUND="${GUI_FOUND} flatpak:network.ur.urnetwork"
+if have flatpak && flatpak list --app --columns=application 2>/dev/null | grep -qx 'com.bringyour.network'; then
+    GUI_FOUND="${GUI_FOUND} flatpak:com.bringyour.network"
 fi
 if [ -n "${GUI_FOUND}" ]; then
     check 9.6 ok "GUI" "${GUI_FOUND# }"

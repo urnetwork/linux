@@ -108,14 +108,14 @@ inline constexpr const char* kControlGroupName = "urnetwork";
 //   policy file absent   -> byte-for-byte today's behaviour: 0660
 //                           root:urnetwork and AuthorizeControlPeer.
 inline constexpr const char* kPolkitPolicyPath =
-    "/usr/share/polkit-1/actions/network.ur.urnetwork.policy";
+    "/usr/share/polkit-1/actions/com.bringyour.network.policy";
 // The immutable-host twin. ostree/bootc machines mount /usr read-only, so the
 // tarball installer maps its whole payload under /usr/local — and polkit has
 // read both directories since 124. ControlServer::PolicyPath() probes this one
 // FIRST; without it the daemon looks in the one place the file cannot be on
 // Bazzite/Silverblue/Kinoite/SteamOS and silently falls back to the group.
 inline constexpr const char* kPolkitPolicyPathLocal =
-    "/usr/local/share/polkit-1/actions/network.ur.urnetwork.policy";
+    "/usr/local/share/polkit-1/actions/com.bringyour.network.policy";
 
 // HelloReply::auth_mode — which authority this daemon actually latched at
 // start. The GUI needs it because the "add yourself to the urnetwork group,
@@ -125,16 +125,16 @@ inline constexpr const char* kAuthModePolkit = "polkit";
 inline constexpr const char* kAuthModeGroup = "group";
 
 // The four polkit action ids, namespaced to the app id. Shipped in
-// packaging/polkit/network.ur.urnetwork.policy (0644 root:root — polkit
+// packaging/polkit/com.bringyour.network.policy (0644 root:root — polkit
 // ignores group- or world-writable action files). They are checked by
 // urnetworkd, never by the GUI: the subject is built from SO_PEERCRED on the
 // connection being served, so a client can neither nominate its own subject
 // nor skip the check by not asking.
-inline constexpr const char* kActionControlTunnel = "network.ur.urnetwork.control-tunnel";
+inline constexpr const char* kActionControlTunnel = "com.bringyour.network.control-tunnel";
 inline constexpr const char* kActionManageKillSwitch =
-    "network.ur.urnetwork.manage-kill-switch";
-inline constexpr const char* kActionTakeOverTunnel = "network.ur.urnetwork.take-over-tunnel";
-inline constexpr const char* kActionReadLog = "network.ur.urnetwork.read-log";
+    "com.bringyour.network.manage-kill-switch";
+inline constexpr const char* kActionTakeOverTunnel = "com.bringyour.network.take-over-tunnel";
+inline constexpr const char* kActionReadLog = "com.bringyour.network.read-log";
 
 // The SDK's built-in default device-RPC address (sdk/device_rpc.go:109,
 // deviceRpcDefaultAddress = "127.0.0.1:12025"). Kept as a NAMED CONSTANT ONLY,

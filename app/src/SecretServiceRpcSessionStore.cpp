@@ -12,7 +12,13 @@ namespace {
 
 constexpr int kSecretPayloadVersion = 1;
 constexpr size_t kMaxSecretPayloadBytes = 256 * 1024;
-constexpr const char* kApplicationAttribute = "network.ur.urnetwork";
+// The keyring attribute that scopes our secrets. Renamed with the app ID, so
+// an entry written by an older build is not found by this one and the app
+// falls back to a fresh RPC session — the same one-time cost as the Flatpak
+// data path moving. Deliberately NOT dual-read: keeping the old attribute
+// alive would leave the previous app identity holding live key material in the
+// user's keyring with nothing left to clean it up.
+constexpr const char* kApplicationAttribute = "com.bringyour.network";
 
 const SecretSchema kRpcSessionSchema = [] {
   // Zero-initialize libsecret's reserved ABI fields explicitly. A short C

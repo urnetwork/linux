@@ -5,7 +5,7 @@
 # /dev/net/tun, no CAP_NET_ADMIN and no way to install a system unit. The app
 # reaches the HOST's urnetworkd over /run/urnetwork/control.sock, which the
 # manifest exposes read-only (Trayscale's pattern). Install the daemon from the
-# native .deb/.rpm — see packaging/flatpak/network.ur.urnetwork.yml for the
+# native .deb/.rpm — see packaging/flatpak/com.bringyour.network.yml for the
 # full reasoning.
 #
 # Works on an immutable host (Bazzite/Silverblue): flatpak-builder itself runs
@@ -20,8 +20,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST="${MANIFEST:-$REPO_ROOT/packaging/flatpak/network.ur.urnetwork.yml}"
-APP_ID="network.ur.urnetwork"
+MANIFEST="${MANIFEST:-$REPO_ROOT/packaging/flatpak/com.bringyour.network.yml}"
+APP_ID="com.bringyour.network"
 RUNTIME_VERSION="${RUNTIME_VERSION:-49}"
 # The build dir MUST live inside the repo. flatpak-builder runs sandboxed and
 # gets a PRIVATE /tmp, so a build dir under the host's /tmp vanishes between

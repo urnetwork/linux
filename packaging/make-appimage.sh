@@ -188,22 +188,22 @@ done < <(find "${STAGING}/usr/share/locale" -type f -name 'urnetwork.mo' 2>/dev/
 # Desktop entry: same app-id filename as the system one (wayland app_id ->
 # icon association), but Exec points at the bundled binary -- inside the
 # AppDir the launcher script does not exist. AppRun is what actually runs.
-DESKTOP_SRC="${APP_PACKAGING_DIR}/network.ur.urnetwork.desktop"
+DESKTOP_SRC="${APP_PACKAGING_DIR}/com.bringyour.network.desktop"
 [ -f "${DESKTOP_SRC}" ] || die "missing ${DESKTOP_SRC}"
 install -d "${APPDIR}/usr/share/applications"
 sed -e 's/^Exec=urnetwork /Exec=urnetwork-gui /' \
     -e 's/^TryExec=urnetwork$/TryExec=urnetwork-gui/' \
-    "${DESKTOP_SRC}" > "${APPDIR}/usr/share/applications/network.ur.urnetwork.desktop"
-printf 'X-AppImage-Version=%s\n' "${VERSION}" >> "${APPDIR}/usr/share/applications/network.ur.urnetwork.desktop"
-cp "${APPDIR}/usr/share/applications/network.ur.urnetwork.desktop" "${APPDIR}/network.ur.urnetwork.desktop"
+    "${DESKTOP_SRC}" > "${APPDIR}/usr/share/applications/com.bringyour.network.desktop"
+printf 'X-AppImage-Version=%s\n' "${VERSION}" >> "${APPDIR}/usr/share/applications/com.bringyour.network.desktop"
+cp "${APPDIR}/usr/share/applications/com.bringyour.network.desktop" "${APPDIR}/com.bringyour.network.desktop"
 
 install -d "${APPDIR}/usr/share/icons/hicolor/256x256/apps" "${APPDIR}/usr/share/icons/hicolor/48x48/apps"
-install -m 0644 "${APP_PACKAGING_DIR}/icons/hicolor/256x256/apps/urnetwork.png" \
-    "${APPDIR}/usr/share/icons/hicolor/256x256/apps/urnetwork.png"
-install -m 0644 "${APP_PACKAGING_DIR}/icons/hicolor/48x48/apps/urnetwork.png" \
-    "${APPDIR}/usr/share/icons/hicolor/48x48/apps/urnetwork.png"
-install -m 0644 "${APP_PACKAGING_DIR}/icons/hicolor/256x256/apps/urnetwork.png" "${APPDIR}/urnetwork.png"
-cp "${APPDIR}/urnetwork.png" "${APPDIR}/.DirIcon"
+install -m 0644 "${APP_PACKAGING_DIR}/icons/hicolor/256x256/apps/com.bringyour.network.png" \
+    "${APPDIR}/usr/share/icons/hicolor/256x256/apps/com.bringyour.network.png"
+install -m 0644 "${APP_PACKAGING_DIR}/icons/hicolor/48x48/apps/com.bringyour.network.png" \
+    "${APPDIR}/usr/share/icons/hicolor/48x48/apps/com.bringyour.network.png"
+install -m 0644 "${APP_PACKAGING_DIR}/icons/hicolor/256x256/apps/com.bringyour.network.png" "${APPDIR}/com.bringyour.network.png"
+cp "${APPDIR}/com.bringyour.network.png" "${APPDIR}/.DirIcon"
 
 install -m 0755 "${SCRIPT_DIR}/appimage/AppRun" "${APPDIR}/AppRun"
 
