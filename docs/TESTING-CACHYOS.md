@@ -1,9 +1,25 @@
 # Testing URnetwork on CachyOS — the tester's procedure
 
 **Target:** CachyOS (Arch-based), x86_64, systemd, cgroup v2, a desktop session.
-**Channels covered:** the daemon **install tarball**, the GUI **AppImage**, the GUI **Flatpak**.
-**Not covered:** `.deb` and `.rpm` — Arch has neither. On this distro the tarball is the
-daemon's only channel, so if the tarball is broken there is no fallback.
+**Channels covered:** the daemon **pacman package** (`.pkg.tar.zst`) and the daemon
+**install tarball**, the GUI **AppImage**, the GUI **Flatpak**.
+**Not covered:** `.deb` and `.rpm` — Arch has neither.
+
+> **THE TARBALL IS NO LONGER THE ONLY DAEMON CHANNEL HERE.** Releases now carry
+> `urnetwork-daemon-<VERSION>-x86_64.pkg.tar.zst`, built by `packaging/make-arch.sh`
+> from the same staging tree as the `.deb` and the `.rpm`, so pacman owns and tracks
+> the files. Prefer it: it declares `nftables` and `fuse2` (a minimal Arch install has
+> neither, and the tarball can only complain about them after the fact), it keeps
+> `/etc` files as `.pacnew`/`.pacsave`, and `pacman -R` removes it cleanly.
+>
+> **Never install both on one machine.** Each channel refuses to overwrite the other's
+> files, on purpose: two owners of the same paths means the next `pacman -Syu` would
+> half-replace the install. If you already ran the tarball installer, run
+> `sudo /usr/lib/urnetwork/uninstall.sh` before `pacman -U`.
+>
+> If a release you are testing has no `.pkg.tar.zst` (the package is still optional in
+> the pipeline while it settles), fall back to the tarball and everything below still
+> applies.
 
 ---
 
@@ -356,7 +372,8 @@ Repo: `Ryanmello07/urnetwork-linux`. Current beta at time of writing:
 
 | Asset | You need it for |
 |---|---|
-| `urnetwork-daemon-<VERSION>-amd64.install.tar.gz` | **The daemon. The only daemon channel on Arch.** |
+| `urnetwork-daemon-<VERSION>-x86_64.pkg.tar.zst` | **The daemon, native pacman package — prefer this.** `sudo pacman -U ./<file>`. May be absent from older builds. |
+| `urnetwork-daemon-<VERSION>-amd64.install.tar.gz` | **The daemon, portable channel.** The fallback when the release has no pacman package, and the right choice on SteamOS (read-only `/usr`). |
 | `URnetwork-<VERSION>-amd64.AppImage` | The GUI, AppImage channel. |
 | `URnetwork-<VERSION>-amd64.AppImage.zsync` | Update control file. Attached for mirroring only — GitHub Releases answers zsync's multi-range requests with HTTP 501, so the in-app updater uses the self-hosted copy. You do not need it to test. |
 | `urnetwork-daemon_<VERSION>_amd64.deb` | **Ignore.** No use on Arch. |

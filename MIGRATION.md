@@ -57,11 +57,26 @@ prints a one-line install hint and exits 127.
 ## Artifact filenames (normative — the pipeline greps for these)
 
 ```
-urnetwork-daemon_<version>_<arch>.deb          arch = amd64 | arm64
+urnetwork-daemon_<version>_<arch>.deb              arch = amd64 | arm64
 urnetwork-daemon-<version>-<arch>.install.tar.gz
+urnetwork-daemon-<version>-<pacmanarch>.pkg.tar.zst   pacmanarch = x86_64 | aarch64
 URnetwork-<version>-<arch>.AppImage
 URnetwork-<version>-<arch>.AppImage.zsync
 ```
+
+The pacman package is named with pacman's own arch spelling, for the same reason the
+`.rpm` is named with rpm's: a package whose filename disagrees with the arch in its own
+metadata is the confusing artifact. Its `<version>` is the release version verbatim —
+pacman does not parse filenames (`pacman -U ./file` reads `.PKGINFO`), so the file is
+free to be named for the release while the metadata carries the folded, pacman-legal
+`pkgver` (see `pkg_fields()` in `packaging/make-arch.sh`). `make-arch.sh` prints the
+canonical `<pkgname>-<pkgver>-<pkgrel>-<arch>.pkg.tar.zst` on every build and emits it
+instead under `UR_ARCH_CANONICAL_NAME=1`, which is what a `repo-add` repository expects.
+
+**The `.rpm` still has no row here.** rpm forbids `-` in both Version and Release while
+this line's `<version>` contains two, so no legal rpm filename can carry the version
+string verbatim. Its asset name is therefore settled by the release workflow rather
+than by this contract, and that remains an open item.
 
 `<version>` = `$EXTERNAL_WARP_VERSION`. The tarball's **single top-level directory** is
 `urnetwork-daemon/`, containing `install.sh`, `uninstall.sh`, `VERSION`, and a
@@ -69,14 +84,23 @@ URnetwork-<version>-<arch>.AppImage.zsync
 
 ### Packaging script names + invocation (pinned 2026-08-05)
 
-The pipeline calls these three by exact path. **These names are normative**; the
+The pipeline calls these by exact path. **These names are normative**; the
 original contract pinned only the output filenames, which left the pipeline guessing:
 
 ```
 linux/packaging/make-deb.sh
 linux/packaging/make-install-tarball.sh
 linux/packaging/make-appimage.sh
+linux/packaging/make-rpm.sh       (added later; Fedora/RHEL/openSUSE)
+linux/packaging/make-arch.sh      (added later; Arch/CachyOS/EndeavourOS/Manjaro)
 ```
+
+The two later ones take the SAME four-variable environment as the original three and
+are deliberately not special: each is one more wrapper around the single staging tree,
+so the daemon inside every package is the same bytes by construction rather than by
+review. The pipeline may treat either as optional (`UR_REQUIRE_RPM` /
+`UR_REQUIRE_ARCH_PKG`) — a new package that cannot build must never take the
+already-contracted assets off a release with it.
 
 Each is invoked with this environment and **must write its normative artifact
 filename into `$OUT_DIR`**:

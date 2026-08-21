@@ -1,0 +1,62 @@
+#!/bin/sh
+# pre_upgrade() for urnetwork-daemon -- the stop half of the upgrade dance.
+#
+# PACMAN ARGUMENTS: "$1" is the INCOMING version, "$2" the OUTGOING one.
+# Read them as incoming/outgoing, NOT as new/old: this same function runs on a
+# DOWNGRADE (measured: arg1=2026.8.11-1 arg2=2026.8.12-1, i.e. arg1 lower) and
+# on a REINSTALL of the identical version (arg1 == arg2). Any "upgrading from
+# older than X" logic keyed on "$2 is old, $1 is new" is wrong in two of the
+# three cases, so this script reads neither.
+#
+# THE REINSTALL CASE IS THE ONE TO REMEMBER: `pacman -U` of the same file, and
+# `pacman -S` of an already-installed package, both route HERE and not through
+# pre_install/post_install. Without this hook declared, a tester's "just
+# reinstall the package" is a silent no-op -- which is very likely how the
+# omission would first be noticed in the field.
+#
+# WHY THE STOP IS HERE AND NOT AFTER THE FILES MOVE.
+#
+# pacman has not replaced a single file yet when this runs, so
+# /usr/lib/urnetwork/urnetworkd is still the OLD binary -- and the unit's
+#     ExecStopPost=-/usr/lib/urnetwork/urnetworkd --revert-unless-armed
+# is what removes `table inet urnetwork`, the policy rules and the capture
+# routes on every stop path. Stopping now means that teardown is performed by
+# the exact binary that built the ruleset. This is the .deb's discipline
+# verbatim (packaging/deb/scripts/prerm: "stop the unit on BOTH remove and
+# upgrade ... The daemon holds a live tun fd; the upgrade discipline is stop
+# (old binary) -> replace files -> start (new binary)"). The .rpm cannot do
+# this because rpm has no pre-replacement slot for the OLD package; pacman
+# does, so this package takes it.
+#
+# THE OTHER HALF OF THE ARCH DIFFERENCE: pre_remove/post_remove do NOT run on
+# an upgrade either. On Debian the discipline is split across two scripts --
+# prerm stops, postinst starts. Here there is no such split to inherit: the
+# entire stop-then-start dance has to live in pre_upgrade/post_upgrade, or it
+# does not happen at all.
+set -e
+
+UNIT='urnetworkd.service'
+RESTART_MARKER='/run/urnetwork.pacman-restart'
+
+# Record whether the daemon was RUNNING, so post_upgrade can put it back the
+# way it found it and no other way. There is no `try-restart` shortcut
+# available: by the time post_upgrade runs we will have stopped the unit
+# ourselves, so "is it active now" no longer answers "was it active before".
+#
+# /run is a tmpfs owned by root and is guaranteed writable here -- this whole
+# block only runs when systemd is booted, which means we are root on a live
+# system. A stale marker (an interrupted transaction) can only cause an extra
+# start of a daemon that comes up idle, which is the safe direction.
+rm -f "${RESTART_MARKER}" 2>/dev/null || :
+if [ -d /run/systemd/system ]; then
+    if systemctl is-active --quiet "${UNIT}" 2>/dev/null; then
+        : > "${RESTART_MARKER}" 2>/dev/null || :
+    fi
+    # `stop`, never `disable`: enablement is post_install's business exactly
+    # once, and an upgrade that disabled and re-enabled would quietly undo an
+    # admin's decision. Stopping tears the tunnel down through the daemon's own
+    # shutdown path; it comes back idle, exactly like a reboot.
+    systemctl stop "${UNIT}" >/dev/null 2>&1 || :
+fi
+
+return 0

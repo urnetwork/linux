@@ -1,0 +1,51 @@
+#!/bin/sh
+# pre_remove() for urnetwork-daemon.
+#
+# PACMAN ARGUMENT: "$1" is the version being removed. "$2" is unset.
+# Runs ONLY on a real removal -- NOT on an upgrade, and not on a downgrade or a
+# reinstall either. That is the opposite of dpkg, where prerm runs on both
+# remove and upgrade and packaging/deb/scripts/prerm relies on it. Nothing here
+# needs an "am I being upgraded?" guard, because pacman never calls this
+# function in that case.
+#
+# `disable --now`, AND IT MUST HAPPEN HERE RATHER THAN IN post_remove. This is
+# a real safety property of this package, not a formality, and it is the same
+# argument packaging/rpm/scripts/preun makes at length:
+#
+#   The unit's ExecStopPost= is
+#       /usr/lib/urnetwork/urnetworkd --revert-unless-armed
+#   i.e. THE DAEMON'S OWN BINARY is what removes `table inet urnetwork`, the
+#   policy rules and the capture routes on every stop path. pre_remove runs
+#   BEFORE pacman deletes a single file, so that binary still exists when
+#   systemd runs it. Move the stop to post_remove and the binary is already
+#   gone, ExecStopPost fails 203/EXEC, and a removal can leave the kill-switch
+#   ruleset in the kernel with nothing left on the machine able to lift it --
+#   a box off the network after `pacman -R`. Do not move this.
+#
+# `systemctl` directly: there is no deb-systemd-helper and no deb-systemd-invoke
+# on Arch, so there is no enable-state file to consult and no policy-rc.d to
+# respect. Those two mechanisms have no Arch equivalent and are deliberately
+# dropped rather than faked.
+set -e
+
+UNIT='urnetworkd.service'
+
+if [ -d /run/systemd/system ]; then
+    # THE ARMED KILL SWITCH IS THE ONE THING A REMOVAL CANNOT FIX FOR ITSELF.
+    # /run/urnetwork/kill-switch-armed is the marker that says "this machine
+    # was armed when the daemon last stopped", and --revert-unless-armed
+    # deliberately PRESERVES the block floor in that case so a crash does not
+    # open a window. That design turns a removal into a trap: the floor stays
+    # in the kernel and the only binary that knows how to remove it is about to
+    # be deleted. Checked while the marker and the binary both still exist, and
+    # only reported -- silently lifting a firewall the user asked for would be
+    # its own bug, and the recovery is one command.
+    if [ -f /run/urnetwork/kill-switch-armed ]; then
+        echo "urnetwork: WARNING -- the kill switch is ARMED on this machine." >&2
+        echo "urnetwork: removing the package leaves that nftables floor in place. Lift it with:" >&2
+        echo "urnetwork:   sudo nft delete table inet urnetwork" >&2
+    fi
+    systemctl --no-reload disable --now "${UNIT}" >/dev/null 2>&1 || :
+fi
+
+return 0

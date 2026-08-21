@@ -305,14 +305,18 @@ fi
 # ==========================================================================
 head2 "2. how URnetwork gets installed here"
 # ==========================================================================
-# The release publishes exactly four assets today and their names are a
-# contract (the in-app service checker parses them):
+# The release asset names are a contract (the in-app service checker parses
+# them):
 #   urnetwork-daemon-<v>-<arch>.install.tar.gz
 #   urnetwork-daemon_<v>_<arch>.deb
-#   URnetwork-<v>-<arch>.AppImage  (+ .zsync)
-# There is NO .rpm and NO flatpak bundle in the release yet. On an rpm distro
-# the tarball installer is the whole story, and this check says so rather than
-# implying a package that does not exist.
+#   urnetwork-daemon-<v>.<rpmarch>.rpm
+#   urnetwork-daemon-<v>-<pacmanarch>.pkg.tar.zst
+#   URnetwork-<v>-<arch>.AppImage  (+ .zsync, + .flatpak)
+# All four daemon packages are the same payload out of one staging tree
+# (packaging/lib/common.sh assemble_daemon_root), so "which channel" is a
+# question about THIS HOST, not about which build is newer. Whether a given
+# release actually carries a given package is still a fact about the RELEASE,
+# which is why the branches below hedge rather than promise.
 
 PKG_CHANNEL=''
 if have dpkg; then
@@ -334,7 +338,15 @@ elif have apk; then
     check 2.1 BLOCKER "native package format" "apk (Alpine): musl, and no musl build exists"
 elif have pacman; then
     PKG_CHANNEL='pacman'
-    check 2.1 WARN "native package format" "pacman present; no Arch package is published -- use the tarball"
+    check 2.1 ok "native package format" "pacman present -> urnetwork-daemon-<v>-$(uname -m).pkg.tar.zst, if the release carries one"
+    note "Install it with: sudo pacman -U ./urnetwork-daemon-<v>-$(uname -m).pkg.tar.zst"
+    note "It declares nftables and fuse2, which a minimal Arch install does not have and"
+    note "which the tarball can only tell you about after the fact. If the release has no"
+    note "pacman package, the install tarball works here too -- but never both on one"
+    note "machine: each refuses to overwrite the other's files."
+    if [ -r /usr/lib/os-release ] && grep -qi '^ID=steamos' /usr/lib/os-release 2>/dev/null; then
+        check 2.1 WARN "native package format" "SteamOS: /usr is read-only, 'pacman -U' needs 'steamos-readonly disable' and the next system update reverts it -- use the install tarball, which installs under /usr/local"
+    fi
 elif have zypper; then
     PKG_CHANNEL='zypper'
     check 2.1 WARN "native package format" "zypper present; no .rpm is published -- use the tarball"
@@ -371,8 +383,10 @@ elif [ -n "${FUSE2}" ]; then
 else
     check 2.3 WARN "AppImage runtime (libfuse2)" "libfuse.so.2 not found -- the GUI AppImage will not mount"
     note "Fix per family:  apt install libfuse2t64 (or libfuse2)  |  dnf install fuse-libs"
-    note "Or run the AppImage with --appimage-extract-and-run. The .deb declares this"
-    note "dependency for you; the tarball and the bare AppImage cannot."
+    note "                  pacman -S fuse2"
+    note "Or run the AppImage with --appimage-extract-and-run. The .deb and the pacman"
+    note "package declare this dependency for you; the tarball and the bare AppImage"
+    note "cannot."
 fi
 
 # The layout the tarball installer WILL choose, by the same rules install.sh

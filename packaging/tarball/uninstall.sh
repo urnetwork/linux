@@ -109,11 +109,19 @@ fi
 if command -v rpm >/dev/null 2>&1 && rpm -q "${PKG_NAME}" >/dev/null 2>&1; then
     die "${PKG_NAME} is owned by rpm -- remove it with: sudo dnf remove ${PKG_NAME}"
 fi
-# ...and never remove a pacman-owned one either. Queried by PATH rather than by
-# name for the same reason install.sh does it: a future Arch/AUR package could
-# be called urnetwork, urnetwork-bin, urnetwork-daemon or urnetwork-git, and
-# the file is what actually collides. `pacman -Qo` exits non-zero both when
-# nothing owns the path and when the path does not exist.
+# ...and never remove a pacman-owned one either -- which stopped being
+# hypothetical when packaging/make-arch.sh landed: releases now carry a real
+# urnetwork-daemon .pkg.tar.zst owning these exact paths, and the right removal
+# for it is `pacman -R`, which runs the package's own pre_remove hook (stop and
+# disable the unit WHILE the binary still exists, so its ExecStopPost can tear
+# the nftables ruleset down). This script would delete the binary out from
+# under pacman instead.
+#
+# Queried by PATH rather than by name for the same reason install.sh does it:
+# our own package is urnetwork-daemon, but an AUR one could be urnetwork,
+# urnetwork-bin or urnetwork-git, and the file is what actually collides.
+# `pacman -Qo` exits non-zero both when nothing owns the path and when the path
+# does not exist.
 if command -v pacman >/dev/null 2>&1 && [ -z "${PREFIX}" ]; then
     for _p in "${LIB_DIR}/urnetworkd" "${BIN_DIR}/urnetwork" \
               /usr/lib/systemd/system/"${UNIT}" /lib/systemd/system/"${UNIT}"; do
