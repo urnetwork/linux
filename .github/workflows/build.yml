@@ -158,7 +158,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential meson ninja-build pkg-config gettext \
             libglib2.0-dev nlohmann-json3-dev \
-            libgtkmm-4.0-dev libadwaita-1-dev libsecret-1-dev
+            libgtkmm-4.0-dev libadwaita-1-dev libsecret-1-dev \
+            appstream
 
       - name: Configure and build the GUI
         working-directory: app
@@ -169,3 +170,11 @@ jobs:
       - name: Run the test suite
         working-directory: app
         run: ./build/urnetwork-tests
+
+      # app/meson.build stamps the release version and date into the metainfo
+      # from -Dapp_version, so this validates the GENERATED file, not the
+      # template. appstreamcli is the same validator Flathub gates on, and
+      # nothing checked this file before.
+      - name: Validate the AppStream metainfo
+        working-directory: app
+        run: appstreamcli validate --no-net --pedantic build/com.bringyour.network.metainfo.xml

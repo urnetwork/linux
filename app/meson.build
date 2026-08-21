@@ -314,10 +314,67 @@ endif
 install_data('packaging/com.bringyour.network.desktop',
              install_dir : get_option('datadir') / 'applications')
 
-# AppStream metadata — required by Flathub, read by GNOME Software / Discover
-# for the .deb and .rpm too. The component id matches the .desktop basename.
-install_data('packaging/com.bringyour.network.metainfo.xml',
+# AppStream metadata — required by Flathub, read by GNOME Software / Discover.
+# The component id matches the .desktop basename.
+#
+# THE RELEASE STAMP IS DERIVED, NOT HARDCODED. The release version is
+# <YYYY>.<M>.<D>-<run>[-<suffix>]. Nothing used to write it into this file, so
+# it sat at whatever was typed last while the pipeline shipped something else —
+# and this element is exactly what GNOME Software, KDE Discover and the Flathub
+# page display.
+#
+# The FULL version goes in, suffix and all: appstreamcli 1.0.2 (the version on
+# the ubuntu-24.04 image CI validates on) accepts a version like
+# "2026.8.16-1020679030-beta" with exit 0, so there is no reason to truncate.
+# Truncating would advertise a version that matches no artifact — every other
+# consumer of $VERSION (UR_APP_VERSION in both binaries, every package
+# filename, the release-asset gates) uses the whole string — and would collapse
+# every build of the same UTC day onto one indistinguishable release element.
+#
+# Only the DATE is derived, from the leading <YYYY>.<M>.<D>.
+#
+# NB: the .deb, .rpm and tarball do NOT ship this file. packaging/lib/common.sh's
+# assemble_daemon_root() copies an explicit whitelist (desktop entry, polkit
+# policy, icons) that does not include usr/share/metainfo, and make-appimage.sh
+# does not package it either. The Flatpak is the only artifact that installs it,
+# which is why -Dapp_version has to reach the Flatpak build.
+_appver = get_option('app_version')
+_av = _appver.split('-')[0]
+_vp = _av.split('.')
+if _vp.length() == 3 and _vp[0].to_int() > 2000
+  _mm = _vp[1].to_int() < 10 ? '0' + _vp[1] : _vp[1]
+  _dd = _vp[2].to_int() < 10 ? '0' + _vp[2] : _vp[2]
+  appstream_date = _vp[0] + '-' + _mm + '-' + _dd
+else
+  # -Dapp_version was not passed (the 0.0.0 dev sentinel). LOUD on purpose: a
+  # document saying version="0.0.0" is perfectly valid AppStream, so neither the
+  # meson test below nor CI's validate step can catch it — the build log is the
+  # only place it can surface. A release build must never take this branch.
+  warning('app_version was not set, so the AppStream release stamp will say "' +
+          _appver + '". Pass -Dapp_version=<release version> for anything you ' +
+          'intend to ship; the store front reads this element.')
+  appstream_date = '2026-08-20'
+endif
+
+metainfo_xml = configure_file(
+  input : 'packaging/com.bringyour.network.metainfo.xml.in',
+  output : 'com.bringyour.network.metainfo.xml',
+  configuration : {
+    'APPSTREAM_VERSION' : _appver,
+    'APPSTREAM_DATE' : appstream_date,
+  },
+)
+install_data(metainfo_xml,
              install_dir : get_option('datadir') / 'metainfo')
+
+# Nothing validated this file before, which is how a stale version survived in
+# it. appstreamcli is the validator Flathub gates submissions on, so a bad edit
+# fails here instead of in review. Optional: not every build host ships it.
+appstreamcli = find_program('appstreamcli', required : false)
+if appstreamcli.found()
+  test('appstream-metainfo', appstreamcli,
+       args : ['validate', '--no-net', '--pedantic', metainfo_xml])
+endif
 
 # hicolor icons (Icon=com.bringyour.network in the desktop file)
 # Every size is a downscale of ONE 1024x1024 master, so they cannot drift the
