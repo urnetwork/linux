@@ -21,17 +21,27 @@
 # daemon explains itself instead of failing blank.
 #
 # LOCAL INSTALL (the current target — Flathub submission comes later):
-#   flatpak install -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
-#   flatpak run org.flatpak.Builder --force-clean --user --install \
-#     build-flatpak packaging/flatpak/com.bringyour.network.yml
+#   VERSION=<release version> packaging/make-flatpak.sh --install
 #   flatpak run com.bringyour.network
 #
-# FOR FLATHUB, two changes are required and are deliberately NOT made here:
+# Go through make-flatpak.sh rather than calling flatpak-builder on this file
+# directly. This manifest carries NO -Dapp_version, so meson falls back to its
+# 0.0.0 dev sentinel; the script stamps the real one in. That sentinel is not
+# cosmetic — the Flatpak is the only artifact that installs the AppStream
+# metainfo, and version="0.0.0" is what GNOME Software, KDE Discover and the
+# Flathub page would then display. It is valid AppStream, so no validator
+# catches it. meson prints a WARNING when it takes that branch; heed it.
+#
+# FOR FLATHUB, three changes are required and are deliberately NOT made here:
 #   1. `sources: [{type: dir, path: ../..}]` must become a git/archive source
 #      with a commit or sha256 — Flathub forbids local directory sources.
 #   2. The four commercial brand faces under app/assets/fonts are NOT MPL-2.0.
 #      Flathub requires the licenses of every bundled binary asset to permit
 #      redistribution; that audit (§7.17) must land before submission.
+#   3. `-Dapp_version=<release version>` must be added to the app module's
+#      config-opts below. Flathub builds this manifest on its own
+#      infrastructure, where make-flatpak.sh never runs, so nothing else can
+#      supply it — and the store page is exactly where a 0.0.0 would show.
 #
 # SPDX-License-Identifier: MPL-2.0
 id: com.bringyour.network
