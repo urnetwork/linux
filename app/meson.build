@@ -305,30 +305,30 @@ endif
 # host_integration=false (Flatpak) drops it with the rest: the GUI never calls
 # polkit — the daemon does, against a subject the GUI cannot influence.
 if host_integration
-install_data('..' / 'packaging' / 'polkit' / 'network.ur.urnetwork.policy',
+install_data('..' / 'packaging' / 'polkit' / 'com.bringyour.network.policy',
              install_dir : get_option('datadir') / 'polkit-1' / 'actions')
 endif
 
-# desktop file: the filename MUST match main.cpp's app id network.ur.urnetwork
+# desktop file: the filename MUST match main.cpp's app id com.bringyour.network
 # (D-Bus activation requires it; APPIMAGE.md §11d)
-install_data('packaging/network.ur.urnetwork.desktop',
+install_data('packaging/com.bringyour.network.desktop',
              install_dir : get_option('datadir') / 'applications')
 
 # AppStream metadata — required by Flathub, read by GNOME Software / Discover
 # for the .deb and .rpm too. The component id matches the .desktop basename.
-install_data('packaging/network.ur.urnetwork.metainfo.xml',
+install_data('packaging/com.bringyour.network.metainfo.xml',
              install_dir : get_option('datadir') / 'metainfo')
 
-# hicolor icons (Icon=urnetwork in the desktop file)
-install_data('packaging/icons/hicolor/48x48/apps/urnetwork.png',
+# hicolor icons (Icon=com.bringyour.network in the desktop file)
+install_data('packaging/icons/hicolor/48x48/apps/com.bringyour.network.png',
              install_dir : get_option('datadir') / 'icons' / 'hicolor' / '48x48' / 'apps')
-install_data('packaging/icons/hicolor/256x256/apps/urnetwork.png',
+install_data('packaging/icons/hicolor/256x256/apps/com.bringyour.network.png',
              install_dir : get_option('datadir') / 'icons' / 'hicolor' / '256x256' / 'apps')
 
 # autostart INERT TEMPLATE: root-owned under /etc/urnetwork/autostart/, where
 # no desktop reads it; the GUI symlinks it into ~/.config/autostart atomically
 if host_integration
-install_data('packaging/autostart/network.ur.urnetwork.desktop',
+install_data('packaging/autostart/com.bringyour.network.desktop',
              install_dir : '/etc/urnetwork/autostart')
 endif
 

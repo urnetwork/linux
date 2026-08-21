@@ -49,7 +49,7 @@ apps:
   urnetwork:
     command: usr/bin/urnetwork
     extensions: [gnome]     # GTK4/libadwaita runtime, themes, portals, wayland/x11
-    common-id: network.ur.urnetwork
+    common-id: com.bringyour.network
     desktop: usr/share/applications/urnetwork.desktop
     plugs:
       - network            # outbound sockets (SDK platform + provider traffic)

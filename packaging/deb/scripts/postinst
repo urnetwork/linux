@@ -57,7 +57,7 @@ case "$1" in
         # Which authority this machine will run under, said out loud.
         #
         # DETECTED BY LOOKING FOR POLKIT, NOT FOR OUR OWN ACTION FILE: dpkg has
-        # already unpacked /usr/share/polkit-1/actions/network.ur.urnetwork
+        # already unpacked /usr/share/polkit-1/actions/com.bringyour.network
         # .policy by the time this runs (and created that directory on the way),
         # so testing the file or the directory would report "polkit" on a box
         # that has never had it. polkitd is a Recommends, so apt pulls it in by
@@ -88,7 +88,7 @@ case "$1" in
         # from the package tree; assert it rather than assume it, and check the
         # directory too (polkit does not police the directory, and whoever can
         # write it can drop in a file that redefines our defaults).
-        UR_POLICY=/usr/share/polkit-1/actions/network.ur.urnetwork.policy
+        UR_POLICY=/usr/share/polkit-1/actions/com.bringyour.network.policy
         if [ -f "${UR_POLICY}" ]; then
             chmod 0644 "${UR_POLICY}" 2>/dev/null || true
             chown root:root "${UR_POLICY}" 2>/dev/null || true

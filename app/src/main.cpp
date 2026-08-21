@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
   // the window with the app (and the hide-to-tray window keeps its identity).
   // HANDLES_OPEN: the single instance receives urnetwork:// deep links (wallet
   // callbacks) via signal_open — the .desktop registers x-scheme-handler/urnetwork.
-  auto app = Gtk::Application::create("network.ur.urnetwork",
+  auto app = Gtk::Application::create("com.bringyour.network",
                                       Gio::Application::Flags::HANDLES_OPEN);
 
   // Hold the application so it survives with only the tray (window hidden).
@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
     // missing face fails silently to the fallback font (windows parity).
     urnw::LoadBrandFonts();
     urnw::EnsureBrandCss();
-    // the icon NAME "urnetwork" must resolve for the window icon and the
+    // the icon NAME kAppIconName must resolve for the window icon and the
     // tray, wherever the app runs from
     urnw::RegisterBrandIcons();
 

@@ -23,8 +23,8 @@
 # LOCAL INSTALL (the current target — Flathub submission comes later):
 #   flatpak install -y flathub org.gnome.Platform//49 org.gnome.Sdk//49
 #   flatpak run org.flatpak.Builder --force-clean --user --install \
-#     build-flatpak packaging/flatpak/network.ur.urnetwork.yml
-#   flatpak run network.ur.urnetwork
+#     build-flatpak packaging/flatpak/com.bringyour.network.yml
+#   flatpak run com.bringyour.network
 #
 # FOR FLATHUB, two changes are required and are deliberately NOT made here:
 #   1. `sources: [{type: dir, path: ../..}]` must become a git/archive source
@@ -34,7 +34,7 @@
 #      redistribution; that audit (§7.17) must land before submission.
 #
 # SPDX-License-Identifier: MPL-2.0
-id: network.ur.urnetwork
+id: com.bringyour.network
 runtime: org.gnome.Platform
 runtime-version: '49'
 sdk: org.gnome.Sdk
@@ -192,9 +192,9 @@ modules:
       # no AppImage here and no /usr/bin to put a launcher in, so the Flatpak
       # runs the GUI binary directly.
       - desktop-file-edit --set-key=Exec --set-value="urnetwork-gui %u"
-        /app/share/applications/network.ur.urnetwork.desktop
+        /app/share/applications/com.bringyour.network.desktop
       - desktop-file-edit --remove-key=TryExec
-        /app/share/applications/network.ur.urnetwork.desktop
+        /app/share/applications/com.bringyour.network.desktop
     sources:
       # LOCAL SOURCE — replace with a git/archive source before any Flathub
       # submission (see the header). The path is relative to this manifest.

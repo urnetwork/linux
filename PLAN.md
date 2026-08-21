@@ -302,7 +302,7 @@ than being the one platform that differs.
   refreshed by **dpkg triggers**, no dependency or maintainer script needed; §9.7.1
   covers `x-scheme-handler/urnetwork`. ⚠️ Triggers fire only for files **dpkg**
   installs, so never symlink one in from `postinst` (IVPN's latent bug). Residual:
-  `main.cpp:67`'s app id `network.ur.urnetwork` does not match
+  `main.cpp:67`'s app id `com.bringyour.network` does not match
   `urnetwork.desktop`; harmless today, but D-Bus activation requires them to match.
 - **R8 — GeoClue ≥ 2.7.0 is required for the location override** [confirmed]:
   Ubuntu 22.04 (2.5.7) and Debian 12 (2.6.0) can **never** support it. Those users

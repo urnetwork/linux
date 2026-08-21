@@ -153,8 +153,8 @@ contents:
   # Admin-editable integration files. %config(noreplace) is the rpm equivalent
   # of a dpkg conffile: an edited file is preserved and the package's version
   # lands beside it as .rpmnew.
-  - src: "${PKGROOT}/etc/urnetwork/autostart/network.ur.urnetwork.desktop"
-    dst: /etc/urnetwork/autostart/network.ur.urnetwork.desktop
+  - src: "${PKGROOT}/etc/urnetwork/autostart/com.bringyour.network.desktop"
+    dst: /etc/urnetwork/autostart/com.bringyour.network.desktop
     type: "config|noreplace"
   - src: "${PKGROOT}/etc/NetworkManager/conf.d/95-urnetwork.conf"
     dst: /etc/NetworkManager/conf.d/95-urnetwork.conf

@@ -738,11 +738,11 @@ bundling format inside a `.deb` — legitimate, but then use `/opt` + `$ORIGIN` 
 - **apt gets strict in 26.04, not 24.04.** apt 3.2 uses Sequoia; `apt-key` is gone;
   `Signed-By` must point at a dearmored keyring in `/usr/share/keyrings`, never
   `/etc/apt/trusted.gpg.d` (which would trust our key for *all* repositories).
-- **Desktop-file naming**: `main.cpp:67` uses app id `network.ur.urnetwork` but the
+- **Desktop-file naming**: `main.cpp:67` uses app id `com.bringyour.network` but the
   desktop file is `urnetwork.desktop`. Nothing is broken today
   (`StartupWMClass` covers window association), but D-Bus activation — the clean way to
   deliver a `urnetwork://` URI to a running instance — requires the names to match.
-  Rename to `network.ur.urnetwork.desktop`.
+  Rename to `com.bringyour.network.desktop`.
 
 ### 10d. The recommended alternative, if the direction changes
 
@@ -903,7 +903,7 @@ working with no error anywhere — a changed type is a decode error, and a chang
       in from `postinst` (IVPN's latent bug). **`install.sh` must run
       `update-desktop-database` and `gtk-update-icon-cache` itself** — see the §5
       callout for why this one silently passes testing and reaches users broken.
-- [ ] Rename the desktop file to `network.ur.urnetwork.desktop` to match
+- [ ] Rename the desktop file to `com.bringyour.network.desktop` to match
       `main.cpp:67`'s app id. Harmless today, but D-Bus activation — the clean way to
       hand a `urnetwork://` URI to a running instance — requires the names to match.
 - [ ] Autostart via a root-owned **inert template** (`/etc/urnetwork/autostart/`) that

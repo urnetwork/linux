@@ -97,7 +97,7 @@ contents:
   # APPIMAGE.md 11d).
   #
   # The polkit action file rides inside this same /usr tree, at
-  # usr/share/polkit-1/actions/network.ur.urnetwork.policy, put there by
+  # usr/share/polkit-1/actions/com.bringyour.network.policy, put there by
   # linux/packaging/lib/common.sh (assemble_daemon_root), which also asserts
   # its 0644 mode before the package is built. It is deliberately NOT given a
   # second explicit contents entry: nfpm would then emit the path twice, and
@@ -112,8 +112,8 @@ contents:
     dst: /lib
     type: tree
   # Admin-editable integration files: conffiles, preserved on upgrade.
-  - src: "${PKGROOT}/etc/urnetwork/autostart/network.ur.urnetwork.desktop"
-    dst: /etc/urnetwork/autostart/network.ur.urnetwork.desktop
+  - src: "${PKGROOT}/etc/urnetwork/autostart/com.bringyour.network.desktop"
+    dst: /etc/urnetwork/autostart/com.bringyour.network.desktop
     type: config
   - src: "${PKGROOT}/etc/NetworkManager/conf.d/95-urnetwork.conf"
     dst: /etc/NetworkManager/conf.d/95-urnetwork.conf

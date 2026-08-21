@@ -152,12 +152,12 @@ ${BIN_DIR}/urnetwork
 /lib/systemd/system/urnetworkd.service
 /usr/lib/systemd/system/urnetworkd.service
 /etc/systemd/system/urnetworkd.service
-${SHARE_DIR}/applications/network.ur.urnetwork.desktop
-${SHARE_DIR}/metainfo/network.ur.urnetwork.metainfo.xml
-${SHARE_DIR}/icons/hicolor/48x48/apps/urnetwork.png
-${SHARE_DIR}/icons/hicolor/256x256/apps/urnetwork.png
-${SHARE_DIR}/polkit-1/actions/network.ur.urnetwork.policy
-/etc/urnetwork/autostart/network.ur.urnetwork.desktop
+${SHARE_DIR}/applications/com.bringyour.network.desktop
+${SHARE_DIR}/metainfo/com.bringyour.network.metainfo.xml
+${SHARE_DIR}/icons/hicolor/48x48/apps/com.bringyour.network.png
+${SHARE_DIR}/icons/hicolor/256x256/apps/com.bringyour.network.png
+${SHARE_DIR}/polkit-1/actions/com.bringyour.network.policy
+/etc/urnetwork/autostart/com.bringyour.network.desktop
 /etc/NetworkManager/conf.d/95-urnetwork.conf
 /etc/udev/rules.d/85-urnetwork-unmanaged.rules"
     # plus whole directories swept below: ${SHARE_DIR}/urnetwork, locale .mo

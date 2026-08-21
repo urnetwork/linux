@@ -2,7 +2,7 @@
 <!--
   AppStream metadata. Required by Flathub, and read by GNOME Software / KDE
   Discover for every other channel too. The component id MUST equal the .desktop
-  basename and the GTK application id in src/main.cpp (network.ur.urnetwork) or
+  basename and the GTK application id in src/main.cpp (com.bringyour.network) or
   the store shows a nameless entry and D-Bus activation misses.
 
   project_license is the CODE license (MPL-2.0). The four commercial brand
@@ -13,7 +13,7 @@
   SPDX-License-Identifier: MPL-2.0
 -->
 <component type="desktop-application">
-  <id>network.ur.urnetwork</id>
+  <id>com.bringyour.network</id>
 
   <name>URnetwork</name>
   <summary>Private, decentralized VPN powered by a peer network</summary>
@@ -45,7 +45,7 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">network.ur.urnetwork.desktop</launchable>
+  <launchable type="desktop-id">com.bringyour.network.desktop</launchable>
 
   <url type="homepage">https://ur.io</url>
   <url type="bugtracker">https://github.com/urnetwork/urnetwork-linux/issues</url>

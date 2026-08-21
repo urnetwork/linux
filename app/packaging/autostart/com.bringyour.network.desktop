@@ -2,7 +2,7 @@
 Type=Application
 Name=URnetwork
 Comment=URnetwork VPN
-Icon=urnetwork
+Icon=com.bringyour.network
 Exec=urnetwork
 # TryExec self-disables this entry once the daemon package (and with it the
 # launcher) is removed, so a stale symlink cannot error at every login.

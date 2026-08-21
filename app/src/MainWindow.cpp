@@ -517,7 +517,7 @@ void MainWindow::BuildChrome() {
   if (auto logo = BrandLogoTexture()) {
     icon->set(logo);
   } else {
-    icon->set_from_icon_name("urnetwork");
+    icon->set_from_icon_name(kAppIconName);
   }
   icon->set_pixel_size(20);
   brand->append(*icon);

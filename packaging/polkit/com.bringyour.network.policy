@@ -2,7 +2,7 @@
 <!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN" "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
 <!--
   URnetwork polkit actions. Installed to
-  /usr/share/polkit-1/actions/network.ur.urnetwork.policy, 0644 root:root
+  /usr/share/polkit-1/actions/com.bringyour.network.policy, 0644 root:root
   (polkit ignores group- or world-writable .policy files).
 
   These are checked by urnetworkd, never by the GUI. The subject is derived
@@ -66,7 +66,7 @@
        your OWN uid's running tunnel is what start_tunnel already does when the
        request matches the live session, and only a tunnel started by a
        DIFFERENT uid escalates (ctl::ActionIdForVerb). -->
-  <action id="network.ur.urnetwork.control-tunnel">
+  <action id="com.bringyour.network.control-tunnel">
     <description>Connect or disconnect the URnetwork VPN</description>
     <message>Authentication is required to route this device's traffic through URnetwork.</message>
     <defaults>
@@ -81,7 +81,7 @@
        a site can require a password for THIS and not for Connect. The kill
        switch can cut every user on the box off the network, which is why it is
        worth its own knob. -->
-  <action id="network.ur.urnetwork.manage-kill-switch">
+  <action id="com.bringyour.network.manage-kill-switch">
     <description>Change the URnetwork kill switch</description>
     <message>Authentication is required to change whether this device's traffic is blocked when the URnetwork connection drops.</message>
     <defaults>
@@ -95,7 +95,7 @@
        DIFFERENT uid started. This is the action that replaces "everyone in the urnetwork
        group is interchangeable": any active local user may run their own
        tunnel, nobody takes over someone else's without proving admin. -->
-  <action id="network.ur.urnetwork.take-over-tunnel">
+  <action id="com.bringyour.network.take-over-tunnel">
     <description>Take over a URnetwork connection started by another user</description>
     <message>Authentication is required to take over the URnetwork connection another user started on this device.</message>
     <defaults>
@@ -111,7 +111,7 @@
        own. Same default trust as control-tunnel (if you can silently start a
        tunnel you can read its log), separate id so it can be tightened alone.
        The daemon ALSO refuses it across uids: see kCodeAuthNotTunnelOwner. -->
-  <action id="network.ur.urnetwork.read-log">
+  <action id="com.bringyour.network.read-log">
     <description>Read the URnetwork service log</description>
     <message>Authentication is required to read the URnetwork service log.</message>
     <defaults>
