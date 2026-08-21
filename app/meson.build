@@ -320,10 +320,22 @@ install_data('packaging/com.bringyour.network.metainfo.xml',
              install_dir : get_option('datadir') / 'metainfo')
 
 # hicolor icons (Icon=com.bringyour.network in the desktop file)
-install_data('packaging/icons/hicolor/48x48/apps/com.bringyour.network.png',
-             install_dir : get_option('datadir') / 'icons' / 'hicolor' / '48x48' / 'apps')
-install_data('packaging/icons/hicolor/256x256/apps/com.bringyour.network.png',
-             install_dir : get_option('datadir') / 'icons' / 'hicolor' / '256x256' / 'apps')
+# Every size is a downscale of ONE 1024x1024 master, so they cannot drift the
+# way separately-drawn assets do. Shipping only 48 and 256 meant the shell had
+# to upscale for the 64px app grid and the 128/256 HiDPI lookups, which is the
+# softness that showed up on a HiDPI desktop.
+#
+# 512 IS THE CEILING ON PURPOSE. flatpak refuses to export an icon larger than
+# 512x512 -- "Image too large (1024x1024). Max. size 512x512" -- and fails the
+# whole build at export time. The master is kept at
+# packaging/icons/com.bringyour.network-master-1024.png for regenerating these
+# and is deliberately not installed; nothing downstream asks for more than 512
+# (Flathub renders the store page at up to 512).
+foreach size : ['48', '64', '128', '256', '512']
+  install_data('packaging/icons/hicolor/' + size + 'x' + size + '/apps/com.bringyour.network.png',
+               install_dir : get_option('datadir') / 'icons' / 'hicolor' /
+                             (size + 'x' + size) / 'apps')
+endforeach
 
 # autostart INERT TEMPLATE: root-owned under /etc/urnetwork/autostart/, where
 # no desktop reads it; the GUI symlinks it into ~/.config/autostart atomically

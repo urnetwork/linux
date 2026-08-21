@@ -38,7 +38,7 @@ a known follow-up, do not silently pretend loopback is private.
 | `/usr/bin/urnetwork` | daemon pkg | **launcher script**, the stable `Exec=` target |
 | `/lib/systemd/system/urnetworkd.service` | daemon pkg | `/lib`, in every release's load path |
 | `/usr/share/applications/com.bringyour.network.desktop` | daemon pkg | filename **must** match `main.cpp`'s app id |
-| `/usr/share/icons/hicolor/{48x48,256x256}/apps/com.bringyour.network.png` | daemon pkg | |
+| `/usr/share/icons/hicolor/{48x48,64x64,128x128,256x256,512x512}/apps/com.bringyour.network.png` | daemon pkg | one 1024 master, downscaled |
 | `/usr/share/urnetwork/world-110m.json` | daemon pkg | globe land outlines |
 | `/usr/share/urnetwork/icons/urnetwork-tray-*.png` | daemon pkg | tray art |
 | `/usr/share/locale/<l>/LC_MESSAGES/urnetwork.mo` | daemon pkg | gettext catalogs |

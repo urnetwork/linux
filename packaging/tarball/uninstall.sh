@@ -155,7 +155,10 @@ ${BIN_DIR}/urnetwork
 ${SHARE_DIR}/applications/com.bringyour.network.desktop
 ${SHARE_DIR}/metainfo/com.bringyour.network.metainfo.xml
 ${SHARE_DIR}/icons/hicolor/48x48/apps/com.bringyour.network.png
+${SHARE_DIR}/icons/hicolor/64x64/apps/com.bringyour.network.png
+${SHARE_DIR}/icons/hicolor/128x128/apps/com.bringyour.network.png
 ${SHARE_DIR}/icons/hicolor/256x256/apps/com.bringyour.network.png
+${SHARE_DIR}/icons/hicolor/512x512/apps/com.bringyour.network.png
 ${SHARE_DIR}/polkit-1/actions/com.bringyour.network.policy
 /etc/urnetwork/autostart/com.bringyour.network.desktop
 /etc/NetworkManager/conf.d/95-urnetwork.conf

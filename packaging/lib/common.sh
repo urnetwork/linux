@@ -128,7 +128,10 @@ assemble_daemon_root() {
              autostart/com.bringyour.network.desktop 95-urnetwork.conf \
              85-urnetwork-unmanaged.rules \
              icons/hicolor/48x48/apps/com.bringyour.network.png \
-             icons/hicolor/256x256/apps/com.bringyour.network.png; do
+             icons/hicolor/64x64/apps/com.bringyour.network.png \
+             icons/hicolor/128x128/apps/com.bringyour.network.png \
+             icons/hicolor/256x256/apps/com.bringyour.network.png \
+             icons/hicolor/512x512/apps/com.bringyour.network.png; do
         [ -f "${src}/${f}" ] || die "packaging source missing: ${src}/${f}"
     done
 
@@ -142,12 +145,17 @@ assemble_daemon_root() {
     install -d "${root}/usr/share/applications"
     cp "${src}/com.bringyour.network.desktop" "${root}/usr/share/applications/"
 
-    install -d "${root}/usr/share/icons/hicolor/48x48/apps" \
-               "${root}/usr/share/icons/hicolor/256x256/apps"
-    cp "${src}/icons/hicolor/48x48/apps/com.bringyour.network.png" \
-        "${root}/usr/share/icons/hicolor/48x48/apps/com.bringyour.network.png"
-    cp "${src}/icons/hicolor/256x256/apps/com.bringyour.network.png" \
-        "${root}/usr/share/icons/hicolor/256x256/apps/com.bringyour.network.png"
+    # All five installed sizes, not just 48 and 256. Shipping only those two is
+    # why the shell had to upscale 48 -> 64 and 256 -> 512 for the app grid and
+    # the window titlebar, which is exactly the softness that showed up on a
+    # HiDPI desktop. app/meson.build installs the same five for the Flatpak;
+    # keep the two lists in step.
+    local icon_size
+    for icon_size in 48 64 128 256 512; do
+        install -d "${root}/usr/share/icons/hicolor/${icon_size}x${icon_size}/apps"
+        cp "${src}/icons/hicolor/${icon_size}x${icon_size}/apps/com.bringyour.network.png" \
+            "${root}/usr/share/icons/hicolor/${icon_size}x${icon_size}/apps/com.bringyour.network.png"
+    done
 
     install -d "${root}/etc/urnetwork/autostart"
     cp "${src}/autostart/com.bringyour.network.desktop" "${root}/etc/urnetwork/autostart/"
