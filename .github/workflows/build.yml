@@ -35,11 +35,25 @@ env:
   UR_CONNECT_REF: main
   UR_ZIG_VERSION: "0.14.1"
   DEBIAN_FRONTEND: noninteractive
+  # Layer 2 of the anti-hang fix (layer 1 is timeout-minutes on every job).
+  # apt's DEFAULT is to wait forever on a stalled mirror connection: two runs
+  # died that way -- one an hour on `apt-get install zip`, one six hours split
+  # across the AppImage and Flatpak dependency steps. Different packages, same
+  # cause, so this is bounded at the transport rather than per call site.
+  # Retries covers the transient 503s the azure mirrors serve under load.
+  UR_APT_OPTS: >-
+    -o Acquire::Retries=3
+    -o Acquire::http::Timeout=30
+    -o Acquire::https::Timeout=30
+    -o Acquire::http::No-Cache=true
 
 jobs:
   build-sdk:
     name: SDK (cgo shared objects)
     runs-on: ubuntu-latest
+    # Bounded on purpose: an apt mirror stall used to hang this job
+    # until GitHub's 6h default killed it. Fail in minutes instead.
+    timeout-minutes: 45
     steps:
       - name: Check out the SDK
         uses: actions/checkout@v4
@@ -62,7 +76,7 @@ jobs:
           cache-dependency-path: sdk/cgo/go.sum
 
       - name: Install zip
-        run: sudo apt-get update && sudo apt-get install -y zip
+        run: sudo apt-get $UR_APT_OPTS update && sudo apt-get $UR_APT_OPTS install -y zip
 
       # The Makefile's LINUX_*_CC default to `zig cc -target <arch>-linux-gnu.2.35`,
       # which is what holds the glibc floor the daemon job then asserts.
@@ -104,13 +118,16 @@ jobs:
   daemon:
     name: Daemon + tests (glibc floor)
     runs-on: ubuntu-latest
+    # Bounded on purpose: an apt mirror stall used to hang this job
+    # until GitHub's 6h default killed it. Fail in minutes instead.
+    timeout-minutes: 40
     needs: build-sdk
     container: ubuntu:22.04
     steps:
       - name: Install build dependencies
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends \
+          apt-get $UR_APT_OPTS update
+          apt-get $UR_APT_OPTS install -y --no-install-recommends \
             build-essential meson ninja-build pkg-config gettext \
             libglib2.0-dev nlohmann-json3-dev ca-certificates git binutils
 
@@ -143,6 +160,9 @@ jobs:
   gui:
     name: GUI (GTK4 + libadwaita + libsecret)
     runs-on: ubuntu-latest
+    # Bounded on purpose: an apt mirror stall used to hang this job
+    # until GitHub's 6h default killed it. Fail in minutes instead.
+    timeout-minutes: 40
     needs: build-sdk
     steps:
       - uses: actions/checkout@v4
@@ -154,8 +174,8 @@ jobs:
 
       - name: Install the GUI stack
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt-get $UR_APT_OPTS update
+          sudo apt-get $UR_APT_OPTS install -y --no-install-recommends \
             build-essential meson ninja-build pkg-config gettext \
             libglib2.0-dev nlohmann-json3-dev \
             libgtkmm-4.0-dev libadwaita-1-dev libsecret-1-dev
