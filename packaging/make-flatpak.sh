@@ -28,6 +28,19 @@ RUNTIME_VERSION="${RUNTIME_VERSION:-49}"
 # stages ("Build directory not initialized, use flatpak build-init").
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build-flatpak}"
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/out}"
+# Read here, not just in the --bundle branch: the version has to be stamped into
+# the manifest BEFORE the build, not after it.
+VERSION="${VERSION:-}"
+# Debian arch spelling, to match -Dsdk_arch and every other artifact name in
+# this pipeline. Defaults to THIS host: flatpak-builder builds for the machine
+# it runs on, so a cross-arch value here would only mislabel the bundle.
+if [[ -z "${ARCH:-}" ]]; then
+  case "$(uname -m)" in
+    x86_64)          ARCH=amd64 ;;
+    aarch64|arm64)   ARCH=arm64 ;;
+    *) echo "unsupported machine $(uname -m); set ARCH=amd64|arm64" >&2; exit 1 ;;
+  esac
+fi
 
 DO_INSTALL=0
 DO_RUN=0
@@ -70,12 +83,57 @@ if [[ "$DO_BUNDLE" == 1 ]]; then
   BUILD_ARGS+=(--repo="$BUILD_DIR-repo")
 fi
 
+# The committed manifest carries NO -Dapp_version, so meson falls back to its
+# 0.0.0 dev sentinel unless something supplies one. That matters more than it
+# looks: the Flatpak is the ONLY artifact that installs the AppStream metainfo
+# (packaging/lib/common.sh's assemble_daemon_root() whitelist excludes
+# usr/share/metainfo, and make-appimage.sh does not package it), and that file
+# is what GNOME Software, KDE Discover and the Flathub page read. A 0.0.0 in
+# there is valid AppStream, so no validator catches it -- it just shows up on
+# the store page.
+#
+# Stamped by the SCRIPT and not by the release workflow, deliberately. A
+# CI-only sed would leave a local `make-flatpak.sh --install` shipping 0.0.0
+# while CI shipped the real version; doing it here covers both cases, because
+# CI reaches the Flatpak through this script too.
+BUILD_MANIFEST="$MANIFEST"
+if [[ -n "$VERSION" ]]; then
+  anchor='      - -Dhost_integration=false'
+  if ! grep -qxF "$anchor" "$MANIFEST"; then
+    echo "the app module's config-opts anchor ('-Dhost_integration=false') is gone from $MANIFEST, so -Dapp_version cannot be stamped and the build would report 0.0.0. Add -Dapp_version to the manifest directly and drop this block." >&2
+    exit 1
+  fi
+  # Same directory as the original ON PURPOSE: the app module is `path: ../..`,
+  # which flatpak-builder resolves relative to the manifest, so a copy anywhere
+  # else would not find the repo. Written as a copy rather than an in-place edit
+  # so a developer's working tree is never left modified.
+  BUILD_MANIFEST="$(dirname "$MANIFEST")/.stamped-$(basename "$MANIFEST")"
+  trap 'rm -f "$BUILD_MANIFEST"' EXIT
+  sed "s|^${anchor}\$|${anchor}\n      - -Dapp_version=${VERSION}\n      - -Dsdk_arch=${ARCH}|" \
+      "$MANIFEST" > "$BUILD_MANIFEST"
+  for opt in "-Dapp_version=${VERSION}" "-Dsdk_arch=${ARCH}"; do
+    if ! grep -qxF "      - ${opt}" "$BUILD_MANIFEST"; then
+      echo "failed to stamp ${opt} into $BUILD_MANIFEST" >&2
+      exit 1
+    fi
+  done
+  echo "==> stamped -Dapp_version=${VERSION} -Dsdk_arch=${ARCH}"
+else
+  echo "==> WARNING: VERSION is unset, so this build reports the 0.0.0 dev sentinel." >&2
+  echo "==>          Set VERSION=<release version> for anything you intend to ship." >&2
+fi
+
 echo "==> building $APP_ID"
-( cd "$REPO_ROOT" && "${BUILDER[@]}" "${BUILD_ARGS[@]}" "$BUILD_DIR" "$MANIFEST" )
+( cd "$REPO_ROOT" && "${BUILDER[@]}" "${BUILD_ARGS[@]}" "$BUILD_DIR" "$BUILD_MANIFEST" )
 
 if [[ "$DO_BUNDLE" == 1 ]]; then
-  VERSION="${VERSION:-0.0.0-dev}"
-  BUNDLE="$OUT_DIR/URnetwork-${VERSION}.flatpak"
+  VERSION="${VERSION:-0.0.0-dev}"  # filename only; the stamp happened above
+  # ARCH IS PART OF THE NAME. Without it the amd64 and arm64 legs write the same
+  # file and one silently overwrites the other wherever the artifacts are merged.
+  # The rule everywhere else in packaging/ is that the build script names its
+  # own artifact rather than leaving a workflow to rename it afterwards, so the
+  # arch suffix is applied here.
+  BUNDLE="$OUT_DIR/URnetwork-${VERSION}-${ARCH}.flatpak"
   echo "==> exporting $BUNDLE"
   flatpak build-bundle "$BUILD_DIR-repo" "$BUNDLE" "$APP_ID" \
     --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo

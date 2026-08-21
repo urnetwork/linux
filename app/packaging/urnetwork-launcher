@@ -12,6 +12,7 @@
 #   3. ~/Applications/URnetwork*.AppImage   (newest when several match)
 #   4. /usr/lib/urnetwork/URnetwork.AppImage
 #   5. any `urnetwork-gui` on $PATH
+#   6. the com.bringyour.network Flatpak, if installed
 # First hit is exec'd with "$@". No hit: one-line install hint, exit 127.
 
 candidate=""
@@ -43,8 +44,21 @@ if [ -z "${candidate}" ]; then
     candidate="$(command -v urnetwork-gui 2>/dev/null || true)"
 fi
 
+# Flatpak fallback. Unlike every branch above there is no file to exec, so this
+# one execs directly instead of setting ${candidate}.
+#
+# LAST on purpose. The Flatpak installs its OWN desktop entry, with the same id
+# as the package-managed one that points here -- so on a Flatpak machine this
+# launcher normally loses on XDG precedence and is never invoked at all. It is
+# reached only when that export is gone or shadowed, and in exactly that case
+# the old behaviour was to tell someone to download a GUI they already have.
+if [ -z "${candidate}" ] && command -v flatpak >/dev/null 2>&1 \
+   && flatpak info com.bringyour.network >/dev/null 2>&1; then
+    exec flatpak run com.bringyour.network "$@"
+fi
+
 if [ -z "${candidate}" ]; then
-    echo "urnetwork: URnetwork GUI not found -- download the AppImage to ~/.local/lib/urnetwork/URnetwork.AppImage (https://ur.io/download)" >&2
+    echo "urnetwork: URnetwork GUI not found -- install the Flatpak (flatpak install flathub com.bringyour.network) or download the AppImage to ~/.local/lib/urnetwork/URnetwork.AppImage (https://ur.io/download)" >&2
     exit 127
 fi
 
