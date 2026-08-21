@@ -2887,8 +2887,21 @@ DnsHostProbe ProbeDnsHost() {
              (!p.resolvconf_present ? "absent"
                                     : (p.resolvconf_is_resolvectl ? "is resolvectl's shim"
                                                                   : "present")) +
-             ", " + kResolvConfPath + " -> " +
-             (p.resolv_conf_realpath.empty() ? std::string("(missing)") : p.resolv_conf_realpath) +
+             ", " + kResolvConfPath +
+             // ONLY render the arrow when the path actually resolves somewhere ELSE.
+             // On Arch/CachyOS /etc/resolv.conf is commonly a REGULAR FILE that
+             // systemd-resolved writes in place rather than a symlink into its
+             // runtime dir, so realpath() returns the path itself and the old
+             // unconditional " -> " printed
+             //     /etc/resolv.conf -> /etc/resolv.conf (resolved's)
+             // which reads as a self-referential symlink and sent a tester's log
+             // triage chasing a misdetection that was not there. The tier
+             // selection was always correct; only this line was wrong.
+             (p.resolv_conf_realpath.empty()
+                  ? std::string(" missing")
+                  : (p.resolv_conf_realpath == kResolvConfPath
+                         ? std::string(" is a regular file")
+                         : " -> " + p.resolv_conf_realpath)) +
              (p.resolv_conf_points_at_resolved ? " (resolved's)" : "");
   return p;
 }

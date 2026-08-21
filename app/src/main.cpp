@@ -69,10 +69,6 @@ int main(int argc, char** argv) {
   // glibmm on core24 (the 2.68 ABI series) has no Glib::get_user_state_dir wrapper;
   // call the C g_get_user_state_dir() (glib 2.72+) directly for XDG_STATE_HOME.
   const std::string logDir = EnsureDir(g_get_user_state_dir(), "urnetwork");
-  if (!host->Initialize(storageDir, logDir)) {
-    g_printerr("failed to initialize SDK\n");
-    return 1;
-  }
 
   // Must match the .desktop StartupWMClass + common-id so the shell associates
   // the window with the app (and the hide-to-tray window keeps its identity).
@@ -88,6 +84,26 @@ int main(int argc, char** argv) {
   std::shared_ptr<urnw::Tray> tray;
 
   app->signal_startup().connect([&] {
+    // SDK INIT BELONGS HERE, NOT BEFORE app->run(). GApplication only decides
+    // primary-vs-remote inside run(), so anything above it executes in EVERY
+    // launch -- including a duplicate that is about to hand off to the running
+    // instance and exit. signal_startup is emitted on the PRIMARY only.
+    //
+    // That distinction is not cosmetic. SdkHost::Initialize calls
+    // urnet::setLogDir(), which runs the SDK's glog init: it sweeps the log
+    // directory down to a keep-N budget and rewrites the
+    // urnetwork-gui.{INFO,WARNING,ERROR} symlinks. A tester's bundle caught it
+    // -- a second launch deleted three of the seven log files and left
+    // urnetwork-gui.INFO, the file any "grab the current log" step follows,
+    // naming its own 846-byte stub while the session that was actually running
+    // had a 1.5 MB log the symlink no longer pointed at. Initialize also opens
+    // the shared storage dir, which a process about to exit has no business
+    // touching.
+    if (!host->Initialize(storageDir, logDir)) {
+      g_printerr("failed to initialize SDK\n");
+      app->quit();
+      return;
+    }
     adw_init();  // libadwaita stylesheet + platform integration
     // the brand visual system is dark (mac app parity); the Ui.cpp stylesheet
     // layers the exact palette on top
