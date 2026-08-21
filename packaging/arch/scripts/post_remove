@@ -1,0 +1,58 @@
+#!/bin/sh
+# post_remove() for urnetwork-daemon.
+#
+# PACMAN ARGUMENT: "$1" is the version that was removed. "$2" is unset. Runs
+# only on a real removal, never on an upgrade.
+#
+# WHAT DELIBERATELY DOES *NOT* HAPPEN HERE, and why it differs from
+# packaging/deb/scripts/postrm.
+#
+# dpkg has two removal states and the .deb uses both: on `remove` it masks the
+# unit, and only on `purge` does it delete /var/lib/urnetwork (device identity
+# and key material), /etc/urnetwork, an URnetwork-authored /etc/geolocation,
+# and the urnetwork group.
+#
+# PACMAN HAS NO PURGE. `pacman -R` and even `pacman -Rns` are the equivalent of
+# `apt remove`, not of `apt purge`: pacman removes the files it owns, keeps
+# modified `backup =` files as .pacsave, and has no second state in which a
+# package is entitled to delete user data or a system group other files may
+# still be group-owned by. So this script removes none of it -- and says
+# exactly how to, rather than silently keeping key material or silently
+# deleting it. packaging/rpm/scripts/postun reaches the same conclusion for the
+# same reason.
+#
+# There is also no mask step. deb-systemd-helper masks a unit while it is
+# removed-but-not-purged so nothing restarts a service whose binary is gone;
+# with no purge state there is nothing to unmask later, and pre_remove has
+# already disabled the unit, so masking would only leave a permanent
+# /etc/systemd/system/urnetworkd.service -> /dev/null symlink behind after the
+# package that created it is gone.
+set -e
+
+# The unit file is gone; tell systemd. Arch's own
+# /usr/share/libalpm/hooks/30-systemd-daemon-reload-system.hook fires on
+# Remove for usr/lib/systemd/system/* too, but it is PostTransaction and this
+# costs nothing, so correct behaviour never depends on the hook being present.
+if [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null 2>&1 || :
+fi
+
+# /run/urnetwork survives a stop on purpose (RuntimeDirectoryPreserve=yes in
+# the unit, so a crash-restart comes back armed rather than open). With the
+# daemon gone it is a leftover holding a marker nothing will ever read again.
+if [ -d /run/urnetwork ]; then
+    rm -rf /run/urnetwork 2>/dev/null || :
+fi
+rm -f /run/urnetwork.pacman-restart 2>/dev/null || :
+
+echo "urnetwork: removed. Device credentials and settings were KEPT (pacman has no 'purge')."
+echo "urnetwork: to erase them too:  sudo rm -rf /var/lib/urnetwork /etc/urnetwork"
+echo "urnetwork: the 'urnetwork' group was kept:  sudo groupdel urnetwork"
+# Only ever mention the location override when URnetwork demonstrably authored
+# it: the writer stamps the file with a marker line, and no other actor on the
+# system reverts it.
+if [ -f /etc/geolocation ] && grep -qi 'urnetwork' /etc/geolocation 2>/dev/null; then
+    echo "urnetwork: /etc/geolocation still holds an URnetwork location override:  sudo rm -f /etc/geolocation"
+fi
+
+return 0

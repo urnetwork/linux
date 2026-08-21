@@ -1,0 +1,44 @@
+#!/bin/sh
+# post_upgrade() for urnetwork-daemon -- the start half of the upgrade dance,
+# and the reason nothing in post_install is unreachable on Arch.
+#
+# PACMAN ARGUMENTS: "$1" incoming version, "$2" outgoing version. Runs on
+# UPGRADE, DOWNGRADE and REINSTALL alike (see pre_upgrade); never on a fresh
+# install.
+#
+# THE ENTIRE BODY IS A DELEGATION, ON PURPOSE. post_install holds the work that
+# must be true after every transaction -- the polkit authority detection, the
+# 0644 assertion on the action file, the /run/urnetwork pre-create, the
+# NetworkManager and udev reloads (both of those files are `backup =`
+# conffiles an upgrade may have replaced), and the systemd daemon-reload.
+# Restating any of it here would guarantee the two copies drift; worse, the
+# NEXT thing added to post_install would silently never reach an existing user,
+# because Arch does not run the install hooks on an upgrade the way dpkg and
+# rpm both do.
+#
+# This works because nfpm emits every hook into ONE .INSTALL file and pacman
+# sources the whole file before calling any function, so post_install is
+# already defined here. It is also the idiomatic PKGBUILD .install shape
+# (`post_upgrade() { post_install "$@"; }`); the only addition is the phase
+# variable, so post_install can tell the two callers apart without trying to
+# infer it from the version strings.
+#
+# WHAT post_install DOES DIFFERENTLY IN THIS PHASE, and why:
+#   * it does NOT re-enable the unit -- enabling exactly once, on the initial
+#     install, is what makes an admin's `systemctl disable` survive upgrades on
+#     a distribution with no deb-systemd-helper state file and no preset
+#     convention;
+#   * it starts the unit only if pre_upgrade recorded that it was running, so
+#     an upgrade never starts a daemon an admin had stopped;
+#   * it stays quiet -- the first-run polkit/group guidance is printed on a
+#     fresh install only.
+set -e
+
+# Set BEFORE the call: post_install reads it as ${UR_ARCH_PHASE:-install}, and
+# both functions run in the same shell process, so a plain variable is enough.
+UR_ARCH_PHASE=upgrade
+export UR_ARCH_PHASE
+
+post_install "$1"
+
+return 0

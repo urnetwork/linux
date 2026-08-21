@@ -1,0 +1,360 @@
+# nfpm (https://nfpm.goreleaser.com) package definition for the URnetwork
+# daemon .pkg.tar.zst -- the Arch-family native channel (Arch, CachyOS,
+# EndeavourOS, Manjaro), and the third wrapper around the ONE staging tree
+# packaging/lib/common.sh assemble_daemon_root() produces.
+#
+# WHY nfpm AND NOT A PKGBUILD
+# ---------------------------
+# The .deb and the .rpm are already nfpm, over the same assemble_daemon_root()
+# output, and that shared function is the only reason "the three daemon
+# packages ship the same payload" is a fact rather than a hope. A PKGBUILD
+# would be a fourth, independent copy of the installed-path table -- exactly
+# what packaging/rpm/nfpm.yaml's header refuses for rpmbuild, and for the same
+# reason. nfpm 2.47.0 (the UR_NFPM_VERSION pin in
+# .github/workflows/beta-build.yml) lists archlinux among its packagers, and
+# its output is a real .pkg.tar.zst with .PKGINFO, .MTREE and .INSTALL that
+# pacman installs, upgrades and removes.
+#
+# It also means this package needs no Arch machine to build: nfpm is pure Go,
+# its zstd is pure Go, and the CI daemon job builds this inside the same
+# ubuntu:22.04 container that produces the .deb and the .rpm.
+#
+# WHAT THAT COSTS, STATED PLAINLY
+# -------------------------------
+#   * There is no makepkg, no namcap and no PKGBUILD to submit to the AUR.
+#     This is a first-party binary package for direct `pacman -U`, not an AUR
+#     submission. An AUR recipe would be a separate, later piece of work.
+#   * nfpm's archlinux packager has NO optdepends field, and it SILENTLY
+#     DISCARDS the shared `recommends:`/`suggests:` keys -- measured on 2.47.0:
+#     a config carrying `recommends: [polkit]` emitted `Recommends:` in the
+#     .deb and NOTHING in the .PKGINFO, with no warning. Do not add a
+#     `recommends:` block here expecting an advisory line; it produces no
+#     bytes. (It would buy little anyway: PKGBUILD(5) is explicit that
+#     "optdepends are ... for informational purposes only and are not utilized
+#     by pacman during dependency resolution" -- there is no Arch analogue of
+#     APT::Install-Recommends or dnf's install_weak_deps.) The polkit story is
+#     told by scripts/post_install instead, which is strictly better than a
+#     metadata line nobody reads.
+#   * The dependency STRINGS are passed through verbatim and unvalidated.
+#     Debian alternation ("libfuse2t64 | libfuse2") and Debian version syntax
+#     ("polkit (>= 124)") emit as literal `depend =` tokens that pacman then
+#     cannot resolve -- an UNINSTALLABLE package that builds without a
+#     complaint. The depends list below is therefore REWRITTEN for Arch, never
+#     copied from packaging/deb/nfpm.yaml. Bare names, or `pkg>=ver`, only.
+#
+# Do not run nfpm against this file directly: this is a TEMPLATE, exactly like
+# its two siblings. make-arch.sh assembles the package root, relocates the
+# systemd unit out of /lib, substitutes ${PKG_VERSION} / ${PKG_RELEASE} /
+# ${PKG_ARCH} / ${PKG_MTIME} / ${NFPM_ARCH} / ${PKGROOT} itself (nfpm does not
+# expand environment variables in contents[].src -- verified for the .deb
+# against nfpm v2.47), and names the output per the asset contract.
+name: urnetwork-daemon
+# The Debian arch spelling on the way in; nfpm maps amd64 -> x86_64 and
+# arm64 -> aarch64 for the archlinux packager (measured: `arch: amd64` emitted
+# `arch = x86_64` in .PKGINFO). The archlinux: block below states the pacman
+# spelling explicitly all the same, so make-arch.sh's filename and this
+# package's own metadata come from ONE variable and cannot disagree.
+arch: "${NFPM_ARCH}"
+platform: linux
+# ONE TIMESTAMP FOR EVERY FILE, AND IT IS NOT COSMETIC.
+#
+# nfpm writes two independent time fields: the tar header mtime of each member,
+# and .MTREE's `time=` for the same path. Left to itself it takes the tar mtime
+# from the moment it writes the archive and the .MTREE time from the SOURCE
+# file's ModTime -- which make-arch.sh created seconds earlier, when
+# assemble_daemon_root copied it. pacman sets each installed file's mtime from
+# the TAR header and then checks it against the .MTREE copy in its local
+# database, so the two disagreeing by even one second makes
+#
+#     pacman -Qkk urnetwork-daemon
+#     -> 144 total files, 24 altered files   ("Modification time mismatch")
+#
+# FOREVER, on every installed machine. Measured exactly that way on real pacman
+# before this line existed -- and measured as CLEAN in a build where the copy
+# and the archive write happened to land in the same second, which is what
+# makes it a nasty one: it is intermittent, and the clean build is the lucky
+# one. For a VPN daemon `pacman -Qkk` is precisely the check a careful user
+# runs, and "24 altered files" on a package they just installed is the wrong
+# answer to give them.
+#
+# make-arch.sh substitutes one value here (SOURCE_DATE_EPOCH when set, so the
+# package participates in reproducible builds; otherwise the build time) and
+# asserts afterwards that every .MTREE entry carries it.
+mtime: "${PKG_MTIME}"
+# THE VERSION FOLD, AND WHY IT IS A THIRD DIFFERENT ANSWER.
+#
+# The pipeline's VERSION is "2026.8.20-1024376890-beta". Each packager mangles
+# it differently and no two of the three scripts here derive their version
+# fields the same way:
+#   .deb  splits at the LAST hyphen  -> Version: 2026.8.20-1024376890-beta
+#   .rpm  splits at the FIRST hyphen -> 2026.8.20 + 0.1024376890.beta
+#   .pkg  splits at NEITHER: pacman's pkgver may not contain '-' at all (it is
+#         the pkgver/pkgrel separator), so make-arch.sh folds the WHOLE string
+#         to dots and pins pkgrel to the literal 1.
+#             pkgver = 2026.8.20.1024376890.beta   pkgrel = 1
+#
+# Both other shapes were measured and both are wrong:
+#   * rpm-style split (version=2026.8.20, release="1024376890.beta") -> nfpm
+#     coerces a non-integer release to 1 SILENTLY and emits
+#     `pkgver = 2026.8.20-1`. The build id and the beta marker are simply gone,
+#     every build of a given day becomes the same pacman version, and
+#     `pacman -U` of a newer build reports "is up to date -- reinstalling".
+#     That is the tarball's problem back again, wearing a pacman badge.
+#   * the raw VERSION -> `pkgver = 2026.8.20-1024376890-beta-1`, which nfpm
+#     writes happily and pacman then REJECTS outright: "package version
+#     contains invalid characters" / "invalid or corrupted package".
+# alpm compares dot-separated segments numerically, so the folded form orders
+# correctly across both the day and the month rollover (verified with vercmp:
+# 2026.8.9.x < 2026.8.20.y < 2026.9.1.z).
+version: "${PKG_VERSION}"
+release: "${PKG_RELEASE}"
+# version_schema none for the same reason packaging/rpm/nfpm.yaml carries it:
+# keep make-arch.sh's fold verbatim. Left at nfpm's semver default the filename
+# and the .PKGINFO DISAGREE -- measured: file "...2026.8.161020679030_beta-1..."
+# with `pkgver = 2026.8.16-1` inside it.
+version_schema: none
+maintainer: "URnetwork <support@ur.io>"
+vendor: "URnetwork"
+homepage: "https://ur.io"
+# Ground rule 8: the code is MPL-2.0, used verbatim in the deb License:, the
+# rpm's license: and the Flathub project_license.
+license: "MPL-2.0"
+description: |
+  Privileged system half of URnetwork for Linux: owns /dev/net/tun, routes and
+  DNS, exposes a control socket under /run/urnetwork whose privileged verbs are
+  gated by polkit (falling back to the urnetwork group where polkit is absent),
+  and starts idle -- no tunnel comes up until an authorized desktop client
+  asks. The GUI is the separate, unprivileged URnetwork AppImage, which lives
+  in a user-writable path so it can self-update; this package installs the
+  stable /usr/bin/urnetwork launcher plus the desktop entry, urnetwork://
+  scheme handler, icons and autostart template that point at it.
+
+# NO GTK (or any GUI) dependency -- the daemon must install on a headless box.
+depends:
+  # C runtime floor. The SDK is cross-built against glibc 2.35 (jammy),
+  # sdk/cgo/Makefile target gnu.2.35, and the .deb and .rpm both declare that
+  # floor by hand because nfpm runs no dependency generator.
+  #
+  # ON A ROLLING DISTRIBUTION THIS LINE IS ALWAYS SATISFIED (Arch is on 2.4x),
+  # and it is kept anyway so all three package definitions state the same floor
+  # in the same place. app/tests/glibc-floor-gate.sh (meson test `glibc-floor`)
+  # is what couples the declaration to the actual binary.
+  - "glibc>=2.35"
+  # Tunnel.cpp builds the tun link, the capture routes and the policy rules
+  # with `ip`, and the kill switch / egress self-exclusion with `nft`. BOTH are
+  # marked required=true in the daemon's own preflight (daemon/main.cpp), so
+  # without either the package installs, the service starts, and the first
+  # Connect fails at the first exec.
+  #
+  # iproute2 is in Arch's `base` meta-package and nftables is NOT -- so the
+  # nftables line is the one that does real work here. It is also the exact gap
+  # the .deb shipped with for a while (declared by the rpm, missing from the
+  # deb), which is what a declared dependency exists to prevent.
+  #
+  # Arch spells it iproute2, like Debian and openSUSE; only Fedora says
+  # `iproute`. Do not copy the rpm's name.
+  - "iproute2"
+  - "nftables"
+  # groupadd, used by scripts/pre_install. Arch's `shadow` is Fedora's
+  # `shadow-utils`; there is no `addgroup` on Arch at all, which is why the
+  # Debian postinst's addgroup-first shape is not reproduced in this package.
+  - "shadow"
+  # The unit, systemctl, and everything scripts/{post_install,post_upgrade,
+  # pre_remove} drive. Also what provides the alpm hooks in
+  # /usr/share/libalpm/hooks that daemon-reload on any change under
+  # usr/lib/systemd/system.
+  - "systemd"
+  # THE ONE GENUINE WIN OF SHIPPING A NATIVE PACKAGE (APPIMAGE.md 11d): the GUI
+  # AppImage needs libfuse.so.2 at runtime and every AppImage-only vendor walks
+  # its users through installing it by hand. This package ships
+  # /usr/bin/urnetwork and the .desktop entry that launch that AppImage, so an
+  # Arch box without fuse2 gets a menu entry that dies on a missing library.
+  #
+  # HARD, matching the .deb (which makes libfuse2 a Depends) rather than the
+  # .rpm (which makes libfuse.so.2 a Recommends). That difference is forced,
+  # not chosen: dnf and zypper install weak dependencies by default, so the rpm
+  # gets the same practical outcome from a Recommends -- pacman has no weak
+  # dependencies at all, so on Arch the choice is "hard" or "silently absent".
+  # fuse2 is 456 KB and pulls only fuse-common and glibc; nothing in a base
+  # Arch install provides it (verified against the archlinux image: absent).
+  - "fuse2"
+# POLKIT IS DELIBERATELY NOT DECLARED, and this is the one place the three
+# packages genuinely diverge. State the reasoning so nobody "fixes" it:
+#
+#   * The .deb declares it as a RECOMMENDS with an explicit rationale -- the
+#     package must still install on a headless box, and apt installs Recommends
+#     by default so a desktop gets it anyway.
+#   * The .rpm declares it NOWHERE, in depends or recommends. So "no polkit
+#     line" is already the established behaviour of one of the two native
+#     packages, and this one matches it.
+#   * pacman has no weak-dependency mechanism to express the .deb's actual
+#     intent, and nfpm cannot emit optdepends even for the advisory line
+#     (see the header). The only two options are a HARD depend or nothing.
+#   * A hard depend would drag polkit and its pam/systemd/glib2/duktape/expat
+#     chain (~1.9 MB) onto every headless Arch install to buy nothing there,
+#     and would contradict the headless rationale the .deb states in its own
+#     words.
+#   * It is SAFE to omit because the fallback is real and fails open, not shut:
+#     ControlServer::PolkitPolicyPresent() requires BOTH the action file AND
+#     PolkitRuntimePresent() (which probes /usr/bin/pkcheck and
+#     /usr/lib/polkit-1/polkitd -- Arch's layout is covered), so an Arch box
+#     with no polkit latches Group mode and authorizes uid 0 plus the
+#     `urnetwork` group, exactly as it always did. A machine that shipped the
+#     action file with no polkit runtime is precisely the fail-shut trap that
+#     two-fact check exists to prevent.
+#   * On any Arch DESKTOP -- which is every machine that will run the GUI --
+#     polkit is already present through GNOME/KDE/Cinnamon, so the polkit path
+#     is taken and there is no group-then-log-out first run. Only a minimal
+#     Arch install gets the group fallback, which is the same honest outcome
+#     the .rpm already ships to a minimal Fedora.
+#
+# scripts/post_install detects which of the two is in force and says so.
+
+contents:
+  # ONE /usr tree, and NOTHING under /lib. Two Arch facts drive this, and the
+  # first one is a hard install failure rather than a style preference:
+  #
+  # 1. /lib IS A SYMLINK TO usr/lib, OWNED BY THE `filesystem` PACKAGE. A
+  #    package that carries any member under lib/ aborts the transaction:
+  #        error: failed to commit transaction (conflicting files)
+  #        urnetwork-daemon: /lib exists in filesystem (owned by filesystem)
+  #    and nothing is installed. There is no YAML-level dodge -- nfpm emits an
+  #    implicit parent-directory member for every dst, so declaring the unit as
+  #    a single file at /lib/systemd/system/urnetworkd.service produces the
+  #    lib/ member just the same. make-arch.sh RELOCATES the unit in ${PKGROOT}
+  #    before nfpm runs, exactly as make-rpm.sh does, and asserts that nothing
+  #    else was staged under /lib.
+  #
+  # 2. usr/lib/systemd/system IS THE PATH ARCH'S OWN HOOKS WATCH.
+  #    /usr/share/libalpm/hooks/30-systemd-daemon-reload-system.hook targets
+  #    `usr/lib/systemd/system/*`; a unit shipped anywhere else would not fire
+  #    it. (Those hooks are PostTransaction, i.e. AFTER post_install and
+  #    post_upgrade, which is why the scripts still run their own
+  #    `systemctl daemon-reload` before starting anything -- the hook is not a
+  #    substitute for the reload in the scriptlet.)
+  #    The unit is NOT marked config: /usr/lib/systemd/system is the vendor
+  #    unit directory, admin overrides live in /etc/systemd/system (drop-ins,
+  #    `systemctl edit`), and pacman never writes there -- so "never overwrite
+  #    an admin-edited unit" is satisfied by the path, with no scriptlet logic
+  #    that could get it wrong.
+  #
+  # A GLOB, NOT `type: tree`, AND THAT IS NOT COSMETIC. With `type: tree` nfpm
+  # writes Go's unmasked fs.FileMode for every directory it walks into .MTREE
+  # -- `mode=20000000755`, i.e. fs.ModeDir|0755 formatted with %o and never
+  # masked to permission bits. Measured on the pristine nfpm output: 83 such
+  # entries, one `warning: directory permissions differ on <dir> / filesystem:
+  # 755  package: 755` per directory at install time (both sides printing 755
+  # is the tell), and `pacman -Qkk urnetwork-daemon` reporting those
+  # directories as altered forever. For a VPN daemon that is exactly the check
+  # a security-minded user runs. The glob form emits the same 140 members with
+  # byte-identical per-file modes and zero folded entries -- verified by
+  # diffing `tar tvf` of both packages (mode, size and path identical; only
+  # .MTREE differs).
+  #
+  # DO NOT "fix" the directory modes with `file_info: {mode: 0755}` on a tree
+  # entry instead: that silences the warnings by clobbering EVERY FILE to 0755
+  # -- the 0644 unit, the SDK library and the polkit .policy included --
+  # destroying the mode discipline assemble_daemon_root() asserts.
+  #
+  # The .desktop file and the hicolor icons ride as plain pacman-shipped files
+  # ON PURPOSE, exactly as they ride as plain dpkg and rpm files in the other
+  # two packages: /usr/share/libalpm/hooks/ ships desktop-file-utils' and
+  # gtk-update-icon-cache's own hooks targeting usr/share/applications/ and
+  # usr/share/icons/, so mimeinfo.cache (what an x-scheme-handler/urnetwork
+  # lookup actually consults) and the icon cache refresh with zero scriptlet
+  # code. Never call update-desktop-database from post_install.
+  #
+  # The polkit action file rides inside this same /usr tree, put there by
+  # assemble_daemon_root(), which also asserts its 0644 mode before the package
+  # is built. It gets no second explicit entry here: a duplicated member is a
+  # packaging bug, not a stronger guarantee.
+  - src: "${PKGROOT}/usr/**/*"
+    dst: /usr
+  # Admin-editable integration files. `type: config` maps to pacman's
+  # `backup = etc/...` array, which is the exact analogue of a dpkg conffile
+  # and of rpm's %config(noreplace): an edited file survives an upgrade and the
+  # package's version lands beside it as .pacnew, and on removal the edited
+  # file is kept as .pacsave.
+  - src: "${PKGROOT}/etc/urnetwork/autostart/com.bringyour.network.desktop"
+    dst: /etc/urnetwork/autostart/com.bringyour.network.desktop
+    type: config
+  - src: "${PKGROOT}/etc/NetworkManager/conf.d/95-urnetwork.conf"
+    dst: /etc/NetworkManager/conf.d/95-urnetwork.conf
+    type: config
+  - src: "${PKGROOT}/etc/udev/rules.d/85-urnetwork-unmanaged.rules"
+    dst: /etc/udev/rules.d/85-urnetwork-unmanaged.rules
+    type: config
+
+# THE SIX HOOKS, AND WHY ALL SIX MUST BE DECLARED HERE.
+#
+# pacman's .INSTALL is not a set of Debian maintainer scripts and not a set of
+# rpm scriptlets: it defines shell FUNCTIONS, and pacman dispatches to them by
+# TRANSACTION KIND, with version strings as arguments and no overlap:
+#
+#   fresh install    pre_install "$new"        post_install "$new"
+#   upgrade          pre_upgrade "$new" "$old" post_upgrade "$new" "$old"
+#   downgrade        pre_upgrade "$new" "$old" post_upgrade "$new" "$old"
+#   reinstall        pre_upgrade "$v"   "$v"   post_upgrade "$v"   "$v"
+#   removal          pre_remove  "$old"       post_remove  "$old"
+#
+# The install pair NEVER runs on an upgrade, and the remove pair never runs on
+# one either -- so unlike dpkg (whose postinst re-runs its whole `configure`
+# branch on upgrade) and unlike rpm (whose %post runs with $1 >= 2), Arch gives
+# an upgrade NOTHING unless pre_upgrade/post_upgrade exist.
+#
+# And they only exist if they are declared in THIS BLOCK. nfpm's generic
+# `scripts:` maps to pre_install/post_install/pre_remove/post_remove and
+# NOTHING ELSE -- `nfpm jsonschema` shows `Scripts` with exactly those four
+# keys and `ArchLinuxScripts` with exactly preupgrade/postupgrade, both
+# additionalProperties:false, and there is no fallback wiring between them.
+# Measured: a package carrying only the four generic scripts installs fine and
+# then runs ABSOLUTELY NOTHING on `pacman -U` of a newer build -- the binary is
+# replaced under a still-running daemon that keeps executing the old code, with
+# no daemon-reload and no restart, and pacman reports success.
+#
+# The same trap is a forward-compatibility trap: because post_install never
+# runs on upgrade, anything ADDED to it in a future release is invisible to
+# every existing user forever. Whatever must hold after every transaction has
+# to be idempotent and reachable from BOTH -- which is why post_upgrade here
+# calls post_install rather than restating it. (Both function bodies land in
+# one sourced .INSTALL file, so that call is just a shell function call; it is
+# the same shape a hand-written PKGBUILD .install uses.)
+scripts:
+  preinstall: scripts/pre_install
+  postinstall: scripts/post_install
+  preremove: scripts/pre_remove
+  postremove: scripts/post_remove
+archlinux:
+  # Explicit, not inferred. The top-level `arch:` already produces the right
+  # value, but make-arch.sh needs the pacman spelling for the artifact name and
+  # this keeps the two from ever disagreeing.
+  arch: "${PKG_ARCH}"
+  # REQUIRED, and easy to lose by copying either sibling config: the top-level
+  # `maintainer:` does NOT feed .PKGINFO's packager field. Measured -- with
+  # maintainer set and this key absent, `pacman -Qi` reports
+  # "Packager : Unknown Packager".
+  packager: "URnetwork <support@ur.io>"
+  scripts:
+    preupgrade: scripts/pre_upgrade
+    postupgrade: scripts/post_upgrade
+
+# ---------------------------------------------------------------------------
+# PORTABILITY NOTE -- WHAT THIS PACKAGE IS AND IS NOT
+# ---------------------------------------------------------------------------
+# This is the ARCH-FAMILY package: Arch, CachyOS, EndeavourOS, Manjaro. Every
+# dependency name above was checked against the real repositories (glibc,
+# iproute2, shadow, systemd in core; nftables, fuse2 in extra), so it resolves
+# on any of them.
+#
+# IT IS NOT FOR SteamOS, which is Arch-family but immutable. SteamOS has a
+# read-only /usr; `pacman -U` there needs `steamos-readonly disable` and is
+# reverted by the next system update. Immutable Arch hosts take the install
+# tarball instead, which handles a read-only /usr by installing under
+# /usr/local. packaging/distro-smoke.sh says so on a SteamOS host.
+#
+# NO conflicts:/provides:/replaces: are declared. There is no urnetwork package
+# in the Arch repositories or the AUR today, so there is nothing to conflict
+# with by name; the real collision is with a tarball install of the same files,
+# and pacman cannot see that. packaging/tarball/install.sh and uninstall.sh
+# already guard the other direction -- both refuse to touch paths that
+# `pacman -Qo` says a package owns.

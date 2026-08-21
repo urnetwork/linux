@@ -1,0 +1,178 @@
+#!/bin/sh
+# post_install() for urnetwork-daemon -- and, via post_upgrade, the ONE place
+# that converges this machine after EVERY pacman transaction.
+#
+# PACMAN ARGUMENTS: "$1" is the version just installed. "$2" is unset.
+# post_install runs ONLY on a fresh install -- never on an upgrade, never on a
+# downgrade, and never on a reinstall (all three go through the pre_upgrade /
+# post_upgrade pair instead). That is the single biggest difference from the
+# other two packages: packaging/deb/scripts/postinst re-runs its whole
+# `configure` branch on every upgrade, and packaging/rpm/scripts/post runs on
+# upgrade with $1 >= 2. Arch runs neither.
+#
+# WHICH IS WHY post_upgrade CALLS THIS FUNCTION rather than restating it.
+# nfpm emits every hook into ONE .INSTALL file which pacman sources whole
+# before calling anything, so `post_install "$1"` from post_upgrade is an
+# ordinary shell function call -- the same shape a hand-written PKGBUILD
+# .install uses (`post_upgrade() { post_install "$@"; }`). The consequence to
+# keep in mind when editing: ANYTHING ADDED BELOW MUST BE IDEMPOTENT, because
+# it will run again on every upgrade, downgrade and reinstall. That is the
+# property that makes it safe, and it is also the only defence against the
+# forward-compatibility trap -- work added to an install-only hook on Arch is
+# invisible to every existing user forever.
+#
+# UR_ARCH_PHASE is how the two callers differ. post_upgrade sets it to
+# "upgrade" before calling; a real install leaves it unset. It is NOT derived
+# from "$1"/"$2" on purpose: the version strings alone cannot distinguish an
+# upgrade from a downgrade from a reinstall, and every attempt to read meaning
+# out of them is the same class of mistake as branching on 'configure'.
+#
+# Deliberately absent, mirroring both siblings: anything touching
+# /usr/share/applications or /usr/share/icons. Those ship as plain
+# pacman-owned files precisely so the desktop-file-utils and
+# gtk-update-icon-cache alpm hooks in /usr/share/libalpm/hooks refresh
+# mimeinfo.cache -- the thing an x-scheme-handler/urnetwork lookup actually
+# consults -- and the icon cache, with zero scriptlet code.
+set -e
+
+UNIT='urnetworkd.service'
+UR_PHASE="${UR_ARCH_PHASE:-install}"
+RESTART_MARKER='/run/urnetwork.pacman-restart'
+
+# --- which authority this machine will run under, said out loud --------------
+#
+# DETECTED BY LOOKING FOR POLKIT, NOT FOR OUR OWN ACTION FILE. pacman has
+# already extracted /usr/share/polkit-1/actions/com.bringyour.network.policy by
+# the time this runs (and created that directory on the way), so testing the
+# file or the directory would report "polkit" on a box that has never had it.
+#
+# This mirrors the daemon's own two-fact test exactly:
+# ControlServer::PolkitRuntimePresent() probes /usr/bin/pkcheck and
+# /usr/lib/polkit-1/polkitd among others, and PolkitPolicyPresent() requires
+# BOTH that and the action file -- so a machine with the file and no runtime
+# falls back to the group rather than latching an authority it cannot ask.
+# Unlike the .deb, this package declares no polkit dependency at all (see
+# nfpm.yaml for the four reasons), so on Arch this branch is genuinely load
+# bearing rather than a formality.
+UR_HAS_POLKIT=0
+if command -v pkaction >/dev/null 2>&1 || command -v pkcheck >/dev/null 2>&1; then
+    UR_HAS_POLKIT=1
+elif [ -f /usr/share/polkit-1/actions/org.freedesktop.policykit.policy ]; then
+    UR_HAS_POLKIT=1
+else
+    for d in /usr/lib/polkit-1 /usr/libexec/polkit-1 /usr/lib64/polkit-1; do
+        if [ -x "${d}/polkitd" ]; then UR_HAS_POLKIT=1; break; fi
+    done
+fi
+# Said once, on a fresh install. An upgrade repeats none of this chatter.
+if [ "${UR_PHASE}" = install ]; then
+    if [ "${UR_HAS_POLKIT}" = 1 ]; then
+        echo "urnetwork: permission is granted through polkit -- no group change and no log-out are needed."
+        if [ -n "$(getent group urnetwork 2>/dev/null | cut -d: -f4)" ]; then
+            echo "urnetwork: the 'urnetwork' group still has members from an earlier version. Nothing to undo -- membership is simply no longer consulted where polkit is present."
+        fi
+    else
+        echo "urnetwork: no polkit found; urnetworkd falls back to the 'urnetwork' group."
+        echo "urnetwork: run 'sudo usermod -aG urnetwork <user>', then log out and back in."
+        echo "urnetwork: or 'sudo pacman -S polkit' and reinstall this package, which removes that requirement."
+    fi
+fi
+
+# --- the polkit action file's mode -------------------------------------------
+# polkit IGNORES a group- or world-writable .policy file, SILENTLY: the actions
+# revert to their built-in defaults and the only symptom is an administrator
+# password prompt on every Connect, long after the install. pacman ships ours
+# 0644 root:root from the package tree (assemble_daemon_root asserts that at
+# build time); assert it here rather than assume it, and check the directory
+# too -- polkit does not police the directory, and whoever can write it can
+# drop in a file that redefines our defaults.
+UR_POLICY=/usr/share/polkit-1/actions/com.bringyour.network.policy
+if [ -f "${UR_POLICY}" ]; then
+    chmod 0644 "${UR_POLICY}" 2>/dev/null || :
+    chown root:root "${UR_POLICY}" 2>/dev/null || :
+    UR_POLICY_DIR_MODE="$(stat -c '%a' /usr/share/polkit-1/actions 2>/dev/null || echo '')"
+    case "${UR_POLICY_DIR_MODE}" in
+        '') : ;;
+        *[2367]|*[2367]?)
+            echo "urnetwork: WARNING /usr/share/polkit-1/actions is group- or world-writable (mode ${UR_POLICY_DIR_MODE}); anyone who can write there can redefine URnetwork's polkit defaults." >&2 ;;
+    esac
+fi
+
+# --- /run/urnetwork -----------------------------------------------------------
+# The unit's RuntimeDirectory=urnetwork (RuntimeDirectoryPreserve=yes) is the
+# real owner and re-applies the mode on every start; pre-create it so the
+# control path exists even before the first start. The daemon narrows it to
+# 0750 root:urnetwork itself when it finds no polkit action file.
+if [ -d /run ]; then
+    if [ "${UR_HAS_POLKIT}" = 1 ]; then
+        install -d -m 0755 -o root -g root /run/urnetwork 2>/dev/null || :
+    else
+        install -d -m 0750 -o root -g urnetwork /run/urnetwork 2>/dev/null || :
+    fi
+fi
+
+# --- NetworkManager / udev markings -------------------------------------------
+# The conf.d marking must be live before the first tunnel comes up, and both
+# files are `backup =` conffiles that an upgrade may replace -- which is a
+# second reason this block has to be reachable from post_upgrade. Neither call
+# touches existing connections.
+if command -v nmcli >/dev/null 2>&1; then
+    nmcli general reload conf >/dev/null 2>&1 || :
+fi
+if command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload >/dev/null 2>&1 || :
+fi
+
+# --- systemd ------------------------------------------------------------------
+# THE daemon-reload IS NOT REDUNDANT with Arch's own
+# /usr/share/libalpm/hooks/30-systemd-daemon-reload-system.hook. That hook is
+# PostTransaction -- it runs AFTER this function -- so starting the unit here
+# without reloading first would start it against the stale in-memory unit.
+if [ ! -d /run/systemd/system ]; then
+    # No booted systemd (a chroot, a container image build, pacstrap). Nothing
+    # to enable or start; the unit is on disk and will be picked up at boot.
+    return 0
+fi
+systemctl --system daemon-reload >/dev/null 2>&1 || :
+
+if [ "${UR_PHASE}" = install ]; then
+    # ENABLE, AND ONLY EVER HERE.
+    #
+    # Arch has no preset mechanism to lean on: its
+    # /usr/lib/systemd/system-preset/99-default.preset ends in `disable *`, and
+    # unlike Fedora there is no convention of shipping a package preset file --
+    # so `systemctl preset` would leave the unit disabled and this package
+    # would install a service that never starts, at install or at boot.
+    #
+    # Enabling on the INITIAL INSTALL ONLY is how an admin's later `systemctl
+    # disable urnetworkd` survives every upgrade. It needs no state file: the
+    # enablement symlink lives in /etc/systemd/system/multi-user.target.wants/,
+    # which pacman does not touch on upgrade, and post_upgrade deliberately
+    # does not re-enable. This is the Arch expression of the .deb's
+    # deb-systemd-helper "enable once" state file and the .rpm's
+    # `[ $1 -eq 1 ]` preset guard -- same guarantee, no equivalent machinery
+    # required.
+    systemctl enable "${UNIT}" >/dev/null 2>&1 || :
+    # STARTING FROM A SCRIPTLET is correct here for the same reason Debian
+    # Policy 9.3.3.1 permits it for the .deb and the .rpm does it too:
+    # urnetworkd STARTS IDLE. It brings up no tunnel, changes no routes and
+    # installs no firewall rules until a client authenticates on the control
+    # socket and asks. The alternative is a `pacman -S` that leaves a machine
+    # where the app truthfully reports "the service is not running" until the
+    # next reboot.
+    systemctl start "${UNIT}" >/dev/null 2>&1 || :
+else
+    # UPGRADE / DOWNGRADE / REINSTALL: start again ONLY if pre_upgrade stopped
+    # a unit that was actually running. An upgrade must never start a daemon an
+    # admin had stopped, and must never re-enable one they had disabled.
+    if [ -f "${RESTART_MARKER}" ]; then
+        rm -f "${RESTART_MARKER}" 2>/dev/null || :
+        systemctl start "${UNIT}" >/dev/null 2>&1 || :
+    fi
+fi
+
+# `return 0`, never `exit 0` -- see the note at the end of pre_install. This
+# one matters in practice rather than in theory: post_upgrade calls this
+# function and then returns, and an `exit` here would end pacman's scriptlet
+# shell mid-call.
+return 0

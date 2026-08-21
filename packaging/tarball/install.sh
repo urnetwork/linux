@@ -552,17 +552,22 @@ fi
 if command -v rpm >/dev/null 2>&1 && rpm -q "${PKG_NAME}" >/dev/null 2>&1; then
     die "${PKG_NAME} is installed and owned by rpm -- use dnf/zypper to upgrade or remove it first"
 fi
-# pacman (Arch, CachyOS, Manjaro, EndeavourOS). There is no URnetwork package
-# in the Arch repositories or the AUR today, so this is a guard against a
-# FUTURE one rather than a live conflict -- and the day one lands, two owners
-# of the same paths is exactly the silent-corruption failure dpkg is refused
-# for above.
+# pacman (Arch, CachyOS, Manjaro, EndeavourOS). THIS IS NOW A LIVE CONFLICT,
+# not the hypothetical it was written as: packaging/make-arch.sh ships a real
+# urnetwork-daemon .pkg.tar.zst, owning exactly the paths below. Two owners of
+# the same paths is the same silent-corruption failure dpkg is refused for
+# above -- pacman would not know these files changed, and the next
+# `pacman -Syu` or `pacman -R` would half-replace or half-remove the install.
 #
-# Queried by PATH, not by name. An AUR package could be called urnetwork,
-# urnetwork-bin, urnetwork-daemon or urnetwork-git, and a name check would miss
-# all but one; the path is the thing that actually collides. `pacman -Qo` exits
-# non-zero and writes to stderr both when nothing owns the file and when the
-# file does not exist, so both are absorbed.
+# SteamOS is the one Arch-family host where the tarball is the RIGHT answer and
+# this guard should stay quiet: its /usr is read-only, so the pacman package is
+# never installed there and pacman owns none of these paths.
+#
+# Queried by PATH, not by name. Our own package is urnetwork-daemon, but an AUR
+# package could equally be urnetwork, urnetwork-bin or urnetwork-git, and a
+# name check would miss all but one; the path is the thing that actually
+# collides. `pacman -Qo` exits non-zero and writes to stderr both when nothing
+# owns the file and when the file does not exist, so both are absorbed.
 if command -v pacman >/dev/null 2>&1; then
     PACMAN_OWNER=''
     PACMAN_OWNED_PATH=''

@@ -1,0 +1,47 @@
+#!/bin/sh
+# pre_install() for urnetwork-daemon -- the Arch install hook.
+#
+# PACMAN ARGUMENT: "$1" is the version being installed ("2026.8.20.1024376890
+# .beta-1"). There is no "$2" AT ALL -- not empty, UNSET (measured: nargs=1,
+# "${2-UNSET}" -> UNSET), so a bare $2 aborts the scriptlet under `set -u`.
+#
+# THIS IS NOT A DEBIAN MAINTAINER SCRIPT AND NOT AN RPM SCRIPTLET. pacman never
+# passes 'configure', 'remove' or 'purge', and never passes 0/1/2 either. Any
+# `case "$1" in configure)` or `[ "$1" -eq 1 ]` branch carried over from
+# packaging/deb/scripts/ or packaging/rpm/scripts/ would simply never match,
+# and the failure is SILENT -- the package installs with exit code 0 and does
+# nothing. Each function here IS its own branch; that is the whole point of
+# there being six of them.
+#
+# WHAT THIS DOES: creates the `urnetwork` system group, and nothing else.
+#
+# It is here rather than in post_install for the ordering reason Fedora's
+# guidelines give and packaging/rpm/scripts/pre already follows: post_install
+# pre-creates /run/urnetwork with `-g urnetwork` on a machine with no polkit,
+# so the group has to exist before any file that references it. pacman runs
+# pre_install before extracting a single file, which is exactly the right slot.
+#
+# THE GROUP IS THE FALLBACK AUTHORIZER, AND NOBODY IS PUT IN IT. Where polkit
+# is present the socket is authorized per-action against the peer's SO_PEERCRED
+# uid and membership is inert. Where it is absent, urnetworkd binds the socket
+# 0660 root:urnetwork and consults this group. The `usermod -aG` + "log out and
+# back in" pair that used to follow is deliberately gone: supplementary groups
+# are applied at LOGIN, so it made a correct install unusable until the user
+# ended their session. See packaging/deb/scripts/postinst, which this mirrors.
+#
+# Created on install and DELIBERATELY NEVER REMOVED -- see post_remove.
+set -e
+
+# `groupadd --system`, not Debian's `addgroup`: there is no addgroup on Arch.
+# groupadd comes from `shadow`, which this package depends on.
+if ! getent group urnetwork >/dev/null 2>&1; then
+    groupadd --system urnetwork >/dev/null 2>&1 || :
+fi
+
+# `return 0`, NEVER `exit 0`. nfpm inlines this file VERBATIM inside
+# `function pre_install() { ... }` in the generated .INSTALL, so an `exit`
+# terminates pacman's whole scriptlet shell rather than this function --
+# harmless as the very last statement, fatal for any function that calls
+# another (post_upgrade calls post_install, and measured, a trailing `exit 0`
+# in the callee silently swallowed everything after the call).
+return 0

@@ -344,8 +344,8 @@ the kill switch is available), the `.deb` exists, and the daemon's floor is exac
 
 | | Arch (rolling) |
 |---|---|
-| Channel today | **T** (tarball) + **A** |
-| Channel it should be | AUR `PKGBUILD` producing a native package |
+| Channel today | **P** (`.pkg.tar.zst`, `packaging/make-arch.sh`, nfpm `-p archlinux`) + **T** (tarball) + **A** |
+| Channel it should be | as today. An AUR `PKGBUILD` would be a *fourth* independent copy of the installed-path table; the first-party binary package is built from the same `assemble_daemon_root()` tree as the `.deb` and `.rpm`, so it cannot drift from them. An AUR recipe remains reasonable as a discovery channel, not as a replacement. |
 | init | systemd **[I]** |
 | LSM | none by default **[I]** — the SELinux branch no-ops (`getenforce` absent) **[M-src]** |
 | Firewall | nftables available, nothing enabled by default **[I]** |
