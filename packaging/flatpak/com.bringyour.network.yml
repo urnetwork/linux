@@ -166,6 +166,19 @@ modules:
       - -Dbuild-documentation=false
       - -Dbuild-examples=false
       - -Dbuild-tests=false
+      # REQUIRED because the source is git rather than a tarball. cairomm turns
+      # maintainer mode on when it does not find a released tree, and then hard-
+      # requires mm-common-get, which the GNOME SDK does not ship:
+      #
+      #   ../meson.build:151:18: ERROR: Program 'mm-common-get' not found
+      #
+      # Safe to switch off here, and not merely expedient: mm-common-get exists
+      # to fetch the gmmproc scaffolding that generates .h/.cc from .hg/.ccg
+      # inputs, and cairomm has NONE -- its 1.18.0 tree contains zero .hg and
+      # zero .ccg files, unlike glibmm and gtkmm which are generated. The only
+      # other thing maintainer mode buys is the doc toolchain, and
+      # -Dbuild-documentation=false above already declines that.
+      - -Dmaintainer-mode=false
     sources:
       - type: git
         url: https://gitlab.freedesktop.org/cairo/cairomm.git
