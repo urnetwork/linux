@@ -136,8 +136,29 @@ modules:
         url: https://download.gnome.org/sources/glibmm/2.86/glibmm-2.86.0.tar.xz
         sha256: 39c0e9f6da046d679390774efdb9ad564436236736dc2f7825e614b2d4087826
 
-  # cairomm 1.16+ is released by cairographics.org, NOT download.gnome.org
-  # (the GNOME mirror stops at the old 1.12/1.15 API series).
+  # FROM GIT, unlike every other module here, and not by preference.
+  #
+  # cairomm 1.16+ is released by cairographics.org and nowhere else: the GNOME
+  # mirror stops at the old 1.12/1.15 API series, Debian's pool stops at 1.14.6,
+  # and neither Gentoo distfiles nor Fedora's lookaside carries 1.18.0. That
+  # leaves one unmirrored host, and it is not reachable from GitHub's runners --
+  # it answers a home connection in about 8 seconds and times out from CI every
+  # single time:
+  #
+  #   Failed to download sources: module cairomm: Failed to connect to
+  #   www.cairographics.org port 443 after 60000 ms: Timeout was reached
+  #
+  # Four attempts across three runs, all identical, so this is not a blip that a
+  # retry absorbs. With no archive left to mirror, the remaining source is
+  # cairo's own upstream git -- which is where that tarball is cut from anyway.
+  #
+  # PINNED TO A COMMIT, not just the tag. `tag:` alone would follow a moved tag;
+  # the commit is what keeps this reproducible, and it is the same guarantee the
+  # sha256 gave on the archive. e0bad5477 is what 1.18.0 peels to.
+  #
+  # If cairographics.org ever gets a mirror this should go back to an archive
+  # source: a release tarball is the better input, because it is what upstream
+  # actually tested.
   - name: cairomm
     buildsystem: meson
     config-opts:
@@ -145,10 +166,24 @@ modules:
       - -Dbuild-documentation=false
       - -Dbuild-examples=false
       - -Dbuild-tests=false
+      # REQUIRED because the source is git rather than a tarball. cairomm turns
+      # maintainer mode on when it does not find a released tree, and then hard-
+      # requires mm-common-get, which the GNOME SDK does not ship:
+      #
+      #   ../meson.build:151:18: ERROR: Program 'mm-common-get' not found
+      #
+      # Safe to switch off here, and not merely expedient: mm-common-get exists
+      # to fetch the gmmproc scaffolding that generates .h/.cc from .hg/.ccg
+      # inputs, and cairomm has NONE -- its 1.18.0 tree contains zero .hg and
+      # zero .ccg files, unlike glibmm and gtkmm which are generated. The only
+      # other thing maintainer mode buys is the doc toolchain, and
+      # -Dbuild-documentation=false above already declines that.
+      - -Dmaintainer-mode=false
     sources:
-      - type: archive
-        url: https://www.cairographics.org/releases/cairomm-1.18.0.tar.xz
-        sha256: b81255394e3ea8e8aa887276d22afa8985fc8daef60692eb2407d23049f03cfb
+      - type: git
+        url: https://gitlab.freedesktop.org/cairo/cairomm.git
+        tag: '1.18.0'
+        commit: e0bad547705348657d09db4c9375833d8890cf54
 
   - name: pangomm
     buildsystem: meson
