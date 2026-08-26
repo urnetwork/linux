@@ -45,9 +45,6 @@ constexpr const char* kAppVersion = UR_APP_VERSION;
 // The GUI's memory bound. The data plane's budget now lives in urnetworkd
 // (TunnelHost); this only scales the GUI-side SDK (api + DeviceRemote).
 constexpr int64_t kMemoryLimit = 64ll * 1024 * 1024;
-// The challenge every wallet signs for wallet sign-in — the same static string on
-// every client (apple/NEXTSTEPS2.md §4); no client sends a nonce.
-constexpr const char* kWalletSignInMessage = "Welcome to URnetwork";
 // AuthLogin{wallet_auth} blockchain ids. The server matches case-insensitively:
 // "solana" -> ed25519, urnet::TAO ("TAO") -> sr25519 (bittensor).
 constexpr const char* kSolanaBlockchain = "solana";
@@ -771,16 +768,39 @@ void SdkHost::CreateNetworkWithPendingWallet(const std::string& networkName,
     done({false, false, "no wallet sign-in pending"});
     return;
   }
-  urnet::NetworkCreateArgs args;
-  args.user_name = std::string();
-  args.network_name = networkName;
-  args.terms = true;
-  args.verify_use_numeric = true;
-  if (!referralCode.empty()) args.referral_code = referralCode;
-  args.wallet_auth = walletAuth;  // the signed challenge from the wallet sign-in
-  api_->networkCreate(args, [this, done](std::optional<urnet::NetworkCreateResult> result,
-                                         std::optional<std::string> err) {
-    HandleNetworkCreateResult(std::move(result), std::move(err), done);
+
+  RequestWalletChallenge(walletAuth->blockchain.value_or(std::string()),
+                         walletAuth->wallet_address.value_or(std::string()),
+                         [this, networkName, referralCode, done = std::move(done)](
+                             std::optional<std::string> message, std::string error) mutable {
+    if (!message) {
+      done({false, false, error.empty() ? "could not fetch wallet challenge" : error});
+      return;
+    }
+
+    PostToMain([this, networkName, referralCode, message = *message,
+                done = std::move(done)]() mutable {
+      WalletConnect::Provider provider;
+      {
+        std::scoped_lock lock(mutex_);
+        if (!pendingWalletAuth_) {
+          done({false, false, "no wallet sign-in pending"});
+          return;
+        }
+        pendingWalletAuth_->wallet_message = message;
+        pendingWalletAuth_->wallet_signature = std::string();
+        pendingWalletNetworkName_ = networkName;
+        pendingWalletReferralCode_ = referralCode;
+        walletCreateDone_ = std::move(done);
+        provider = wallet_.provider();
+      }
+
+      if (provider == WalletConnect::Provider::Bittensor) {
+        wallet_.SignInWithBittensor(message);
+      } else {
+        wallet_.SignMessage(message);
+      }
+    });
   });
 }
 
@@ -907,14 +927,30 @@ void SdkHost::RefreshJwt() {
 void SdkHost::SetupWalletCallbacks() {
   // Solana is a two-hop flow: connect first, then ask the wallet to sign the
   // challenge. (Bittensor never fires this — it signs in a single hop.)
-  wallet_.on_public_key = [this](std::string, WalletConnect::Provider) {
-    wallet_.SignMessage(kWalletSignInMessage);
+  wallet_.on_public_key = [this](std::string publicKey, WalletConnect::Provider) {
+    RequestWalletChallenge(kSolanaBlockchain, publicKey,
+                           [this](std::optional<std::string> message, std::string error) {
+      if (!message) {
+        FailWalletOperation(error.empty() ? "could not fetch wallet challenge" : error);
+        return;
+      }
+      PostToMain([this, message = *message] { wallet_.SignMessage(message); });
+    });
   };
   // Either way the wallet address is on the WalletConnect by now: solana set it
   // on the connect callback, bittensor returns it alongside the signature.
   wallet_.on_signature = [this](std::string signature) {
+    bool creating = false;
+    {
+      std::scoped_lock lock(mutex_);
+      creating = static_cast<bool>(walletCreateDone_);
+    }
+    if (creating) {
+      FinishCreateNetworkWithWallet(signature);
+      return;
+    }
     const bool bittensor = wallet_.provider() == WalletConnect::Provider::Bittensor;
-    AuthLoginWithWallet(wallet_.publicKey(), signature, kWalletSignInMessage,
+    AuthLoginWithWallet(wallet_.publicKey(), signature, wallet_.message(),
                         bittensor ? urnet::TAO : kSolanaBlockchain);
   };
   wallet_.on_error = [this](std::string err) {
@@ -923,8 +959,15 @@ void SdkHost::SetupWalletCallbacks() {
     std::function<void(AuthResult)> done;
     {
       std::scoped_lock lock(mutex_);
-      done = std::move(walletAuthDone_);
+      if (walletCreateDone_) {
+        done = std::move(walletCreateDone_);
+        pendingWalletNetworkName_.clear();
+        pendingWalletReferralCode_.clear();
+      } else {
+        done = std::move(walletAuthDone_);
+      }
       walletAuthDone_ = nullptr;
+      walletCreateDone_ = nullptr;
     }
     if (done) done({false, false, err});
   };
@@ -934,6 +977,7 @@ void SdkHost::SignInWithSolana(WalletConnect::Provider provider,
                                std::function<void(AuthResult)> done) {
   {
     std::scoped_lock lock(mutex_);
+    pendingWalletAuth_.reset();
     walletAuthDone_ = std::move(done);
   }
   wallet_.Connect(provider);  // opens the browser; the rest continues on the deep-link callback
@@ -942,11 +986,107 @@ void SdkHost::SignInWithSolana(WalletConnect::Provider provider,
 void SdkHost::SignInWithBittensor(std::function<void(AuthResult)> done) {
   {
     std::scoped_lock lock(mutex_);
+    pendingWalletAuth_.reset();
     walletAuthDone_ = std::move(done);
   }
-  // one hop: the bridge connects the substrate wallet and signs; the rest
-  // continues on the urnetwork://bittensor-sign-message callback
-  wallet_.SignInWithBittensor(kWalletSignInMessage);
+  RequestWalletChallenge(urnet::TAO, std::string(),
+                         [this](std::optional<std::string> message, std::string error) {
+    if (!message) {
+      FailWalletOperation(error.empty() ? "could not fetch wallet challenge" : error);
+      return;
+    }
+    // one hop: the bridge connects the substrate wallet and signs; the rest
+    // continues on the urnetwork://bittensor-sign-message callback
+    PostToMain([this, message = *message] { wallet_.SignInWithBittensor(message); });
+  });
+}
+
+void SdkHost::RequestWalletChallenge(
+    const std::string& blockchain, const std::string& walletAddress,
+    std::function<void(std::optional<std::string> message, std::string error)> done) {
+  urnet::AuthWalletChallengeArgs args;
+  args.blockchain = blockchain;
+  if (!walletAddress.empty()) args.wallet_address = walletAddress;
+  api_->authWalletChallenge(args, [done = std::move(done)](
+                                      std::optional<urnet::AuthWalletChallengeResult> result,
+                                      std::optional<std::string> err) mutable {
+    if (err) {
+      done(std::nullopt, *err);
+      return;
+    }
+    if (!result) {
+      done(std::nullopt, "wallet challenge returned no result");
+      return;
+    }
+    if (result->error && !result->error->message.empty()) {
+      done(std::nullopt, result->error->message);
+      return;
+    }
+    if (!result->message_template || result->message_template->empty()) {
+      done(std::nullopt, "wallet challenge returned no message");
+      return;
+    }
+    done(*result->message_template, std::string());
+  });
+}
+
+void SdkHost::FailWalletOperation(const std::string& error) {
+  std::function<void(AuthResult)> done;
+  {
+    std::scoped_lock lock(mutex_);
+    if (walletCreateDone_) {
+      done = std::move(walletCreateDone_);
+      pendingWalletNetworkName_.clear();
+      pendingWalletReferralCode_.clear();
+    } else {
+      done = std::move(walletAuthDone_);
+    }
+    walletAuthDone_ = nullptr;
+    walletCreateDone_ = nullptr;
+  }
+  if (done) done({false, false, error});
+}
+
+void SdkHost::FinishCreateNetworkWithWallet(const std::string& signature) {
+  std::function<void(AuthResult)> done;
+  std::optional<urnet::WalletAuthArgs> walletAuth;
+  std::string networkName;
+  std::string referralCode;
+  {
+    std::scoped_lock lock(mutex_);
+    done = std::move(walletCreateDone_);
+    walletCreateDone_ = nullptr;
+    if (!done || !pendingWalletAuth_) return;
+    if (wallet_.publicKey() != pendingWalletAuth_->wallet_address.value_or(std::string())) {
+      pendingWalletNetworkName_.clear();
+      pendingWalletReferralCode_.clear();
+      walletAuth.reset();
+    } else {
+      pendingWalletAuth_->wallet_signature = signature;
+      walletAuth = pendingWalletAuth_;
+      networkName = std::move(pendingWalletNetworkName_);
+      referralCode = std::move(pendingWalletReferralCode_);
+      pendingWalletNetworkName_.clear();
+      pendingWalletReferralCode_.clear();
+    }
+  }
+  if (!walletAuth) {
+    done({false, false, "wallet account changed; use the same account to create the network"});
+    return;
+  }
+
+  urnet::NetworkCreateArgs args;
+  args.user_name = std::string();
+  args.network_name = networkName;
+  args.terms = true;
+  args.verify_use_numeric = true;
+  if (!referralCode.empty()) args.referral_code = referralCode;
+  args.wallet_auth = walletAuth;
+  api_->networkCreate(args, [this, done = std::move(done)](
+                                std::optional<urnet::NetworkCreateResult> result,
+                                std::optional<std::string> err) mutable {
+    HandleNetworkCreateResult(std::move(result), std::move(err), std::move(done));
+  });
 }
 
 void SdkHost::HandleDeepLink(const std::string& url) {

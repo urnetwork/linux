@@ -26,11 +26,12 @@ umask 077
 
 here="$(cd "$(dirname "$0")" && pwd)"
 root="${URNETWORK_ROOT:-$(dirname "$here")}"
-vault="${UR_ACCEPT_VAULT:-$root/vault/main/test-acceptance.yml}"
+vault="${UR_ACCEPT_VAULT:-$root/vault/main/tests.yml}"
 fixture="${UR_ACCEPT_FIXTURE:-$here/tests/__acceptance__/fixtures/linux-main.secret}"
 repeat_count="${UR_ACCEPT_REPEAT:-1}"
 skip_build="${SKIP_BUILD:-0}"
 keep_fixture="${UR_ACCEPT_KEEP_FIXTURE:-0}"
+result_matrix="${UR_ACCEPT_RESULT_FILE:-}"
 version="${EXTERNAL_WARP_VERSION:-0.0.0-0}"
 out_dir="${UR_ACCEPT_LINUX_OUT:-$here/out/acceptance}"
 
@@ -59,9 +60,11 @@ command -v timeout >/dev/null 2>&1 || die "GNU timeout is required"
 timeout 15 docker info >/dev/null 2>&1 || die "docker is not running"
 node "$root/build/all/acceptance/preflight-main.mjs" || exit 1
 [ -f "$vault" ] || die "no acceptance vault at $vault"
-acc_user="$(awk -F': *' '$1=="user"{print $2; exit}' "$vault")"
-acc_pass="$(awk -F': *' '$1=="pass"{print $2; exit}' "$vault")"
-[ -n "$acc_user" ] && [ -n "$acc_pass" ] || die "$vault must contain user: and pass:"
+config_reader="$root/tests/read-tests-config.sh"
+[ -x "$config_reader" ] || die "test config reader is missing: $config_reader"
+UR_ACCEPT_VAULT="$vault" "$config_reader" --ready validate
+acc_user="$(UR_ACCEPT_VAULT="$vault" "$config_reader" get data_plane_account.email)"
+acc_pass="$(UR_ACCEPT_VAULT="$vault" "$config_reader" get data_plane_account.password)"
 
 timestamp="$(date +%Y%m%d-%H%M%S)"
 artifacts="$here/tests/__acceptance__/$timestamp"
@@ -72,6 +75,8 @@ chmod 700 "$run_dir" "$(dirname "$fixture")"
 credentials="$run_dir/credentials"
 printf '%s\n%s\n' "$acc_user" "$acc_pass" >"$credentials"
 chmod 600 "$credentials"
+tests_json="$run_dir/tests.json"
+UR_ACCEPT_VAULT="$vault" "$config_reader" write-json "$tests_json"
 unset acc_pass
 
 release_retained_client() {
@@ -106,6 +111,16 @@ cleanup() {
     echo "[linux acceptance] could not remove $run_dir" >&2
     exit_status=1
   fi
+  if [ -n "$result_matrix" ]; then
+    mkdir -p "$(dirname "$result_matrix")"
+    matrix_status=PASS
+    matrix_detail="Linux SDK/service acceptance completed"
+    if [ "$exit_status" -ne 0 ]; then matrix_status=FAIL; matrix_detail="Linux acceptance runner failed; see artifacts"; fi
+    for matrix_case in email phone solana bittensor instant password data-plane; do
+      printf 'linux\t%s\t%s\t%s\n' "$matrix_case" "$matrix_status" "$matrix_detail" >>"$result_matrix"
+    done
+    chmod 600 "$result_matrix"
+  fi
   echo
   if [ "$exit_status" -eq 0 ]; then
     echo "[linux acceptance] ✓ ACCEPTANCE PASSED (artifacts: $artifacts)"
@@ -139,19 +154,21 @@ echo "[linux acceptance] building the local SDK control agent"
 
 echo "[linux acceptance] running $repeat_count complete repetition(s)"
 set +e
-timeout --signal=TERM --kill-after=60s "$((600 + repeat_count * 600))" \
+timeout --signal=TERM --kill-after=60s "$((900 + repeat_count * 900))" \
   docker run --name "$container_name" --rm --platform linux/arm64 \
   --cap-add NET_ADMIN --device /dev/net/tun \
   -v "$out_dir:/out:ro" \
   -v "$artifacts:/artifacts" \
   -v "$run_dir/agent:/opt/urnetwork-acceptance/agent:ro" \
   -v "$credentials:/opt/urnetwork-acceptance/credentials:ro" \
+  -v "$tests_json:/opt/urnetwork-acceptance/tests.json:ro" \
   -v "$root/build/all/acceptance/run-linux.sh:/opt/urnetwork-acceptance/run.sh:ro" \
   -v "$(dirname "$fixture"):/fixtures" \
   -e UR_ACCEPT_DEB="/out/$(basename "$deb")" \
   -e UR_ACCEPT_VERSION="$version" \
   -e UR_ACCEPT_REPEAT="$repeat_count" \
   -e UR_ACCEPT_FIXTURE="/fixtures/$(basename "$fixture")" \
+  -e UR_ACCEPT_TESTS=/opt/urnetwork-acceptance/tests.json \
   -e UR_ACCEPT_ARTIFACTS=/artifacts \
   urnetwork-linux-builder-daemon:arm64 \
   bash /opt/urnetwork-acceptance/run.sh \

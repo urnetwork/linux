@@ -791,6 +791,11 @@ class SdkHost {
   // auth (Logout clears auth too; the guest upgrade only swaps the device).
   void TeardownDeviceLocked();
   void SetupWalletCallbacks();
+  void RequestWalletChallenge(
+      const std::string& blockchain, const std::string& walletAddress,
+      std::function<void(std::optional<std::string> message, std::string error)> done);
+  void FailWalletOperation(const std::string& error);
+  void FinishCreateNetworkWithWallet(const std::string& signature);
   // blockchain: "solana" (ed25519, base64 signature) | urnet::TAO (sr25519, hex)
   void AuthLoginWithWallet(const std::string& address, const std::string& signature,
                            const std::string& message, const std::string& blockchain);
@@ -964,9 +969,13 @@ class SdkHost {
   // consumed on wallet deep-link and SDK callback threads (on_error /
   // AuthLoginWithWallet) — always taken under the lock, invoked outside it.
   std::function<void(AuthResult)> walletAuthDone_;
-  // The signed wallet_auth of a wallet sign-in with no network, carried into
-  // CreateNetworkWithPendingWallet (android/apple route the same way).
+  // Identity from a wallet sign-in with no network. Its first signature was
+  // consumed by AuthLogin; CreateNetworkWithPendingWallet always fetches and
+  // signs a new address-bound challenge before submitting it.
   std::optional<urnet::WalletAuthArgs> pendingWalletAuth_;
+  std::string pendingWalletNetworkName_;
+  std::string pendingWalletReferralCode_;
+  std::function<void(AuthResult)> walletCreateDone_;
   // The instant account's jwt, held between CreateInstantAccount and the
   // seedphrase sheet's confirm (guarded by mutex_; a secret — never log it).
   std::optional<std::string> pendingInstantJwt_;
