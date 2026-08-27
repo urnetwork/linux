@@ -1073,6 +1073,16 @@ msgctxt "delete_account_2"
 msgid "Delete account"
 msgstr ""
 
+#. Developer tools screen (reliability surface): performance-aware affinity control label.
+msgctxt "dev_affinity_performance"
+msgid "Performance-aware affinity"
+msgstr ""
+
+#. Developer tools screen: explanatory subtext under the performance-aware affinity control.
+msgctxt "dev_affinity_performance_detail"
+msgid "Weight new TLS races by each provider's peak acknowledged-byte rate relative to its advertised bandwidth. With hard affinity enabled, low measured donors yield to the race. Existing connections and explicit pins stay fixed"
+msgstr ""
+
 #. Developer tools screen (reliability surface): affinity sticky control label.
 msgctxt "dev_affinity_sticky"
 msgid "Sticky site affinity"
@@ -1271,6 +1281,16 @@ msgstr ""
 #. Developer tools screen: explanatory subtext under the 'formation poll' control.
 msgctxt "dev_formation_poll_detail"
 msgid "How often a connecting flow re-checks an empty window, so the first request leaves right after the first exit lands. Off waits the 2s retry pace"
+msgstr ""
+
+#. Developer tools screen (reliability surface): hard fresh-flow affinity control label.
+msgctxt "dev_fresh_flow_affinity"
+msgid "Hard fresh-flow affinity"
+msgstr ""
+
+#. Developer tools screen: explanatory subtext under the hard fresh-flow affinity control.
+msgctxt "dev_fresh_flow_affinity_detail"
+msgid "Assign each new connection to the exit its IP or domain already uses. Off is the default: every ordinary fresh connection reaches the provider race. Existing connections and explicit pins always stay fixed"
 msgstr ""
 
 #. Developer tools screen (reliability surface): group follow control label.
