@@ -246,6 +246,8 @@ FilterConfig TunnelHost::FilterConfigForLocked(FilterState state, bool floor) co
   cfg.state = state;
   cfg.floor = floor;
   cfg.cgroup = cgroup_;
+  cfg.socket_mark_proven = socketMarkerProven_;
+  cfg.cgroup_socket_match_supported = cgroupSocketMatchSupported_;
   cfg.block_ipv6 = true;  // leak prevention is not a preference (§6.3)
   cfg.block_offtunnel_dns = false;
   if (state == FilterState::Connecting || state == FilterState::Connected) {
@@ -451,14 +453,17 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       //     process. A cgroup-bpf sock_create program is the one hook that
       //     reaches Go's sockets without touching the vendored SDK.
       //
-      //     A failure here is NOT fatal on its own: the nftables chain below
-      //     is a genuine belt for sockets that already exist, and some hosts
-      //     have no CONFIG_CGROUP_BPF. What is fatal is failing the packet
-      //     witness in Tunnel::Configure, which is what decides whether this
-      //     tunnel is allowed to exist.
+      //     A failure here is not fatal on its own when the nftables chain
+      //     below is available as a genuine belt for sockets that already
+      //     exist. If this kernel lacks both mechanisms the preflight below
+      //     refuses before it creates the DeviceLocal; the packet witness is
+      //     still the final authority on the mechanism that was selected.
+      socketMarkerProven_ = false;
+      cgroupSocketMatchSupported_ = false;
       {
         std::string markerError;
         if (egressMarker_.Attach(cgroup_, kEgressMark, &markerError)) {
+          socketMarkerProven_ = true;
           DaemonLogf("[tunnel] egress: %s\n", egressMarker_.detail().c_str());
         } else {
           DaemonLogf(
@@ -470,15 +475,37 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
         }
       }
 
-      // 1b. THE BELT: the nftables cgroup mark chain, plus the ruleset that
-      //     carries the packet witness's counters.
-      const bool egressPossible = cgroup_.valid && !FindTool("nft").empty();
+      // 1b. The belt: the nftables cgroup mark chain when this kernel accepts
+      //     it, plus the ruleset that always carries the packet witness's
+      //     counters. The compatibility decision is measured with --check and
+      //     is passed into every later ruleset generation.
+      const bool nftAvailable = !FindTool("nft").empty();
+      std::string cgroupProbeError;
+      if (nftAvailable && cgroup_.valid) {
+        cgroupSocketMatchSupported_ =
+            NetFilter::CheckCgroupSocketMatch(cgroup_, &cgroupProbeError);
+      }
+      if (!cgroupSocketMatchSupported_ && socketMarkerProven_) {
+        DaemonLogf(
+            "[tunnel] nftables socket cgroupv2 matching is unavailable (%s). Using the "
+            "proven cgroup-BPF socket mark without the nft cgroup belt for this floorless "
+            "session. Kill-switch floors and helper-DNS reconnects remain disabled rather "
+            "than weakened.\n",
+            cgroupProbeError.empty() ? "the kernel rejected the expression"
+                                     : cgroupProbeError.c_str());
+      }
+      const bool egressPossible =
+          nftAvailable && cgroup_.valid &&
+          (cgroupSocketMatchSupported_ || socketMarkerProven_);
       if (!egressPossible && !allowUnprotectedEgress_) {
         const std::string why =
             !cgroup_.valid
                 ? "this system is not running the cgroup v2 unified hierarchy, so the "
                   "daemon's own sockets cannot be marked"
-                : "nftables (nft) is not installed";
+                : !nftAvailable
+                      ? "nftables (nft) is not installed"
+                      : "the kernel rejected nftables socket cgroupv2 matching and the "
+                        "cgroup-BPF socket marker could not be proven";
         throw std::runtime_error(
             std::string("refusing to start: the daemon's own traffic would be captured by "
                         "its own tunnel (") +
@@ -971,6 +998,7 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
   // is removed (nothing consults it), so the ordering costs nothing and the
   // detach keeps the blast radius to the session that asked for it.
   egressMarker_.Detach();
+  socketMarkerProven_ = false;
   egressWitnessTicks_ = 0;
   egressWitnessFailures_ = 0;
   if (!reason.empty()) {

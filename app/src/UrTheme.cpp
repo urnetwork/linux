@@ -280,6 +280,8 @@ button.ur-nav-item image { color: inherit; }
 }
 .ur-snackbar-error { border-color: alpha(#FF6C58, .5); }
 .ur-snackbar-success { border-color: alpha(#87FB67, .4); }
+/* the referral gold toast (Ui.hpp kReferralGold) */
+.ur-snackbar-gold { border-color: alpha(#F5B93C, .6); }
 )";
 
 void AddFontFile(const std::string& dir, const char* file) {

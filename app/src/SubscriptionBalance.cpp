@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "SubscriptionBalance.hpp"
 
+#include "AppPrefs.hpp"
+
 #include <algorithm>
 #include <cstdio>
 
@@ -55,6 +57,7 @@ void SubscriptionBalanceStore::Start() {
     } else {
       FetchNow();  // Pro networks don't poll (mac parity), but the bar needs data once
     }
+    EnsureReferralPolling();  // referrals poll for Pro networks too
   }
   Emit();
 }
@@ -63,6 +66,7 @@ void SubscriptionBalanceStore::Stop() {
   ++*epoch_;  // drop in-flight results
   started_ = false;
   StopPolling();
+  referralTimer_.disconnect();
   isLoading_ = false;
   isLoadingReferral_ = false;
   hasFetched_ = false;
@@ -91,9 +95,11 @@ void SubscriptionBalanceStore::SetWindowVisible(bool visible) {
     }
     backgroundTimer_.disconnect();
     pollingTimer_.disconnect();
+    referralTimer_.disconnect();
     return;
   }
   if (!started_ || wasVisible) return;
+  EnsureReferralPolling();
   if (isPolling_) {
     ResumeConfirmationPolling();  // immediate poll; the banked budget re-arms
     return;
@@ -220,9 +226,51 @@ void SubscriptionBalanceStore::FetchReferralCode() {
           if (err || !result || result->error) return;  // the row just keeps its last value
           totalReferrals_ = result->total_referrals;
           referralCode_ = result->referral_code.value_or(std::string());
+          MaybeCelebrateReferrals(result->total_referrals);
           Emit();
         });
       });
+}
+
+// The celebration baseline is the count the last celebration (or the first
+// observation) left behind, persisted per network in the app prefs so an
+// increment observed on this machine celebrates exactly once.
+void SubscriptionBalanceStore::MaybeCelebrateReferrals(int64_t count) {
+  auto byJwt = host_.ParseByJwt();
+  if (!byJwt || !byJwt->NetworkId) return;
+  const std::string key = "referral_celebrated_count_" + *byJwt->NetworkId;
+
+  const nlohmann::json all = prefs::ReadAll();
+  if (all.find(key) == all.end()) {
+    // first observation for this network on this machine: baseline only --
+    // pre-existing referrals (reinstall, second machine) are old news
+    prefs::Set<int64_t>(key.c_str(), count);
+    return;
+  }
+
+  const int64_t previous = prefs::Get<int64_t>(key.c_str(), 0);
+  if (count > previous) {
+    ReferralCelebration celebration{count - previous, previous == 0};
+    prefs::Set<int64_t>(key.c_str(), count);
+    if (onReferralCelebration_) onReferralCelebration_(celebration);
+  } else if (count < previous) {
+    // referrals can be unlinked; re-baseline quietly
+    prefs::Set<int64_t>(key.c_str(), count);
+  }
+}
+
+// Unlike the balance poll, referral polling never stops for a Pro network:
+// referrals keep landing either way, and the crowning should fire while the
+// user is looking at the app rather than a session later.
+void SubscriptionBalanceStore::EnsureReferralPolling() {
+  referralTimer_.disconnect();
+  if (!started_ || !windowVisible_) return;
+  referralTimer_ = Glib::signal_timeout().connect_seconds(
+      [this]() -> bool {
+        FetchReferralCode();
+        return true;
+      },
+      kBackgroundPollingSeconds);
 }
 
 void SubscriptionBalanceStore::StartBackgroundPolling() {

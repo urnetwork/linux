@@ -42,10 +42,19 @@
 
 namespace urnw {
 
+// A batch of newly observed referrals for the local network. `isFirst` marks
+// the crowning: the count went from zero to earned, which gets the full-screen
+// celebration; later batches get the gold snackbar.
+struct ReferralCelebration {
+  int64_t joined = 0;
+  bool isFirst = false;
+};
+
 class SubscriptionBalanceStore {
  public:
   // Fired on the GTK main loop after any state change.
   using ChangedHandler = std::function<void()>;
+  using ReferralCelebrationHandler = std::function<void(const ReferralCelebration&)>;
 
   explicit SubscriptionBalanceStore(SdkHost& host);
   ~SubscriptionBalanceStore();
@@ -91,8 +100,16 @@ class SubscriptionBalanceStore {
   const std::string& ReferralCode() const { return referralCode_; }
 
   void SetChangedHandler(ChangedHandler h) { onChanged_ = std::move(h); }
+  // Fired on the GTK main loop when the referral poll observes new referrals
+  // over the persisted per-network baseline (the first observation only
+  // records the baseline, so pre-existing referrals never celebrate).
+  void SetReferralCelebrationHandler(ReferralCelebrationHandler h) {
+    onReferralCelebration_ = std::move(h);
+  }
 
  private:
+  void MaybeCelebrateReferrals(int64_t count);
+  void EnsureReferralPolling();
   void FetchSubscriptionBalance();
   void FetchReferralCode();
   void UpdateIsPro(bool isPro);  // mac updateIsPro: flips the polling mode
@@ -106,6 +123,10 @@ class SubscriptionBalanceStore {
 
   SdkHost& host_;
   ChangedHandler onChanged_;
+  ReferralCelebrationHandler onReferralCelebration_;
+  // referral celebrations poll on their own timer: unlike the balance poll it
+  // never stops for Pro (referrals keep landing either way)
+  sigc::connection referralTimer_;
 
   // Invalidates in-flight fetch callbacks across Stop()/Start() (logout must
   // not let a stale result repopulate the next session's state).

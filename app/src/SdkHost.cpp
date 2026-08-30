@@ -512,11 +512,13 @@ void SdkHost::LoginWithSeedphrase(const std::string& seedphrase,
   });
 }
 
-void SdkHost::CreateInstantAccount(std::function<void(InstantAccount)> done) {
+void SdkHost::CreateInstantAccount(const std::string& referralCode,
+                                   std::function<void(InstantAccount)> done) {
   // NO user_auth, password, auth_jwt or wallet_auth: that combination is what
   // makes the server mint a seedphrase-secured network and return the phrase.
   urnet::NetworkCreateArgs args;
   args.terms = true;  // the form's button is gated on the terms consent
+  if (!referralCode.empty()) args.referral_code = referralCode;
   api_->networkCreate(args, [this, done](std::optional<urnet::NetworkCreateResult> result,
                                          std::optional<std::string> err) {
     InstantAccount out;

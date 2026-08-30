@@ -152,7 +152,11 @@ FilterDerived DeriveFilter(const FilterConfig& cfg) {
   d.dns_floor = cfg.state == FilterState::Connected && d.tun_named &&
                 cfg.block_offtunnel_dns && !d.resolvers.empty();
   d.block_v6 = cfg.block_ipv6;
-  d.helper_dns = cfg.state == FilterState::Connecting && cfg.floor &&
+  const NftCgroupMode cgroupMode =
+      SelectNftCgroupMode(cfg.socket_mark_proven, cfg.cgroup_socket_match_supported,
+                          cfg.floor, !cfg.dns_helper_cgroups.empty());
+  d.helper_dns = cgroupMode == NftCgroupMode::CgroupAndMark &&
+                 cfg.state == FilterState::Connecting && cfg.floor &&
                  !cfg.dns_helper_cgroups.empty();
   return d;
 }
@@ -865,7 +869,11 @@ std::string BuildNftRuleset(const FilterConfig& cfg) {
   const FilterDerived d = DeriveFilter(cfg);
   const std::string mark = MarkHex(cfg.mark);
   const char* policy = cfg.floor ? "drop" : "accept";
-  const bool cg = CgroupQuotable(cfg.cgroup);
+  const NftCgroupMode cgroupMode =
+      SelectNftCgroupMode(cfg.socket_mark_proven, cfg.cgroup_socket_match_supported,
+                          cfg.floor, !cfg.dns_helper_cgroups.empty());
+  const bool cg = cgroupMode == NftCgroupMode::CgroupAndMark &&
+                  CgroupQuotable(cfg.cgroup);
 
   std::string s;
   const auto line = [&s](const std::string& text) {
@@ -1699,6 +1707,29 @@ bool NetFilter::CheckRuleset(const std::string& script, std::string* error) {
   return true;
 }
 
+bool NetFilter::CheckCgroupSocketMatch(const CgroupRef& cgroup, std::string* error) {
+  if (!CgroupInstallable(cgroup)) {
+    if (error != nullptr) {
+      *error = cgroup.valid
+                   ? "the cgroup v2 path '" + cgroup.path + "' is not usable"
+                   : "this process has no usable cgroup v2 path";
+    }
+    return false;
+  }
+
+  // Keep the probe narrower than the production ruleset: if this fails while
+  // the path above exists, the only expression being evaluated is the
+  // socket-cgroup matcher. A regular (unhooked) chain avoids touching packet
+  // traversal even in check mode, and --check commits nothing.
+  std::string script;
+  script += "table inet urnetwork_cgroup_probe {\n";
+  script += "\tchain probe {\n";
+  script += "\t\t" + CgroupMatch(cgroup) + " counter\n";
+  script += "\t}\n";
+  script += "}\n";
+  return CheckRuleset(script, error);
+}
+
 bool NetFilter::Apply(const FilterConfig& requested, std::string* error) {
   // Copy: the reaper legitimately calls Apply(filter.appliedConfig(), …), and
   // this function rewrites the config it actually installs.
@@ -1714,11 +1745,31 @@ bool NetFilter::Apply(const FilterConfig& requested, std::string* error) {
     return false;
   };
 
+  const NftCgroupMode cgroupMode =
+      SelectNftCgroupMode(cfg.socket_mark_proven, cfg.cgroup_socket_match_supported,
+                          cfg.floor, !cfg.dns_helper_cgroups.empty());
+  if (cgroupMode == NftCgroupMode::Refuse) {
+    std::string why;
+    if (!cfg.socket_mark_proven) {
+      why = "this kernel does not support nftables socket cgroupv2 matching and the "
+            "cgroup-BPF socket marker was not proven";
+    } else if (cfg.floor) {
+      why = "this kernel does not support nftables socket cgroupv2 matching, so the "
+            "crash-safe kill-switch floor cannot exempt the daemon after its BPF program "
+            "dies";
+    } else {
+      why = "this kernel does not support nftables socket cgroupv2 matching, so the DNS "
+            "helper cgroup cannot be opened for a floored reconnect";
+    }
+    return refuse(kFilterCodeCgroupUnavailable, std::move(why));
+  }
+
   // A floor we cannot exempt ourselves from is a machine that is blocked AND
   // structurally unable to reconnect: with no cgroup match nothing sets the
   // mark, so neither permit fires for the daemon's own sockets. Refuse with
   // the cause named rather than install it.
-  if (cfg.floor && !CgroupInstallable(cfg.cgroup)) {
+  if (cfg.floor && cgroupMode == NftCgroupMode::CgroupAndMark &&
+      !CgroupInstallable(cfg.cgroup)) {
     return refuse(kFilterCodeCgroupUnavailable,
                   cfg.cgroup.valid
                       ? "the daemon's cgroup v2 path '" + cfg.cgroup.path +
@@ -1744,7 +1795,8 @@ bool NetFilter::Apply(const FilterConfig& requested, std::string* error) {
   // resolves it to a cgroup id at load time), which would take the kill switch
   // and the egress self-exclusion down with it. Drop the absent ones here so
   // appliedConfig() is what is really in force.
-  if (!cfg.dns_helper_cgroups.empty()) {
+  if (cgroupMode == NftCgroupMode::CgroupAndMark &&
+      !cfg.dns_helper_cgroups.empty()) {
     std::vector<CgroupRef> usable;
     for (const auto& helper : cfg.dns_helper_cgroups) {
       if (CgroupInstallable(helper)) {
@@ -1758,7 +1810,8 @@ bool NetFilter::Apply(const FilterConfig& requested, std::string* error) {
   }
   // The mark chain is worth installing even without a floor (it is the whole
   // egress self-exclusion), but only when the path resolves.
-  if (!CgroupInstallable(cfg.cgroup) && cfg.cgroup.valid) {
+  if (cgroupMode == NftCgroupMode::CgroupAndMark &&
+      !CgroupInstallable(cfg.cgroup) && cfg.cgroup.valid) {
     std::fprintf(stderr,
                  "[filter] the daemon cgroup path '%s' does not resolve; the mark chain will be "
                  "empty and the egress split will not hold\n",
@@ -1779,10 +1832,12 @@ bool NetFilter::Apply(const FilterConfig& requested, std::string* error) {
   SetArmedMarker(cfg.floor);
   std::fprintf(stderr,
                "[filter] %s (floor=%d ipv6_blocked=%d dns_pinned=%d helper_dns=%d lan=%d "
-               "cgroup=%s)\n",
+               "socket_mark=%d cgroup_match=%d cgroup=%s)\n",
                ToString(cfg.state), cfg.floor ? 1 : 0, RulesetBlocksIpv6(cfg) ? 1 : 0,
                RulesetPinsDns(cfg) ? 1 : 0, RulesetOpensHelperDns(cfg) ? 1 : 0,
-               cfg.allow_lan ? 1 : 0, cfg.cgroup.valid ? cfg.cgroup.path.c_str() : "(none)");
+               cfg.allow_lan ? 1 : 0, cfg.socket_mark_proven ? 1 : 0,
+               cgroupMode == NftCgroupMode::CgroupAndMark ? 1 : 0,
+               cfg.cgroup.valid ? cfg.cgroup.path.c_str() : "(none)");
   if (cfg.floor) {
     // Printed at the moment the floor goes in, so the recovery command is in
     // the journal BEFORE anyone needs it.

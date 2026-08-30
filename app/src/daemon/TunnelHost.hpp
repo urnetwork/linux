@@ -318,6 +318,11 @@ class TunnelHost {
   // exempts from our own tunnel. Derived from /proc/self/cgroup, so a
   // --foreground dev run marks itself correctly too.
   CgroupRef cgroup_;
+  // Re-proven for every session before any SDK socket is created. The first is
+  // the BPF measurement; the second is a non-committing nftables kernel probe.
+  // Together they select the cgroup+mark or floorless mark-only ruleset.
+  bool socketMarkerProven_ = false;
+  bool cgroupSocketMatchSupported_ = true;
   // $URNETWORK_ALLOW_UNPROTECTED_EGRESS — development escape hatch that lets
   // the tunnel come up with the daemon's own sockets INSIDE it. Logged loudly
   // and reported as egress_protected=false; never a default.

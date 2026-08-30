@@ -34,5 +34,6 @@ src/TransportSheet.cpp
 src/Tray.cpp
 src/UpgradeSheet.cpp
 src/UsageBar.cpp
-app/src/EarningsPage.cpp
-app/src/AccountPage.cpp
+src/EarningsPage.cpp
+src/AccountPage.cpp
+src/ReferralRoyalty.cpp

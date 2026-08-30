@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "AccountPage.hpp"
 
+#include "ReferralRoyalty.hpp"
+
 #include <glib.h>
 #include <gtk/gtk.h>
 
@@ -56,17 +58,12 @@ constexpr int kAuthCodeAbbreviateAbove = 14;  // longer than this -> 6…6
 constexpr int kAuthCodeShoulder = 6;
 constexpr int kMaskShoulder = 3;      // balance-code secret: first 3 + last 3
 constexpr int kIsoDatePrefix = 10;    // YYYY-MM-DD
-constexpr int64_t kReferralGiBPerMonth = 30;
 constexpr int kFrogPx = 40;
 constexpr int kValueChars = 22;       // client id / bonus code readouts (MaxWidth 220)
 constexpr int kReferralValueChars = 24;  // referral-network value (MaxWidth 240)
 
-// Pro gold. The ONE entitlement colour: the plan value wears it and nothing
-// else in the app may.
-// TODO(theme): kProGold #FFC400 belongs in Ui.hpp's Rgba palette beside
-// kUrAmber — it is spent by the Account plan value and by the account-menu
-// avatar ring, and this file must not edit a shared header.
-constexpr Rgba kProGold{0xFF / 255.0, 0xC4 / 255.0, 0x00 / 255.0, 1.0};
+// Pro gold now lives in Ui.hpp's palette beside the referral gold ramp (the
+// TODO(theme) that used to sit here).
 // Body text is off-white, never pure white (Ui.hpp's kUrText is 0xFFFFFF).
 constexpr Rgba kOffWhite{0xF8 / 255.0, 0xF8 / 255.0, 0xF8 / 255.0, 1.0};
 
@@ -353,17 +350,9 @@ std::string FirstMessage(const std::string& serverMessage,
 }
 
 // The frog mascot beside "You're referral royalty!". Resolved through the
-// RuntimePaths ladder; a miss hides the image and keeps the line.
-//
-// FLAG FOR THE WAVE OWNER (needs meson.build, which this wave forbids
-// editing): assets/ReferralFrog.png is in the tree but NOT in meson.build's
-// install_data set — the blocks there cover assets/urnetwork-tray-*.png,
-// assets/world-110m.json, assets/fonts/* and assets/carousel/* only. So the
-// installed candidate can never exist and only the build-tree fallback
-// (/proc/self/exe, i.e. a dev run out of app/) resolves: every packaged build
-// and every AppImage renders the royalty badge as a bare sentence with the
-// crowned frog silently missing. Adding assets/ReferralFrog.png beside the
-// carousel block fixes it; nothing in this file can.
+// RuntimePaths ladder; a miss hides the image and keeps the line. (The asset
+// IS in meson's install_data set now, so installed builds resolve it too —
+// the old flag about a missing install entry is obsolete.)
 std::string ReferralFrogPath() {
   static const std::string path = ResolveRuntimePath(
       UR_PKGDATADIR "/ReferralFrog.png", G_FILE_TEST_IS_REGULAR, "assets/ReferralFrog.png");
@@ -995,6 +984,8 @@ class AccountReferralNetworkSheet : public Gtk::Window {
 
   // The page's referral-network row re-reads after any change.
   std::function<void()> on_changed;
+  // fired after a successful link: the caller shows the royal welcome
+  std::function<void()> on_royal;
 
   void Open() {
     ++*epoch_;
@@ -1136,6 +1127,9 @@ class AccountReferralNetworkSheet : public Gtk::Window {
             code_->set_text("");
             LoadCurrent();
             if (on_changed) on_changed();
+            // linking a referral network is the royal-welcome moment
+            close();
+            if (on_royal) on_royal();
           });
         });
   }
@@ -1681,7 +1675,7 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   referralTotals_->set_text(
       Format(T_("total_referrals_lld", "Total Referrals: {}"), totalReferrals_));
   const Glib::ustring bonus =
-      Format(T_("referral_bonus", "+{} GiB/Month"), totalReferrals_ * kReferralGiBPerMonth);
+      Format(T_("referral_bonus", "+{} GiB/Day"), totalReferrals_ * kReferralGiBPerDay);
   SetToned(*referralBonus_, kOffWhite, bonus);
   kit::SetAccessibleLabel(*referralBonus_, referralTotals_->get_text() + ", " + bonus);
 }
@@ -1993,6 +1987,19 @@ void AccountPage::BuildReferralGroup(Gtk::Box& host) {
   referralNetworkRow_.root->signal_clicked().connect([this] { ShowReferralNetworkSheet(); });
   host.append(*referralNetworkRow_.root);
 
+  // 2b. refer friends: opens the gold king-frog refer panel (parity with the
+  // account rows on android/apple).
+  {
+    auto referRow =
+        kit::MakePaneTwoLineRowButton(T_("refer_and_earn", "Refer and earn"), {}, kRowTall);
+    referRow.root->signal_clicked().connect([this] {
+      Gtk::Window* root = RootWindow();
+      if (root == nullptr) return;
+      ShowReferSheet(*root, totalReferrals_, referralCode_);
+    });
+    host.append(*referRow.root);
+  }
+
   // 3. the referral summary (wraps; no trimming).
   {
     auto prose = MakeProseRow({}, kProsePadY);
@@ -2014,10 +2021,8 @@ void AccountPage::BuildReferralGroup(Gtk::Box& host) {
       kit::MarkDecorative(*image);  // the crowned frog mascot says nothing new
       line->append(*image);
     } else {
-      // TODO(assets): assets/ReferralFrog.png is in the tree but not in
-      // meson.build's install_data set, so an INSTALLED build cannot resolve
-      // it. The badge keeps its sentence rather than reserving a hole for a
-      // picture that will not arrive.
+      // resolver miss (unusual — the asset is installed): the badge keeps its
+      // sentence rather than reserving a hole for a picture that never arrives
       g_message("account: ReferralFrog.png not found; the royalty badge runs text-only");
     }
     auto* text = Gtk::make_managed<Gtk::Label>(
@@ -2822,6 +2827,7 @@ void AccountPage::ShowReferralNetworkSheet() {
     referralSheet_ = std::make_unique<AccountReferralNetworkSheet>(
         *root, host_, [this] { return CanCallApi(); });
     referralSheet_->on_changed = [this] { LoadReferralNetwork(); };
+    referralSheet_->on_royal = [this, root] { ShowRoyalWelcomeSheet(*root); };
     WireSheet(*referralSheet_);
   }
   referralSheet_->Open();

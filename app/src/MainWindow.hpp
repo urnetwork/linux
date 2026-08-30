@@ -82,6 +82,7 @@ class MainWindow : public Gtk::ApplicationWindow {
   void OnSeedphraseChanged();
   void OnSeedphraseSubmit();
   void OnInstantSubmit();
+  void OnInstantValidateReferral();
   // android disables every sign-in affordance while any one is in flight
   void SetLoginBusy(bool busy);
   // narrow <-> wide login (the app-wide 1000dip breakpoint): the wide layout
@@ -172,6 +173,15 @@ class MainWindow : public Gtk::ApplicationWindow {
   Gtk::Button* instantCreate_ = nullptr;
   Gtk::Label* instantError_ = nullptr;
   bool creatingInstant_ = false;
+  // optional referral code on the instant path (android/apple parity)
+  Gtk::Button* instantReferralToggle_ = nullptr;
+  Gtk::Revealer* instantReferralRevealer_ = nullptr;
+  Gtk::Entry* instantReferralEntry_ = nullptr;
+  Gtk::Button* instantReferralApply_ = nullptr;
+  Gtk::Label* instantReferralSupporting_ = nullptr;
+  Gtk::Box* instantReferralApplied_ = nullptr;
+  bool instantReferralValid_ = false;
+  bool validatingInstantReferral_ = false;
   std::unique_ptr<SeedphraseSheet> seedphraseSheet_;
   std::unique_ptr<NetworkServerSheet> networkServerSheet_;
   // The user auth the discovery routed to the password step (normalized echo);

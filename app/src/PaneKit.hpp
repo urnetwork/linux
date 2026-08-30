@@ -237,7 +237,7 @@ class Snackbar {
  public:
   static constexpr int kDefaultDurationMs = 4000;
   static constexpr int kPersistent = 0;
-  enum class Severity { Info, Success, Warning, Error };
+  enum class Severity { Info, Success, Warning, Error, Gold };
 
   Snackbar();
   Gtk::Widget& root();  // overlay this at the window bottom-center

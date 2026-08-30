@@ -31,7 +31,7 @@
 //          real machine on 2026-08-15: 1.34 Gbps out, 0 in, 3.38 Tb sent over
 //          forty minutes before a human noticed.
 //
-//          THE MECHANISM HAS TWO LAYERS, AND THE ORDER IS NOT A PREFERENCE.
+//          THE MECHANISM NORMALLY HAS TWO LAYERS, AND THE ORDER IS NOT A PREFERENCE.
 //          A fwmark only excludes a socket if the socket carries it BEFORE
 //          connect(): the route lookup that picks the tun (and, with it, the
 //          tun's source address) happens in connect(), and `ip_route_me_harder`
@@ -51,7 +51,9 @@
 //               connect() already bound, so it is a BELT, not the mechanism: it
 //               still saves sockets that were created before the marker
 //               attached, and it is the only layer at all on a host without
-//               CONFIG_CGROUP_BPF.
+//               CONFIG_CGROUP_BPF. A kernel that instead lacks CONFIG_NFT_SOCKET
+//               may omit this belt only for a floorless session after layer 1
+//               has been proven; kill-switch and helper-DNS states refuse.
 //          Neither layer is trusted. Tunnel::VerifyEgressWitness connect()s two
 //          real sockets that differ only in the mark and compares the source
 //          addresses the kernel binds to them, then reads nftables counters
@@ -540,11 +542,21 @@ struct FilterConfig {
   // and firewall are built from ONE table or they silently disagree.
   bool allow_lan = true;
   uint32_t mark = kEgressMark;
-  // The daemon's own. Permits by CGROUP, not by mark: SO_MARK needs
+  // Set only after EgressSocketMarker::Attach has read SO_MARK back from a
+  // fresh socket. It is the evidence that permits a floorless mark-only
+  // ruleset when this kernel lacks nft's socket-cgroup expression.
+  bool socket_mark_proven = false;
+  // Result of a live `nft --check` probe against this exact cgroup path.
+  // False omits every `socket cgroupv2` expression; NetFilter::Apply consults
+  // SelectNftCgroupMode first and refuses unsafe omissions.
+  bool cgroup_socket_match_supported = true;
+  // The daemon's own. Normally permits by CGROUP, not by mark: SO_MARK needs
   // CAP_NET_ADMIN/CAP_NET_RAW, so a privileged third party could forge our
   // mark and inherit the exemption; cgroup membership cannot be forged. The
   // mark match stays as a ranked-below fallback for packets whose socket
-  // lookup misses in the output hook.
+  // lookup misses in the output hook. On a measured CONFIG_NFT_SOCKET absence,
+  // a proven marker may run floorless without this belt; the policy above
+  // refuses every state that depends on crash survival or another cgroup.
   CgroupRef cgroup;
   // Emitted ONLY when state == Connecting && floor, and only for cgroups that
   // exist (see DnsHelperCgroupsV2).
@@ -617,6 +629,10 @@ class NetFilter {
   // preflight and in tests, so a malformed ruleset is named before it is ever
   // the thing standing between the user and their network.
   static bool CheckRuleset(const std::string& script, std::string* error);
+  // A narrow, non-committing probe for CONFIG_NFT_SOCKET and nft userspace
+  // support. The path must exist; false carries the exact `nft --check`
+  // diagnostic so a compatibility fallback is never inferred from a guess.
+  static bool CheckCgroupSocketMatch(const CgroupRef& cgroup, std::string* error);
 
   // Is the table still ours and intact? nftables gives no tamper callback, and
   // a root `nft flush ruleset` destroys our table with no notification —

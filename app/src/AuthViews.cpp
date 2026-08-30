@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "AuthViews.hpp"
 
+#include "ReferralRoyalty.hpp"
+
 #include "Formatters.hpp"
 #include "I18n.hpp"
 #include "Ui.hpp"
@@ -169,14 +171,14 @@ void CreateNetworkPage::BuildUi() {
   referralRevealer_->set_child(*referralBox);
   card->append(*referralRevealer_);
 
+  // referral accepted: the gold king-frog line (referral royalty, matching
+  // the ur.io referral panel and the android/apple gold chips)
   referralAppliedRow_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 6);
-  auto* appliedCheck = Gtk::make_managed<Gtk::Image>();
-  appliedCheck->set_from_icon_name("emblem-ok-symbolic");
-  appliedCheck->add_css_class("ur-value-on");
-  referralAppliedRow_->append(*appliedCheck);
-  auto* appliedLabel =
-      Gtk::make_managed<Gtk::Label>(T_("referral_bonus_applied_2", "Referral Bonus applied"));
-  appliedLabel->add_css_class("dim-label");
+  auto* appliedLabel = Gtk::make_managed<Gtk::Label>();
+  appliedLabel->set_markup("<span foreground='" + HexForMarkup(kReferralGoldLight) + "'>" +
+                           Glib::Markup::escape_text(
+                               T_("referral_bonus_applied_2", "Referral Bonus applied")) +
+                           "</span>");
   appliedLabel->add_css_class("caption");
   referralAppliedRow_->append(*appliedLabel);
   referralAppliedRow_->set_visible(false);
@@ -324,6 +326,10 @@ void CreateNetworkPage::OnValidateReferral() {
         referralRevealer_->set_reveal_child(false);
         referralAppliedRow_->set_visible(true);
         referralToggle_->set_label(T_("edit_referral_code", "Edit referral code"));
+        // the royal welcome: the gold king-frog moment for the referred
+        if (auto* root = dynamic_cast<Gtk::Window*>(get_root())) {
+          ShowRoyalWelcomeSheet(*root);
+        }
       } else if (referralCapped_) {
         referralSupporting_->set_text(
             T_("referral_code_capped", "This code has been used up"));

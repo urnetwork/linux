@@ -104,6 +104,43 @@ UR_TEST(tunnelPolicyAcceptsTheConfigurationTheDaemonActuallyBuilds) {
   UR_EXPECT_TRUE(urnw::IsIpv4OnlyTunnelConfig(config));
 }
 
+UR_TEST(nftCgroupPolicyKeepsTheCgroupBeltWhenTheKernelSupportsIt) {
+  UR_EXPECT_TRUE(urnw::SelectNftCgroupMode(/*socketMarkerProven=*/false,
+                                           /*cgroupSocketMatchSupported=*/true,
+                                           /*blockFloor=*/true,
+                                           /*helperDnsRequired=*/true) ==
+                 urnw::NftCgroupMode::CgroupAndMark);
+}
+
+UR_TEST(nftCgroupPolicyUsesAProvenMarkOnFloorlessUnsupportedKernels) {
+  UR_EXPECT_TRUE(urnw::SelectNftCgroupMode(/*socketMarkerProven=*/true,
+                                           /*cgroupSocketMatchSupported=*/false,
+                                           /*blockFloor=*/false,
+                                           /*helperDnsRequired=*/false) ==
+                 urnw::NftCgroupMode::MarkOnly);
+}
+
+UR_TEST(nftCgroupPolicyRefusesAnUnprovenMarkOnUnsupportedKernels) {
+  UR_EXPECT_TRUE(urnw::SelectNftCgroupMode(/*socketMarkerProven=*/false,
+                                           /*cgroupSocketMatchSupported=*/false,
+                                           /*blockFloor=*/false,
+                                           /*helperDnsRequired=*/false) ==
+                 urnw::NftCgroupMode::Refuse);
+}
+
+UR_TEST(nftCgroupPolicyDoesNotWeakenFloorOrHelperDns) {
+  UR_EXPECT_TRUE(urnw::SelectNftCgroupMode(/*socketMarkerProven=*/true,
+                                           /*cgroupSocketMatchSupported=*/false,
+                                           /*blockFloor=*/true,
+                                           /*helperDnsRequired=*/false) ==
+                 urnw::NftCgroupMode::Refuse);
+  UR_EXPECT_TRUE(urnw::SelectNftCgroupMode(/*socketMarkerProven=*/true,
+                                           /*cgroupSocketMatchSupported=*/false,
+                                           /*blockFloor=*/false,
+                                           /*helperDnsRequired=*/true) ==
+                 urnw::NftCgroupMode::Refuse);
+}
+
 UR_TEST(tunnelPolicyRefusesAnEmptyOrTruncatedAddress) {
   urnw::TunnelConfig config;
   config.local_addr_v4 = "";

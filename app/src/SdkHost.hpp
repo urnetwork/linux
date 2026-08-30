@@ -378,7 +378,10 @@ class SdkHost {
     std::string error;
     std::string seedphrase;  // the caller zeroes its copy after display
   };
-  void CreateInstantAccount(std::function<void(InstantAccount)> done);
+  // Instant accounts can be referred too: a validated referral code rides
+  // along on the create (empty = none).
+  void CreateInstantAccount(const std::string& referralCode,
+                            std::function<void(InstantAccount)> done);
   void ConfirmInstantAccount(std::function<void(AuthResult)> done);
   void DiscardInstantAccount();
 

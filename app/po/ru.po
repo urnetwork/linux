@@ -2817,25 +2817,25 @@ msgctxt "refer_friends_increase_free_data"
 msgid "Refer some friends and watch your free data go up."
 msgstr "Пригласите друзей и наблюдайте, как увеличивается ваш бесплатный трафик."
 
-#. Call to action
+#. Referral perk bullet on the introduction referral screen. The referral grant is per day (pro.yml referral.period: 24h).
 msgctxt "refer_friends_perks"
-msgid "You get +{} GiB/month for life"
-msgstr "Вы получаете +{} GiB/месяц навсегда"
+msgid "You get +{} GiB/day for life"
+msgstr "Вы получаете +{} GiB/день навсегда"
 
-#. Call to action
+#. Referral perk bullet on the introduction referral screen (the referred side). The referral grant is per day (pro.yml referral.period: 24h).
 msgctxt "refer_friends_they_get_data"
-msgid "Your friend gets +{} GiB/month for life"
-msgstr "Ваш друг получает +{} GiB/месяц навсегда"
+msgid "Your friend gets +{} GiB/day for life"
+msgstr "Ваш друг получает +{} GiB/день навсегда"
 
 #. Call to action
 msgctxt "referral"
 msgid "Referral"
 msgstr "Реферал"
 
-#. Call to action
+#. Referral earn rate shown next to the referral count (usage bar). The referral grant is per day (pro.yml referral.period: 24h).
 msgctxt "referral_bonus"
-msgid "+{} GiB/Month"
-msgstr "+{} GiB/месяц"
+msgid "+{} GiB/Day"
+msgstr "+{} GiB/день"
 
 #. Call to action
 msgctxt "referral_bonus_applied"
@@ -2847,6 +2847,14 @@ msgctxt "referral_bonus_applied_2"
 msgid "Referral Bonus applied"
 msgstr "Применен реферальный бонус"
 
+#. Body of the one-time full-screen crowning celebration shown to the referrer when a friend joins with their code. {count} is the number of friends that just joined, {data} the daily GiB bonus per referral (currently 3).
+msgctxt "referral_celebration_detail"
+msgid "A friend just joined URnetwork with your code. You're both earning +{1} GiB a day of free data — for life."
+msgid_plural "{0} friends just joined URnetwork with your code. Each one earns you +{1} GiB a day of free data — for life."
+msgstr[0] "Друг только что присоединился к URnetwork по вашему коду. Вы оба получаете +{1} GiB бесплатных данных в день — навсегда."
+msgstr[1] "{0} друга только что присоединились к URnetwork по вашему коду. Каждый приносит вам +{1} GiB бесплатных данных в день — навсегда."
+msgstr[2] "{0} друзей только что присоединились к URnetwork по вашему коду. Каждый приносит вам +{1} GiB бесплатных данных в день — навсегда."
+
 #. Call to action
 msgctxt "referral_code"
 msgid "Referral code"
@@ -2857,6 +2865,14 @@ msgctxt "referral_code_capped"
 msgid "This code has been used up"
 msgstr "Этот код уже был использован"
 
+#. Crowned status line on the gold refer overlay once the network has referrals. {count} is total referrals, {data} the total daily GiB the referrer earns (min(count, 20) × 3).
+msgctxt "referral_crowned_congrats"
+msgid "A friend has joined — you're earning +{1} GiB/day, for life."
+msgid_plural "{0} friends have joined — you're earning +{1} GiB/day, for life."
+msgstr[0] "Присоединился друг — вы получаете +{1} GiB в день, навсегда."
+msgstr[1] "Присоединились {0} друга — вы получаете +{1} GiB в день, навсегда."
+msgstr[2] "Присоединились {0} друзей — вы получаете +{1} GiB в день, навсегда."
+
 #. Call to action
 msgctxt "referral_network"
 msgid "Referral network"
@@ -2866,6 +2882,16 @@ msgstr "Реферальная сеть"
 msgctxt "referral_progress_of_five"
 msgid "{}/5"
 msgstr "{}/5"
+
+#. Celebration headline shown the moment a referral code is accepted (signup bonus sheet and the settings referral sheet). Royal king-frog theme, matches the ur.io referral panel.
+msgctxt "referral_royal_welcome"
+msgid "A royal welcome!"
+msgstr "Королевский приём!"
+
+#. Detail line under the royal-welcome headline when a referral code is accepted. {data} is the daily bonus in GiB each side earns (pro.yml referral, currently 3).
+msgctxt "referral_royal_welcome_detail"
+msgid "Referral confirmed — you and your friend each get +{} GiB/day of free data, for life."
+msgstr "Реферал подтверждён — вы и ваш друг получаете по +{} GiB бесплатных данных в день, навсегда."
 
 #. dns settings
 msgctxt "referral_royalty"
@@ -2881,6 +2907,14 @@ msgstr "Присоединяйтесь ко мне в URnetwork! Установ�
 msgctxt "referral_summary"
 msgid "Code: {0} · Referrals: {1} · Friends enter the code when they sign up"
 msgstr "Код: {0} · Рефералы: {1} · Друзья вводят код при регистрации"
+
+#. Gold toast shown to the referrer for referrals after the first (the first gets the full-screen celebration). {count} friends just joined, {data} is the daily GiB bonus per referral (currently 3).
+msgctxt "referral_toast_joined"
+msgid "A friend joined with your code! +{1} GiB/day, for life."
+msgid_plural "{0} friends joined with your code! +{1} GiB/day each, for life."
+msgstr[0] "Друг присоединился по вашему коду! +{1} GiB в день, навсегда."
+msgstr[1] "{0} друга присоединились по вашему коду! По +{1} GiB в день за каждого, навсегда."
+msgstr[2] "{0} друзей присоединились по вашему коду! По +{1} GiB в день за каждого, навсегда."
 
 #. Used in Shared/Views/ReferBar.swift.
 msgctxt "referrals"

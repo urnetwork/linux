@@ -2806,25 +2806,25 @@ msgctxt "refer_friends_increase_free_data"
 msgid "Refer some friends and watch your free data go up."
 msgstr "कुछ दोस्तों को रेफ़र करें और अपनी मुफ्त डेटा को बढ़ते हुए देखें।"
 
-#. Call to action
+#. Referral perk bullet on the introduction referral screen. The referral grant is per day (pro.yml referral.period: 24h).
 msgctxt "refer_friends_perks"
-msgid "You get +{} GiB/month for life"
-msgstr "आपको जीवनभर +{} GiB/महीना मिलेगा"
+msgid "You get +{} GiB/day for life"
+msgstr "आपको जीवनभर +{} GiB/दिन मिलेगा"
 
-#. Call to action
+#. Referral perk bullet on the introduction referral screen (the referred side). The referral grant is per day (pro.yml referral.period: 24h).
 msgctxt "refer_friends_they_get_data"
-msgid "Your friend gets +{} GiB/month for life"
-msgstr "आपके दोस्त को जीवनभर +{} GiB/महीना मिलेगा"
+msgid "Your friend gets +{} GiB/day for life"
+msgstr "आपके दोस्त को जीवनभर +{} GiB/दिन मिलेगा"
 
 #. Call to action
 msgctxt "referral"
 msgid "Referral"
 msgstr "रेफ़रल"
 
-#. Call to action
+#. Referral earn rate shown next to the referral count (usage bar). The referral grant is per day (pro.yml referral.period: 24h).
 msgctxt "referral_bonus"
-msgid "+{} GiB/Month"
-msgstr "+{} GiB/महीना"
+msgid "+{} GiB/Day"
+msgstr "+{} GiB/दिन"
 
 #. Call to action
 msgctxt "referral_bonus_applied"
@@ -2836,6 +2836,13 @@ msgctxt "referral_bonus_applied_2"
 msgid "Referral Bonus applied"
 msgstr "रेफरल बोनस लागू किया गया"
 
+#. Body of the one-time full-screen crowning celebration shown to the referrer when a friend joins with their code. {count} is the number of friends that just joined, {data} the daily GiB bonus per referral (currently 3).
+msgctxt "referral_celebration_detail"
+msgid "A friend just joined URnetwork with your code. You're both earning +{1} GiB a day of free data — for life."
+msgid_plural "{0} friends just joined URnetwork with your code. Each one earns you +{1} GiB a day of free data — for life."
+msgstr[0] "आपके कोड से एक दोस्त अभी URnetwork से जुड़ा। आप दोनों को जीवनभर हर दिन +{1} GiB मुफ़्त डेटा मिलेगा।"
+msgstr[1] "आपके कोड से {0} दोस्त अभी URnetwork से जुड़े। हर दोस्त से आपको जीवनभर हर दिन +{1} GiB मुफ़्त डेटा मिलेगा।"
+
 #. Call to action
 msgctxt "referral_code"
 msgid "Referral code"
@@ -2846,6 +2853,13 @@ msgctxt "referral_code_capped"
 msgid "This code has been used up"
 msgstr "यह कोड पहले ही उपयोग हो चुका है"
 
+#. Crowned status line on the gold refer overlay once the network has referrals. {count} is total referrals, {data} the total daily GiB the referrer earns (min(count, 20) × 3).
+msgctxt "referral_crowned_congrats"
+msgid "A friend has joined — you're earning +{1} GiB/day, for life."
+msgid_plural "{0} friends have joined — you're earning +{1} GiB/day, for life."
+msgstr[0] "एक दोस्त जुड़ चुका है — आप जीवनभर +{1} GiB/दिन कमा रहे हैं।"
+msgstr[1] "{0} दोस्त जुड़ चुके हैं — आप जीवनभर +{1} GiB/दिन कमा रहे हैं।"
+
 #. Call to action
 msgctxt "referral_network"
 msgid "Referral network"
@@ -2855,6 +2869,16 @@ msgstr "रेफ़रल नेटवर्क"
 msgctxt "referral_progress_of_five"
 msgid "{}/5"
 msgstr "{}/5"
+
+#. Celebration headline shown the moment a referral code is accepted (signup bonus sheet and the settings referral sheet). Royal king-frog theme, matches the ur.io referral panel.
+msgctxt "referral_royal_welcome"
+msgid "A royal welcome!"
+msgstr "शाही स्वागत है!"
+
+#. Detail line under the royal-welcome headline when a referral code is accepted. {data} is the daily bonus in GiB each side earns (pro.yml referral, currently 3).
+msgctxt "referral_royal_welcome_detail"
+msgid "Referral confirmed — you and your friend each get +{} GiB/day of free data, for life."
+msgstr "रेफ़रल की पुष्टि हो गई — आपको और आपके दोस्त, दोनों को जीवनभर +{} GiB/दिन मुफ़्त डेटा मिलेगा।"
 
 #. dns settings
 msgctxt "referral_royalty"
@@ -2870,6 +2894,13 @@ msgstr "URnetwork पर मेरे साथ जुड़ें! ऐप ड�
 msgctxt "referral_summary"
 msgid "Code: {0} · Referrals: {1} · Friends enter the code when they sign up"
 msgstr "कोड: {0} · रेफ़रल: {1} · दोस्त साइन अप करते समय कोड डालते हैं"
+
+#. Gold toast shown to the referrer for referrals after the first (the first gets the full-screen celebration). {count} friends just joined, {data} is the daily GiB bonus per referral (currently 3).
+msgctxt "referral_toast_joined"
+msgid "A friend joined with your code! +{1} GiB/day, for life."
+msgid_plural "{0} friends joined with your code! +{1} GiB/day each, for life."
+msgstr[0] "आपके कोड से एक दोस्त जुड़ा! जीवनभर +{1} GiB/दिन।"
+msgstr[1] "आपके कोड से {0} दोस्त जुड़े! हर एक से जीवनभर +{1} GiB/दिन।"
 
 #. Used in Shared/Views/ReferBar.swift.
 msgctxt "referrals"

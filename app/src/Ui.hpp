@@ -46,6 +46,17 @@ inline constexpr Rgba kUrTextFaint{0x5A / 255.0, 0x5A / 255.0, 0x5A / 255.0, 1.0
 inline constexpr Rgba kUrBorderBase{1.0, 1.0, 1.0, 0.12};  // borders + chart axis
 inline constexpr Rgba kUrDanger{0xF8 / 255.0, 0x52 / 255.0, 0x3B / 255.0, 1.0};  // #F8523B
 inline constexpr Rgba kUrAccent{0xEF / 255.0, 0xF7 / 255.0, 0xBB / 255.0, 1.0};  // #EFF7BB
+// Pro gold. The ONE entitlement colour (the Account plan value, the account
+// avatar's Pro ring); nothing else may wear it.
+inline constexpr Rgba kProGold{0xFF / 255.0, 0xC4 / 255.0, 0x00 / 255.0, 1.0};      // #FFC400
+inline constexpr Rgba kProGoldLight{0xFF / 255.0, 0xE0 / 255.0, 0x82 / 255.0, 1.0};  // #FFE082
+// Referral gold. The ur.io referral-panel palette, used only for the referral
+// king-frog moments -- deliberately a warmer gold than kProGold so the Pro
+// value keeps its meaning (and distinct from kUrAmber, a status colour).
+inline constexpr Rgba kReferralGold{0xF5 / 255.0, 0xB9 / 255.0, 0x3C / 255.0, 1.0};      // #F5B93C
+inline constexpr Rgba kReferralGoldLight{0xFF / 255.0, 0xD7 / 255.0, 0x6A / 255.0, 1.0};  // #FFD76A
+inline constexpr Rgba kReferralGoldPale{0xFF / 255.0, 0xE3 / 255.0, 0x8A / 255.0, 1.0};   // #FFE38A
+inline constexpr Rgba kReferralGoldInk{0x24 / 255.0, 0x1A / 255.0, 0x05 / 255.0, 1.0};    // #241A05
 
 // Parse "rrggbb" / "#rrggbb" (the SDK GetColorHex format); fallback on failure.
 Rgba ParseHexColor(const std::string& hex, const Rgba& fallback);

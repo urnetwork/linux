@@ -627,14 +627,19 @@ void Snackbar::Show(const Glib::ustring& message, Severity severity,
   message_.set_text(message);
   bar_.remove_css_class("ur-snackbar-error");
   bar_.remove_css_class("ur-snackbar-success");
+  bar_.remove_css_class("ur-snackbar-gold");
   if (severity == Severity::Error || severity == Severity::Warning) {
     bar_.add_css_class("ur-snackbar-error");
   } else if (severity == Severity::Success) {
     bar_.add_css_class("ur-snackbar-success");
+  } else if (severity == Severity::Gold) {
+    // the referral gold toast (a friend joined with your code)
+    bar_.add_css_class("ur-snackbar-gold");
   }
   revealer_.set_reveal_child(true);
   // an error is usually the only diagnostic the user gets; it waits for them
-  const bool safeToMiss = (severity == Severity::Info || severity == Severity::Success);
+  const bool safeToMiss = (severity == Severity::Info || severity == Severity::Success ||
+                           severity == Severity::Gold);
   const int duration = durationMs.value_or(safeToMiss ? kDefaultDurationMs : kPersistent);
   if (duration <= kPersistent) return;
   timer_ = Glib::signal_timeout().connect(

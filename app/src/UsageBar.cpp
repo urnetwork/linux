@@ -94,8 +94,11 @@ void UsageBar::SetData(int64_t usedByteCount, int64_t pendingByteCount,
 
   dailyBalanceValue_->set_text(FormatByteCountCompact(dailyBalanceByteCount));
   referralCount_->set_text(
-      Format(T_("total_referral_count", "Total referrals: {}"), totalReferrals));
-  referralBonus_->set_text(Format(T_("referral_bonus", "+{} GiB/Month"), totalReferrals * 30));
+      Format(TN_("total_referral_count", "Total referrals: {}", "Total referrals: {}",
+                 totalReferrals),
+             totalReferrals));
+  // 3 GiB per referral per DAY (server pro.yml referral; this said GiB/Month * 30)
+  referralBonus_->set_text(Format(T_("referral_bonus", "+{} GiB/Day"), totalReferrals * 3));
 }
 
 void UsageBar::DrawBar(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height) {

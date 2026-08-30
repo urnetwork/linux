@@ -35,6 +35,32 @@ struct TunnelConfig {
   bool require_egress_protection = true;
 };
 
+// Whether nftables may use its socket-cgroup expression for the daemon's
+// egress exemption. Some otherwise-capable kernels (notably Docker Desktop's
+// LinuxKit kernel) ship cgroup BPF but omit CONFIG_NFT_SOCKET. In that case a
+// proven socket-creation mark is sufficient for a floorless tunnel, but it is
+// not sufficient for a crash-safe kill-switch floor or for a DNS helper that
+// lives in another cgroup.
+enum class NftCgroupMode {
+  CgroupAndMark,
+  MarkOnly,
+  Refuse,
+};
+
+// Pure policy boundary for the runtime kernel probe. Refusal is intentional:
+// omitting an unavailable expression must never silently weaken the states
+// whose safety depends on matching another cgroup or surviving daemon death.
+constexpr NftCgroupMode SelectNftCgroupMode(bool socketMarkerProven,
+                                            bool cgroupSocketMatchSupported,
+                                            bool blockFloor,
+                                            bool helperDnsRequired) {
+  if (cgroupSocketMatchSupported) return NftCgroupMode::CgroupAndMark;
+  if (!socketMarkerProven || blockFloor || helperDnsRequired) {
+    return NftCgroupMode::Refuse;
+  }
+  return NftCgroupMode::MarkOnly;
+}
+
 constexpr bool IsIpv4Literal(std::string_view address) {
   if (address.empty()) return false;
 
