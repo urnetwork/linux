@@ -1158,6 +1158,11 @@ msgctxt "dev_busy_probes_value"
 msgid "{0} sent / {1} acquitted"
 msgstr "{0} sent / {1} acquitted"
 
+#. Developer tools screen: action for choosing individual log files to export.
+msgctxt "dev_choose_logs"
+msgid "Choose logs…"
+msgstr "Choose logs…"
+
 #. Developer tools screen (reliability surface): cluster affinity control label.
 msgctxt "dev_cluster_affinity"
 msgid "Group IPs by site"
@@ -1237,6 +1242,53 @@ msgstr "{} flows"
 msgctxt "dev_exits"
 msgid "Exits"
 msgstr "Exits"
+
+#. Developer tools screen: action for exporting all diagnostic logs without redaction.
+msgctxt "dev_export_all_logs"
+msgid "Export all logs (raw)"
+msgstr "Export all logs (raw)"
+
+#. Developer tools screen: error shown when diagnostic log export fails.
+msgctxt "dev_export_failed"
+msgid "Export failed: {}"
+msgstr "Export failed: {}"
+
+#. Developer tools screen: explanation that a requested diagnostic item was omitted from an export.
+msgctxt "dev_export_not_included"
+msgid "Not included: {}"
+msgstr "Not included: {}"
+
+#. Developer tools screen: action for exporting diagnostic logs with sensitive traffic details redacted.
+msgctxt "dev_export_redacted_logs"
+msgid "Export redacted logs"
+msgstr "Export redacted logs"
+
+#. Developer tools screen: action for exporting the selected diagnostic log files.
+msgctxt "dev_export_selected"
+msgid "Export selected"
+msgstr "Export selected"
+
+#. Developer tools screen: action for sharing a diagnostic bundle.
+msgctxt "dev_export_share"
+msgid "Share diagnostic bundle"
+msgstr "Share diagnostic bundle"
+
+#. Developer tools screen: summary of the number and total size of diagnostic log files exported.
+msgctxt "dev_export_summary"
+msgid "Exported {0} log file ({1})"
+msgid_plural "Exported {0} log files ({1})"
+msgstr[0] "Exported {0} log file ({1})"
+msgstr[1] "Exported {0} log files ({1})"
+
+#. Developer tools screen: explanation that a diagnostic export option is unavailable.
+msgctxt "dev_export_unavailable"
+msgid "Not available: {}"
+msgstr "Not available: {}"
+
+#. Developer tools screen: progress label shown while a diagnostic bundle is being exported.
+msgctxt "dev_exporting"
+msgid "Exporting…"
+msgstr "Exporting…"
 
 #. Developer tools screen (reliability surface): flows opened control label.
 msgctxt "dev_flows_opened"
@@ -1332,6 +1384,61 @@ msgstr "Load corroboration"
 msgctxt "dev_load_corroboration_detail"
 msgid "Extra silent destinations required per this many flows before a busy exit can be benched on soft evidence: a 24-flow exit at 8 needs 3 silent sites, not 2. Off keeps the flat minimum"
 msgstr "Extra silent destinations required per this many flows before a busy exit can be benched on soft evidence: a 24-flow exit at 8 needs 3 silent sites, not 2. Off keeps the flat minimum"
+
+#. Developer tools screen: control label for diagnostic log detail.
+msgctxt "dev_log_verbosity"
+msgid "Log detail"
+msgstr "Log detail"
+
+#. Developer tools screen: default diagnostic log detail level.
+msgctxt "dev_log_verbosity_default"
+msgid "Default"
+msgstr "Default"
+
+#. Developer tools screen: explanation of the default diagnostic log detail level.
+msgctxt "dev_log_verbosity_default_detail"
+msgid "Connection errors and contract pings"
+msgstr "Connection errors and contract pings"
+
+#. Developer tools screen: trace diagnostic log detail level.
+msgctxt "dev_log_verbosity_trace"
+msgid "Trace"
+msgstr "Trace"
+
+#. Developer tools screen: explanation of the trace diagnostic log detail level.
+msgctxt "dev_log_verbosity_trace_detail"
+msgid "Transport and window internals. Very large logs"
+msgstr "Transport and window internals. Very large logs"
+
+#. Developer tools screen: label used when the diagnostic log detail level cannot be read.
+msgctxt "dev_log_verbosity_unavailable"
+msgid "Unavailable"
+msgstr "Unavailable"
+
+#. Developer tools screen: explanation shown when the diagnostic log detail level cannot be read.
+msgctxt "dev_log_verbosity_unavailable_detail"
+msgid "There is no device to read the log level from yet. Sign in first"
+msgstr "There is no device to read the log level from yet. Sign in first"
+
+#. Developer tools screen: verbose diagnostic log detail level.
+msgctxt "dev_log_verbosity_verbose"
+msgid "Verbose"
+msgstr "Verbose"
+
+#. Developer tools screen: explanation of the verbose diagnostic log detail level.
+msgctxt "dev_log_verbosity_verbose_detail"
+msgid "Contract accounting and per-packet block decisions. Includes destination IP addresses"
+msgstr "Contract accounting and per-packet block decisions. Includes destination IP addresses"
+
+#. Developer tools screen: privacy warning shown when detailed traffic logging is enabled.
+msgctxt "dev_log_verbosity_warning"
+msgid "At Verbose and above the logs contain the destination IP addresses and ports of the traffic you send. Use “Export redacted logs” to share them; the raw bundle should not leave this device."
+msgstr "At Verbose and above the logs contain the destination IP addresses and ports of the traffic you send. Use “Export redacted logs” to share them; the raw bundle should not leave this device."
+
+#. Developer tools screen: title for the detailed traffic logging privacy warning.
+msgctxt "dev_log_verbosity_warning_title"
+msgid "Logs are recording your real traffic"
+msgstr "Logs are recording your real traffic"
 
 #. Developer tools screen (reliability surface): max flows per exit control label.
 msgctxt "dev_max_flows_per_exit"
@@ -1552,6 +1659,11 @@ msgstr "Host suspends the detector caught, each one a batch of verdicts held ins
 msgctxt "dev_section_detection"
 msgid "Detection"
 msgstr "Detection"
+
+#. Developer tools screen: section heading for diagnostic log controls.
+msgctxt "dev_section_diagnostics"
+msgid "Diagnostics"
+msgstr "Diagnostics"
 
 #. Developer tools screen: section heading for the observability controls.
 msgctxt "dev_section_observability"
