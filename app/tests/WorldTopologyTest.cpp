@@ -131,7 +131,7 @@ UR_TEST(totalPointCountIsInTheExpectedBand) {
 }
 
 UR_TEST(dequantizesKnownUsaCoordinates) {
-  // independently decoded (python): the first ring of the USA MultiPolygon
+  // independently decoded: the first ring of the USA MultiPolygon
   // (Hawaii) has 17 points and starts at (-155.541355, 19.084175)
   REQUIRE_TOPOLOGY(world);
   const urnw::CountryShape* usa = nullptr;

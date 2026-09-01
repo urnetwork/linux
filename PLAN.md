@@ -350,7 +350,7 @@ answer is a root daemon — which is what every shipping Linux VPN uses.)*
   bearing for the app (not just a third-party artifact). The wrapper exposes the
   unix-only `IoLoop` for the fd data plane. SDK-host logic is shared C++ with the
   Windows app; only the UI toolkit + tun/network layer differ per platform.
-- Reuse the generated tray icon art (`windows/app/tools/make-icons.py` source →
+- Reuse the generated tray icon art (`windows/app/tools/make-icons` source →
   PNG for SNI; SNI takes themed PNG/named icons rather than .ico).
 - **Egress self-exclusion IS needed — this bullet previously said the opposite and
   was wrong.** [corrected 2026-08-05] It claimed single-process made it moot; it
