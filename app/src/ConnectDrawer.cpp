@@ -580,6 +580,10 @@ void ConnectDrawer::OnHostEvent(DrawerEvent event) {
       // home screen's provider-count label, not off the drawer, and the location
       // override has to keep tracking the window even with the drawer unbuilt.
       break;
+    case DrawerEvent::ProviderSelection:
+      // The chooser owns its selection row and MainWindow owns the connected
+      // provider summary. The drawer has no selected-provider state to refresh.
+      break;
   }
 }
 

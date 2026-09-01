@@ -26,6 +26,23 @@ log()  { printf '%s\n' "$*"; }
 warn() { printf 'warning: %s\n' "$*" >&2; }
 die()  { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+# stage_gsettings_schemas <source-dir> <destination-dir>
+# Copies the complete source vocabulary required by glib-compile-schemas and
+# treats every compiler diagnostic as fatal. In particular, *.gschema.xml may
+# reference enums declared in sibling *.enums.xml files; omitting those files
+# made the compiler ignore otherwise valid host schemas and still exit zero.
+stage_gsettings_schemas() {
+    local source_dir="$1" destination_dir="$2"
+    [ -d "${source_dir}" ] || die "GSettings schema directory missing: ${source_dir}"
+    command -v glib-compile-schemas >/dev/null 2>&1 || \
+        die "glib-compile-schemas is required to stage GSettings schemas"
+    install -d "${destination_dir}"
+    find "${source_dir}" -maxdepth 1 \
+        \( -name '*.gschema.xml' -o -name '*.enums.xml' -o -name '*.override' \) \
+        -exec cp {} "${destination_dir}/" \;
+    glib-compile-schemas --strict "${destination_dir}"
+}
+
 # elf_arch <file> -> amd64 | arm64 | unknown
 # Reads the ELF e_machine field (offset 0x12, little-endian) so build hosts
 # without binutils (this macOS build server) can still assert that a payload

@@ -73,6 +73,7 @@ sdk_root = meson.project_source_root() / 'third_party' / 'urnetwork-sdk' / sdk_a
 # explicitly where the compiler supports it (MSVC on Windows has no such warning).
 sdk_inc  = include_directories('third_party' / 'urnetwork-sdk' / sdk_arch, is_system : true)
 cpp = meson.get_compiler('cpp')
+exhaustive_switch_args = cpp.get_supported_arguments('-Werror=switch')
 # Existence check at configure time (a missing vendored SDK must fail here,
 # not with a link error later).
 sdk_found = cpp.find_library('URnetworkSdk', dirs : sdk_root)
@@ -207,7 +208,8 @@ executable('urnetwork-gui',
   ],
   include_directories : [sdk_inc],
   dependencies : gui_deps,
-  cpp_args : wc_args + i18n_args + webkit_args + sdk_warn_args + pkgdata_args + version_args,
+  cpp_args : wc_args + i18n_args + webkit_args + sdk_warn_args + pkgdata_args +
+             version_args + exhaustive_switch_args,
   install : true,
   # AppDir layout: usr/bin/urnetwork-gui next to usr/lib/libURnetworkSdk.so
   install_rpath : '$ORIGIN/../lib')
@@ -247,7 +249,7 @@ executable('urnetworkd',
   ],
   include_directories : [include_directories('src'), sdk_inc],
   dependencies : [gio, json, threads, sdk_lib],
-  cpp_args : sdk_warn_args + version_args,
+  cpp_args : sdk_warn_args + version_args + exhaustive_switch_args,
   link_args : daemon_link_args,
   install : true,
   install_dir : 'lib' / 'urnetwork',
@@ -469,6 +471,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/HealthTest.cpp',
     'tests/TransportBarGeometryTest.cpp',
     'tests/TransportStatusPresentationTest.cpp',
+    'tests/DaemonUnreachableCopyTest.cpp',
     'src/GlobeGeometry.cpp',
     'src/WorldTopology.cpp',
     'src/ProviderLocationRow.cpp',
@@ -482,9 +485,14 @@ urnetwork_tests = executable('urnetwork-tests',
               # still has a caller. A predicate with no call site is this
               # project's most-repeated defect, and it is invisible to a test
               # that only exercises the predicate.
-              '-DUR_SRC_DIR="' + meson.project_source_root() / 'src' + '"'],
+              '-DUR_SRC_DIR="' + meson.project_source_root() / 'src' + '"'] +
+             exhaustive_switch_args,
   install : false)
 test('unit', urnetwork_tests, protocol : 'exitcode')
+
+test('appimage-gsettings-schema-closure',
+     find_program('../packaging/gsettings.test.sh'),
+     protocol : 'exitcode')
 
 # ABI floor gate (APPIMAGE.md R9/§10c): the daemon and the vendored SDK must
 # reference no glibc symbol newer than the floor the packaging declares. The

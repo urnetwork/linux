@@ -252,10 +252,9 @@ fi
 # host's full compiled set (gtk4 + gsettings-desktop-schemas for libadwaita's
 # org.gnome.desktop.interface reads).
 [ -d /usr/share/glib-2.0/schemas ] || die "/usr/share/glib-2.0/schemas missing on build host"
-install -d "${APPDIR}/usr/share/glib-2.0/schemas"
-find /usr/share/glib-2.0/schemas -maxdepth 1 \( -name '*.gschema.xml' -o -name '*.override' \) \
-    -exec cp {} "${APPDIR}/usr/share/glib-2.0/schemas/" \;
-glib-compile-schemas "${APPDIR}/usr/share/glib-2.0/schemas"
+stage_gsettings_schemas \
+    /usr/share/glib-2.0/schemas \
+    "${APPDIR}/usr/share/glib-2.0/schemas"
 
 # Icon themes: Adwaita (symbolic icons the UI names ~15 of; APPIMAGE.md 3b --
 # this is the icon-theme-staging fix, done here in packaging) + hicolor base.

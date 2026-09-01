@@ -9,6 +9,7 @@
 #include "AppPrefs.hpp"
 #include "ReferralRoyalty.hpp"
 #include "BrandIcons.hpp"
+#include "DaemonUnreachableCopy.hpp"
 #include "Formatters.hpp"
 #include "UrTheme.hpp"
 #include "I18n.hpp"
@@ -404,47 +405,16 @@ TunnelStartResult MainWindow::StartTunnelUi(bool connectDestination) {
       // sends them nowhere. Every arm here is a transport failure — the daemon
       // was never reached — which is what separates them from the
       // authorization refusals under Failed.
-      switch (host_.Control().LastUnreachableReason()) {
-        case DaemonUnreachableReason::StaleSandboxMount:
-          notice = T_("daemon_stale_sandbox_mount",
-                      "The URnetwork system service restarted while this app was open. "
-                      "Close the app and open it again to reconnect to it.");
-          break;
-        case DaemonUnreachableReason::PermissionDenied:
-          // EACCES at connect(2) NARROWED to one cause. A polkit-gated daemon
-          // makes the socket world-connectable and refuses per action with a
-          // reason on a live connection, so it can never produce this; only a
-          // group-gated daemon can (an old build, or a machine with no polkit
-          // where it re-tightens the socket to 0660 root:urnetwork). That is
-          // the one and only case where telling the user to join a group and
-          // sign out again is still true.
-          //
-          // NOTE: the key id changed (daemon_permission_denied ->
-          // daemon_legacy_group_auth) because that id was in use at TWO sites
-          // with two DIFFERENT English strings — here and KillSwitchCopy.hpp:82
-          // — and appears zero times in app/po/en.po, so both rendered fallback
-          // English and contradicted each other. KillSwitchCopy.hpp is outside
-          // this change; it must adopt this key and this exact string.
-          notice = T_("daemon_legacy_group_auth",
-                      "The URnetwork system service on this device is an older version "
-                      "that still requires group membership. Update the service, or add "
-                      "your user to the 'urnetwork' group and sign out and back in.");
-          break;
-        case DaemonUnreachableReason::Other: {
+      {
+        const auto reason = host_.Control().LastUnreachableReason();
+        const auto copy = CopyForDaemonUnreachableReason(reason);
+        notice = T_(copy.key, copy.english);
+        if (reason == DaemonUnreachableReason::Other) {
           // LastTunnelError() is EnsureSession's own out-param, which already
           // carries strerror for this case.
           const std::string detail = host_.LastTunnelError();
-          notice = Glib::ustring(T_("daemon_unreachable_detail",
-                                    "Could not reach the URnetwork system service"));
-          if (!detail.empty()) notice += ": " + detail;
-          break;
+          if (!detail.empty()) notice += " (" + detail + ")";
         }
-        case DaemonUnreachableReason::SocketMissing:
-        case DaemonUnreachableReason::None:
-          notice = T_("daemon_unreachable",
-                      "The URnetwork system service is not running. Install or start it, "
-                      "then try again.");
-          break;
       }
       break;
     case TunnelStartResult::DaemonTooOld:

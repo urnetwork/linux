@@ -41,6 +41,7 @@
 
 #include <string>
 
+#include "DaemonUnreachableCopy.hpp"
 #include "I18n.hpp"
 #include "SdkHost.hpp"
 
@@ -76,21 +77,10 @@ struct KillSwitchCopy {
 // that is right there, served by a daemon that is running perfectly.
 inline std::string DaemonReachFailureCause(const KillSwitchStatus& status) {
   switch (status.session) {
-    case DaemonSessionState::Unreachable:
-      switch (status.unreachable_reason) {
-        case DaemonUnreachableReason::PermissionDenied:
-          return T_("daemon_permission_denied",
-                    "This app is not allowed to use the URnetwork system service. Add your "
-                    "user to the urnetwork group and sign in again.");
-        case DaemonUnreachableReason::SocketMissing:
-          return T_("daemon_socket_missing",
-                    "The URnetwork system service is not running.");
-        case DaemonUnreachableReason::Other:
-        case DaemonUnreachableReason::None:
-          break;
-      }
-      return T_("daemon_not_reachable",
-                "The URnetwork system service could not be reached.");
+    case DaemonSessionState::Unreachable: {
+      const auto copy = CopyForDaemonUnreachableReason(status.unreachable_reason);
+      return T_(copy.key, copy.english);
+    }
     case DaemonSessionState::DaemonTooOld:
       return T_("daemon_too_old",
                 "The URnetwork system service is out of date. Update it to connect.");
