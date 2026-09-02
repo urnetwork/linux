@@ -877,7 +877,17 @@ void ConnectPage::BuildDataUsageGroup() {
   providerCountText_->set_hexpand(true);
   providerCountText_->set_ellipsize(Pango::EllipsizeMode::END);
   CapNatural(providerCountText_, 30);
-  providerCountLine_->set_child(*providerCountText_);
+  // text + a chevron (iOS parity): the row opens the provider details
+  auto* providerCountRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 4);
+  providerCountRow->append(*providerCountText_);
+  auto* providerCountChevron = Gtk::make_managed<Gtk::Image>();
+  providerCountChevron->set_from_icon_name("pan-end-symbolic");
+  providerCountChevron->set_pixel_size(14);
+  providerCountChevron->add_css_class("ur-key");
+  providerCountChevron->set_valign(Gtk::Align::CENTER);
+  kit::MarkDecorative(*providerCountChevron);
+  providerCountRow->append(*providerCountChevron);
+  providerCountLine_->set_child(*providerCountRow);
   providerCountLine_->signal_clicked().connect([this] {
     if (!ConnectedNow()) return;  // the globe has nothing to plot without a session
     if (on_open_provider_locations) on_open_provider_locations();

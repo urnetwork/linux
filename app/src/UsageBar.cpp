@@ -67,10 +67,12 @@ UsageBar::UsageBar() : Gtk::Box(Gtk::Orientation::VERTICAL, 8) {
   dailyRow->append(*dailyBalanceValue_);
   append(*dailyRow);
 
-  append(*Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL));
+  referralSeparator_ = Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL);
+  append(*referralSeparator_);
 
   // referrals: every referral adds 30 GiB/month to the daily balance
   auto* referralRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  referralRow_ = referralRow;
   referralCount_ = Gtk::make_managed<Gtk::Label>();
   referralCount_->add_css_class("dim-label");
   referralCount_->set_xalign(0);
@@ -98,7 +100,23 @@ void UsageBar::SetData(int64_t usedByteCount, int64_t pendingByteCount,
                  totalReferrals),
              totalReferrals));
   // 3 GiB per referral per DAY (server pro.yml referral; this said GiB/Month * 30)
-  referralBonus_->set_text(Format(T_("referral_bonus", "+{} GiB/Day"), totalReferrals * 3));
+  totalReferrals_ = totalReferrals;
+  const int64_t paid = (0 < maxReferrals_ && maxReferrals_ < totalReferrals) ? maxReferrals_ : totalReferrals;
+  referralBonus_->set_text(Format(T_("referral_bonus", "+{} GiB/Day"), std::max<int64_t>(0, paid) * bonusGibPerDay_));
+}
+
+void UsageBar::SetShowReferrals(bool show) {
+  if (referralSeparator_) referralSeparator_->set_visible(show);
+  if (referralRow_) referralRow_->set_visible(show);
+}
+
+void UsageBar::SetReferralTerms(int64_t maxReferrals, int64_t bonusGibPerDay) {
+  maxReferrals_ = maxReferrals;
+  bonusGibPerDay_ = bonusGibPerDay;
+  const int64_t paid = (0 < maxReferrals_ && maxReferrals_ < totalReferrals_) ? maxReferrals_ : totalReferrals_;
+  if (referralBonus_) {
+    referralBonus_->set_text(Format(T_("referral_bonus", "+{} GiB/Day"), std::max<int64_t>(0, paid) * bonusGibPerDay_));
+  }
 }
 
 void UsageBar::DrawBar(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height) {

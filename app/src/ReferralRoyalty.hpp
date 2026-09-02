@@ -18,11 +18,26 @@ namespace urnw {
 
 class SdkHost;
 
-// The daily GiB each side of a verified referral earns, for life (server
-// config pro.yml referral: bonus_per_referral / referred_bonus over 24h).
+// Display defaults for the referral program's numbers (pro.yml referral:
+// bonus_per_referral / referred_bonus over 24h, max_referrals). The live
+// values come from the server with the referral code, through
+// GetNetworkReferralCodeResult; read CurrentReferralTerms(), not these.
 inline constexpr int64_t kReferralGiBPerDay = 3;
-// The max referrals a network is paid for (pro.yml referral.max_referrals).
 inline constexpr int64_t kReferralMaxReferrals = 20;
+
+struct ReferralTerms {
+  int64_t maxReferrals = kReferralMaxReferrals;  // 0 = no cap
+  int64_t bonusGibPerDay = kReferralGiBPerDay;
+  int64_t referredBonusGibPerDay = kReferralGiBPerDay;
+  int64_t PaidReferrals(int64_t total) const {
+    if (total <= 0) return 0;
+    return (0 < maxReferrals && maxReferrals < total) ? maxReferrals : total;
+  }
+};
+
+// The terms the balance store last received from the server (defaults until then).
+const ReferralTerms& CurrentReferralTerms();
+void SetCurrentReferralTerms(const ReferralTerms& terms);
 
 // The royal-welcome panel: the crowned frog plus confirmation copy. Shown by
 // the referral sheets the moment a code is accepted. Caller owns placement.

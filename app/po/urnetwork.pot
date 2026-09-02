@@ -444,6 +444,11 @@ msgctxt "best_matches"
 msgid "Best matches"
 msgstr ""
 
+#. Gold pill on the recommended (annual) plan card.
+msgctxt "best_value"
+msgid "Best value"
+msgstr ""
+
 #. Call to action
 msgctxt "bittensor_sign_in"
 msgid "Sign in with Bittensor"
@@ -1041,6 +1046,11 @@ msgstr ""
 #. Call to action
 msgctxt "default_bandwidth_earn_more_by"
 msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
+msgstr ""
+
+#. Onboarding data page: the daily free allowance, formatted from the server's balance (pro.yml free.data per data_period).
+msgctxt "default_daily_data"
+msgid "By default, you get {} every day."
 msgstr ""
 
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
@@ -2431,6 +2441,11 @@ msgctxt "includes_2_week_free_trial"
 msgid "Includes 2 week free trial"
 msgstr ""
 
+#. Line under the annual plan card. The number of days is the free trial length.
+msgctxt "includes_free_trial_days"
+msgid "Includes {} day free trial"
+msgstr ""
+
 #. Call to action
 msgctxt "insufficient_balance"
 msgid "Insufficient balance"
@@ -2449,6 +2464,66 @@ msgstr ""
 #. Circle Wallet Transfer Screen
 msgctxt "insufficient_funds"
 msgid "Insufficient funds"
+msgstr ""
+
+#. How to add the quick connect control on iOS (no add-control API).
+msgctxt "intro_control_manual_ios"
+msgid "Open Control Center, tap +, then Add a Control, and pick URnetwork."
+msgstr ""
+
+#. How to add the quick connect control on macOS.
+msgctxt "intro_control_manual_macos"
+msgid "Open Control Center, choose Edit Controls, and add URnetwork."
+msgstr ""
+
+#. Detail line of the last onboarding page.
+msgctxt "intro_quick_connect_details"
+msgid "Turn URnetwork on and off from Quick Settings, and keep an eye on it from your home screen."
+msgstr ""
+
+#. Detail line of the last onboarding page on iOS/macOS (Control Center instead of Quick Settings).
+msgctxt "intro_quick_connect_details_apple"
+msgid "Turn URnetwork on and off from Control Center, and keep an eye on it from your Home Screen."
+msgstr ""
+
+#. Title of the last onboarding page: the quick connect tile and the home screen widgets.
+msgctxt "intro_quick_connect_title"
+msgid "Connect in one tap"
+msgstr ""
+
+#. Label shown on the last onboarding page once the quick connect tile is in Quick Settings.
+msgctxt "intro_quick_tile_added"
+msgid "Added to Quick Settings"
+msgstr ""
+
+#. Manual steps for adding the quick connect tile on Android versions without the system add-tile request (before Android 13).
+msgctxt "intro_quick_tile_manual"
+msgid "Open Quick Settings, tap the pencil, and drag URnetwork into place."
+msgstr ""
+
+#. Tagline under 'Welcome to URnetwork' on the first onboarding page. Replaces 'URnetwork is the most local and most private network on the planet.'
+msgctxt "intro_verifiable_encryption"
+msgid "URnetwork gives you verifiable encryption for everyday use."
+msgstr ""
+
+#. Manual steps for adding widgets on launchers without the pin dialog.
+msgctxt "intro_widgets_manual"
+msgid "Long-press your home screen, choose Widgets, and pick URnetwork."
+msgstr ""
+
+#. How to add a Home Screen widget on iOS (no pin-widget API).
+msgctxt "intro_widgets_manual_ios"
+msgid "Long-press the Home Screen, tap +, search URnetwork, and add a widget."
+msgstr ""
+
+#. How to add a desktop widget on macOS.
+msgctxt "intro_widgets_manual_macos"
+msgid "Open the widget gallery from Notification Center, search URnetwork, and drag a widget to the desktop."
+msgstr ""
+
+#. Hint under the widget previews on the last onboarding page: tapping a preview asks the launcher to add that widget.
+msgctxt "intro_widgets_tap_to_add"
+msgid "Tap a widget to add it to your home screen."
 msgstr ""
 
 #. Used in Shared/Views/RedeemBalanceCodeSheet/RedeemBalanceCodeSheet.swift.
@@ -3191,6 +3266,11 @@ msgctxt "on"
 msgid "On"
 msgstr ""
 
+#. Accessibility description of the onboarding step bubbles: the current step and the total.
+msgctxt "onboarding_step_of"
+msgid "Step {0} of {1}"
+msgstr ""
+
 #. Call to action
 msgctxt "one_gib_per_day"
 msgid "1 GiB/Day"
@@ -3401,6 +3481,16 @@ msgctxt "plan"
 msgid "Plan"
 msgstr ""
 
+#. Monthly plan card label: the store-formatted price per month.
+msgctxt "plan_price_per_month"
+msgid "{}/month"
+msgstr ""
+
+#. Yearly plan card label: the store-formatted price per year.
+msgctxt "plan_price_per_year"
+msgid "{}/year"
+msgstr ""
+
 #. Used in Shared/Views/SolanaSignMessageSheet.swift.
 msgctxt "please_install_phantom_or_solflare_to_use_this"
 msgid "Please install Phantom or Solflare to use this feature"
@@ -3498,9 +3588,39 @@ msgctxt "provide"
 msgid "Provide"
 msgstr ""
 
+#. First bullet on the onboarding Contribute bandwidth page.
+msgctxt "provide_intro_bullet_devices"
+msgid "Allow your devices to share internet with each other"
+msgstr ""
+
+#. Second bullet on the onboarding Contribute bandwidth page, with a heart.
+msgctxt "provide_intro_bullet_people"
+msgid "Share your internet with other people ❤️"
+msgstr ""
+
+#. Lead line above the two bullets on the onboarding Contribute bandwidth page.
+msgctxt "provide_intro_lead"
+msgid "Your choice, completely optional:"
+msgstr ""
+
 #. Call to action
 msgctxt "provide_mode"
 msgid "Provide mode"
+msgstr ""
+
+#. One-line explanation of the Always provide mode in the onboarding Contribute bandwidth picker.
+msgctxt "provide_mode_always_description"
+msgid "Provides to everyone whenever the app is running."
+msgstr ""
+
+#. One-line explanation of the Auto provide mode in the onboarding Contribute bandwidth picker: public providing only while connected, same-network peers otherwise.
+msgctxt "provide_mode_auto_description"
+msgid "Provides to everyone while you're connected, otherwise only to your own devices."
+msgstr ""
+
+#. One-line explanation of the Network provide mode in the onboarding Contribute bandwidth picker: the private provider for the network's own devices.
+msgctxt "provide_mode_network_description"
+msgid "Provides only to your own network's devices."
 msgstr ""
 
 #. Compact duration a provider has been connected, as hours and minutes (e.g. 3h 24m). {hours} is the whole hours, {minutes} the remaining minutes.
@@ -3765,6 +3885,21 @@ msgctxt "referral_network"
 msgid "Referral network"
 msgstr ""
 
+#. Detail line of the gold referral panel. The amount is the daily GiB each side earns per verified referral (pro.yml referral).
+msgctxt "referral_panel_detail"
+msgid "Every verified referral gives each of you {} GiB/day for free, for life."
+msgstr ""
+
+#. Heading of the gold referral panel (the ur.io referral panel) before the network has a referral.
+msgctxt "referral_panel_heading"
+msgid "Refer a friend and you both get free data"
+msgstr ""
+
+#. Status line of the gold referral panel while the network has no referral yet.
+msgctxt "referral_panel_none"
+msgid "No friends yet. Share your code and watch the crown appear. 👑"
+msgstr ""
+
 #. A label displaying the number of referrals a user has made. The argument is the number of referrals.
 msgctxt "referral_progress_of_five"
 msgid "{}/5"
@@ -3950,9 +4085,19 @@ msgctxt "review_urnetwork"
 msgid "Review URnetwork"
 msgstr ""
 
+#. Right stop label of the onboarding route line the anonymized member travels along.
+msgctxt "route_internet"
+msgid "Internet"
+msgstr ""
+
 #. Call to action
 msgctxt "route_local"
 msgid "Allow local traffic when disconnected"
+msgstr ""
+
+#. Left stop label of the onboarding route line the anonymized member travels along (you -> URnetwork -> internet).
+msgctxt "route_you"
+msgid "You"
 msgstr ""
 
 #. A heading for the pinned split rules.
@@ -3968,6 +4113,11 @@ msgstr ""
 #. Profile
 msgctxt "save"
 msgid "Save"
+msgstr ""
+
+#. Line under the yearly plan's price: the saving against paying monthly.
+msgctxt "save_33_percent"
+msgid "Save 33%"
 msgstr ""
 
 #. Call to action
@@ -4095,6 +4245,26 @@ msgctxt "settings"
 msgid "Settings"
 msgstr ""
 
+#. Settings row that asks the system to add the Quick Settings tile (Android 13+).
+msgctxt "settings_add_quick_tile"
+msgid "Add quick connect tile"
+msgstr ""
+
+#. Description under the add-tile settings row.
+msgctxt "settings_add_quick_tile_description"
+msgid "Connect and disconnect from the Quick Settings panel and the lock screen."
+msgstr ""
+
+#. Settings row that opens the widget picker to pin the app's widgets.
+msgctxt "settings_add_widgets"
+msgid "Add Home Screen widgets"
+msgstr ""
+
+#. Description under the add-widgets settings row.
+msgctxt "settings_add_widgets_description"
+msgid "Quick connect, transfer balance, providers on the globe and your top contracts."
+msgstr ""
+
 #. Call to action
 msgctxt "share"
 msgid "Share"
@@ -4118,6 +4288,16 @@ msgstr ""
 #. Setup wallet
 msgctxt "share_with_others"
 msgid "You share with others, we share with you. Earn a share of revenue when you provide data to others in the network."
+msgstr ""
+
+#. Long label of the launcher shortcut that connects the VPN.
+msgctxt "shortcut_connect_long"
+msgid "Connect to URnetwork"
+msgstr ""
+
+#. Long label of the launcher shortcut that disconnects the VPN.
+msgctxt "shortcut_disconnect_long"
+msgid "Disconnect from URnetwork"
 msgstr ""
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
@@ -5223,6 +5403,16 @@ msgctxt "site_unexpected_error"
 msgid "Something unexpected happened."
 msgstr ""
 
+#. Small muted button at the top of the post-login onboarding flow that leaves the whole flow.
+msgctxt "skip"
+msgid "Skip"
+msgstr ""
+
+#. Note under the Solana payment button on the plan picker: Solana is a one-time yearly payment, the free trial is Stripe only.
+msgctxt "solana_one_time_payment"
+msgid "Paying with Solana is a one-time yearly payment, with no free trial."
+msgstr ""
+
 #. Call to action
 msgctxt "solana_payment_insufficient_funds_warning"
 msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
@@ -5305,6 +5495,11 @@ msgctxt "start_earning_join"
 msgid "To start earning, join the network"
 msgstr ""
 
+#. Primary button of the plan picker (onboarding and upgrade): starts the paid plan's free trial. Replaces 'Join the movement'.
+msgctxt "start_free_trial"
+msgid "Start free trial"
+msgstr ""
+
 #. Used as a headline in the Initial Auth carousel.
 msgctxt "stay_completely_private_and_anonymous"
 msgid "Stay completely private and anonymous"
@@ -5353,6 +5548,11 @@ msgstr ""
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
 msgid "Strong Anonymization"
+msgstr ""
+
+#. Button on the plan picker for the monthly plan, which has no free trial.
+msgctxt "subscribe"
+msgid "Subscribe"
 msgstr ""
 
 #. The store purchase belongs to a different network than the one logged in — crediting must not go to the wrong account, so tell the user which way out exists. Apple: restore-purchases outcome (Shared/ViewModels/AppStoreSubscriptionManager.swift). Android: terminal `wrong_network` answer from the Play purchase report (google/PlanViewModel.kt); the purchase is still acknowledged so Play does not auto-refund it.
@@ -6025,6 +6225,144 @@ msgctxt "when_you_refer_a_friend"
 msgid "When you refer a friend:"
 msgstr ""
 
+#. Dashboard widget chart title: this device's own traffic.
+msgctxt "widget_client"
+msgid "Client"
+msgstr ""
+
+#. Dashboard widget footer before the tunnel has ever written data.
+msgctxt "widget_connect_once"
+msgid "Connect once to see your traffic here"
+msgstr ""
+
+#. Contracts widget empty state while the tunnel is down.
+msgctxt "widget_connect_to_see_contracts"
+msgid "Connect to see your contracts"
+msgstr ""
+
+#. Accessibility label for one contract stack in the contracts widget. The arguments are the number of contracts and the bytes moved.
+msgctxt "widget_contract_stack_accessibility"
+msgid "{0} contract, {1}"
+msgid_plural "{0} contracts, {1}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Description of the contracts widget in the widget gallery.
+msgctxt "widget_contracts_description"
+msgid "Your top client contracts, flowing as they come and go."
+msgstr ""
+
+#. Description of the quick connect control in the Control Center gallery.
+msgctxt "widget_control_description"
+msgid "Connect or disconnect the URnetwork VPN."
+msgstr ""
+
+#. Description of the dashboard widget in the widget gallery.
+msgctxt "widget_dashboard_description"
+msgid "Transfer balance, connected location and traffic, with quick connect."
+msgstr ""
+
+#. Description of the provider globe widget in the widget gallery.
+msgctxt "widget_globe_description"
+msgid "Your connected providers on the globe."
+msgstr ""
+
+#. Provider globe widget: providers not shown in the list. The argument is a count.
+msgctxt "widget_more_providers"
+msgid "+{} more"
+msgstr ""
+
+#. Contracts widget empty state while connected with no open client contracts.
+msgctxt "widget_no_contracts"
+msgid "No contracts"
+msgstr ""
+
+#. Badge on the small provider globe widget when no providers are connected.
+msgctxt "widget_no_providers"
+msgid "No providers"
+msgstr ""
+
+#. Dashboard widget provider chart label when providing is off.
+msgctxt "widget_not_providing"
+msgid "Not providing"
+msgstr ""
+
+#. Quick connect control / widget value when the app has no tunnel configuration yet (fresh install or logged out).
+msgctxt "widget_not_signed_in"
+msgid "Not signed in"
+msgstr ""
+
+#. Button on the Home Screen widget that opens the app when the tunnel is not configured yet.
+msgctxt "widget_open"
+msgid "Open"
+msgstr ""
+
+#. Widget subtitle when the app has no tunnel configuration yet.
+msgctxt "widget_open_to_set_up"
+msgid "Open URnetwork to set up"
+msgstr ""
+
+#. Chart label; the argument is a formatted byte rate such as '1.2 MB/s'.
+msgctxt "widget_peak_rate"
+msgid "{} peak"
+msgstr ""
+
+#. Contracts widget header: number of peers with open contracts.
+msgctxt "widget_peer_count"
+msgid "{} peer"
+msgid_plural "{} peers"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Dashboard widget chart title: traffic relayed for others while providing.
+msgctxt "widget_provider"
+msgid "Provider"
+msgstr ""
+
+#. Widget subtitle: number of connected providers.
+msgctxt "widget_provider_count"
+msgid "{} provider"
+msgid_plural "{} providers"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Widget subtitle: number of connected providers while this device is also providing.
+msgctxt "widget_provider_count_providing"
+msgid "{} provider · providing"
+msgid_plural "{} providers · providing"
+msgstr[0] ""
+msgstr[1] ""
+
+#. Title above the provider traffic chart in the dashboard widget: the chart name with the current provide mode (Auto, Always, Network, Never).
+msgctxt "widget_provider_mode_title"
+msgid "Provider · {}"
+msgstr ""
+
+#. Shown in the dashboard widget in place of the provider traffic chart while providing is off.
+msgctxt "widget_provider_stats_when_enabled"
+msgid "Provider stats will appear when the provider is enabled."
+msgstr ""
+
+#. Toast after the system added the Quick Settings tile.
+msgctxt "widget_quick_tile_added"
+msgid "Quick connect tile added"
+msgstr ""
+
+#. Title of the Set-Value intent behind the quick connect control and widget toggle (shown by the system in Shortcuts/debug UI).
+msgctxt "widget_toggle_intent_title"
+msgid "Toggle URnetwork VPN"
+msgstr ""
+
+#. Dashboard widget footer; the argument is a localized relative time such as '3 min. ago'.
+msgctxt "widget_updated_ago"
+msgid "Updated {}"
+msgstr ""
+
+#. Dashboard widget footer in the widget gallery preview.
+msgctxt "widget_updated_just_now"
+msgid "Updated just now"
+msgstr ""
+
 #. Connect drawer: the auto connection mode (no fixed window type).
 msgctxt "window_type_auto"
 msgid "Auto"
@@ -6070,6 +6408,11 @@ msgctxt "you_get_3_gib_day_for_life"
 msgid "You get 3 GiB/day for life"
 msgstr ""
 
+#. Detail line under the onboarding data page title.
+msgctxt "you_get_free_data_every_day"
+msgid "You get free data every day."
+msgstr ""
+
 msgctxt "you_have_1_other_device_online"
 msgid "You have 1 other device online"
 msgstr ""
@@ -6098,6 +6441,11 @@ msgctxt "you_re_premium"
 msgid "You're premium."
 msgstr ""
 
+#. Title of the onboarding data page (was 'Boost your bandwidth').
+msgctxt "your_bandwidth"
+msgid "Your bandwidth"
+msgstr ""
+
 #. Label for the empty text field.
 msgctxt "your_email"
 msgid "Your email"
@@ -6121,6 +6469,11 @@ msgstr ""
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "your_purchase_needs_to_be_approved_before_it_can"
 msgid "Your purchase needs to be approved before it can complete. UR Pro will turn on by itself once it goes through — there's no need to buy again."
+msgstr ""
+
+#. Label above the referral code pill in the gold referral panel.
+msgctxt "your_referral_code"
+msgid "Your referral code"
 msgstr ""
 
 #. Used in Shared/Views/Introduction/ParticipateReferView.swift.

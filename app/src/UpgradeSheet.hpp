@@ -36,6 +36,8 @@ class UpgradeSheet : public Gtk::Window {
   UpgradeSheet(Gtk::Window& parent, SdkHost& host, SubscriptionBalanceStore& balance);
 
   void Open();
+  // selects the plan and goes straight to the Stripe checkout (the onboarding's Start free trial)
+  void OpenCheckout(bool yearly);
   // Balance store change feed (marshalled onto the GTK loop by the owner):
   // flips waiting -> success / timed-out.
   void OnBalanceChanged();

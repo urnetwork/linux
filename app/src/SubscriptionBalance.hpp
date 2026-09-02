@@ -97,6 +97,10 @@ class SubscriptionBalanceStore {
   int64_t AvailableByteCount() const { return availableByteCount_; }
   int64_t StartBalanceByteCount() const { return startBalanceByteCount_; }
   int64_t TotalReferrals() const { return totalReferrals_; }
+  // the referral program's numbers, from the server (defaults until fetched)
+  int64_t MaxReferrals() const { return maxReferrals_; }
+  int64_t BonusGibPerDay() const { return bonusGibPerDay_; }
+  int64_t ReferredBonusGibPerDay() const { return referredBonusGibPerDay_; }
   const std::string& ReferralCode() const { return referralCode_; }
 
   void SetChangedHandler(ChangedHandler h) { onChanged_ = std::move(h); }
@@ -149,6 +153,9 @@ class SubscriptionBalanceStore {
 
   bool isLoadingReferral_ = false;
   int64_t totalReferrals_ = 0;
+  int64_t maxReferrals_ = 20;
+  int64_t bonusGibPerDay_ = 3;
+  int64_t referredBonusGibPerDay_ = 3;
   std::string referralCode_;
 
   // polling (mac: backgroundPollingTimer / pollingTimer / pollingDeadline).

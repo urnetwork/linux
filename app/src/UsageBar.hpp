@@ -19,6 +19,10 @@ class UsageBar : public Gtk::Box {
 
   void SetData(int64_t usedByteCount, int64_t pendingByteCount, int64_t availableByteCount,
                int64_t dailyBalanceByteCount, int64_t totalReferrals);
+  // the referral row; off where referrals have their own page
+  void SetShowReferrals(bool show);
+  // the program's cap and bonus (server terms), for the referral bonus line
+  void SetReferralTerms(int64_t maxReferrals, int64_t bonusGibPerDay);
 
  private:
   void DrawBar(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height);
@@ -27,6 +31,11 @@ class UsageBar : public Gtk::Box {
   Gtk::Label* dailyBalanceValue_ = nullptr;
   Gtk::Label* referralCount_ = nullptr;
   Gtk::Label* referralBonus_ = nullptr;
+  Gtk::Separator* referralSeparator_ = nullptr;
+  Gtk::Box* referralRow_ = nullptr;
+  int64_t maxReferrals_ = 20;
+  int64_t bonusGibPerDay_ = 3;
+  int64_t totalReferrals_ = 0;
 
   int64_t used_ = 0;
   int64_t pending_ = 0;

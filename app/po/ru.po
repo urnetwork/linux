@@ -2878,6 +2878,21 @@ msgctxt "referral_network"
 msgid "Referral network"
 msgstr "Реферальная сеть"
 
+#. Detail line of the gold referral panel. The amount is the daily GiB each side earns per verified referral (pro.yml referral).
+msgctxt "referral_panel_detail"
+msgid "Every verified referral gives each of you {} GiB/day for free, for life."
+msgstr "Каждый подтверждённый реферал даёт каждому из вас по {} ГиБ в день бесплатно, навсегда."
+
+#. Heading of the gold referral panel (the ur.io referral panel) before the network has a referral.
+msgctxt "referral_panel_heading"
+msgid "Refer a friend and you both get free data"
+msgstr "Пригласите друга и вы оба получите бесплатный трафик"
+
+#. Status line of the gold referral panel while the network has no referral yet.
+msgctxt "referral_panel_none"
+msgid "No friends yet. Share your code and watch the crown appear. 👑"
+msgstr "Пока нет друзей — поделитесь кодом, и появится корона. 👑"
+
 #. A label displaying the number of referrals a user has made. The argument is the number of referrals.
 msgctxt "referral_progress_of_five"
 msgid "{}/5"
@@ -5074,6 +5089,11 @@ msgstr "Ваш друг получает 3 GiB/день навсегда"
 msgctxt "your_purchase_needs_to_be_approved_before_it_can"
 msgid "Your purchase needs to be approved before it can complete. UR Pro will turn on by itself once it goes through — there's no need to buy again."
 msgstr "Покупку нужно подтвердить, чтобы она завершилась. UR Pro включится сам, как только всё пройдёт — покупать заново не нужно."
+
+#. Label above the referral code pill in the gold referral panel.
+msgctxt "your_referral_code"
+msgid "Your referral code"
+msgstr "Ваш реферальный код"
 
 #. Used in Shared/Views/Introduction/ParticipateReferView.swift.
 msgctxt "your_referral_link"

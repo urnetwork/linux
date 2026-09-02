@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "SubscriptionBalance.hpp"
 
+#include <cmath>
+
+#include "ReferralRoyalty.hpp"
+
 #include "AppPrefs.hpp"
 
 #include <algorithm>
@@ -226,6 +230,21 @@ void SubscriptionBalanceStore::FetchReferralCode() {
           if (err || !result || result->error) return;  // the row just keeps its last value
           totalReferrals_ = result->total_referrals;
           referralCode_ = result->referral_code.value_or(std::string());
+          // the program terms ride along (server pro.yml); zero means the
+          // server reported none, so the display defaults stay
+          auto gibPerDay = [](int64_t bytes, int64_t periodSeconds) -> int64_t {
+            if (bytes <= 0 || periodSeconds <= 0) return 0;
+            const double perDay = static_cast<double>(bytes) * 86400.0 / periodSeconds;
+            return static_cast<int64_t>(std::llround(perDay / (1024.0 * 1024.0 * 1024.0)));
+          };
+          if (0 < result->max_referrals) maxReferrals_ = result->max_referrals;
+          if (const int64_t gib = gibPerDay(result->bonus_per_referral_bytes, result->bonus_period_seconds); 0 < gib) {
+            bonusGibPerDay_ = gib;
+          }
+          if (const int64_t gib = gibPerDay(result->referred_bonus_bytes, result->bonus_period_seconds); 0 < gib) {
+            referredBonusGibPerDay_ = gib;
+          }
+          SetCurrentReferralTerms(ReferralTerms{maxReferrals_, bonusGibPerDay_, referredBonusGibPerDay_});
           MaybeCelebrateReferrals(result->total_referrals);
           Emit();
         });

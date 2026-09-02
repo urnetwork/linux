@@ -26,6 +26,7 @@
 #include "LocationOverride.hpp"
 #include "LoginCarousel.hpp"
 #include "NetworkServerSheet.hpp"
+#include "Onboarding.hpp"
 #include "ProviderLocationsSheet.hpp"
 #include "SdkHost.hpp"
 #include "SeedphraseSheet.hpp"
@@ -228,6 +229,8 @@ class MainWindow : public Gtk::ApplicationWindow {
   // Account's Redeem row opens the same sheet the drawer owns, but the
   // drawer exposes no opener, so the window keeps its own (lazily built).
   std::unique_ptr<RedeemCodeSheet> redeemSheet_;
+  std::unique_ptr<OnboardingWindow> onboarding_;
+  void OpenOnboardingIfPending();
   // Last width (in dip) fanned out to the destinations. Pages fold their own
   // panes; nothing else in the app measures the window for them.
   int pageWidthDip_ = -1;

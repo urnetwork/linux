@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "UpgradeSheet.hpp"
 
+#include "Onboarding.hpp"
+
 #include <gio/gio.h>
 
 #ifdef UR_HAVE_WEBKIT
@@ -144,10 +146,11 @@ void UpgradeSheet::BuildUi() {
   // yearly (preselected, "Most Popular" — mac parity), then monthly. Prices are
   // shown by Stripe's checkout, so the cards carry the cadence + trial.
   yearlyCard_ = MakeOptionCard(T_("yearly", "Yearly"),
-                               T_("includes_2_week_free_trial", "Includes 2 week free trial"));
+                               Format(T_("includes_free_trial_days", "Includes {} day free trial"),
+                                      kFreeTrialDays));
   auto* yearlyOverlay = Gtk::make_managed<Gtk::Overlay>();
   yearlyOverlay->set_child(*yearlyCard_);
-  auto* popularChip = MakeChip(T_("most_popular", "Most Popular"), "green", true);
+  auto* popularChip = MakeChip(T_("best_value", "Best value"), "gold", true);
   popularChip->set_halign(Gtk::Align::END);
   popularChip->set_valign(Gtk::Align::START);
   popularChip->set_margin_end(12);
@@ -168,7 +171,7 @@ void UpgradeSheet::BuildUi() {
   joinSpinner_->set_visible(false);
   joinContent->append(*joinSpinner_);
   joinContent->append(
-      *Gtk::make_managed<Gtk::Label>(T_("join_the_movement", "Join the movement")));
+      *Gtk::make_managed<Gtk::Label>(T_("start_free_trial", "Start free trial")));
   joinBtn_->set_child(*joinContent);
   joinBtn_->add_css_class("suggested-action");
   joinBtn_->add_css_class("pill");
@@ -345,6 +348,13 @@ void UpgradeSheet::Open() {
   // resuming a still-running confirmation poll re-opens onto the waiting state
   SetState(balance_.IsPolling() ? State::Waiting : State::Options);
   present();
+}
+
+void UpgradeSheet::OpenCheckout(bool yearly) {
+  if (yearlyCard_) yearlyCard_->set_active(yearly);
+  if (monthlyCard_) monthlyCard_->set_active(!yearly);
+  present();
+  StartCheckout();
 }
 
 void UpgradeSheet::StartCheckout() {

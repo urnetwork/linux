@@ -16,6 +16,10 @@
 #include "Ui.hpp"
 
 namespace urnw {
+
+namespace {
+constexpr const char* kOnboardingPendingKey = "onboarding_pending";
+}  // namespace
 namespace {
 
 // a user auth is an email or a phone number (light shape check gating the
@@ -121,6 +125,17 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   BuildInstantStep();
   BuildHome();
   BuildAuthPages();
+  // URNW_ONBOARDING_PREVIEW=1 opens the onboarding flow over whatever is
+  // showing, for design review without an account (no data behind it)
+  if (const char* preview = g_getenv("URNW_ONBOARDING_PREVIEW"); preview && *preview) {
+    const int step = std::max(1, atoi(preview));
+    Glib::signal_timeout().connect_once([this, step] {
+      if (!onboarding_) {
+        onboarding_ = std::make_unique<OnboardingWindow>(*this, host_, balance_);
+      }
+      onboarding_->OpenAt(step);
+    }, 800);
+  }
   // AdwToastOverlay across the page stack: hosts the drawer PQI panel's
   // copied-to-clipboard toasts (the detail sheets carry their own overlays;
   // see Ui.hpp ShowToast).
@@ -1308,6 +1323,7 @@ void MainWindow::OnInstantSubmit() {
                                           : r.error.c_str());
               return;
             }
+            prefs::Set(kOnboardingPendingKey, true);  // an instant account is a new network
             StartTunnelUi();  // auth handler flips the view
           });
         });
@@ -1625,6 +1641,8 @@ void MainWindow::BuildAuthPages() {
 
   createPage_ = Gtk::make_managed<CreateNetworkPage>(host_);
   createPage_->on_success = [this] {
+    // a network was just created: the onboarding flow follows the sign-in
+    prefs::Set(kOnboardingPendingKey, true);
     StartTunnelUi();  // auth handler flips the view
   };
   createPage_->on_verify = [this](std::string userAuth) { NavigateVerify(userAuth); };
@@ -1635,6 +1653,7 @@ void MainWindow::BuildAuthPages() {
 
   verifyPage_ = Gtk::make_managed<VerifyPage>(host_);
   verifyPage_->on_success = [this] {
+    prefs::Set(kOnboardingPendingKey, true);  // a verified sign-up is a new network
     StartTunnelUi();  // auth handler flips the view
   };
   verifyPage_->on_back = [this] { stack_.set_visible_child("login"); };
@@ -1886,6 +1905,20 @@ void MainWindow::SyncProvideControlMode() {
   syncingProvideMode_ = false;
 }
 
+// The post-sign-up onboarding: shown once, only after a network was created
+// on this machine (never for an existing account signing in).
+void MainWindow::OpenOnboardingIfPending() {
+  if (!prefs::Get<bool>(kOnboardingPendingKey, false)) return;
+  Glib::signal_timeout().connect_once([this] {
+    if (!prefs::Get<bool>(kOnboardingPendingKey, false)) return;
+    if (!onboarding_) {
+      onboarding_ = std::make_unique<OnboardingWindow>(*this, host_, balance_);
+      onboarding_->on_finished = [] { prefs::Set(kOnboardingPendingKey, false); };
+    }
+    onboarding_->Open();
+  }, 600);
+}
+
 void MainWindow::ApplyAuthState(bool loggedIn) {
   stack_.set_visible_child(loggedIn ? "home" : "login");
   // a fresh session (either way) re-arms the once-only Pro-upgrade provide
@@ -1905,6 +1938,7 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
     // so panes B/C would otherwise wait for the next DeviceLifecycle event.
     if (connectPage_) connectPage_->Resync();
     if (shell_ && shell_->on_navigate) shell_->on_navigate(shell_->CurrentTag());
+    OpenOnboardingIfPending();
   } else {
     // A signed-out window has no session at all: the DEFAULT reading, not a
     // bool poked into a copy of the last one.

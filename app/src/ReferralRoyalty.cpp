@@ -13,6 +13,14 @@
 #include "Ui.hpp"
 
 namespace urnw {
+
+namespace {
+ReferralTerms g_referralTerms;
+}  // namespace
+
+const ReferralTerms& CurrentReferralTerms() { return g_referralTerms; }
+void SetCurrentReferralTerms(const ReferralTerms& terms) { g_referralTerms = terms; }
+
 namespace {
 
 constexpr int kSheetWidth = 400;   // matches the account referral sheets
@@ -133,7 +141,7 @@ Gtk::Box* MakeRoyalWelcomePanel() {
       Format(T_("referral_royal_welcome_detail",
                 "Referral confirmed — you and your friend each get +{} GiB/day of free "
                 "data, for life."),
-             kReferralGiBPerDay)));
+             CurrentReferralTerms().bonusGibPerDay)));
   return box;
 }
 
@@ -168,7 +176,7 @@ void ShowReferralCelebrationSheet(Gtk::Window& parent, int64_t joined,
           "{0} friends just joined URnetwork with your code. Each one earns you +{1} "
           "GiB a day of free data — for life.",
           joined),
-      joined, kReferralGiBPerDay)));
+      joined, CurrentReferralTerms().bonusGibPerDay)));
 
   AppendCodeActions(*box, *sheet, referralCode);
 
@@ -209,7 +217,7 @@ void ShowReferSheet(Gtk::Window& parent, int64_t totalReferrals,
                 "{0} friends have joined — you're earning +{1} GiB/day, for life.",
                 totalReferrals),
             totalReferrals,
-            std::min<int64_t>(totalReferrals, kReferralMaxReferrals) * kReferralGiBPerDay)) +
+            CurrentReferralTerms().PaidReferrals(totalReferrals) * CurrentReferralTerms().bonusGibPerDay)) +
         "</span>");
     congrats->set_wrap(true);
     congrats->set_justify(Gtk::Justification::CENTER);

@@ -196,6 +196,7 @@ executable('urnetwork-gui',
     'src/UsageBar.cpp',
     'src/RedeemCodeSheet.cpp',
     'src/UpgradeSheet.cpp',
+    'src/Onboarding.cpp',
     'src/AuthViews.cpp',
     'src/GlobeGeometry.cpp',
     'src/WorldTopology.cpp',
@@ -429,6 +430,8 @@ install_data('assets/world-110m.json',
 # install the asset resolves ONLY out of a build tree — every packaged build
 # and every AppImage would silently render the badge as a bare sentence.
 install_data('assets/ReferralFrog.png',
+             install_dir : get_option('datadir') / 'urnetwork')
+install_data('assets/UrPerson1.png', 'assets/UrPerson2.png', 'assets/UrPerson3.png',
              install_dir : get_option('datadir') / 'urnetwork')
 
 # The four licensed brand faces (SEPARATELY LICENSED commercial fonts — ABC

@@ -46,6 +46,8 @@ window.background { background-color: #101010; color: #f8f8f8; }
 .ur-chip { font-size: 10px; font-weight: 600; padding: 3px 7px; border-radius: 999px; }
 .ur-chip-green { color: #87fb67; background-color: alpha(#87fb67, .14); }
 .ur-chip-green-hi { color: #101010; background-color: #87fb67; }
+.ur-chip-gold { color: #FFC400; background-color: alpha(#FFC400, .14); }
+.ur-chip-gold-hi { color: #101010; background-image: linear-gradient(#FFE082, #FFC400); }
 .ur-chip-coral { color: #ff6c58; background-color: alpha(#ff6c58, .14); }
 .ur-chip-coral-hi { color: #ffffff; background-color: #ff6c58; }
 .ur-chip-muted { color: #989898; background-color: alpha(#989898, .16); }
