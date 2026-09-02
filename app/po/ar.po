@@ -54,11 +54,6 @@ msgctxt "account_needs_verification"
 msgid "This account needs verification. Check your email."
 msgstr "يحتاج هذا الحساب إلى التحقق. تحقق من بريدك الإلكتروني."
 
-#. Call to action
-msgctxt "account_points"
-msgid "Account points"
-msgstr "نقاط الحساب"
-
 #. A heading for the list of current block actions.
 msgctxt "activity"
 msgid "Activity"
@@ -97,11 +92,6 @@ msgstr "إضافة طريقة تسجيل دخول"
 msgctxt "add_sign_in_method_2"
 msgid "Add Sign-In Method"
 msgstr "إضافة طريقة تسجيل الدخول"
-
-#. Wallets Screen
-msgctxt "add_wallet"
-msgid "Add wallet"
-msgstr "إضافة محفظة"
 
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
@@ -261,11 +251,6 @@ msgstr "هل أنت متأكد أنك تريد حذف حسابك؟"
 msgctxt "are_you_sure_you_want_to_remove"
 msgid "Are you sure you want to remove {} as a sign-in method?"
 msgstr "هل أنت متأكد أنك تريد إزالة {} كطريقة لتسجيل الدخول؟"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "are_you_sure_you_want_to_remove_this_wallet"
-msgid "Are you sure you want to remove this wallet?"
-msgstr "هل أنت متأكد أنك تريد إزالة هذه المحفظة؟"
 
 #. Call to action
 msgctxt "auth_code"
@@ -427,11 +412,6 @@ msgctxt "bittensor_sign_in"
 msgid "Sign in with Bittensor"
 msgstr "تسجيل الدخول باستخدام Bittensor"
 
-#. Call to action
-msgctxt "bittensor_wallet_future_use"
-msgid "Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "يتم حفظ محافظ Bittensor للاستخدام المستقبلي ولا يمكنها استلام المدفوعات بعد."
-
 #. dns settings
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
@@ -477,11 +457,6 @@ msgctxt "boost_bandwidth_details"
 msgid "You get free data every month, and can earn more by referring friends."
 msgstr "من خلال المشاركة في الشبكة وتوفير عرض النطاق الترددي، يمكنك كسب المكافآت."
 
-#. Call to action
-msgctxt "boost_bandwidth_title"
-msgid "Boost your bandwidth"
-msgstr "عزز عرض النطاق الترددي لديك - اربح المزيد كل يوم"
-
 #. A title for the introductory usage bar.
 msgctxt "boost_your_bandwidth"
 msgid "Boost Your Bandwidth"
@@ -521,11 +496,6 @@ msgstr "تجاوز VPN"
 msgctxt "cancel"
 msgid "Cancel"
 msgstr "ألغِ"
-
-#. Wallet Screen
-msgctxt "chains_supported"
-msgid "Solana and Polygon wallets are currently supported"
-msgstr "محافظ Solana و Polygon مدعومة حاليًا"
 
 #. Call to action
 msgctxt "change"
@@ -581,21 +551,6 @@ msgstr "جارٍ التحقق من معاملات Solana"
 msgctxt "checkout_opened_in_browser"
 msgid "Complete your purchase in the browser. Your plan updates here automatically once payment is confirmed."
 msgstr "أكمل عملية الشراء في المتصفح. سيتم تحديث خطتك هنا تلقائيًا بمجرد تأكيد الدفع."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_fee_coverage"
-msgid "URnetwork covers your transfer fees."
-msgstr "URnetwork تغطي رسوم التحويل الخاصة بك."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_header"
-msgid "Transfer to external wallet"
-msgstr "التحويل إلى محفظة خارجية"
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_topbar_title"
-msgid "Transfer USDC"
-msgstr "تحويل USDC"
 
 #. Provider list group title for cities
 msgctxt "cities"
@@ -682,11 +637,6 @@ msgctxt "companion"
 msgid "Companion"
 msgstr "الطرف المقابل"
 
-#. Used in Main/Account/Settings/SettingsView.swift.
-msgctxt "confirm_seeker_token"
-msgid "Confirm Seeker Token"
-msgstr "تأكيد رمز Seeker"
-
 #. Button text to connect to URnetwork VPN
 msgctxt "connect"
 msgid "Connect"
@@ -702,35 +652,15 @@ msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
 msgstr "ربط محفظة"
 
-#. Used in Main/Account/Settings/SettingsForm-iOS.swift.
-msgctxt "connect_a_wallet_with_the_seeker_pre_order_token"
-msgid "Connect a wallet with the Seeker Pre-Order Token"
-msgstr "ربط محفظة برمز طلب Seeker المسبق"
-
 #. Call to action
 msgctxt "connect_and_open"
 msgid "Connect and open link"
 msgstr "الاتصال وفتح الرابط"
 
-#. Wallets Screen
-msgctxt "connect_external_wallet"
-msgid "Connect external wallet"
-msgstr "ربط محفظة خارجية"
-
-#. Wallets Screen
-msgctxt "connect_external_wallet_supported_chains"
-msgid "USDC addresses on Solana and Polygon are currently supported."
-msgstr "عناوين USDC على Solana و Polygon مدعومة حاليًا."
-
 #. A label displayed above the options for connecting to a tunnel.
 msgctxt "connect_options"
 msgid "Connect options"
 msgstr "خيارات الاتصال"
-
-#. Setup Wallet
-msgctxt "connect_saga_wallet"
-msgid "Connect Saga wallet"
-msgstr "ربط محفظة Saga"
 
 #. Call to action
 msgctxt "connect_seeker_wallet"
@@ -746,11 +676,6 @@ msgstr "الاتصال بـ {}"
 msgctxt "connect_urnetwork_vpn"
 msgid "Connect URnetwork VPN"
 msgstr "الاتصال بـ URnetwork VPN"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "connect_wallet"
-msgid "Connect Wallet"
-msgstr "ربط المحفظة"
 
 #. Used in Main/Connect/ConnectButton/StatusIndicator/ConnectStatusIndicator.swift.
 msgctxt "connected"
@@ -1004,25 +929,10 @@ msgctxt "date_payout"
 msgid "{} Payout"
 msgstr "دفعة {}"
 
-#. Call to action
-msgctxt "default_bandwidth_earn_more_by"
-msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
-msgstr "بشكل افتراضي، تحصل على {} GiB/شهر. إليك كيفية كسب عرض نطاق إضافي:"
-
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
 msgctxt "default_option"
 msgid "Default"
 msgstr "افتراضي"
-
-#. Used in Shared/Views/PayoutWalletTag.swift.
-msgctxt "default_txt"
-msgid "DEFAULT"
-msgstr "افتراضي"
-
-#. Call to action
-msgctxt "default_wallet"
-msgid "Default"
-msgstr "الافتراضي"
 
 #. Delete button label. Apple: Main/Account/BlockedLocations/BlockedLocationsView.swift. Android: the swipe-to-reveal delete button label (SwipeToRevealRow).
 msgctxt "delete"
@@ -1180,11 +1090,6 @@ msgid "Don't see it?"
 msgstr "ألا تراه؟"
 
 #. Call to action
-msgctxt "earn_more_bullet_refer"
-msgid "Refer a friend = +{} GiB/Month"
-msgstr "إحالة صديق = +{} GiB/شهر"
-
-#. Call to action
 msgctxt "earn_more_bullet_stay_connected"
 msgid "Stay connected daily = Earn up to {} GiB/Day"
 msgstr "البقاء متصلاً يوميًا = اربح حتى {} GiB/يوم"
@@ -1198,11 +1103,6 @@ msgstr "مضاعفات الأرباح"
 msgctxt "earnings"
 msgid "Earnings"
 msgstr "الأرباح"
-
-#. Call to action
-msgctxt "earnings_doubled"
-msgid "You're earning x2 points"
-msgstr "أنت تكسب نقاط x2"
 
 #. device
 msgctxt "edit_device_name"
@@ -1254,15 +1154,6 @@ msgctxt "enter_a_password"
 msgid "Enter a password"
 msgstr "أدخل كلمة مرور"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_a_solana_or_bittensor_wallet_address"
-msgid "Enter a Solana or Bittensor wallet address"
-msgstr "أدخل عنوان محفظة Solana أو Bittensor"
-
-msgctxt "enter_a_solana_usdc_wallet_address"
-msgid "Enter a Solana USDC wallet address"
-msgstr "أدخل عنوان محفظة USDC على Solana"
-
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
@@ -1283,11 +1174,6 @@ msgctxt "enter_urnetwork"
 msgid "Enter URnetwork"
 msgstr "أدخل URnetwork"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_wallet_address"
-msgid "Enter wallet address"
-msgstr "أدخل عنوان المحفظة"
-
 #. Error message displayed in a snackbar when there was an error changing the network name.
 msgctxt "error_changing_network_name"
 msgid "Error changing network name"
@@ -1307,11 +1193,6 @@ msgstr "عذرًا، حدث خطأ أثناء المطالبة بالمضاعف:
 msgctxt "error_connecting_wallet"
 msgid "There was an error connecting your wallet."
 msgstr "حدث خطأ أثناء ربط محفظتك."
-
-#. Snackbar shown when connecting a wallet fails, with the underlying error message. Used in Main/Account/Wallets/WalletsView.swift.
-msgctxt "error_connecting_wallet_with_reason"
-msgid "There was an error connecting your wallet: {}"
-msgstr "حدث خطأ أثناء ربط محفظتك: {}"
 
 #. Snackbar shown when creating the user's network fails. Used in ContentView.swift, Main/Account/AccountRootView.swift and Main/Connect/ConnectView-iOS.swift.
 msgctxt "error_creating_network"
@@ -1347,16 +1228,6 @@ msgstr "خطأ في إرسال رابط إعادة تعيين كلمة المر�
 msgctxt "error_sending_verification_code"
 msgid "There was an error sending the verification code."
 msgstr "حدث خطأ أثناء إرسال رمز التحقق."
-
-#. Snackbar shown when setting the default payout wallet fails. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet"
-msgid "Error setting default wallet"
-msgstr "خطأ في تعيين المحفظة الافتراضية"
-
-#. Snackbar shown when setting the default payout wallet fails, with the underlying error message. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet_with_reason"
-msgid "Error setting default wallet: {}"
-msgstr "خطأ في تعيين المحفظة الافتراضية: {}"
 
 #. Snackbar shown when saving the device name fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_updating_device_name"
@@ -1881,11 +1752,6 @@ msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
 msgstr "أقل نسبة مستخدم/عنوان IP للوصول إلى المحتوى"
 
-#. Wallet Screen
-msgctxt "make_default"
-msgid "Make default"
-msgstr "جعل الافتراضي"
-
 #. Split tunnel settings: button opening the app split rules sheet.
 msgctxt "manage_apps"
 msgid "Manage apps"
@@ -2052,16 +1918,6 @@ msgid "Need more data, faster?"
 msgstr "هل تحتاج إلى المزيد من البيانات وبشكل أسرع؟"
 
 #. Call to action
-msgctxt "net_points_earned"
-msgid "net points earned"
-msgstr "صافي النقاط المكتسبة"
-
-#. Used in Shared/Views/AccountPointsBreakdown.swift.
-msgctxt "net_points_earned_2"
-msgid "Net points earned"
-msgstr "صافي النقاط المكتسبة"
-
-#. Call to action
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "البيانات المقدمة"
@@ -2155,11 +2011,6 @@ msgstr "استخدام الشبكة الافتراضية"
 msgctxt "network_create_bonus_message"
 msgid "Someone invited you to join 🥳 \nClaim your bonus by creating a network!"
 msgstr "شخص ما دعاك للانضمام 🥳\\nاحصل على مكافأتك عن طريق إنشاء شبكة!"
-
-#. Used in Main/Account/AccountRootView.swift.
-msgctxt "network_earnings"
-msgid "Network earnings"
-msgstr "أرباح الشبكة"
 
 #. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
 msgctxt "network_name_changed_to_n"
@@ -2308,11 +2159,6 @@ msgctxt "no_open_contracts"
 msgid "No open contracts"
 msgstr "لا توجد عقود مفتوحة"
 
-#. Wallet Screen
-msgctxt "no_payouts_found"
-msgid "No payouts found for this wallet"
-msgstr "لم يتم العثور على مدفوعات لهذه المحفظة"
-
 #. Locations List
 msgctxt "no_providers_found"
 msgid "We could not find any providers."
@@ -2398,16 +2244,6 @@ msgctxt "or"
 msgid "or"
 msgstr "أو"
 
-#. Separator label above the wallet sign-in buttons on the sign-in panel.
-msgctxt "or_use_a_wallet"
-msgid "Or use a wallet"
-msgstr "أو استخدم محفظة"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "other"
-msgid "Other"
-msgstr "آخر"
-
 #. Call to action
 msgctxt "participate"
 msgid "Participate"
@@ -2458,40 +2294,10 @@ msgctxt "pay_with_stripe"
 msgid "Join with Stripe"
 msgstr "انضم باستخدام Stripe"
 
-#. Used in Main/Account/PayoutItem/PayoutItemView.swift.
-msgctxt "payment_pending"
-msgid "Payment Pending"
-msgstr "الدفع معلق"
-
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "payment_problem"
 msgid "Payment problem"
 msgstr "مشكلة في الدفع"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "payout"
-msgid "Payout"
-msgstr "دفع"
-
-#. Snackbar shown after the payout wallet is changed. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "payout_wallet_updated"
-msgid "Payout wallet updated"
-msgstr "تم تحديث محفظة الدفع"
-
-#. Wallet Screen
-msgctxt "payout_wallets"
-msgid "Payout Wallets"
-msgstr "محافظ الدفع"
-
-#. Call to action
-msgctxt "payouts"
-msgid "Payouts"
-msgstr "المدفوعات"
-
-#. Wallet Screen
-msgctxt "payouts_amount_threshold"
-msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
-msgstr "تحدث الدفعات كل يوم أحد في الساعة 00:00 بتوقيت UTC، ويتطلب ذلك تحقيق حد أدنى من USDC."
 
 #. Post quantum identity panel: peer identity count indicator, singular.
 msgctxt "peer_count_one"
@@ -2517,11 +2323,6 @@ msgstr "معلّق"
 msgctxt "pending_mb_provided"
 msgid "Pending: {} MB provided"
 msgstr "قيد الانتظار: تم توفير {} ميغابايت"
-
-#. Call to action
-msgctxt "pending_payout"
-msgid "Pending payout"
-msgstr "دفعة معلقة"
 
 #. Android app string: pin app.
 msgctxt "pin_app"
@@ -2583,11 +2384,6 @@ msgstr[2] "+ {} آخران"
 msgstr[3] "+ {} أخرى"
 msgstr[4] "+ {} أخرى"
 msgstr[5] "+ {} أخرى"
-
-#. Call to action
-msgctxt "points_breakdown"
-msgid "Points breakdown"
-msgstr "تفصيل النقاط"
 
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
@@ -3051,11 +2847,6 @@ msgctxt "remove_this_sign_in_method"
 msgid "Remove this sign-in method?"
 msgstr "إزالة طريقة تسجيل الدخول هذه؟"
 
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "remove_wallet"
-msgid "Remove wallet"
-msgstr "إزالة المحفظة"
-
 #. Reset link sent
 msgctxt "resend_reset_link"
 msgid "Resend link"
@@ -3120,11 +2911,6 @@ msgstr "السماح بحركة المرور المحلية عند قطع الا
 msgctxt "rules"
 msgid "Rules"
 msgstr "القواعد"
-
-#. A description of the benefits of using a Seeker Token.
-msgctxt "s_2x_your_free_and_referral_data"
-msgid "2x your free and referral data"
-msgstr "بياناتك المجانية وبيانات الإحالة ×2"
 
 #. Profile
 msgctxt "save"
@@ -3247,11 +3033,6 @@ msgid "Sent! Thanks for your feedback."
 msgstr "تم الإرسال! شكرًا على ملاحظاتك."
 
 #. Account Screen
-msgctxt "set_up_wallet"
-msgid "Set up wallet"
-msgstr "إعداد المحفظة"
-
-#. Account Screen
 msgctxt "settings"
 msgid "Settings"
 msgstr "الإعدادات"
@@ -3275,11 +3056,6 @@ msgstr "مشاركة السجلات"
 msgctxt "share_urnetwork"
 msgid "Share URnetwork"
 msgstr "مشاركة URnetwork"
-
-#. Setup wallet
-msgctxt "share_with_others"
-msgid "You share with others, we share with you. Earn a share of revenue when you provide data to others in the network."
-msgstr "أنت تشارك مع الآخرين، ونحن نشارك معك. اكسب حصة من الإيرادات عندما تقدم بيانات للآخرين على الشبكة."
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show"
@@ -3378,11 +3154,6 @@ msgstr "أدوات الحساب"
 msgctxt "site_app_add"
 msgid "Add"
 msgstr "إضافة"
-
-#. App wallets: add wallet heading
-msgctxt "site_app_add_wallet"
-msgid "Add wallet"
-msgstr "إضافة محفظة"
 
 #. App connect: allowed count label
 msgctxt "site_app_allowed"
@@ -3719,11 +3490,6 @@ msgctxt "site_app_login_methods"
 msgid "Login methods"
 msgstr "طرق تسجيل الدخول"
 
-#. App wallets: make payout wallet action
-msgctxt "site_app_make_payout_wallet"
-msgid "Make payout wallet"
-msgstr "تعيين محفظة الدفعات"
-
 #. App sidebar: manage subscription button (opens the Stripe billing portal)
 msgctxt "site_app_manage_subscription"
 msgid "Manage Subscription"
@@ -3774,11 +3540,6 @@ msgctxt "site_app_no_blocked"
 msgid "No blocked locations yet"
 msgstr "لا توجد مواقع محظورة بعد"
 
-#. App wallets: payouts empty state
-msgctxt "site_app_no_payouts"
-msgid "No payouts yet"
-msgstr "لا توجد دفعات بعد"
-
 #. App provider: no provider throughput
 msgctxt "site_app_no_provider_activity"
 msgid "No providing activity in this window."
@@ -3799,30 +3560,10 @@ msgctxt "site_app_no_traffic"
 msgid "No traffic yet"
 msgstr "لا توجد حركة مرور بعد"
 
-#. App wallets: empty state
-msgctxt "site_app_no_wallets"
-msgid "No wallets yet — add one to receive payouts"
-msgstr "لا توجد محافظ بعد — أضف واحدة لاستلام الدفعات"
-
 #. App payout detail: paid time
 msgctxt "site_app_paid_on"
 msgid "Paid"
 msgstr "تاريخ الدفع"
-
-#. App payout detail: not found
-msgctxt "site_app_payout_not_found"
-msgid "This payout could not be found."
-msgstr "تعذّر العثور على هذه الدفعة."
-
-#. App wallets: payout wallet label
-msgctxt "site_app_payout_wallet"
-msgid "Payout wallet"
-msgstr "محفظة الدفعات"
-
-#. App wallets: payouts section
-msgctxt "site_app_payouts"
-msgid "Payouts"
-msgstr "الدفعات"
 
 #. App provider: peak clients metric
 msgctxt "site_app_peak_clients"
@@ -3998,16 +3739,6 @@ msgstr "تم التحقق"
 msgctxt "site_app_wallet"
 msgid "Wallet"
 msgstr "محفظة"
-
-#. App wallets: wallet address input
-msgctxt "site_app_wallet_address"
-msgid "Wallet address"
-msgstr "عنوان المحفظة"
-
-#. App account: wallets row/screen title
-msgctxt "site_app_wallets"
-msgid "Wallets"
-msgstr "المحافظ"
 
 #. Account panel: any-provider location option
 msgctxt "site_best_available"
@@ -4335,19 +4066,9 @@ msgid "Something unexpected happened."
 msgstr "حدث خطأ غير متوقع."
 
 #. Call to action
-msgctxt "solana_payment_insufficient_funds_warning"
-msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
-msgstr "يرجى التأكد من أن لديك رصيد كافٍ من USDC في محفظتك. في بعض الحالات، قد تفشل مطالبات الدفع إذا لم تكن هناك أموال كافية في المحفظة."
-
-#. Call to action
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "تسجيل الدخول باستخدام Solana"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "solana_usdc_addresses_and_bittensor_tao"
-msgid "Solana USDC addresses and Bittensor (TAO) addresses are supported. Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "عناوين USDC على Solana وعناوين Bittensor (TAO) مدعومة. يتم حفظ محافظ Bittensor للاستخدام المستقبلي ولا يمكنها استلام المدفوعات بعد."
 
 #. Something went wrong error message
 msgctxt "something_went_wrong"
@@ -4410,11 +4131,6 @@ msgctxt "start_2_week_free_trial"
 msgid "Start 2 week free trial"
 msgstr "ابدأ تجربة مجانية لمدة أسبوعين"
 
-#. Setup wallet
-msgctxt "start_earning"
-msgid "To start earning, connect your cryptocurrency wallet to URnetwork or set one up with Circle."
-msgstr "للبدء في الربح، اربط محفظة العملات المشفرة الخاصة بك بـ URnetwork أو قم بإعداد واحدة باستخدام Circle."
-
 #. Guest mode overlay
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
@@ -4459,11 +4175,6 @@ msgstr "الخطوة 1"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "الخطوة2"
-
-#. Suffix on a Bittensor (TAO) wallet row: the wallet is recorded but cannot receive payouts yet.
-msgctxt "stored_for_future_use"
-msgid "stored for future use, no payouts yet"
-msgstr "مخزنة للاستخدام المستقبلي، لا توجد مدفوعات بعد"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
@@ -4580,11 +4291,6 @@ msgctxt "there_was_an_error_validating_your_auth_code"
 msgid "There was an error validating your auth code. Please try again or generate a new one"
 msgstr "حدث خطأ أثناء التحقق من رمز المصادقة الخاص بك. يرجى المحاولة مرة أخرى أو إنشاء رمز جديد."
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "these_wallets_are_not_affiliated_or_controlled"
-msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
-msgstr "هذه المحافظ غير مرتبطة أو متحكم بها من قبل URnetwork. سنقوم بإرسال الأرباح إلى المحفظة المتصلة."
-
 #. A warning message displayed in the seedphrase display view.
 msgctxt "this_is_the_only_time_you_ll"
 msgid "⚠️ This is the ONLY time you'll see this."
@@ -4609,11 +4315,6 @@ msgctxt "title_login"
 msgid "Login"
 msgstr "تسجيل الدخول"
 
-#. Used in Main/Account/Wallets/EmptyWallets/EmptyWalletsView.swift.
-msgctxt "to_start_earning_connect_your_solana_wallet_to"
-msgid "To start earning, connect your Solana wallet to URnetwork."
-msgstr "للبدء في الكسب، قم بربط محفظة Solana الخاصة بك مع URnetwork."
-
 #. Locations List
 msgctxt "top_matches"
 msgid "Top Matches"
@@ -4628,11 +4329,6 @@ msgstr "إجمالي نقاط الحساب"
 msgctxt "total_clients"
 msgid "Total Clients"
 msgstr "إجمالي العملاء"
-
-#. Wallets Screen
-msgctxt "total_payouts"
-msgid "total payouts"
-msgstr "إجمالي المدفوعات"
 
 #. Call to action
 msgctxt "total_referral_count"
@@ -4684,11 +4380,6 @@ msgstr "تمت تهيئة عملية التحويل الخاصة بك وسيتم
 msgctxt "trusted_by_over_100_000_private_networks"
 msgid "Trusted by over 100,000 private networks"
 msgstr "موثوق به من قبل أكثر من 100,000 شبكة خاصة"
-
-#. Call to action
-msgctxt "trusted_by_private_networks"
-msgid "Trusted by over {} private networks"
-msgstr "موثوق به من قبل أكثر من {} شبكة خاصة"
 
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "try_again"
@@ -4744,11 +4435,6 @@ msgstr "ستفتح سرعات أعلى وستحصل على أولوية الوص
 msgctxt "unlock_supporter_tooltip"
 msgid "Unlock even faster speeds and first dibs on new features."
 msgstr "افتح سرعات أعلى واحصل على أولوية الوصول إلى الميزات الجديدة."
-
-#. Wallet Screen
-msgctxt "unpaid_data_provided"
-msgid "Unpaid data provided"
-msgstr "تم توفير بيانات غير مدفوعة"
 
 #. Call to action
 msgctxt "unstable_providers_warning"
@@ -4839,14 +4525,6 @@ msgstr "URnetwork VPN غير متصل"
 msgctxt "urnetwork_vpn_started"
 msgid "URnetwork VPN started"
 msgstr "تم تشغيل URnetwork VPN"
-
-msgctxt "usdc_addresses_on_solana_are_currently_supported"
-msgid "USDC addresses on Solana are currently supported"
-msgstr "حاليًا يتم دعم عناوين USDC على Solana"
-
-msgctxt "usdc_wallet_address"
-msgid "USDC wallet address"
-msgstr "عنوان محفظة USDC"
 
 #. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
 msgctxt "use_most_stable_provider"
@@ -4977,21 +4655,6 @@ msgctxt "wallet"
 msgid "Wallet"
 msgstr "المحفظة"
 
-#. Call to action
-msgctxt "wallet_address"
-msgid "Wallet Address"
-msgstr "عنوان المحفظة"
-
-#. Wallets Screen
-msgctxt "wallet_address_label"
-msgid "Wallet address"
-msgstr "عنوان المحفظة"
-
-#. Wallets Screen
-msgctxt "wallet_address_placeholder"
-msgid "Copy and paste here"
-msgstr "انسخ والصق هنا"
-
 #. Error shown when connecting an external wallet to the account fails.
 msgctxt "wallet_connect_failed"
 msgid "Failed to connect the wallet."
@@ -5007,14 +4670,6 @@ msgctxt "wallet_needs_network"
 msgid "This wallet isn't linked to a network yet. Pick a network name to create one."
 msgstr "هذه المحفظة غير مرتبطة بشبكة بعد. اختر اسمًا للشبكة لإنشاء واحدة."
 
-msgctxt "wallet_provider"
-msgid "{} Wallet"
-msgstr "محفظة {}"
-
-msgctxt "wallet_provider_lower"
-msgid "{} wallet"
-msgstr "محفظة {}"
-
 #. Error shown when signing in with a wallet fails.
 msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
@@ -5024,11 +4679,6 @@ msgstr "فشل تسجيل الدخول بالمحفظة"
 msgctxt "wallet_sign_in_method_added"
 msgid "Wallet sign-in method added"
 msgstr "تمت إضافة طريقة تسجيل الدخول عبر المحفظة"
-
-#. Wallets Screen
-msgctxt "wallets"
-msgid "Wallets"
-msgstr "محافظ"
 
 #. Call to action
 msgctxt "welcome_to_urnetwork"

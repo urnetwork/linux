@@ -54,11 +54,6 @@ msgctxt "account_needs_verification"
 msgid "This account needs verification. Check your email."
 msgstr "Tài khoản này cần được xác minh. Hãy kiểm tra email của bạn."
 
-#. Call to action
-msgctxt "account_points"
-msgid "Account points"
-msgstr "Điểm tài khoản"
-
 #. A heading for the list of current block actions.
 msgctxt "activity"
 msgid "Activity"
@@ -97,11 +92,6 @@ msgstr "Thêm phương thức đăng nhập"
 msgctxt "add_sign_in_method_2"
 msgid "Add Sign-In Method"
 msgstr "Thêm phương thức đăng nhập"
-
-#. Wallets Screen
-msgctxt "add_wallet"
-msgid "Add wallet"
-msgstr "Thêm ví"
 
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
@@ -251,11 +241,6 @@ msgstr "Bạn có chắc chắn muốn xóa tài khoản của mình không?"
 msgctxt "are_you_sure_you_want_to_remove"
 msgid "Are you sure you want to remove {} as a sign-in method?"
 msgstr "Bạn có chắc muốn xóa {} khỏi các phương thức đăng nhập?"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "are_you_sure_you_want_to_remove_this_wallet"
-msgid "Are you sure you want to remove this wallet?"
-msgstr "Bạn có chắc chắn muốn xóa ví này không?"
 
 #. Call to action
 msgctxt "auth_code"
@@ -417,11 +402,6 @@ msgctxt "bittensor_sign_in"
 msgid "Sign in with Bittensor"
 msgstr "Đăng nhập bằng Bittensor"
 
-#. Call to action
-msgctxt "bittensor_wallet_future_use"
-msgid "Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Ví Bittensor được lưu để dùng trong tương lai và chưa thể nhận thanh toán."
-
 #. dns settings
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
@@ -467,11 +447,6 @@ msgctxt "boost_bandwidth_details"
 msgid "You get free data every month, and can earn more by referring friends."
 msgstr "Bạn nhận dữ liệu miễn phí mỗi tháng và có thể kiếm thêm bằng cách giới thiệu bạn bè."
 
-#. Call to action
-msgctxt "boost_bandwidth_title"
-msgid "Boost your bandwidth"
-msgstr "Tăng băng thông của bạn"
-
 #. A title for the introductory usage bar.
 msgctxt "boost_your_bandwidth"
 msgid "Boost Your Bandwidth"
@@ -511,11 +486,6 @@ msgstr "Bỏ qua VPN"
 msgctxt "cancel"
 msgid "Cancel"
 msgstr "Hủy"
-
-#. Wallet Screen
-msgctxt "chains_supported"
-msgid "Solana and Polygon wallets are currently supported"
-msgstr "Hiện hỗ trợ ví Solana và Polygon"
 
 #. Call to action
 msgctxt "change"
@@ -571,21 +541,6 @@ msgstr "Đang kiểm tra giao dịch Solana"
 msgctxt "checkout_opened_in_browser"
 msgid "Complete your purchase in the browser. Your plan updates here automatically once payment is confirmed."
 msgstr "Hoàn tất giao dịch mua trong trình duyệt. Kế hoạch của bạn sẽ tự động cập nhật tại đây sau khi thanh toán được xác nhận."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_fee_coverage"
-msgid "URnetwork covers your transfer fees."
-msgstr "URnetwork chi trả phí chuyển khoản cho bạn."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_header"
-msgid "Transfer to external wallet"
-msgstr "Chuyển đến ví bên ngoài"
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_topbar_title"
-msgid "Transfer USDC"
-msgstr "Chuyển USDC"
 
 #. Provider list group title for cities
 msgctxt "cities"
@@ -672,11 +627,6 @@ msgctxt "companion"
 msgid "Companion"
 msgstr "Đối tác"
 
-#. Used in Main/Account/Settings/SettingsView.swift.
-msgctxt "confirm_seeker_token"
-msgid "Confirm Seeker Token"
-msgstr "Xác nhận Token Seeker"
-
 #. Button text to connect to URnetwork VPN
 msgctxt "connect"
 msgid "Connect"
@@ -692,35 +642,15 @@ msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
 msgstr "Kết nối ví"
 
-#. Used in Main/Account/Settings/SettingsForm-iOS.swift.
-msgctxt "connect_a_wallet_with_the_seeker_pre_order_token"
-msgid "Connect a wallet with the Seeker Pre-Order Token"
-msgstr "Kết nối ví với Mã thông báo Đặt hàng trước Seeker"
-
 #. Call to action
 msgctxt "connect_and_open"
 msgid "Connect and open link"
 msgstr "Kết nối và mở liên kết"
 
-#. Wallets Screen
-msgctxt "connect_external_wallet"
-msgid "Connect external wallet"
-msgstr "Kết nối ví"
-
-#. Wallets Screen
-msgctxt "connect_external_wallet_supported_chains"
-msgid "USDC addresses on Solana and Polygon are currently supported."
-msgstr "Hiện hỗ trợ địa chỉ USDC trên Solana và Polygon."
-
 #. A label displayed above the options for connecting to a tunnel.
 msgctxt "connect_options"
 msgid "Connect options"
 msgstr "Tùy chọn kết nối"
-
-#. Setup Wallet
-msgctxt "connect_saga_wallet"
-msgid "Connect Saga wallet"
-msgstr "Kết nối ví Saga"
 
 #. Call to action
 msgctxt "connect_seeker_wallet"
@@ -736,11 +666,6 @@ msgstr "Kết nối đến {}"
 msgctxt "connect_urnetwork_vpn"
 msgid "Connect URnetwork VPN"
 msgstr "Kết nối URnetwork VPN"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "connect_wallet"
-msgid "Connect Wallet"
-msgstr "Kết nối ví"
 
 #. Used in Main/Connect/ConnectButton/StatusIndicator/ConnectStatusIndicator.swift.
 msgctxt "connected"
@@ -984,23 +909,8 @@ msgctxt "date_payout"
 msgid "{} Payout"
 msgstr "Thanh toán {}"
 
-#. Call to action
-msgctxt "default_bandwidth_earn_more_by"
-msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
-msgstr "Mặc định bạn nhận được {} GiB/tháng. Đây là cách bạn có thể kiếm thêm băng thông:"
-
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
 msgctxt "default_option"
-msgid "Default"
-msgstr "Mặc định"
-
-#. Used in Shared/Views/PayoutWalletTag.swift.
-msgctxt "default_txt"
-msgid "DEFAULT"
-msgstr "MẶC ĐỊNH"
-
-#. Call to action
-msgctxt "default_wallet"
 msgid "Default"
 msgstr "Mặc định"
 
@@ -1160,11 +1070,6 @@ msgid "Don't see it?"
 msgstr "Không thấy?"
 
 #. Call to action
-msgctxt "earn_more_bullet_refer"
-msgid "Refer a friend = +{} GiB/Month"
-msgstr "Giới thiệu bạn bè = +{} GiB/tháng"
-
-#. Call to action
 msgctxt "earn_more_bullet_stay_connected"
 msgid "Stay connected daily = Earn up to {} GiB/Day"
 msgstr "Kết nối hàng ngày = Kiếm tới {} GiB/ngày"
@@ -1178,11 +1083,6 @@ msgstr "Hệ số nhân thu nhập"
 msgctxt "earnings"
 msgid "Earnings"
 msgstr "Thu nhập"
-
-#. Call to action
-msgctxt "earnings_doubled"
-msgid "You're earning x2 points"
-msgstr "Bạn đang kiếm được điểm x2"
 
 #. device
 msgctxt "edit_device_name"
@@ -1234,15 +1134,6 @@ msgctxt "enter_a_password"
 msgid "Enter a password"
 msgstr "Nhập mật khẩu"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_a_solana_or_bittensor_wallet_address"
-msgid "Enter a Solana or Bittensor wallet address"
-msgstr "Nhập địa chỉ ví Solana hoặc Bittensor"
-
-msgctxt "enter_a_solana_usdc_wallet_address"
-msgid "Enter a Solana USDC wallet address"
-msgstr "Nhập địa chỉ ví USDC trên Solana"
-
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
@@ -1263,11 +1154,6 @@ msgctxt "enter_urnetwork"
 msgid "Enter URnetwork"
 msgstr "Vào URnetwork"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_wallet_address"
-msgid "Enter wallet address"
-msgstr "Nhập địa chỉ ví"
-
 #. Error message displayed in a snackbar when there was an error changing the network name.
 msgctxt "error_changing_network_name"
 msgid "Error changing network name"
@@ -1287,11 +1173,6 @@ msgstr "Rất tiếc, đã xảy ra lỗi khi yêu cầu hệ số nhân: {}"
 msgctxt "error_connecting_wallet"
 msgid "There was an error connecting your wallet."
 msgstr "Đã xảy ra lỗi khi kết nối ví của bạn."
-
-#. Snackbar shown when connecting a wallet fails, with the underlying error message. Used in Main/Account/Wallets/WalletsView.swift.
-msgctxt "error_connecting_wallet_with_reason"
-msgid "There was an error connecting your wallet: {}"
-msgstr "Đã xảy ra lỗi khi kết nối ví của bạn: {}"
 
 #. Snackbar shown when creating the user's network fails. Used in ContentView.swift, Main/Account/AccountRootView.swift and Main/Connect/ConnectView-iOS.swift.
 msgctxt "error_creating_network"
@@ -1327,16 +1208,6 @@ msgstr "Lỗi khi gửi liên kết đặt lại mật khẩu"
 msgctxt "error_sending_verification_code"
 msgid "There was an error sending the verification code."
 msgstr "Đã xảy ra lỗi khi gửi mã xác minh."
-
-#. Snackbar shown when setting the default payout wallet fails. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet"
-msgid "Error setting default wallet"
-msgstr "Lỗi khi đặt ví mặc định"
-
-#. Snackbar shown when setting the default payout wallet fails, with the underlying error message. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet_with_reason"
-msgid "Error setting default wallet: {}"
-msgstr "Lỗi khi đặt ví mặc định: {}"
 
 #. Snackbar shown when saving the device name fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_updating_device_name"
@@ -1851,11 +1722,6 @@ msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
 msgstr "Tỷ lệ người dùng/IP thấp nhất để truy cập nội dung"
 
-#. Wallet Screen
-msgctxt "make_default"
-msgid "Make default"
-msgstr "Đặt làm mặc định"
-
 #. Split tunnel settings: button opening the app split rules sheet.
 msgctxt "manage_apps"
 msgid "Manage apps"
@@ -2022,16 +1888,6 @@ msgid "Need more data, faster?"
 msgstr "Cần thêm dữ liệu, nhanh hơn?"
 
 #. Call to action
-msgctxt "net_points_earned"
-msgid "net points earned"
-msgstr "điểm ròng đã kiếm được"
-
-#. Used in Shared/Views/AccountPointsBreakdown.swift.
-msgctxt "net_points_earned_2"
-msgid "Net points earned"
-msgstr "Điểm ròng đã kiếm được"
-
-#. Call to action
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Mạng cung cấp (ròng)"
@@ -2125,11 +1981,6 @@ msgstr "Dùng mạng mặc định"
 msgctxt "network_create_bonus_message"
 msgid "Someone invited you to join 🥳 \nClaim your bonus by creating a network!"
 msgstr "Có người đã mời bạn tham gia 🥳 \nNhận thưởng bằng cách tạo mạng!"
-
-#. Used in Main/Account/AccountRootView.swift.
-msgctxt "network_earnings"
-msgid "Network earnings"
-msgstr "Thu nhập mạng"
 
 #. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
 msgctxt "network_name_changed_to_n"
@@ -2268,11 +2119,6 @@ msgctxt "no_open_contracts"
 msgid "No open contracts"
 msgstr "Không có hợp đồng đang mở"
 
-#. Wallet Screen
-msgctxt "no_payouts_found"
-msgid "No payouts found for this wallet"
-msgstr "Không tìm thấy khoản thanh toán nào cho ví này"
-
 #. Locations List
 msgctxt "no_providers_found"
 msgid "We could not find any providers."
@@ -2358,16 +2204,6 @@ msgctxt "or"
 msgid "or"
 msgstr "hoặc"
 
-#. Separator label above the wallet sign-in buttons on the sign-in panel.
-msgctxt "or_use_a_wallet"
-msgid "Or use a wallet"
-msgstr "Hoặc dùng ví"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "other"
-msgid "Other"
-msgstr "Khác"
-
 #. Call to action
 msgctxt "participate"
 msgid "Participate"
@@ -2418,40 +2254,10 @@ msgctxt "pay_with_stripe"
 msgid "Join with Stripe"
 msgstr "Tham gia qua Stripe"
 
-#. Used in Main/Account/PayoutItem/PayoutItemView.swift.
-msgctxt "payment_pending"
-msgid "Payment Pending"
-msgstr "Thanh toán đang chờ xử lý"
-
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "payment_problem"
 msgid "Payment problem"
 msgstr "Sự cố thanh toán"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "payout"
-msgid "Payout"
-msgstr "Thanh toán"
-
-#. Snackbar shown after the payout wallet is changed. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "payout_wallet_updated"
-msgid "Payout wallet updated"
-msgstr "Đã cập nhật ví thanh toán"
-
-#. Wallet Screen
-msgctxt "payout_wallets"
-msgid "Payout Wallets"
-msgstr "Ví thanh toán"
-
-#. Call to action
-msgctxt "payouts"
-msgid "Payouts"
-msgstr "Thanh toán"
-
-#. Wallet Screen
-msgctxt "payouts_amount_threshold"
-msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
-msgstr "Thanh toán diễn ra vào mỗi Chủ Nhật lúc 00:00 UTC và yêu cầu đạt ngưỡng USDC tối thiểu."
 
 #. Post quantum identity panel: peer identity count indicator, singular.
 msgctxt "peer_count_one"
@@ -2477,11 +2283,6 @@ msgstr "Đang chờ"
 msgctxt "pending_mb_provided"
 msgid "Pending: {} MB provided"
 msgstr "Đang chờ xử lý: đã cung cấp {} MB"
-
-#. Call to action
-msgctxt "pending_payout"
-msgid "Pending payout"
-msgstr "Thanh toán đang chờ"
 
 #. Android app string: pin app.
 msgctxt "pin_app"
@@ -2538,11 +2339,6 @@ msgctxt "plus_n_more"
 msgid "+ {} more"
 msgid_plural "+ {} more"
 msgstr[0] "+ {} nữa"
-
-#. Call to action
-msgctxt "points_breakdown"
-msgid "Points breakdown"
-msgstr "Phân tích điểm"
 
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
@@ -2966,11 +2762,6 @@ msgctxt "remove_this_sign_in_method"
 msgid "Remove this sign-in method?"
 msgstr "Xóa phương thức đăng nhập này?"
 
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "remove_wallet"
-msgid "Remove wallet"
-msgstr "Xóa ví"
-
 #. Reset link sent
 msgctxt "resend_reset_link"
 msgid "Resend link"
@@ -3035,11 +2826,6 @@ msgstr "Cho phép lưu lượng cục bộ khi ngắt kết nối"
 msgctxt "rules"
 msgid "Rules"
 msgstr "Quy tắc"
-
-#. A description of the benefits of using a Seeker Token.
-msgctxt "s_2x_your_free_and_referral_data"
-msgid "2x your free and referral data"
-msgstr "Gấp 2 lần dữ liệu miễn phí và dữ liệu giới thiệu"
 
 #. Profile
 msgctxt "save"
@@ -3162,11 +2948,6 @@ msgid "Sent! Thanks for your feedback."
 msgstr "Đã gửi! Cảm ơn phản hồi của bạn."
 
 #. Account Screen
-msgctxt "set_up_wallet"
-msgid "Set up wallet"
-msgstr "Thiết lập ví"
-
-#. Account Screen
 msgctxt "settings"
 msgid "Settings"
 msgstr "Cài đặt"
@@ -3190,11 +2971,6 @@ msgstr "Chia sẻ nhật ký"
 msgctxt "share_urnetwork"
 msgid "Share URnetwork"
 msgstr "Chia sẻ URnetwork"
-
-#. Setup wallet
-msgctxt "share_with_others"
-msgid "You share with others, we share with you. Earn a share of revenue when you provide data to others in the network."
-msgstr "Bạn chia sẻ với người khác, chúng tôi chia sẻ với bạn. Kiếm được phần doanh thu khi bạn cung cấp dữ liệu cho người khác trong mạng."
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show"
@@ -3465,19 +3241,9 @@ msgid "Your Pro subscription is billed through Stripe. Update your payment detai
 msgstr "Gói đăng ký Pro của bạn được thanh toán qua Stripe. Cập nhật thông tin thanh toán hoặc hủy bất cứ lúc nào ở bên dưới."
 
 #. Call to action
-msgctxt "solana_payment_insufficient_funds_warning"
-msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
-msgstr "Vui lòng đảm bảo bạn có đủ USDC trong ví. Trong một số trường hợp, yêu cầu thanh toán sẽ thất bại nếu ví không đủ tiền."
-
-#. Call to action
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "Đăng nhập bằng Solana"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "solana_usdc_addresses_and_bittensor_tao"
-msgid "Solana USDC addresses and Bittensor (TAO) addresses are supported. Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Hỗ trợ địa chỉ USDC trên Solana và địa chỉ Bittensor (TAO). Ví Bittensor được lưu để dùng trong tương lai và chưa thể nhận thanh toán."
 
 #. Something went wrong error message
 msgctxt "something_went_wrong"
@@ -3535,11 +3301,6 @@ msgctxt "start_2_week_free_trial"
 msgid "Start 2 week free trial"
 msgstr "Bắt đầu dùng thử miễn phí 2 tuần"
 
-#. Setup wallet
-msgctxt "start_earning"
-msgid "To start earning, connect your cryptocurrency wallet to URnetwork or set one up with Circle."
-msgstr "Để bắt đầu kiếm tiền, kết nối ví tiền mã hóa của bạn với URnetwork hoặc tạo ví với Circle."
-
 #. Guest mode overlay
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
@@ -3584,11 +3345,6 @@ msgstr "Bước 1"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "Bước 2"
-
-#. Suffix on a Bittensor (TAO) wallet row: the wallet is recorded but cannot receive payouts yet.
-msgctxt "stored_for_future_use"
-msgid "stored for future use, no payouts yet"
-msgstr "được lưu để dùng sau, chưa có khoản chi trả"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
@@ -3705,11 +3461,6 @@ msgctxt "there_was_an_error_validating_your_auth_code"
 msgid "There was an error validating your auth code. Please try again or generate a new one"
 msgstr "Có lỗi khi xác thực mã của bạn. Vui lòng thử lại hoặc tạo mã mới."
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "these_wallets_are_not_affiliated_or_controlled"
-msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
-msgstr "Các ví này không liên kết hoặc được kiểm soát bởi URnetwork. Chúng tôi sẽ gửi thu nhập vào ví đã kết nối."
-
 #. A warning message displayed in the seedphrase display view.
 msgctxt "this_is_the_only_time_you_ll"
 msgid "⚠️ This is the ONLY time you'll see this."
@@ -3734,11 +3485,6 @@ msgctxt "title_login"
 msgid "Login"
 msgstr "Đăng nhập"
 
-#. Used in Main/Account/Wallets/EmptyWallets/EmptyWalletsView.swift.
-msgctxt "to_start_earning_connect_your_solana_wallet_to"
-msgid "To start earning, connect your Solana wallet to URnetwork."
-msgstr "Để bắt đầu kiếm tiền, kết nối ví Solana của bạn với URnetwork."
-
 #. Locations List
 msgctxt "top_matches"
 msgid "Top Matches"
@@ -3753,11 +3499,6 @@ msgstr "Tổng điểm tài khoản"
 msgctxt "total_clients"
 msgid "Total Clients"
 msgstr "Tổng số máy khách"
-
-#. Wallets Screen
-msgctxt "total_payouts"
-msgid "total payouts"
-msgstr "tổng thanh toán"
 
 #. Call to action
 msgctxt "total_referral_count"
@@ -3804,11 +3545,6 @@ msgstr "Lệnh chuyển của bạn đã được khởi tạo và sẽ hoàn t�
 msgctxt "trusted_by_over_100_000_private_networks"
 msgid "Trusted by over 100,000 private networks"
 msgstr "Được hơn 100.000 mạng riêng tin tưởng"
-
-#. Call to action
-msgctxt "trusted_by_private_networks"
-msgid "Trusted by over {} private networks"
-msgstr "Được hơn {} mạng riêng tin tưởng"
 
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "try_again"
@@ -3864,11 +3600,6 @@ msgstr "Bạn sẽ mở khóa tốc độ nhanh hơn và được ưu tiên tr�
 msgctxt "unlock_supporter_tooltip"
 msgid "Unlock even faster speeds and first dibs on new features."
 msgstr "Mở khóa tốc độ nhanh hơn và ưu tiên trải nghiệm các tính năng mới."
-
-#. Wallet Screen
-msgctxt "unpaid_data_provided"
-msgid "Unpaid data provided"
-msgstr "Dữ liệu đã cung cấp chưa thanh toán"
 
 #. Call to action
 msgctxt "unstable_providers_warning"
@@ -3959,14 +3690,6 @@ msgstr "URnetwork VPN đã ngắt kết nối"
 msgctxt "urnetwork_vpn_started"
 msgid "URnetwork VPN started"
 msgstr "URnetwork VPN đã khởi động"
-
-msgctxt "usdc_addresses_on_solana_are_currently_supported"
-msgid "USDC addresses on Solana are currently supported"
-msgstr "Hiện tại hỗ trợ địa chỉ USDC trên Solana"
-
-msgctxt "usdc_wallet_address"
-msgid "USDC wallet address"
-msgstr "Địa chỉ ví USDC"
 
 #. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
 msgctxt "use_most_stable_provider"
@@ -4097,21 +3820,6 @@ msgctxt "wallet"
 msgid "Wallet"
 msgstr "Ví"
 
-#. Call to action
-msgctxt "wallet_address"
-msgid "Wallet Address"
-msgstr "Địa chỉ ví"
-
-#. Wallets Screen
-msgctxt "wallet_address_label"
-msgid "Wallet address"
-msgstr "Địa chỉ ví"
-
-#. Wallets Screen
-msgctxt "wallet_address_placeholder"
-msgid "Copy and paste here"
-msgstr "Sao chép và dán vào đây"
-
 #. Error shown when connecting an external wallet to the account fails.
 msgctxt "wallet_connect_failed"
 msgid "Failed to connect the wallet."
@@ -4127,14 +3835,6 @@ msgctxt "wallet_needs_network"
 msgid "This wallet isn't linked to a network yet. Pick a network name to create one."
 msgstr "Ví này chưa được liên kết với mạng nào. Hãy chọn tên mạng để tạo một mạng mới."
 
-msgctxt "wallet_provider"
-msgid "{} Wallet"
-msgstr "Ví {}"
-
-msgctxt "wallet_provider_lower"
-msgid "{} wallet"
-msgstr "ví {}"
-
 #. Error shown when signing in with a wallet fails.
 msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
@@ -4144,11 +3844,6 @@ msgstr "Đăng nhập bằng ví thất bại"
 msgctxt "wallet_sign_in_method_added"
 msgid "Wallet sign-in method added"
 msgstr "Đã thêm phương thức đăng nhập bằng ví"
-
-#. Wallets Screen
-msgctxt "wallets"
-msgid "Wallets"
-msgstr "Ví"
 
 #. Call to action
 msgctxt "welcome_to_urnetwork"

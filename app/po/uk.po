@@ -54,11 +54,6 @@ msgctxt "account_needs_verification"
 msgid "This account needs verification. Check your email."
 msgstr "Цей обліковий запис потребує підтвердження. Перевірте свою електронну пошту."
 
-#. Call to action
-msgctxt "account_points"
-msgid "Account points"
-msgstr "Бали акаунта"
-
 #. A heading for the list of current block actions.
 msgctxt "activity"
 msgid "Activity"
@@ -97,11 +92,6 @@ msgstr "Додати спосіб входу"
 msgctxt "add_sign_in_method_2"
 msgid "Add Sign-In Method"
 msgstr "Додати спосіб входу"
-
-#. Wallets Screen
-msgctxt "add_wallet"
-msgid "Add wallet"
-msgstr "Додати гаманець"
 
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
@@ -255,11 +245,6 @@ msgstr "Ви впевнені, що хочете видалити свій об�
 msgctxt "are_you_sure_you_want_to_remove"
 msgid "Are you sure you want to remove {} as a sign-in method?"
 msgstr "Ви впевнені, що хочете видалити {} як спосіб входу?"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "are_you_sure_you_want_to_remove_this_wallet"
-msgid "Are you sure you want to remove this wallet?"
-msgstr "Ви впевнені, що хочете видалити цей гаманець?"
 
 #. Call to action
 msgctxt "auth_code"
@@ -421,11 +406,6 @@ msgctxt "bittensor_sign_in"
 msgid "Sign in with Bittensor"
 msgstr "Увійти через Bittensor"
 
-#. Call to action
-msgctxt "bittensor_wallet_future_use"
-msgid "Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Гаманці Bittensor зберігаються для майбутнього використання і поки не можуть отримувати виплати."
-
 #. dns settings
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
@@ -471,11 +451,6 @@ msgctxt "boost_bandwidth_details"
 msgid "You get free data every month, and can earn more by referring friends."
 msgstr "Щомісяця ви отримуєте безкоштовні дані та можете заробити більше, запрошуючи друзів."
 
-#. Call to action
-msgctxt "boost_bandwidth_title"
-msgid "Boost your bandwidth"
-msgstr "Збільшіть пропускну здатність"
-
 #. A title for the introductory usage bar.
 msgctxt "boost_your_bandwidth"
 msgid "Boost Your Bandwidth"
@@ -515,11 +490,6 @@ msgstr "Обійти VPN"
 msgctxt "cancel"
 msgid "Cancel"
 msgstr "Скасувати"
-
-#. Wallet Screen
-msgctxt "chains_supported"
-msgid "Solana and Polygon wallets are currently supported"
-msgstr "Наразі підтримуються гаманці Solana та Polygon"
 
 #. Call to action
 msgctxt "change"
@@ -575,21 +545,6 @@ msgstr "Перевірка транзакцій Solana"
 msgctxt "checkout_opened_in_browser"
 msgid "Complete your purchase in the browser. Your plan updates here automatically once payment is confirmed."
 msgstr "Завершіть покупку в браузері. Ваш план оновиться тут автоматично, щойно оплату буде підтверджено."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_fee_coverage"
-msgid "URnetwork covers your transfer fees."
-msgstr "URnetwork покриває ваші комісії за переказ."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_header"
-msgid "Transfer to external wallet"
-msgstr "Переказ на зовнішній гаманець"
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_topbar_title"
-msgid "Transfer USDC"
-msgstr "Переказати USDC"
 
 #. Provider list group title for cities
 msgctxt "cities"
@@ -676,11 +631,6 @@ msgctxt "companion"
 msgid "Companion"
 msgstr "Партнер"
 
-#. Used in Main/Account/Settings/SettingsView.swift.
-msgctxt "confirm_seeker_token"
-msgid "Confirm Seeker Token"
-msgstr "Підтвердити токен Seeker"
-
 #. Button text to connect to URnetwork VPN
 msgctxt "connect"
 msgid "Connect"
@@ -696,35 +646,15 @@ msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
 msgstr "Підключіть гаманець"
 
-#. Used in Main/Account/Settings/SettingsForm-iOS.swift.
-msgctxt "connect_a_wallet_with_the_seeker_pre_order_token"
-msgid "Connect a wallet with the Seeker Pre-Order Token"
-msgstr "Підключіть гаманець за допомогою токена попереднього замовлення Seeker"
-
 #. Call to action
 msgctxt "connect_and_open"
 msgid "Connect and open link"
 msgstr "Підключитися та відкрити посилання"
 
-#. Wallets Screen
-msgctxt "connect_external_wallet"
-msgid "Connect external wallet"
-msgstr "Підключити гаманець"
-
-#. Wallets Screen
-msgctxt "connect_external_wallet_supported_chains"
-msgid "USDC addresses on Solana and Polygon are currently supported."
-msgstr "Наразі підтримуються адреси USDC у мережах Solana та Polygon."
-
 #. A label displayed above the options for connecting to a tunnel.
 msgctxt "connect_options"
 msgid "Connect options"
 msgstr "Параметри підключення"
-
-#. Setup Wallet
-msgctxt "connect_saga_wallet"
-msgid "Connect Saga wallet"
-msgstr "Підключити гаманець Saga"
 
 #. Call to action
 msgctxt "connect_seeker_wallet"
@@ -740,11 +670,6 @@ msgstr "Підключитися до {}"
 msgctxt "connect_urnetwork_vpn"
 msgid "Connect URnetwork VPN"
 msgstr "Підключити URnetwork VPN"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "connect_wallet"
-msgid "Connect Wallet"
-msgstr "Підключити гаманець"
 
 #. Used in Main/Connect/ConnectButton/StatusIndicator/ConnectStatusIndicator.swift.
 msgctxt "connected"
@@ -992,23 +917,8 @@ msgctxt "date_payout"
 msgid "{} Payout"
 msgstr "Виплата {}"
 
-#. Call to action
-msgctxt "default_bandwidth_earn_more_by"
-msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
-msgstr "За замовчуванням ви отримуєте {} ГіБ/місяць. Ось як можна отримати додаткову пропускну здатність:"
-
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
 msgctxt "default_option"
-msgid "Default"
-msgstr "За замовчуванням"
-
-#. Used in Shared/Views/PayoutWalletTag.swift.
-msgctxt "default_txt"
-msgid "DEFAULT"
-msgstr "ЗА ЗАМОВЧУВАННЯМ"
-
-#. Call to action
-msgctxt "default_wallet"
 msgid "Default"
 msgstr "За замовчуванням"
 
@@ -1168,11 +1078,6 @@ msgid "Don't see it?"
 msgstr "Не бачите?"
 
 #. Call to action
-msgctxt "earn_more_bullet_refer"
-msgid "Refer a friend = +{} GiB/Month"
-msgstr "Порекомендуйте друга = +{} ГіБ/місяць"
-
-#. Call to action
 msgctxt "earn_more_bullet_stay_connected"
 msgid "Stay connected daily = Earn up to {} GiB/Day"
 msgstr "Залишайтеся на зв'язку щодня = Заробляйте до {} ГіБ/день"
@@ -1186,11 +1091,6 @@ msgstr "Множники заробітку"
 msgctxt "earnings"
 msgid "Earnings"
 msgstr "Заробіток"
-
-#. Call to action
-msgctxt "earnings_doubled"
-msgid "You're earning x2 points"
-msgstr "Ви заробляєте x2 бали"
 
 #. device
 msgctxt "edit_device_name"
@@ -1242,15 +1142,6 @@ msgctxt "enter_a_password"
 msgid "Enter a password"
 msgstr "Введіть пароль"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_a_solana_or_bittensor_wallet_address"
-msgid "Enter a Solana or Bittensor wallet address"
-msgstr "Введіть адресу гаманця Solana або Bittensor"
-
-msgctxt "enter_a_solana_usdc_wallet_address"
-msgid "Enter a Solana USDC wallet address"
-msgstr "Введіть адресу гаманця USDC на Solana"
-
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
@@ -1271,11 +1162,6 @@ msgctxt "enter_urnetwork"
 msgid "Enter URnetwork"
 msgstr "Увійти в URnetwork"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_wallet_address"
-msgid "Enter wallet address"
-msgstr "Введіть адресу гаманця"
-
 #. Error message displayed in a snackbar when there was an error changing the network name.
 msgctxt "error_changing_network_name"
 msgid "Error changing network name"
@@ -1295,11 +1181,6 @@ msgstr "На жаль, сталася помилка під час отрима�
 msgctxt "error_connecting_wallet"
 msgid "There was an error connecting your wallet."
 msgstr "Сталася помилка під час підключення гаманця."
-
-#. Snackbar shown when connecting a wallet fails, with the underlying error message. Used in Main/Account/Wallets/WalletsView.swift.
-msgctxt "error_connecting_wallet_with_reason"
-msgid "There was an error connecting your wallet: {}"
-msgstr "Сталася помилка під час підключення гаманця: {}"
 
 #. Snackbar shown when creating the user's network fails. Used in ContentView.swift, Main/Account/AccountRootView.swift and Main/Connect/ConnectView-iOS.swift.
 msgctxt "error_creating_network"
@@ -1335,16 +1216,6 @@ msgstr "Помилка під час надсилання посилання д�
 msgctxt "error_sending_verification_code"
 msgid "There was an error sending the verification code."
 msgstr "Сталася помилка під час надсилання коду підтвердження."
-
-#. Snackbar shown when setting the default payout wallet fails. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet"
-msgid "Error setting default wallet"
-msgstr "Помилка під час встановлення гаманця за замовчуванням"
-
-#. Snackbar shown when setting the default payout wallet fails, with the underlying error message. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet_with_reason"
-msgid "Error setting default wallet: {}"
-msgstr "Помилка під час встановлення гаманця за замовчуванням: {}"
 
 #. Snackbar shown when saving the device name fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_updating_device_name"
@@ -1863,11 +1734,6 @@ msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
 msgstr "Найнижче співвідношення користувачів до IP для доступу до контенту"
 
-#. Wallet Screen
-msgctxt "make_default"
-msgid "Make default"
-msgstr "Зробити за замовчуванням"
-
 #. Split tunnel settings: button opening the app split rules sheet.
 msgctxt "manage_apps"
 msgid "Manage apps"
@@ -2034,16 +1900,6 @@ msgid "Need more data, faster?"
 msgstr "Потрібно більше даних, швидше?"
 
 #. Call to action
-msgctxt "net_points_earned"
-msgid "net points earned"
-msgstr "чистих зароблених балів"
-
-#. Used in Shared/Views/AccountPointsBreakdown.swift.
-msgctxt "net_points_earned_2"
-msgid "Net points earned"
-msgstr "Чисті зароблені бали"
-
-#. Call to action
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Надано мережею (нетто)"
@@ -2137,11 +1993,6 @@ msgstr "Використовувати мережу за замовчуванн�
 msgctxt "network_create_bonus_message"
 msgid "Someone invited you to join 🥳 \nClaim your bonus by creating a network!"
 msgstr "Хтось запросив вас приєднатися 🥳 \nОтримайте свій бонус, створивши мережу!"
-
-#. Used in Main/Account/AccountRootView.swift.
-msgctxt "network_earnings"
-msgid "Network earnings"
-msgstr "Заробіток мережі"
 
 #. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
 msgctxt "network_name_changed_to_n"
@@ -2284,11 +2135,6 @@ msgctxt "no_open_contracts"
 msgid "No open contracts"
 msgstr "Немає відкритих контрактів"
 
-#. Wallet Screen
-msgctxt "no_payouts_found"
-msgid "No payouts found for this wallet"
-msgstr "Виплат для цього гаманця не знайдено"
-
 #. Locations List
 msgctxt "no_providers_found"
 msgid "We could not find any providers."
@@ -2374,16 +2220,6 @@ msgctxt "or"
 msgid "or"
 msgstr "або"
 
-#. Separator label above the wallet sign-in buttons on the sign-in panel.
-msgctxt "or_use_a_wallet"
-msgid "Or use a wallet"
-msgstr "Або скористайтеся гаманцем"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "other"
-msgid "Other"
-msgstr "Інше"
-
 #. Call to action
 msgctxt "participate"
 msgid "Participate"
@@ -2434,40 +2270,10 @@ msgctxt "pay_with_stripe"
 msgid "Join with Stripe"
 msgstr "Приєднатися через Stripe"
 
-#. Used in Main/Account/PayoutItem/PayoutItemView.swift.
-msgctxt "payment_pending"
-msgid "Payment Pending"
-msgstr "Очікується оплата"
-
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "payment_problem"
 msgid "Payment problem"
 msgstr "Проблема з оплатою"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "payout"
-msgid "Payout"
-msgstr "Виплата"
-
-#. Snackbar shown after the payout wallet is changed. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "payout_wallet_updated"
-msgid "Payout wallet updated"
-msgstr "Гаманець для виплат оновлено"
-
-#. Wallet Screen
-msgctxt "payout_wallets"
-msgid "Payout Wallets"
-msgstr "Гаманці для виплат"
-
-#. Call to action
-msgctxt "payouts"
-msgid "Payouts"
-msgstr "Виплати"
-
-#. Wallet Screen
-msgctxt "payouts_amount_threshold"
-msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
-msgstr "Виплати відбуваються щонеділі о 00:00 UTC і вимагають досягнення мінімального порогу USDC."
 
 #. Post quantum identity panel: peer identity count indicator, singular.
 msgctxt "peer_count_one"
@@ -2493,11 +2299,6 @@ msgstr "В очікуванні"
 msgctxt "pending_mb_provided"
 msgid "Pending: {} MB provided"
 msgstr "Очікується: надано {} МБ"
-
-#. Call to action
-msgctxt "pending_payout"
-msgid "Pending payout"
-msgstr "Очікувана виплата"
 
 #. Android app string: pin app.
 msgctxt "pin_app"
@@ -2556,11 +2357,6 @@ msgid_plural "+ {} more"
 msgstr[0] "+ ще {}"
 msgstr[1] "+ ще {}"
 msgstr[2] "+ ще {}"
-
-#. Call to action
-msgctxt "points_breakdown"
-msgid "Points breakdown"
-msgstr "Розподіл балів"
 
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
@@ -2994,11 +2790,6 @@ msgctxt "remove_this_sign_in_method"
 msgid "Remove this sign-in method?"
 msgstr "Видалити цей спосіб входу?"
 
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "remove_wallet"
-msgid "Remove wallet"
-msgstr "Видалити гаманець"
-
 #. Reset link sent
 msgctxt "resend_reset_link"
 msgid "Resend link"
@@ -3063,11 +2854,6 @@ msgstr "Дозволити локальний трафік, коли відкл�
 msgctxt "rules"
 msgid "Rules"
 msgstr "Правила"
-
-#. A description of the benefits of using a Seeker Token.
-msgctxt "s_2x_your_free_and_referral_data"
-msgid "2x your free and referral data"
-msgstr "Безкоштовний і реферальний трафік ×2"
 
 #. Profile
 msgctxt "save"
@@ -3190,11 +2976,6 @@ msgid "Sent! Thanks for your feedback."
 msgstr "Надіслано! Дякуємо за відгук."
 
 #. Account Screen
-msgctxt "set_up_wallet"
-msgid "Set up wallet"
-msgstr "Налаштувати гаманець"
-
-#. Account Screen
 msgctxt "settings"
 msgid "Settings"
 msgstr "Налаштування"
@@ -3218,11 +2999,6 @@ msgstr "Поділитися логами"
 msgctxt "share_urnetwork"
 msgid "Share URnetwork"
 msgstr "Поділитися URnetwork"
-
-#. Setup wallet
-msgctxt "share_with_others"
-msgid "You share with others, we share with you. Earn a share of revenue when you provide data to others in the network."
-msgstr "Ви ділитесь з іншими, ми ділимось з вами. Отримуйте частку доходу, коли надаєте дані іншим у мережі."
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show"
@@ -3493,19 +3269,9 @@ msgid "Your Pro subscription is billed through Stripe. Update your payment detai
 msgstr "Ваша підписка Pro оплачується через Stripe. Нижче ви можете будь-коли оновити платіжні дані або скасувати підписку."
 
 #. Call to action
-msgctxt "solana_payment_insufficient_funds_warning"
-msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
-msgstr "Будь ласка, переконайтеся, що у вашому гаманці достатньо коштів USDC. У деяких випадках запити на оплату не проходять, якщо в гаманці недостатньо коштів."
-
-#. Call to action
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "Увійти через Solana"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "solana_usdc_addresses_and_bittensor_tao"
-msgid "Solana USDC addresses and Bittensor (TAO) addresses are supported. Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Підтримуються адреси USDC у мережі Solana та адреси Bittensor (TAO). Гаманці Bittensor зберігаються для майбутнього використання і поки не можуть отримувати виплати."
 
 #. Something went wrong error message
 msgctxt "something_went_wrong"
@@ -3565,11 +3331,6 @@ msgctxt "start_2_week_free_trial"
 msgid "Start 2 week free trial"
 msgstr "Почати двотижневий безкоштовний пробний період"
 
-#. Setup wallet
-msgctxt "start_earning"
-msgid "To start earning, connect your cryptocurrency wallet to URnetwork or set one up with Circle."
-msgstr "Щоб почати заробляти, підключіть свій криптовалютний гаманець до URnetwork або створіть його з Circle."
-
 #. Guest mode overlay
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
@@ -3614,11 +3375,6 @@ msgstr "Крок 1"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "Крок 2"
-
-#. Suffix on a Bittensor (TAO) wallet row: the wallet is recorded but cannot receive payouts yet.
-msgctxt "stored_for_future_use"
-msgid "stored for future use, no payouts yet"
-msgstr "збережено для майбутнього використання, виплат поки немає"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
@@ -3735,11 +3491,6 @@ msgctxt "there_was_an_error_validating_your_auth_code"
 msgid "There was an error validating your auth code. Please try again or generate a new one"
 msgstr "Сталася помилка під час перевірки коду авторизації. Спробуйте ще раз або згенеруйте новий."
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "these_wallets_are_not_affiliated_or_controlled"
-msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
-msgstr "Ці гаманці не пов'язані та не контролюються URnetwork. Ми надішлемо заробіток на підключений гаманець."
-
 #. A warning message displayed in the seedphrase display view.
 msgctxt "this_is_the_only_time_you_ll"
 msgid "⚠️ This is the ONLY time you'll see this."
@@ -3764,11 +3515,6 @@ msgctxt "title_login"
 msgid "Login"
 msgstr "Вхід"
 
-#. Used in Main/Account/Wallets/EmptyWallets/EmptyWalletsView.swift.
-msgctxt "to_start_earning_connect_your_solana_wallet_to"
-msgid "To start earning, connect your Solana wallet to URnetwork."
-msgstr "Щоб почати заробляти, підключіть свій гаманець Solana до URnetwork."
-
 #. Locations List
 msgctxt "top_matches"
 msgid "Top Matches"
@@ -3783,11 +3529,6 @@ msgstr "Загальні бали облікового запису"
 msgctxt "total_clients"
 msgid "Total Clients"
 msgstr "Всього клієнтів"
-
-#. Wallets Screen
-msgctxt "total_payouts"
-msgid "total payouts"
-msgstr "всього виплат"
 
 #. Call to action
 msgctxt "total_referral_count"
@@ -3836,11 +3577,6 @@ msgstr "Ваш переказ розпочато, і він завершитьс
 msgctxt "trusted_by_over_100_000_private_networks"
 msgid "Trusted by over 100,000 private networks"
 msgstr "Довіряють понад 100 000 приватних мереж"
-
-#. Call to action
-msgctxt "trusted_by_private_networks"
-msgid "Trusted by over {} private networks"
-msgstr "Довіряють понад {} приватних мереж"
 
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "try_again"
@@ -3896,11 +3632,6 @@ msgstr "Ви отримаєте ще вищу швидкість та перши
 msgctxt "unlock_supporter_tooltip"
 msgid "Unlock even faster speeds and first dibs on new features."
 msgstr "Отримайте ще вищу швидкість та перший доступ до нових функцій."
-
-#. Wallet Screen
-msgctxt "unpaid_data_provided"
-msgid "Unpaid data provided"
-msgstr "неоплачені надані дані"
 
 #. Call to action
 msgctxt "unstable_providers_warning"
@@ -3991,14 +3722,6 @@ msgstr "URnetwork VPN відключено"
 msgctxt "urnetwork_vpn_started"
 msgid "URnetwork VPN started"
 msgstr "URnetwork VPN запущено"
-
-msgctxt "usdc_addresses_on_solana_are_currently_supported"
-msgid "USDC addresses on Solana are currently supported"
-msgstr "Адреси USDC на Solana наразі підтримуються"
-
-msgctxt "usdc_wallet_address"
-msgid "USDC wallet address"
-msgstr "Адреса гаманця USDC"
 
 #. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
 msgctxt "use_most_stable_provider"
@@ -4129,21 +3852,6 @@ msgctxt "wallet"
 msgid "Wallet"
 msgstr "Гаманець"
 
-#. Call to action
-msgctxt "wallet_address"
-msgid "Wallet Address"
-msgstr "Адреса гаманця"
-
-#. Wallets Screen
-msgctxt "wallet_address_label"
-msgid "Wallet address"
-msgstr "Адреса гаманця"
-
-#. Wallets Screen
-msgctxt "wallet_address_placeholder"
-msgid "Copy and paste here"
-msgstr "Скопіюйте та вставте сюди"
-
 #. Error shown when connecting an external wallet to the account fails.
 msgctxt "wallet_connect_failed"
 msgid "Failed to connect the wallet."
@@ -4159,14 +3867,6 @@ msgctxt "wallet_needs_network"
 msgid "This wallet isn't linked to a network yet. Pick a network name to create one."
 msgstr "Цей гаманець ще не пов'язаний із мережею. Виберіть назву мережі, щоб створити її."
 
-msgctxt "wallet_provider"
-msgid "{} Wallet"
-msgstr "Гаманець {}"
-
-msgctxt "wallet_provider_lower"
-msgid "{} wallet"
-msgstr "гаманець {}"
-
 #. Error shown when signing in with a wallet fails.
 msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
@@ -4176,11 +3876,6 @@ msgstr "Не вдалося увійти за допомогою гаманця"
 msgctxt "wallet_sign_in_method_added"
 msgid "Wallet sign-in method added"
 msgstr "Спосіб входу через гаманець додано"
-
-#. Wallets Screen
-msgctxt "wallets"
-msgid "Wallets"
-msgstr "Гаманці"
 
 #. Call to action
 msgctxt "welcome_to_urnetwork"

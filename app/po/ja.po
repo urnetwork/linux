@@ -54,11 +54,6 @@ msgctxt "account_needs_verification"
 msgid "This account needs verification. Check your email."
 msgstr "このアカウントは確認が必要です。メールを確認してください。"
 
-#. Call to action
-msgctxt "account_points"
-msgid "Account points"
-msgstr "アカウントポイント"
-
 #. A heading for the list of current block actions.
 msgctxt "activity"
 msgid "Activity"
@@ -97,11 +92,6 @@ msgstr "サインイン方法を追加"
 msgctxt "add_sign_in_method_2"
 msgid "Add Sign-In Method"
 msgstr "サインイン方法を追加"
-
-#. Wallets Screen
-msgctxt "add_wallet"
-msgid "Add wallet"
-msgstr "ウォレットを追加"
 
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
@@ -251,11 +241,6 @@ msgstr "本当にアカウントを削除しますか？"
 msgctxt "are_you_sure_you_want_to_remove"
 msgid "Are you sure you want to remove {} as a sign-in method?"
 msgstr "{} をサインイン方法から削除してもよろしいですか？"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "are_you_sure_you_want_to_remove_this_wallet"
-msgid "Are you sure you want to remove this wallet?"
-msgstr "このウォレットを削除してもよろしいですか？"
 
 #. Call to action
 msgctxt "auth_code"
@@ -417,11 +402,6 @@ msgctxt "bittensor_sign_in"
 msgid "Sign in with Bittensor"
 msgstr "Bittensorでサインイン"
 
-#. Call to action
-msgctxt "bittensor_wallet_future_use"
-msgid "Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Bittensorウォレットは将来の利用のために保存されますが、まだ支払いは受け取れません。"
-
 #. dns settings
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
@@ -467,11 +447,6 @@ msgctxt "boost_bandwidth_details"
 msgid "You get free data every month, and can earn more by referring friends."
 msgstr "ネットワークに参加し、帯域幅を提供することで報酬を得ることができます。"
 
-#. Call to action
-msgctxt "boost_bandwidth_title"
-msgid "Boost your bandwidth"
-msgstr "帯域幅を増やして、毎日もっと稼ごう"
-
 #. A title for the introductory usage bar.
 msgctxt "boost_your_bandwidth"
 msgid "Boost Your Bandwidth"
@@ -511,11 +486,6 @@ msgstr "VPNを迂回"
 msgctxt "cancel"
 msgid "Cancel"
 msgstr "キャンセル"
-
-#. Wallet Screen
-msgctxt "chains_supported"
-msgid "Solana and Polygon wallets are currently supported"
-msgstr "現在、SolanaとPolygonのウォレットがサポートされています"
 
 #. Call to action
 msgctxt "change"
@@ -571,21 +541,6 @@ msgstr "Solanaのトランザクションを確認中"
 msgctxt "checkout_opened_in_browser"
 msgid "Complete your purchase in the browser. Your plan updates here automatically once payment is confirmed."
 msgstr "ブラウザで購入を完了してください。支払いが確認されると、プランはここで自動的に更新されます。"
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_fee_coverage"
-msgid "URnetwork covers your transfer fees."
-msgstr "URnetworkが送金手数料を負担します。"
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_header"
-msgid "Transfer to external wallet"
-msgstr "外部ウォレットへ送金"
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_topbar_title"
-msgid "Transfer USDC"
-msgstr "USDC送金"
 
 #. Provider list group title for cities
 msgctxt "cities"
@@ -672,11 +627,6 @@ msgctxt "companion"
 msgid "Companion"
 msgstr "相手"
 
-#. Used in Main/Account/Settings/SettingsView.swift.
-msgctxt "confirm_seeker_token"
-msgid "Confirm Seeker Token"
-msgstr "シーカートークンを確認"
-
 #. Button text to connect to URnetwork VPN
 msgctxt "connect"
 msgid "Connect"
@@ -692,35 +642,15 @@ msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
 msgstr "ウォレットを接続"
 
-#. Used in Main/Account/Settings/SettingsForm-iOS.swift.
-msgctxt "connect_a_wallet_with_the_seeker_pre_order_token"
-msgid "Connect a wallet with the Seeker Pre-Order Token"
-msgstr "Seekerプレオーダートークンでウォレットを接続"
-
 #. Call to action
 msgctxt "connect_and_open"
 msgid "Connect and open link"
 msgstr "接続してリンクを開く"
 
-#. Wallets Screen
-msgctxt "connect_external_wallet"
-msgid "Connect external wallet"
-msgstr "外部ウォレットを接続"
-
-#. Wallets Screen
-msgctxt "connect_external_wallet_supported_chains"
-msgid "USDC addresses on Solana and Polygon are currently supported."
-msgstr "現在、SolanaとPolygonのUSDCアドレスがサポートされています。"
-
 #. A label displayed above the options for connecting to a tunnel.
 msgctxt "connect_options"
 msgid "Connect options"
 msgstr "接続オプション"
-
-#. Setup Wallet
-msgctxt "connect_saga_wallet"
-msgid "Connect Saga wallet"
-msgstr "Sagaウォレットを接続"
 
 #. Call to action
 msgctxt "connect_seeker_wallet"
@@ -736,11 +666,6 @@ msgstr "{}に接続"
 msgctxt "connect_urnetwork_vpn"
 msgid "Connect URnetwork VPN"
 msgstr "URnetwork VPNに接続"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "connect_wallet"
-msgid "Connect Wallet"
-msgstr "ウォレットを接続"
 
 #. Used in Main/Connect/ConnectButton/StatusIndicator/ConnectStatusIndicator.swift.
 msgctxt "connected"
@@ -984,23 +909,8 @@ msgctxt "date_payout"
 msgid "{} Payout"
 msgstr "{} の支払い"
 
-#. Call to action
-msgctxt "default_bandwidth_earn_more_by"
-msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
-msgstr "デフォルトでは、{} GiB/月が付与されます。追加の帯域幅を獲得する方法はこちらです："
-
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
 msgctxt "default_option"
-msgid "Default"
-msgstr "デフォルト"
-
-#. Used in Shared/Views/PayoutWalletTag.swift.
-msgctxt "default_txt"
-msgid "DEFAULT"
-msgstr "デフォルト"
-
-#. Call to action
-msgctxt "default_wallet"
 msgid "Default"
 msgstr "デフォルト"
 
@@ -1160,11 +1070,6 @@ msgid "Don't see it?"
 msgstr "メールが見つかりませんか？"
 
 #. Call to action
-msgctxt "earn_more_bullet_refer"
-msgid "Refer a friend = +{} GiB/Month"
-msgstr "友達を紹介 = +{} GiB/月"
-
-#. Call to action
 msgctxt "earn_more_bullet_stay_connected"
 msgid "Stay connected daily = Earn up to {} GiB/Day"
 msgstr "毎日接続を維持 = 最大 {} GiB/日を獲得"
@@ -1178,11 +1083,6 @@ msgstr "獲得ポイントの倍率"
 msgctxt "earnings"
 msgid "Earnings"
 msgstr "収益"
-
-#. Call to action
-msgctxt "earnings_doubled"
-msgid "You're earning x2 points"
-msgstr "あなたは x2 ポイントを獲得しています"
 
 #. device
 msgctxt "edit_device_name"
@@ -1234,15 +1134,6 @@ msgctxt "enter_a_password"
 msgid "Enter a password"
 msgstr "パスワードを入力"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_a_solana_or_bittensor_wallet_address"
-msgid "Enter a Solana or Bittensor wallet address"
-msgstr "SolanaまたはBittensorのウォレットアドレスを入力"
-
-msgctxt "enter_a_solana_usdc_wallet_address"
-msgid "Enter a Solana USDC wallet address"
-msgstr "Solana USDCウォレットアドレスを入力してください"
-
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
@@ -1263,11 +1154,6 @@ msgctxt "enter_urnetwork"
 msgid "Enter URnetwork"
 msgstr "URnetworkに入る"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_wallet_address"
-msgid "Enter wallet address"
-msgstr "ウォレットアドレスを入力"
-
 #. Error message displayed in a snackbar when there was an error changing the network name.
 msgctxt "error_changing_network_name"
 msgid "Error changing network name"
@@ -1287,11 +1173,6 @@ msgstr "申し訳ありません。乗数の受け取り中にエラーが発生
 msgctxt "error_connecting_wallet"
 msgid "There was an error connecting your wallet."
 msgstr "ウォレットの接続中にエラーが発生しました。"
-
-#. Snackbar shown when connecting a wallet fails, with the underlying error message. Used in Main/Account/Wallets/WalletsView.swift.
-msgctxt "error_connecting_wallet_with_reason"
-msgid "There was an error connecting your wallet: {}"
-msgstr "ウォレットの接続中にエラーが発生しました：{}"
 
 #. Snackbar shown when creating the user's network fails. Used in ContentView.swift, Main/Account/AccountRootView.swift and Main/Connect/ConnectView-iOS.swift.
 msgctxt "error_creating_network"
@@ -1327,16 +1208,6 @@ msgstr "パスワードリセット用リンクの送信中にエラーが発生
 msgctxt "error_sending_verification_code"
 msgid "There was an error sending the verification code."
 msgstr "確認コードの送信中にエラーが発生しました。"
-
-#. Snackbar shown when setting the default payout wallet fails. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet"
-msgid "Error setting default wallet"
-msgstr "デフォルトウォレットの設定中にエラーが発生しました"
-
-#. Snackbar shown when setting the default payout wallet fails, with the underlying error message. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet_with_reason"
-msgid "Error setting default wallet: {}"
-msgstr "デフォルトウォレットの設定中にエラーが発生しました：{}"
 
 #. Snackbar shown when saving the device name fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_updating_device_name"
@@ -1851,11 +1722,6 @@ msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
 msgstr "コンテンツにアクセスするための最も低いユーザー/IP比率"
 
-#. Wallet Screen
-msgctxt "make_default"
-msgid "Make default"
-msgstr "デフォルトに設定"
-
 #. Split tunnel settings: button opening the app split rules sheet.
 msgctxt "manage_apps"
 msgid "Manage apps"
@@ -2022,16 +1888,6 @@ msgid "Need more data, faster?"
 msgstr "より多くのデータをより速く必要ですか？"
 
 #. Call to action
-msgctxt "net_points_earned"
-msgid "net points earned"
-msgstr "純獲得ポイント"
-
-#. Used in Shared/Views/AccountPointsBreakdown.swift.
-msgctxt "net_points_earned_2"
-msgid "Net points earned"
-msgstr "獲得した純ポイント"
-
-#. Call to action
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "提供済みネット"
@@ -2125,11 +1981,6 @@ msgstr "デフォルトのネットワークを使用"
 msgctxt "network_create_bonus_message"
 msgid "Someone invited you to join 🥳 \nClaim your bonus by creating a network!"
 msgstr "誰かがあなたを招待しています 🥳\\nネットワークを作成してボーナスを獲得しましょう！"
-
-#. Used in Main/Account/AccountRootView.swift.
-msgctxt "network_earnings"
-msgid "Network earnings"
-msgstr "ネットワーク収益"
 
 #. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
 msgctxt "network_name_changed_to_n"
@@ -2268,11 +2119,6 @@ msgctxt "no_open_contracts"
 msgid "No open contracts"
 msgstr "有効な契約はありません"
 
-#. Wallet Screen
-msgctxt "no_payouts_found"
-msgid "No payouts found for this wallet"
-msgstr "このウォレットの支払いが見つかりません"
-
 #. Locations List
 msgctxt "no_providers_found"
 msgid "We could not find any providers."
@@ -2358,16 +2204,6 @@ msgctxt "or"
 msgid "or"
 msgstr "または"
 
-#. Separator label above the wallet sign-in buttons on the sign-in panel.
-msgctxt "or_use_a_wallet"
-msgid "Or use a wallet"
-msgstr "またはウォレットを使う"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "other"
-msgid "Other"
-msgstr "その他"
-
 #. Call to action
 msgctxt "participate"
 msgid "Participate"
@@ -2418,40 +2254,10 @@ msgctxt "pay_with_stripe"
 msgid "Join with Stripe"
 msgstr "Stripeで参加する"
 
-#. Used in Main/Account/PayoutItem/PayoutItemView.swift.
-msgctxt "payment_pending"
-msgid "Payment Pending"
-msgstr "支払い保留中"
-
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "payment_problem"
 msgid "Payment problem"
 msgstr "支払いの問題"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "payout"
-msgid "Payout"
-msgstr "支払い"
-
-#. Snackbar shown after the payout wallet is changed. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "payout_wallet_updated"
-msgid "Payout wallet updated"
-msgstr "支払いウォレットを更新しました"
-
-#. Wallet Screen
-msgctxt "payout_wallets"
-msgid "Payout Wallets"
-msgstr "支払いウォレット"
-
-#. Call to action
-msgctxt "payouts"
-msgid "Payouts"
-msgstr "支払い"
-
-#. Wallet Screen
-msgctxt "payouts_amount_threshold"
-msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
-msgstr "支払いは毎週日曜日の00:00 UTCに行われ、最低USDC基準を満たす必要があります。"
 
 #. Post quantum identity panel: peer identity count indicator, singular.
 msgctxt "peer_count_one"
@@ -2477,11 +2283,6 @@ msgstr "保留中"
 msgctxt "pending_mb_provided"
 msgid "Pending: {} MB provided"
 msgstr "保留中: {} MB 提供済み"
-
-#. Call to action
-msgctxt "pending_payout"
-msgid "Pending payout"
-msgstr "保留中の支払い"
 
 #. Android app string: pin app.
 msgctxt "pin_app"
@@ -2538,11 +2339,6 @@ msgctxt "plus_n_more"
 msgid "+ {} more"
 msgid_plural "+ {} more"
 msgstr[0] "+ 他{}件"
-
-#. Call to action
-msgctxt "points_breakdown"
-msgid "Points breakdown"
-msgstr "ポイントの内訳"
 
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
@@ -2966,11 +2762,6 @@ msgctxt "remove_this_sign_in_method"
 msgid "Remove this sign-in method?"
 msgstr "このサインイン方法を削除しますか？"
 
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "remove_wallet"
-msgid "Remove wallet"
-msgstr "ウォレットを削除"
-
 #. Reset link sent
 msgctxt "resend_reset_link"
 msgid "Resend link"
@@ -3035,11 +2826,6 @@ msgstr "切断時にローカルトラフィックを許可する"
 msgctxt "rules"
 msgid "Rules"
 msgstr "ルール"
-
-#. A description of the benefits of using a Seeker Token.
-msgctxt "s_2x_your_free_and_referral_data"
-msgid "2x your free and referral data"
-msgstr "無料データと紹介データが2倍"
 
 #. Profile
 msgctxt "save"
@@ -3162,11 +2948,6 @@ msgid "Sent! Thanks for your feedback."
 msgstr "送信しました！フィードバックありがとうございます。"
 
 #. Account Screen
-msgctxt "set_up_wallet"
-msgid "Set up wallet"
-msgstr "ウォレットをセットアップ"
-
-#. Account Screen
 msgctxt "settings"
 msgid "Settings"
 msgstr "設定"
@@ -3190,11 +2971,6 @@ msgstr "ログを共有"
 msgctxt "share_urnetwork"
 msgid "Share URnetwork"
 msgstr "URnetworkを共有"
-
-#. Setup wallet
-msgctxt "share_with_others"
-msgid "You share with others, we share with you. Earn a share of revenue when you provide data to others in the network."
-msgstr "あなたが他の人と共有すれば、私たちもあなたと共有します。ネットワーク内の他の人にデータを提供すると、収益の一部を獲得できます。"
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show"
@@ -3465,19 +3241,9 @@ msgid "Your Pro subscription is billed through Stripe. Update your payment detai
 msgstr "Pro サブスクリプションは Stripe 経由で請求されています。以下でいつでもお支払い情報の更新や解約ができます。"
 
 #. Call to action
-msgctxt "solana_payment_insufficient_funds_warning"
-msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
-msgstr "ウォレットに十分なUSDC資金があることを確認してください。場合によっては、ウォレットの資金が不足していると支払いが失敗することがあります。"
-
-#. Call to action
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "Solanaでサインイン"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "solana_usdc_addresses_and_bittensor_tao"
-msgid "Solana USDC addresses and Bittensor (TAO) addresses are supported. Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Solana USDCアドレスとBittensor（TAO）アドレスに対応しています。Bittensorウォレットは将来の利用のために保存されますが、まだ支払いは受け取れません。"
 
 #. Something went wrong error message
 msgctxt "something_went_wrong"
@@ -3535,11 +3301,6 @@ msgctxt "start_2_week_free_trial"
 msgid "Start 2 week free trial"
 msgstr "2週間の無料トライアルを開始"
 
-#. Setup wallet
-msgctxt "start_earning"
-msgid "To start earning, connect your cryptocurrency wallet to URnetwork or set one up with Circle."
-msgstr "収益を得始めるには、暗号通貨ウォレットをURnetworkに接続するか、Circleでセットアップしてください。"
-
 #. Guest mode overlay
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
@@ -3584,11 +3345,6 @@ msgstr "ステップ1"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "ステップ2"
-
-#. Suffix on a Bittensor (TAO) wallet row: the wallet is recorded but cannot receive payouts yet.
-msgctxt "stored_for_future_use"
-msgid "stored for future use, no payouts yet"
-msgstr "将来の利用のために保存されます（支払いはまだありません）"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
@@ -3705,11 +3461,6 @@ msgctxt "there_was_an_error_validating_your_auth_code"
 msgid "There was an error validating your auth code. Please try again or generate a new one"
 msgstr "認証コードの検証中にエラーが発生しました。もう一度お試しください、または新しいコードを生成してください。"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "these_wallets_are_not_affiliated_or_controlled"
-msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
-msgstr "これらのウォレットはURnetworkと提携しておらず、URnetworkによって管理されていません。収益は接続されたウォレットに送金されます。"
-
 #. A warning message displayed in the seedphrase display view.
 msgctxt "this_is_the_only_time_you_ll"
 msgid "⚠️ This is the ONLY time you'll see this."
@@ -3734,11 +3485,6 @@ msgctxt "title_login"
 msgid "Login"
 msgstr "ログイン"
 
-#. Used in Main/Account/Wallets/EmptyWallets/EmptyWalletsView.swift.
-msgctxt "to_start_earning_connect_your_solana_wallet_to"
-msgid "To start earning, connect your Solana wallet to URnetwork."
-msgstr "収益を得るには、SolanaウォレットをURnetworkに接続してください。"
-
 #. Locations List
 msgctxt "top_matches"
 msgid "Top Matches"
@@ -3753,11 +3499,6 @@ msgstr "アカウントの合計ポイント"
 msgctxt "total_clients"
 msgid "Total Clients"
 msgstr "クライアント合計"
-
-#. Wallets Screen
-msgctxt "total_payouts"
-msgid "total payouts"
-msgstr "総支払額"
 
 #. Call to action
 msgctxt "total_referral_count"
@@ -3804,11 +3545,6 @@ msgstr "送金が開始されました。チェーン上で取引が処理され
 msgctxt "trusted_by_over_100_000_private_networks"
 msgid "Trusted by over 100,000 private networks"
 msgstr "10万以上のプライベートネットワークに信頼されています"
-
-#. Call to action
-msgctxt "trusted_by_private_networks"
-msgid "Trusted by over {} private networks"
-msgstr "{}以上のプライベートネットワークに信頼されています"
 
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "try_again"
@@ -3864,11 +3600,6 @@ msgstr "さらに高速な速度と、強力な検閲対策や制御データな
 msgctxt "unlock_supporter_tooltip"
 msgid "Unlock even faster speeds and first dibs on new features."
 msgstr "さらに高速な速度と新機能への優先アクセスをアンロックします。"
-
-#. Wallet Screen
-msgctxt "unpaid_data_provided"
-msgid "Unpaid data provided"
-msgstr "未払いのデータが提供されました"
 
 #. Call to action
 msgctxt "unstable_providers_warning"
@@ -3959,14 +3690,6 @@ msgstr "URnetwork VPN が切断されました"
 msgctxt "urnetwork_vpn_started"
 msgid "URnetwork VPN started"
 msgstr "URnetwork VPN が起動しました"
-
-msgctxt "usdc_addresses_on_solana_are_currently_supported"
-msgid "USDC addresses on Solana are currently supported"
-msgstr "Solana上のUSDCアドレスは現在サポートされています"
-
-msgctxt "usdc_wallet_address"
-msgid "USDC wallet address"
-msgstr "USDCウォレットアドレス"
 
 #. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
 msgctxt "use_most_stable_provider"
@@ -4097,21 +3820,6 @@ msgctxt "wallet"
 msgid "Wallet"
 msgstr "ウォレット"
 
-#. Call to action
-msgctxt "wallet_address"
-msgid "Wallet Address"
-msgstr "ウォレットアドレス"
-
-#. Wallets Screen
-msgctxt "wallet_address_label"
-msgid "Wallet address"
-msgstr "ウォレットアドレス"
-
-#. Wallets Screen
-msgctxt "wallet_address_placeholder"
-msgid "Copy and paste here"
-msgstr "ここにコピーして貼り付けてください"
-
 #. Error shown when connecting an external wallet to the account fails.
 msgctxt "wallet_connect_failed"
 msgid "Failed to connect the wallet."
@@ -4127,14 +3835,6 @@ msgctxt "wallet_needs_network"
 msgid "This wallet isn't linked to a network yet. Pick a network name to create one."
 msgstr "このウォレットはまだネットワークにリンクされていません。ネットワーク名を選んで作成してください。"
 
-msgctxt "wallet_provider"
-msgid "{} Wallet"
-msgstr "{}ウォレット"
-
-msgctxt "wallet_provider_lower"
-msgid "{} wallet"
-msgstr "{}ウォレット"
-
 #. Error shown when signing in with a wallet fails.
 msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
@@ -4144,11 +3844,6 @@ msgstr "ウォレットでのサインインに失敗しました"
 msgctxt "wallet_sign_in_method_added"
 msgid "Wallet sign-in method added"
 msgstr "ウォレットのサインイン方法を追加しました"
-
-#. Wallets Screen
-msgctxt "wallets"
-msgid "Wallets"
-msgstr "ウォレット"
 
 #. Call to action
 msgctxt "welcome_to_urnetwork"

@@ -54,11 +54,6 @@ msgctxt "account_needs_verification"
 msgid "This account needs verification. Check your email."
 msgstr "Akun ini perlu diverifikasi. Periksa email Anda."
 
-#. Call to action
-msgctxt "account_points"
-msgid "Account points"
-msgstr "Poin akun"
-
 #. A heading for the list of current block actions.
 msgctxt "activity"
 msgid "Activity"
@@ -97,11 +92,6 @@ msgstr "Tambah metode masuk"
 msgctxt "add_sign_in_method_2"
 msgid "Add Sign-In Method"
 msgstr "Tambah Metode Masuk"
-
-#. Wallets Screen
-msgctxt "add_wallet"
-msgid "Add wallet"
-msgstr "Tambahkan dompet"
 
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
@@ -251,11 +241,6 @@ msgstr "Apakah Anda yakin ingin menghapus akun Anda?"
 msgctxt "are_you_sure_you_want_to_remove"
 msgid "Are you sure you want to remove {} as a sign-in method?"
 msgstr "Yakin ingin menghapus {} sebagai metode masuk?"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "are_you_sure_you_want_to_remove_this_wallet"
-msgid "Are you sure you want to remove this wallet?"
-msgstr "Apakah Anda yakin ingin menghapus dompet ini?"
 
 #. Call to action
 msgctxt "auth_code"
@@ -417,11 +402,6 @@ msgctxt "bittensor_sign_in"
 msgid "Sign in with Bittensor"
 msgstr "Masuk dengan Bittensor"
 
-#. Call to action
-msgctxt "bittensor_wallet_future_use"
-msgid "Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Dompet Bittensor disimpan untuk penggunaan mendatang dan belum bisa menerima pembayaran."
-
 #. dns settings
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
@@ -467,11 +447,6 @@ msgctxt "boost_bandwidth_details"
 msgid "You get free data every month, and can earn more by referring friends."
 msgstr "Anda mendapat data gratis setiap bulan, dan bisa mendapatkan lebih banyak dengan mereferensikan teman."
 
-#. Call to action
-msgctxt "boost_bandwidth_title"
-msgid "Boost your bandwidth"
-msgstr "Tingkatkan bandwidth Anda"
-
 #. A title for the introductory usage bar.
 msgctxt "boost_your_bandwidth"
 msgid "Boost Your Bandwidth"
@@ -511,11 +486,6 @@ msgstr "Lewati VPN"
 msgctxt "cancel"
 msgid "Cancel"
 msgstr "Batal"
-
-#. Wallet Screen
-msgctxt "chains_supported"
-msgid "Solana and Polygon wallets are currently supported"
-msgstr "Dompet Solana dan Polygon saat ini didukung"
 
 #. Call to action
 msgctxt "change"
@@ -571,21 +541,6 @@ msgstr "Memeriksa Transaksi Solana"
 msgctxt "checkout_opened_in_browser"
 msgid "Complete your purchase in the browser. Your plan updates here automatically once payment is confirmed."
 msgstr "Selesaikan pembelian Anda di browser. Paket Anda akan diperbarui di sini secara otomatis setelah pembayaran dikonfirmasi."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_fee_coverage"
-msgid "URnetwork covers your transfer fees."
-msgstr "URnetwork menanggung biaya transfer Anda."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_header"
-msgid "Transfer to external wallet"
-msgstr "Transfer ke dompet eksternal"
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_topbar_title"
-msgid "Transfer USDC"
-msgstr "Transfer USDC"
 
 #. Provider list group title for cities
 msgctxt "cities"
@@ -672,11 +627,6 @@ msgctxt "companion"
 msgid "Companion"
 msgstr "Rekan"
 
-#. Used in Main/Account/Settings/SettingsView.swift.
-msgctxt "confirm_seeker_token"
-msgid "Confirm Seeker Token"
-msgstr "Konfirmasi Token Seeker"
-
 #. Button text to connect to URnetwork VPN
 msgctxt "connect"
 msgid "Connect"
@@ -692,35 +642,15 @@ msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
 msgstr "Hubungkan dompet"
 
-#. Used in Main/Account/Settings/SettingsForm-iOS.swift.
-msgctxt "connect_a_wallet_with_the_seeker_pre_order_token"
-msgid "Connect a wallet with the Seeker Pre-Order Token"
-msgstr "Hubungkan dompet dengan Token Pra-Pemesanan Seeker"
-
 #. Call to action
 msgctxt "connect_and_open"
 msgid "Connect and open link"
 msgstr "Hubungkan dan buka tautan"
 
-#. Wallets Screen
-msgctxt "connect_external_wallet"
-msgid "Connect external wallet"
-msgstr "Hubungkan Dompet"
-
-#. Wallets Screen
-msgctxt "connect_external_wallet_supported_chains"
-msgid "USDC addresses on Solana and Polygon are currently supported."
-msgstr "Alamat USDC di Solana dan Polygon saat ini didukung."
-
 #. A label displayed above the options for connecting to a tunnel.
 msgctxt "connect_options"
 msgid "Connect options"
 msgstr "Opsi koneksi"
-
-#. Setup Wallet
-msgctxt "connect_saga_wallet"
-msgid "Connect Saga wallet"
-msgstr "Hubungkan dompet Saga"
 
 #. Call to action
 msgctxt "connect_seeker_wallet"
@@ -736,11 +666,6 @@ msgstr "Hubungkan ke {}"
 msgctxt "connect_urnetwork_vpn"
 msgid "Connect URnetwork VPN"
 msgstr "Hubungkan URnetwork VPN"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "connect_wallet"
-msgid "Connect Wallet"
-msgstr "Hubungkan Dompet"
 
 #. Used in Main/Connect/ConnectButton/StatusIndicator/ConnectStatusIndicator.swift.
 msgctxt "connected"
@@ -984,23 +909,8 @@ msgctxt "date_payout"
 msgid "{} Payout"
 msgstr "Pembayaran {}"
 
-#. Call to action
-msgctxt "default_bandwidth_earn_more_by"
-msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
-msgstr "Secara default Anda mendapatkan {} GiB/bulan. Berikut cara mendapatkan bandwidth tambahan:"
-
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
 msgctxt "default_option"
-msgid "Default"
-msgstr "Default"
-
-#. Used in Shared/Views/PayoutWalletTag.swift.
-msgctxt "default_txt"
-msgid "DEFAULT"
-msgstr "DEFAULT"
-
-#. Call to action
-msgctxt "default_wallet"
 msgid "Default"
 msgstr "Default"
 
@@ -1160,11 +1070,6 @@ msgid "Don't see it?"
 msgstr "Tidak melihatnya?"
 
 #. Call to action
-msgctxt "earn_more_bullet_refer"
-msgid "Refer a friend = +{} GiB/Month"
-msgstr "Referensikan teman = +{} GiB/bulan"
-
-#. Call to action
 msgctxt "earn_more_bullet_stay_connected"
 msgid "Stay connected daily = Earn up to {} GiB/Day"
 msgstr "Tetap terhubung setiap hari = Dapatkan hingga {} GiB/hari"
@@ -1178,11 +1083,6 @@ msgstr "Pengganda penghasilan"
 msgctxt "earnings"
 msgid "Earnings"
 msgstr "Pendapatan"
-
-#. Call to action
-msgctxt "earnings_doubled"
-msgid "You're earning x2 points"
-msgstr "Anda mendapatkan x2 poin"
 
 #. device
 msgctxt "edit_device_name"
@@ -1234,15 +1134,6 @@ msgctxt "enter_a_password"
 msgid "Enter a password"
 msgstr "Masukkan kata sandi"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_a_solana_or_bittensor_wallet_address"
-msgid "Enter a Solana or Bittensor wallet address"
-msgstr "Masukkan alamat dompet Solana atau Bittensor"
-
-msgctxt "enter_a_solana_usdc_wallet_address"
-msgid "Enter a Solana USDC wallet address"
-msgstr "Masukkan alamat dompet USDC Solana"
-
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
@@ -1263,11 +1154,6 @@ msgctxt "enter_urnetwork"
 msgid "Enter URnetwork"
 msgstr "Masuk URnetwork"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_wallet_address"
-msgid "Enter wallet address"
-msgstr "Masukkan alamat dompet"
-
 #. Error message displayed in a snackbar when there was an error changing the network name.
 msgctxt "error_changing_network_name"
 msgid "Error changing network name"
@@ -1287,11 +1173,6 @@ msgstr "Maaf, terjadi kesalahan saat mengklaim pengganda: {}"
 msgctxt "error_connecting_wallet"
 msgid "There was an error connecting your wallet."
 msgstr "Terjadi kesalahan saat menghubungkan dompet Anda."
-
-#. Snackbar shown when connecting a wallet fails, with the underlying error message. Used in Main/Account/Wallets/WalletsView.swift.
-msgctxt "error_connecting_wallet_with_reason"
-msgid "There was an error connecting your wallet: {}"
-msgstr "Terjadi kesalahan saat menghubungkan dompet Anda: {}"
 
 #. Snackbar shown when creating the user's network fails. Used in ContentView.swift, Main/Account/AccountRootView.swift and Main/Connect/ConnectView-iOS.swift.
 msgctxt "error_creating_network"
@@ -1327,16 +1208,6 @@ msgstr "Kesalahan saat mengirim tautan atur ulang kata sandi"
 msgctxt "error_sending_verification_code"
 msgid "There was an error sending the verification code."
 msgstr "Terjadi kesalahan saat mengirim kode verifikasi."
-
-#. Snackbar shown when setting the default payout wallet fails. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet"
-msgid "Error setting default wallet"
-msgstr "Kesalahan saat mengatur dompet default"
-
-#. Snackbar shown when setting the default payout wallet fails, with the underlying error message. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet_with_reason"
-msgid "Error setting default wallet: {}"
-msgstr "Kesalahan saat mengatur dompet default: {}"
 
 #. Snackbar shown when saving the device name fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_updating_device_name"
@@ -1851,11 +1722,6 @@ msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
 msgstr "Rasio pengguna/IP terendah untuk mengakses konten"
 
-#. Wallet Screen
-msgctxt "make_default"
-msgid "Make default"
-msgstr "Jadikan default"
-
 #. Split tunnel settings: button opening the app split rules sheet.
 msgctxt "manage_apps"
 msgid "Manage apps"
@@ -2022,16 +1888,6 @@ msgid "Need more data, faster?"
 msgstr "Butuh lebih banyak data, lebih cepat?"
 
 #. Call to action
-msgctxt "net_points_earned"
-msgid "net points earned"
-msgstr "poin bersih yang diperoleh"
-
-#. Used in Shared/Views/AccountPointsBreakdown.swift.
-msgctxt "net_points_earned_2"
-msgid "Net points earned"
-msgstr "Poin bersih yang diperoleh"
-
-#. Call to action
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Bersih Disediakan"
@@ -2125,11 +1981,6 @@ msgstr "Gunakan jaringan default"
 msgctxt "network_create_bonus_message"
 msgid "Someone invited you to join 🥳 \nClaim your bonus by creating a network!"
 msgstr "Seseorang mengundang Anda untuk bergabung 🥳 \nKlaim bonus Anda dengan membuat jaringan!"
-
-#. Used in Main/Account/AccountRootView.swift.
-msgctxt "network_earnings"
-msgid "Network earnings"
-msgstr "Penghasilan Jaringan"
 
 #. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
 msgctxt "network_name_changed_to_n"
@@ -2268,11 +2119,6 @@ msgctxt "no_open_contracts"
 msgid "No open contracts"
 msgstr "Tidak ada kontrak terbuka"
 
-#. Wallet Screen
-msgctxt "no_payouts_found"
-msgid "No payouts found for this wallet"
-msgstr "Tidak ada pembayaran yang ditemukan untuk dompet ini"
-
 #. Locations List
 msgctxt "no_providers_found"
 msgid "We could not find any providers."
@@ -2358,16 +2204,6 @@ msgctxt "or"
 msgid "or"
 msgstr "atau"
 
-#. Separator label above the wallet sign-in buttons on the sign-in panel.
-msgctxt "or_use_a_wallet"
-msgid "Or use a wallet"
-msgstr "Atau gunakan dompet"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "other"
-msgid "Other"
-msgstr "Lainnya"
-
 #. Call to action
 msgctxt "participate"
 msgid "Participate"
@@ -2418,40 +2254,10 @@ msgctxt "pay_with_stripe"
 msgid "Join with Stripe"
 msgstr "Bergabung dengan Stripe"
 
-#. Used in Main/Account/PayoutItem/PayoutItemView.swift.
-msgctxt "payment_pending"
-msgid "Payment Pending"
-msgstr "Pembayaran tertunda"
-
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "payment_problem"
 msgid "Payment problem"
 msgstr "Masalah pembayaran"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "payout"
-msgid "Payout"
-msgstr "Pembayaran"
-
-#. Snackbar shown after the payout wallet is changed. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "payout_wallet_updated"
-msgid "Payout wallet updated"
-msgstr "Dompet pembayaran diperbarui"
-
-#. Wallet Screen
-msgctxt "payout_wallets"
-msgid "Payout Wallets"
-msgstr "Dompet Pembayaran"
-
-#. Call to action
-msgctxt "payouts"
-msgid "Payouts"
-msgstr "Pembayaran"
-
-#. Wallet Screen
-msgctxt "payouts_amount_threshold"
-msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
-msgstr "Pembayaran dilakukan setiap hari Minggu pukul 00:00 UTC dan memerlukan pencapaian ambang minimum USDC."
 
 #. Post quantum identity panel: peer identity count indicator, singular.
 msgctxt "peer_count_one"
@@ -2477,11 +2283,6 @@ msgstr "Tertunda"
 msgctxt "pending_mb_provided"
 msgid "Pending: {} MB provided"
 msgstr "Tertunda: {} MB disediakan"
-
-#. Call to action
-msgctxt "pending_payout"
-msgid "Pending payout"
-msgstr "Pembayaran tertunda"
 
 #. Android app string: pin app.
 msgctxt "pin_app"
@@ -2538,11 +2339,6 @@ msgctxt "plus_n_more"
 msgid "+ {} more"
 msgid_plural "+ {} more"
 msgstr[0] "+ {} lainnya"
-
-#. Call to action
-msgctxt "points_breakdown"
-msgid "Points breakdown"
-msgstr "Rincian poin"
 
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
@@ -2966,11 +2762,6 @@ msgctxt "remove_this_sign_in_method"
 msgid "Remove this sign-in method?"
 msgstr "Hapus metode masuk ini?"
 
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "remove_wallet"
-msgid "Remove wallet"
-msgstr "Hapus dompet"
-
 #. Reset link sent
 msgctxt "resend_reset_link"
 msgid "Resend link"
@@ -3035,11 +2826,6 @@ msgstr "Izinkan lalu lintas lokal saat terputus"
 msgctxt "rules"
 msgid "Rules"
 msgstr "Aturan"
-
-#. A description of the benefits of using a Seeker Token.
-msgctxt "s_2x_your_free_and_referral_data"
-msgid "2x your free and referral data"
-msgstr "2x data gratis dan data referensi Anda"
 
 #. Profile
 msgctxt "save"
@@ -3162,11 +2948,6 @@ msgid "Sent! Thanks for your feedback."
 msgstr "Terkirim! Terima kasih atas umpan balik Anda."
 
 #. Account Screen
-msgctxt "set_up_wallet"
-msgid "Set up wallet"
-msgstr "Siapkan dompet"
-
-#. Account Screen
 msgctxt "settings"
 msgid "Settings"
 msgstr "Pengaturan"
@@ -3190,11 +2971,6 @@ msgstr "Bagikan log"
 msgctxt "share_urnetwork"
 msgid "Share URnetwork"
 msgstr "Bagikan URnetwork"
-
-#. Setup wallet
-msgctxt "share_with_others"
-msgid "You share with others, we share with you. Earn a share of revenue when you provide data to others in the network."
-msgstr "Anda berbagi dengan orang lain, kami berbagi dengan Anda. Dapatkan bagian pendapatan saat Anda menyediakan data untuk orang lain di jaringan."
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show"
@@ -3465,19 +3241,9 @@ msgid "Your Pro subscription is billed through Stripe. Update your payment detai
 msgstr "Langganan Pro Anda ditagih melalui Stripe. Perbarui detail pembayaran atau batalkan kapan saja di bawah ini."
 
 #. Call to action
-msgctxt "solana_payment_insufficient_funds_warning"
-msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
-msgstr "Pastikan Anda memiliki dana USDC yang cukup di dompet Anda. Dalam beberapa kasus, permintaan pembayaran gagal jika dana di dompet tidak mencukupi."
-
-#. Call to action
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "Masuk dengan Solana"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "solana_usdc_addresses_and_bittensor_tao"
-msgid "Solana USDC addresses and Bittensor (TAO) addresses are supported. Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Alamat USDC Solana dan alamat Bittensor (TAO) didukung. Dompet Bittensor disimpan untuk penggunaan mendatang dan belum bisa menerima pembayaran."
 
 #. Something went wrong error message
 msgctxt "something_went_wrong"
@@ -3535,11 +3301,6 @@ msgctxt "start_2_week_free_trial"
 msgid "Start 2 week free trial"
 msgstr "Mulai uji coba gratis 2 minggu"
 
-#. Setup wallet
-msgctxt "start_earning"
-msgid "To start earning, connect your cryptocurrency wallet to URnetwork or set one up with Circle."
-msgstr "Untuk mulai menghasilkan, hubungkan dompet mata uang kripto Anda ke URnetwork atau siapkan dengan Circle."
-
 #. Guest mode overlay
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
@@ -3584,11 +3345,6 @@ msgstr "Langkah 1"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "Langkah 2"
-
-#. Suffix on a Bittensor (TAO) wallet row: the wallet is recorded but cannot receive payouts yet.
-msgctxt "stored_for_future_use"
-msgid "stored for future use, no payouts yet"
-msgstr "disimpan untuk penggunaan mendatang, belum ada pembayaran"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
@@ -3705,11 +3461,6 @@ msgctxt "there_was_an_error_validating_your_auth_code"
 msgid "There was an error validating your auth code. Please try again or generate a new one"
 msgstr "Terjadi kesalahan saat memvalidasi kode autentikasi Anda. Silakan coba lagi atau buat kode baru."
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "these_wallets_are_not_affiliated_or_controlled"
-msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
-msgstr "Dompet-dompet ini tidak berafiliasi dengan atau dikendalikan oleh URnetwork. Kami akan mengirim pendapatan ke dompet yang terhubung."
-
 #. A warning message displayed in the seedphrase display view.
 msgctxt "this_is_the_only_time_you_ll"
 msgid "⚠️ This is the ONLY time you'll see this."
@@ -3734,11 +3485,6 @@ msgctxt "title_login"
 msgid "Login"
 msgstr "Masuk"
 
-#. Used in Main/Account/Wallets/EmptyWallets/EmptyWalletsView.swift.
-msgctxt "to_start_earning_connect_your_solana_wallet_to"
-msgid "To start earning, connect your Solana wallet to URnetwork."
-msgstr "Untuk mulai menghasilkan, hubungkan dompet Solana Anda ke URnetwork."
-
 #. Locations List
 msgctxt "top_matches"
 msgid "Top Matches"
@@ -3753,11 +3499,6 @@ msgstr "Total poin akun"
 msgctxt "total_clients"
 msgid "Total Clients"
 msgstr "Total Klien"
-
-#. Wallets Screen
-msgctxt "total_payouts"
-msgid "total payouts"
-msgstr "total pembayaran"
 
 #. Call to action
 msgctxt "total_referral_count"
@@ -3804,11 +3545,6 @@ msgstr "Transfer Anda telah dimulai dan akan selesai setelah transaksi diproses 
 msgctxt "trusted_by_over_100_000_private_networks"
 msgid "Trusted by over 100,000 private networks"
 msgstr "Dipercaya oleh lebih dari 100.000 jaringan pribadi"
-
-#. Call to action
-msgctxt "trusted_by_private_networks"
-msgid "Trusted by over {} private networks"
-msgstr "Dipercaya oleh lebih dari {} jaringan pribadi"
 
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "try_again"
@@ -3864,11 +3600,6 @@ msgstr "Anda akan membuka kecepatan yang lebih cepat, dan akses pertama ke fitur
 msgctxt "unlock_supporter_tooltip"
 msgid "Unlock even faster speeds and first dibs on new features."
 msgstr "Buka kecepatan yang lebih cepat dan akses pertama ke fitur baru."
-
-#. Wallet Screen
-msgctxt "unpaid_data_provided"
-msgid "Unpaid data provided"
-msgstr "Data yang disediakan belum dibayar"
 
 #. Call to action
 msgctxt "unstable_providers_warning"
@@ -3959,14 +3690,6 @@ msgstr "URnetwork VPN terputus"
 msgctxt "urnetwork_vpn_started"
 msgid "URnetwork VPN started"
 msgstr "URnetwork VPN dimulai"
-
-msgctxt "usdc_addresses_on_solana_are_currently_supported"
-msgid "USDC addresses on Solana are currently supported"
-msgstr "Alamat USDC di Solana saat ini didukung"
-
-msgctxt "usdc_wallet_address"
-msgid "USDC wallet address"
-msgstr "Alamat dompet USDC"
 
 #. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
 msgctxt "use_most_stable_provider"
@@ -4097,21 +3820,6 @@ msgctxt "wallet"
 msgid "Wallet"
 msgstr "Dompet"
 
-#. Call to action
-msgctxt "wallet_address"
-msgid "Wallet Address"
-msgstr "Alamat dompet"
-
-#. Wallets Screen
-msgctxt "wallet_address_label"
-msgid "Wallet address"
-msgstr "Alamat dompet"
-
-#. Wallets Screen
-msgctxt "wallet_address_placeholder"
-msgid "Copy and paste here"
-msgstr "Salin dan tempel di sini"
-
 #. Error shown when connecting an external wallet to the account fails.
 msgctxt "wallet_connect_failed"
 msgid "Failed to connect the wallet."
@@ -4127,14 +3835,6 @@ msgctxt "wallet_needs_network"
 msgid "This wallet isn't linked to a network yet. Pick a network name to create one."
 msgstr "Dompet ini belum tertaut ke jaringan mana pun. Pilih nama jaringan untuk membuatnya."
 
-msgctxt "wallet_provider"
-msgid "{} Wallet"
-msgstr "Dompet {}"
-
-msgctxt "wallet_provider_lower"
-msgid "{} wallet"
-msgstr "dompet {}"
-
 #. Error shown when signing in with a wallet fails.
 msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
@@ -4144,11 +3844,6 @@ msgstr "Gagal masuk dengan dompet"
 msgctxt "wallet_sign_in_method_added"
 msgid "Wallet sign-in method added"
 msgstr "Metode masuk dompet ditambahkan"
-
-#. Wallets Screen
-msgctxt "wallets"
-msgid "Wallets"
-msgstr "Dompet"
 
 #. Call to action
 msgctxt "welcome_to_urnetwork"

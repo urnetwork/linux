@@ -59,11 +59,6 @@ msgctxt "account_needs_verification"
 msgid "This account needs verification. Check your email."
 msgstr "This account needs verification. Check your email."
 
-#. Call to action
-msgctxt "account_points"
-msgid "Account points"
-msgstr "Account points"
-
 #. A heading for the list of current block actions.
 msgctxt "activity"
 msgid "Activity"
@@ -107,11 +102,6 @@ msgstr "Add Sign-In Method"
 msgctxt "add_tao_for_gas"
 msgid "Add TAO for gas"
 msgstr "Add TAO for gas"
-
-#. Wallets Screen
-msgctxt "add_wallet"
-msgid "Add wallet"
-msgstr "Add wallet"
 
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
@@ -268,11 +258,6 @@ msgstr "Are you sure you want to delete your account?"
 msgctxt "are_you_sure_you_want_to_remove"
 msgid "Are you sure you want to remove {} as a sign-in method?"
 msgstr "Are you sure you want to remove {} as a sign-in method?"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "are_you_sure_you_want_to_remove_this_wallet"
-msgid "Are you sure you want to remove this wallet?"
-msgstr "Are you sure you want to remove this wallet?"
 
 #. Call to action
 msgctxt "auth_code"
@@ -464,11 +449,6 @@ msgctxt "bittensor_wallet"
 msgid "Bittensor wallet"
 msgstr "Bittensor wallet"
 
-#. Call to action
-msgctxt "bittensor_wallet_future_use"
-msgid "Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Bittensor wallets are stored for future use and can't receive payouts yet."
-
 #. dns settings
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
@@ -514,11 +494,6 @@ msgctxt "boost_bandwidth_details"
 msgid "You get free data every month, and can earn more by referring friends."
 msgstr "You get free data every month, and can earn more by referring friends."
 
-#. Call to action
-msgctxt "boost_bandwidth_title"
-msgid "Boost your bandwidth"
-msgstr "Boost your bandwidth"
-
 #. A title for the introductory usage bar.
 msgctxt "boost_your_bandwidth"
 msgid "Boost Your Bandwidth"
@@ -563,11 +538,6 @@ msgstr "Cancel"
 msgctxt "chain_rpc_unreachable"
 msgid "The chain RPC is unreachable. Try again."
 msgstr "The chain RPC is unreachable. Try again."
-
-#. Wallet Screen
-msgctxt "chains_supported"
-msgid "Solana and Polygon wallets are currently supported"
-msgstr "Solana and Polygon wallets are currently supported"
 
 #. Call to action
 msgctxt "change"
@@ -638,21 +608,6 @@ msgstr "The checkout view closed unexpectedly. If your payment went through, you
 msgctxt "checkout_opened_in_browser"
 msgid "Complete your purchase in the browser. Your plan updates here automatically once payment is confirmed."
 msgstr "Complete your purchase in the browser. Your plan updates here automatically once payment is confirmed."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_fee_coverage"
-msgid "URnetwork covers your transfer fees."
-msgstr "URnetwork covers your transfer fees."
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_header"
-msgid "Transfer to external wallet"
-msgstr "Transfer to external wallet"
-
-#. Circle Wallet Transfer Screen
-msgctxt "circle_transfer_topbar_title"
-msgid "Transfer USDC"
-msgstr "Transfer USDC"
 
 #. Provider list group title for cities
 msgctxt "cities"
@@ -809,11 +764,6 @@ msgctxt "companion"
 msgid "Companion"
 msgstr "Companion"
 
-#. Used in Main/Account/Settings/SettingsView.swift.
-msgctxt "confirm_seeker_token"
-msgid "Confirm Seeker Token"
-msgstr "Confirm Seeker Token"
-
 #. Button text to connect to URnetwork VPN
 msgctxt "connect"
 msgid "Connect"
@@ -829,11 +779,6 @@ msgctxt "connect_a_wallet"
 msgid "Connect a wallet"
 msgstr "Connect a wallet"
 
-#. Used in Main/Account/Settings/SettingsForm-iOS.swift.
-msgctxt "connect_a_wallet_with_the_seeker_pre_order_token"
-msgid "Connect a wallet with the Seeker Pre-Order Token"
-msgstr "Connect a wallet with the Seeker Pre-Order Token"
-
 #. Call to action
 msgctxt "connect_and_open"
 msgid "Connect and open link"
@@ -844,25 +789,10 @@ msgctxt "connect_bittensor_wallet"
 msgid "Connect Bittensor wallet"
 msgstr "Connect Bittensor wallet"
 
-#. Wallets Screen
-msgctxt "connect_external_wallet"
-msgid "Connect external wallet"
-msgstr "Connect external wallet"
-
-#. Wallets Screen
-msgctxt "connect_external_wallet_supported_chains"
-msgid "USDC addresses on Solana and Polygon are currently supported."
-msgstr "USDC addresses on Solana and Polygon are currently supported."
-
 #. A label displayed above the options for connecting to a tunnel.
 msgctxt "connect_options"
 msgid "Connect options"
 msgstr "Connect options"
-
-#. Setup Wallet
-msgctxt "connect_saga_wallet"
-msgid "Connect Saga wallet"
-msgstr "Connect Saga wallet"
 
 #. Call to action
 msgctxt "connect_seeker_wallet"
@@ -878,11 +808,6 @@ msgstr "Connect to {}"
 msgctxt "connect_urnetwork_vpn"
 msgid "Connect URnetwork VPN"
 msgstr "Connect URnetwork VPN"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "connect_wallet"
-msgid "Connect Wallet"
-msgstr "Connect Wallet"
 
 #. Error when claiming without a wallet.
 msgctxt "connect_wallet_first"
@@ -1143,11 +1068,6 @@ msgctxt "date_payout"
 msgid "{} Payout"
 msgstr "{} Payout"
 
-#. Call to action
-msgctxt "default_bandwidth_earn_more_by"
-msgid "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
-msgstr "By default, you get {} GiB/month. Here's how you can earn extra bandwidth:"
-
 #. Onboarding data page: the daily free allowance, formatted from the server's balance (pro.yml free.data per data_period).
 msgctxt "default_daily_data"
 msgid "By default, you get {} every day."
@@ -1155,16 +1075,6 @@ msgstr "By default, you get {} every day."
 
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
 msgctxt "default_option"
-msgid "Default"
-msgstr "Default"
-
-#. Used in Shared/Views/PayoutWalletTag.swift.
-msgctxt "default_txt"
-msgid "DEFAULT"
-msgstr "DEFAULT"
-
-#. Call to action
-msgctxt "default_wallet"
 msgid "Default"
 msgstr "Default"
 
@@ -2091,11 +2001,6 @@ msgid "Don't see it?"
 msgstr "Don't see it?"
 
 #. Call to action
-msgctxt "earn_more_bullet_refer"
-msgid "Refer a friend = +{} GiB/Month"
-msgstr "Refer a friend = +{} GiB/Month"
-
-#. Call to action
 msgctxt "earn_more_bullet_stay_connected"
 msgid "Stay connected daily = Earn up to {} GiB/Day"
 msgstr "Stay connected daily = Earn up to {} GiB/Day"
@@ -2109,6 +2014,11 @@ msgstr "Earning multipliers"
 msgctxt "earnings"
 msgid "Earnings"
 msgstr "Earnings"
+
+#. Placeholder of the manual Bittensor address field on the Earnings page.
+msgctxt "earnings_address_placeholder"
+msgid "Enter a Bittensor address"
+msgstr "Enter a Bittensor address"
 
 #. Button on the Earnings page that starts connecting a different Bittensor wallet.
 msgctxt "earnings_change_wallet"
@@ -2130,10 +2040,10 @@ msgctxt "earnings_copy_address"
 msgid "Copy address"
 msgstr "Copy address"
 
-#. Call to action
-msgctxt "earnings_doubled"
-msgid "You're earning x2 points"
-msgstr "You're earning x2 points"
+#. Column header of the per-epoch history table: the date the epoch ended.
+msgctxt "earnings_date_column"
+msgid "Date"
+msgstr "Date"
 
 #. Line about past payouts.
 msgctxt "earnings_email_support"
@@ -2149,6 +2059,11 @@ msgstr "Epoch"
 msgctxt "earnings_gas_balance"
 msgid "Gas balance"
 msgstr "Gas balance"
+
+#. Title of the Earnings destination's third pane: own rank, multipliers and reliability.
+msgctxt "earnings_network_pane_title"
+msgid "Your network"
+msgstr "Your network"
 
 #. Column header of the per-epoch history table: points earned in the epoch.
 msgctxt "earnings_points_column"
@@ -2235,15 +2150,6 @@ msgctxt "enter_a_password"
 msgid "Enter a password"
 msgstr "Enter a password"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_a_solana_or_bittensor_wallet_address"
-msgid "Enter a Solana or Bittensor wallet address"
-msgstr "Enter a Solana or Bittensor wallet address"
-
-msgctxt "enter_a_solana_usdc_wallet_address"
-msgid "Enter a Solana USDC wallet address"
-msgstr "Enter a Solana USDC wallet address"
-
 #. Fallback link to paste an ss58 address.
 msgctxt "enter_address_manually"
 msgid "Enter address manually"
@@ -2268,11 +2174,6 @@ msgstr "Enter network referral code"
 msgctxt "enter_urnetwork"
 msgid "Enter URnetwork"
 msgstr "Enter URnetwork"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "enter_wallet_address"
-msgid "Enter wallet address"
-msgstr "Enter wallet address"
 
 #. History table column: the epoch number.
 msgctxt "epoch_column_epoch_linux"
@@ -2329,11 +2230,6 @@ msgctxt "error_connecting_wallet"
 msgid "There was an error connecting your wallet."
 msgstr "There was an error connecting your wallet."
 
-#. Snackbar shown when connecting a wallet fails, with the underlying error message. Used in Main/Account/Wallets/WalletsView.swift.
-msgctxt "error_connecting_wallet_with_reason"
-msgid "There was an error connecting your wallet: {}"
-msgstr "There was an error connecting your wallet: {}"
-
 #. Snackbar shown when creating the user's network fails. Used in ContentView.swift, Main/Account/AccountRootView.swift and Main/Connect/ConnectView-iOS.swift.
 msgctxt "error_creating_network"
 msgid "There was an error creating your network. Please try again later."
@@ -2368,16 +2264,6 @@ msgstr "Error sending password reset link"
 msgctxt "error_sending_verification_code"
 msgid "There was an error sending the verification code."
 msgstr "There was an error sending the verification code."
-
-#. Snackbar shown when setting the default payout wallet fails. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet"
-msgid "Error setting default wallet"
-msgstr "Error setting default wallet"
-
-#. Snackbar shown when setting the default payout wallet fails, with the underlying error message. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet_with_reason"
-msgid "Error setting default wallet: {}"
-msgstr "Error setting default wallet: {}"
 
 #. Snackbar shown when saving the device name fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_updating_device_name"
@@ -2997,11 +2883,6 @@ msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
 msgstr "Lowest user/IP ratio to access content"
 
-#. Wallet Screen
-msgctxt "make_default"
-msgid "Make default"
-msgstr "Make default"
-
 #. Split tunnel settings: button opening the app split rules sheet.
 msgctxt "manage_apps"
 msgid "Manage apps"
@@ -3173,16 +3054,6 @@ msgid "Need more data, faster?"
 msgstr "Need more data, faster?"
 
 #. Call to action
-msgctxt "net_points_earned"
-msgid "net points earned"
-msgstr "net points earned"
-
-#. Used in Shared/Views/AccountPointsBreakdown.swift.
-msgctxt "net_points_earned_2"
-msgid "Net points earned"
-msgstr "Net points earned"
-
-#. Call to action
 msgctxt "net_provided"
 msgid "Net Provided"
 msgstr "Net Provided"
@@ -3276,11 +3147,6 @@ msgstr "Use default network"
 msgctxt "network_create_bonus_message"
 msgid "Someone invited you to join 🥳 \nClaim your bonus by creating a network!"
 msgstr "Someone invited you to join 🥳 \nClaim your bonus by creating a network!"
-
-#. Used in Main/Account/AccountRootView.swift.
-msgctxt "network_earnings"
-msgid "Network earnings"
-msgstr "Network earnings"
 
 #. A message that is displayed in a snackbar when the user changes the network name. The argument is the new network name.
 msgctxt "network_name_changed_to_n"
@@ -3426,11 +3292,6 @@ msgctxt "no_open_contracts"
 msgid "No open contracts"
 msgstr "No open contracts"
 
-#. Wallet Screen
-msgctxt "no_payouts_found"
-msgid "No payouts found for this wallet"
-msgstr "No payouts found for this wallet"
-
 #. Empty state of the points history.
 msgctxt "no_points_yet"
 msgid "No epochs yet. Points appear after your first finalized epoch."
@@ -3531,16 +3392,6 @@ msgctxt "or"
 msgid "or"
 msgstr "or"
 
-#. Separator label above the wallet sign-in buttons on the sign-in panel.
-msgctxt "or_use_a_wallet"
-msgid "Or use a wallet"
-msgstr "Or use a wallet"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "other"
-msgid "Other"
-msgstr "Other"
-
 #. The one USDC mention: the Solana subscription payment note.
 msgctxt "paid_in_usdc_on_solana"
 msgid "Paid in USDC on Solana."
@@ -3611,11 +3462,6 @@ msgctxt "payment_not_completed"
 msgid "Your payment could not be completed."
 msgstr "Your payment could not be completed."
 
-#. Used in Main/Account/PayoutItem/PayoutItemView.swift.
-msgctxt "payment_pending"
-msgid "Payment Pending"
-msgstr "Payment Pending"
-
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "payment_problem"
 msgid "Payment problem"
@@ -3630,31 +3476,6 @@ msgstr "Payment received."
 msgctxt "payment_received_title"
 msgid "Payment received"
 msgstr "Payment received"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "payout"
-msgid "Payout"
-msgstr "Payout"
-
-#. Snackbar shown after the payout wallet is changed. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "payout_wallet_updated"
-msgid "Payout wallet updated"
-msgstr "Payout wallet updated"
-
-#. Wallet Screen
-msgctxt "payout_wallets"
-msgid "Payout Wallets"
-msgstr "Payout Wallets"
-
-#. Call to action
-msgctxt "payouts"
-msgid "Payouts"
-msgstr "Payouts"
-
-#. Wallet Screen
-msgctxt "payouts_amount_threshold"
-msgid "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
-msgstr "Payouts occur every Sunday at 00:00 UTC, and require meeting a minimum USDC threshold."
 
 #. Post quantum identity panel: peer identity count indicator, singular.
 msgctxt "peer_count_one"
@@ -3680,11 +3501,6 @@ msgstr "Pending"
 msgctxt "pending_mb_provided"
 msgid "Pending: {} MB provided"
 msgstr "Pending: {} MB provided"
-
-#. Call to action
-msgctxt "pending_payout"
-msgid "Pending payout"
-msgstr "Pending payout"
 
 #. Android app string: pin app.
 msgctxt "pin_app"
@@ -3752,11 +3568,6 @@ msgid "+ {} more"
 msgid_plural "+ {} more"
 msgstr[0] "+ {} more"
 msgstr[1] "+ {} more"
-
-#. Call to action
-msgctxt "points_breakdown"
-msgid "Points breakdown"
-msgstr "Points breakdown"
 
 #. Headline label of the earnings screen.
 msgctxt "points_earned"
@@ -4255,11 +4066,6 @@ msgctxt "remove_this_sign_in_method"
 msgid "Remove this sign-in method?"
 msgstr "Remove this sign-in method?"
 
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "remove_wallet"
-msgid "Remove wallet"
-msgstr "Remove wallet"
-
 #. Reset link sent
 msgctxt "resend_reset_link"
 msgid "Resend link"
@@ -4344,11 +4150,6 @@ msgstr "You"
 msgctxt "rules"
 msgid "Rules"
 msgstr "Rules"
-
-#. A description of the benefits of using a Seeker Token.
-msgctxt "s_2x_your_free_and_referral_data"
-msgid "2x your free and referral data"
-msgstr "2x your free and referral data"
 
 #. Profile
 msgctxt "save"
@@ -4486,11 +4287,6 @@ msgid "Sent! Thanks for your feedback."
 msgstr "Sent! Thanks for your feedback."
 
 #. Account Screen
-msgctxt "set_up_wallet"
-msgid "Set up wallet"
-msgstr "Set up wallet"
-
-#. Account Screen
 msgctxt "settings"
 msgid "Settings"
 msgstr "Settings"
@@ -4534,11 +4330,6 @@ msgstr "Share Logs"
 msgctxt "share_urnetwork"
 msgid "Share URnetwork"
 msgstr "Share URnetwork"
-
-#. Setup wallet
-msgctxt "share_with_others"
-msgid "You share with others, we share with you. Earn a share of revenue when you provide data to others in the network."
-msgstr "You share with others, we share with you. Earn a share of revenue when you provide data to others in the network."
 
 #. Long label of the launcher shortcut that connects the VPN.
 msgctxt "shortcut_connect_long"
@@ -4653,11 +4444,6 @@ msgctxt "site_app_add"
 msgid "Add"
 msgstr "Add"
 
-#. App wallets: add wallet heading
-msgctxt "site_app_add_wallet"
-msgid "Add wallet"
-msgstr "Add wallet"
-
 #. App connect: allowed count label
 msgctxt "site_app_allowed"
 msgid "allowed"
@@ -4718,6 +4504,11 @@ msgctxt "site_app_canceled_on"
 msgid "Canceled"
 msgstr "Canceled"
 
+#. App earnings/claim: the SDK reports chain_not_configured (release constants not published)
+msgctxt "site_app_chain_not_configured"
+msgid "Settlement on the subnet is not configured yet. Points keep accruing; check back after the next release."
+msgstr "Settlement on the subnet is not configured yet. Points keep accruing; check back after the next release."
+
 #. App connect screen: change location button
 msgctxt "site_app_change"
 msgid "Change"
@@ -4732,6 +4523,26 @@ msgstr "Check my IP"
 msgctxt "site_app_cities"
 msgid "Cities"
 msgstr "Cities"
+
+#. App claim: no injected EVM wallet
+msgctxt "site_app_claim_no_evm_wallet"
+msgid "No browser wallet was found. Install an EVM wallet extension such as MetaMask and connect the key that pays gas, or claim from the URnetwork app on your device."
+msgstr "No browser wallet was found. Install an EVM wallet extension such as MetaMask and connect the key that pays gas, or claim from the URnetwork app on your device."
+
+#. App claim: empty state
+msgctxt "site_app_claim_nothing"
+msgid "Nothing to claim yet."
+msgstr "Nothing to claim yet."
+
+#. App claim: epoch status when the claim window has not opened
+msgctxt "site_app_claim_opens_soon"
+msgid "Opens soon"
+msgstr "Opens soon"
+
+#. App claim: epoch status
+msgctxt "site_app_claimable"
+msgid "Claimable"
+msgstr "Claimable"
 
 #. Reliability: clients series
 msgctxt "site_app_clients"
@@ -4777,6 +4588,11 @@ msgstr "Connecting…"
 msgctxt "site_app_connections"
 msgid "Connections"
 msgstr "Connections"
+
+#. App earnings: proceed after the new-wallet warning
+msgctxt "site_app_continue_anyway"
+msgid "Continue anyway"
+msgstr "Continue anyway"
 
 #. App connect screen: contract details section title
 msgctxt "site_app_contracts"
@@ -4903,6 +4719,16 @@ msgctxt "site_app_dns_reset"
 msgid "Reset to recommended"
 msgstr "Reset to recommended"
 
+#. App earnings: points breakdown row
+msgctxt "site_app_earn_multiplier"
+msgid "Multiplier"
+msgstr "Multiplier"
+
+#. App earnings: points breakdown row
+msgctxt "site_app_earn_reliability"
+msgid "Reliability"
+msgstr "Reliability"
+
 #. App account: network earnings card
 msgctxt "site_app_earnings"
 msgid "Network earnings"
@@ -4917,6 +4743,11 @@ msgstr "Email"
 msgctxt "site_app_enter_referral"
 msgid "Enter referral code"
 msgstr "Enter referral code"
+
+#. App claim: epoch status before finalization
+msgctxt "site_app_epoch_finalizing"
+msgid "Finalizing"
+msgstr "Finalizing"
 
 #. App settings: extension unavailable note
 msgctxt "site_app_ext_needed"
@@ -4983,6 +4814,11 @@ msgctxt "site_app_leaderboard_note"
 msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
 msgstr "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
 
+#. App earnings: the network's leaderboard rank, as in the epoch email
+msgctxt "site_app_leaderboard_rank"
+msgid "Leaderboard rank #{rank} of {total}"
+msgstr "Leaderboard rank #{rank} of {total}"
+
 #. App: loading state
 msgctxt "site_app_loading"
 msgid "Loading…"
@@ -4992,11 +4828,6 @@ msgstr "Loading…"
 msgctxt "site_app_login_methods"
 msgid "Login methods"
 msgstr "Login methods"
-
-#. App wallets: make payout wallet action
-msgctxt "site_app_make_payout_wallet"
-msgid "Make payout wallet"
-msgstr "Make payout wallet"
 
 #. App sidebar: manage subscription button (opens the Stripe billing portal)
 msgctxt "site_app_manage_subscription"
@@ -5048,11 +4879,6 @@ msgctxt "site_app_no_blocked"
 msgid "No blocked locations yet"
 msgstr "No blocked locations yet"
 
-#. App wallets: payouts empty state
-msgctxt "site_app_no_payouts"
-msgid "No payouts yet"
-msgstr "No payouts yet"
-
 #. App provider: no provider throughput
 msgctxt "site_app_no_provider_activity"
 msgid "No providing activity in this window."
@@ -5073,30 +4899,10 @@ msgctxt "site_app_no_traffic"
 msgid "No traffic yet"
 msgstr "No traffic yet"
 
-#. App wallets: empty state
-msgctxt "site_app_no_wallets"
-msgid "No wallets yet — add one to receive payouts"
-msgstr "No wallets yet — add one to receive payouts"
-
 #. App payout detail: paid time
 msgctxt "site_app_paid_on"
 msgid "Paid"
 msgstr "Paid"
-
-#. App payout detail: not found
-msgctxt "site_app_payout_not_found"
-msgid "This payout could not be found."
-msgstr "This payout could not be found."
-
-#. App wallets: payout wallet label
-msgctxt "site_app_payout_wallet"
-msgid "Payout wallet"
-msgstr "Payout wallet"
-
-#. App wallets: payouts section
-msgctxt "site_app_payouts"
-msgid "Payouts"
-msgstr "Payouts"
 
 #. App provider: peak clients metric
 msgctxt "site_app_peak_clients"
@@ -5117,6 +4923,11 @@ msgstr "Pending"
 msgctxt "site_app_plan"
 msgid "Plan"
 msgstr "Plan"
+
+#. App earnings: history column header
+msgctxt "site_app_points_col"
+msgid "Points"
+msgstr "Points"
 
 #. App leaderboard: hidden network row label
 msgctxt "site_app_private_network"
@@ -5208,6 +5019,11 @@ msgctxt "site_app_save"
 msgid "Save"
 msgstr "Save"
 
+#. App earnings/claim: the loaded wasm SDK predates the subnet exports
+msgctxt "site_app_sdk_not_ready"
+msgid "Claim data is not available in this version of the web app. Reload and try again."
+msgstr "Claim data is not available in this version of the web app. Reload and try again."
+
 #. App support: send button
 msgctxt "site_app_send"
 msgid "Send"
@@ -5227,6 +5043,11 @@ msgstr "Show my network on the leaderboard"
 msgctxt "site_app_shuffle"
 msgid "Shuffle"
 msgstr "Shuffle"
+
+#. App earnings: manual address entry button (the wallet still signs the challenge)
+msgctxt "site_app_sign_and_connect"
+msgid "Sign and connect"
+msgstr "Sign and connect"
 
 #. App settings: stay in touch section
 msgctxt "site_app_stay_in_touch"
@@ -5248,6 +5069,101 @@ msgctxt "site_app_throughput"
 msgid "Transfer"
 msgstr "Transfer"
 
+#. App top200: post a device's binding payload
+msgctxt "site_app_top200_add_signature"
+msgid "Add device"
+msgstr "Add device"
+
+#. App top200: re-check every device with the hotkey signature
+msgctxt "site_app_top200_apply_hotkey_sig"
+msgid "Apply hotkey signature"
+msgstr "Apply hotkey signature"
+
+#. App top200: unparseable paste
+msgctxt "site_app_top200_bad_signature"
+msgid "Paste the binding payload exactly as the app shows it."
+msgstr "Paste the binding payload exactly as the app shows it."
+
+#. App top200: binding not complete
+msgctxt "site_app_top200_binding_incomplete"
+msgid "Calldata appears once the device signature and the hotkey signature both verify."
+msgstr "Calldata appears once the device signature and the hotkey signature both verify."
+
+#. App top200: calldata label
+msgctxt "site_app_top200_calldata"
+msgid "Binding calldata"
+msgstr "Binding calldata"
+
+#. App top200: device row label
+msgctxt "site_app_top200_device"
+msgid "Device"
+msgstr "Device"
+
+#. App top200: signature textarea label
+msgctxt "site_app_top200_device_signature"
+msgid "Device signature"
+msgstr "Device signature"
+
+#. App top200: binding digest label
+msgctxt "site_app_top200_digest"
+msgid "Digest"
+msgstr "Digest"
+
+#. App top200: hotkey input label
+msgctxt "site_app_top200_hotkey"
+msgid "Hotkey"
+msgstr "Hotkey"
+
+#. App top200: how to produce the hotkey signature
+msgctxt "site_app_top200_hotkey_sign_hint"
+msgid "Sign each binding digest with the hotkey using your own tooling (snclaim bind-head) and paste the signature here."
+msgstr "Sign each binding digest with the hotkey using your own tooling (snclaim bind-head) and paste the signature here."
+
+#. App top200: hotkey signature input
+msgctxt "site_app_top200_hotkey_signature"
+msgid "Hotkey signature (hex)"
+msgstr "Hotkey signature (hex)"
+
+#. App top200: intro
+msgctxt "site_app_top200_intro"
+msgid "Head miners are the top {cutoff} networks by routable egress IP breadth. A head spot is paid natively by the subnet every tempo, straight to your coldkey."
+msgstr "Head miners are the top {cutoff} networks by routable egress IP breadth. A head spot is paid natively by the subnet every tempo, straight to your coldkey."
+
+#. App top200: status when not eligible
+msgctxt "site_app_top200_not_eligible"
+msgid "Not eligible yet. Your score is {score} and the eviction floor is {floor}."
+msgstr "Not eligible yet. Your score is {score} and the eviction floor is {floor}."
+
+#. App top200: progress
+msgctxt "site_app_top200_signatures_added"
+msgid "{count} devices added"
+msgstr "{count} devices added"
+
+#. App top200: step 2
+msgctxt "site_app_top200_step_bind"
+msgid "Each provider device signs its fleet binding from its app under Account › Top 200. Paste each device's binding payload here, one device at a time."
+msgstr "Each provider device signs its fleet binding from its app under Account › Top 200. Paste each device's binding payload here, one device at a time."
+
+#. App top200: step 1
+msgctxt "site_app_top200_step_register"
+msgid "Register a hotkey on subnet {netuid} with btcli, then enter it below."
+msgstr "Register a hotkey on subnet {netuid} with btcli, then enter it below."
+
+#. App top200: step 3
+msgctxt "site_app_top200_step_submit"
+msgid "Submit the binding from your own EVM wallet. URnetwork never sends transactions for you."
+msgstr "Submit the binding from your own EVM wallet. URnetwork never sends transactions for you."
+
+#. App top200: send the binding tx from the injected wallet
+msgctxt "site_app_top200_submit"
+msgid "Submit binding"
+msgstr "Submit binding"
+
+#. App top200: GET /sn/head unavailable
+msgctxt "site_app_top200_unavailable"
+msgid "Head spot status is not available right now."
+msgstr "Head spot status is not available right now."
+
 #. App account: total referrals label
 msgctxt "site_app_total_referrals"
 msgid "Total referrals"
@@ -5268,20 +5184,25 @@ msgctxt "site_app_verified"
 msgid "Verified"
 msgstr "Verified"
 
+#. App claim/top200: explorer link
+msgctxt "site_app_view_transaction"
+msgid "View transaction"
+msgstr "View transaction"
+
 #. App wallets: wallet label
 msgctxt "site_app_wallet"
 msgid "Wallet"
 msgstr "Wallet"
 
-#. App wallets: wallet address input
-msgctxt "site_app_wallet_address"
-msgid "Wallet address"
-msgstr "Wallet address"
+#. App earnings: badge next to the connected Bittensor coldkey
+msgctxt "site_app_wallet_connected"
+msgid "Connected"
+msgstr "Connected"
 
-#. App account: wallets row/screen title
-msgctxt "site_app_wallets"
-msgid "Wallets"
-msgstr "Wallets"
+#. App earnings: the bridge signed with a different account than the typed address
+msgctxt "site_app_wallet_mismatch"
+msgid "Sign with the wallet that holds this address."
+msgstr "Sign with the wallet that holds this address."
 
 #. Account panel: any-provider location option
 msgctxt "site_best_available"
@@ -5684,19 +5605,9 @@ msgid "Paying with Solana is a one-time yearly payment, with no free trial."
 msgstr "Paying with Solana is a one-time yearly payment, with no free trial."
 
 #. Call to action
-msgctxt "solana_payment_insufficient_funds_warning"
-msgid "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
-msgstr "Please make sure you have sufficient USDC funds in your wallet. In some instances, payment prompts fail if there are insufficient funds in the wallet."
-
-#. Call to action
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "Sign in with Solana"
-
-#. Used in Main/Account/Wallets/ConnectWalletSheet/EnterWalletAddress/EnterWalletAddressView.swift.
-msgctxt "solana_usdc_addresses_and_bittensor_tao"
-msgid "Solana USDC addresses and Bittensor (TAO) addresses are supported. Bittensor wallets are stored for future use and can't receive payouts yet."
-msgstr "Solana USDC addresses and Bittensor (TAO) addresses are supported. Bittensor wallets are stored for future use and can't receive payouts yet."
 
 #. Something went wrong error message
 msgctxt "something_went_wrong"
@@ -5755,11 +5666,6 @@ msgctxt "start_2_week_free_trial"
 msgid "Start 2 week free trial"
 msgstr "Start 2 week free trial"
 
-#. Setup wallet
-msgctxt "start_earning"
-msgid "To start earning, connect your cryptocurrency wallet to URnetwork or set one up with Circle."
-msgstr "To start earning, connect your cryptocurrency wallet to URnetwork or set one up with Circle."
-
 #. Guest mode overlay
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
@@ -5809,11 +5715,6 @@ msgstr "Step 1"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "Step 2"
-
-#. Suffix on a Bittensor (TAO) wallet row: the wallet is recorded but cannot receive payouts yet.
-msgctxt "stored_for_future_use"
-msgid "stored for future use, no payouts yet"
-msgstr "stored for future use, no payouts yet"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"
@@ -5955,11 +5856,6 @@ msgctxt "there_was_an_error_validating_your_auth_code"
 msgid "There was an error validating your auth code. Please try again or generate a new one"
 msgstr "There was an error validating your auth code. Please try again or generate a new one"
 
-#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
-msgctxt "these_wallets_are_not_affiliated_or_controlled"
-msgid "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
-msgstr "These wallets are not affiliated or controlled by URnetwork. We will send earnings into the connected wallet."
-
 #. A warning message displayed in the seedphrase display view.
 msgctxt "this_is_the_only_time_you_ll"
 msgid "⚠️ This is the ONLY time you'll see this."
@@ -5988,11 +5884,6 @@ msgstr "Disconnected"
 msgctxt "title_login"
 msgid "Login"
 msgstr "Login"
-
-#. Used in Main/Account/Wallets/EmptyWallets/EmptyWalletsView.swift.
-msgctxt "to_start_earning_connect_your_solana_wallet_to"
-msgid "To start earning, connect your Solana wallet to URnetwork."
-msgstr "To start earning, connect your Solana wallet to URnetwork."
 
 #. Badge text for the head mining spot.
 msgctxt "top200"
@@ -6038,11 +5929,6 @@ msgstr "Total account points"
 msgctxt "total_clients"
 msgid "Total Clients"
 msgstr "Total Clients"
-
-#. Wallets Screen
-msgctxt "total_payouts"
-msgid "total payouts"
-msgstr "total payouts"
 
 #. Call to action
 msgctxt "total_referral_count"
@@ -6161,11 +6047,6 @@ msgctxt "trusted_by_over_100_000_private_networks"
 msgid "Trusted by over 100,000 private networks"
 msgstr "Trusted by over 100,000 private networks"
 
-#. Call to action
-msgctxt "trusted_by_private_networks"
-msgid "Trusted by over {} private networks"
-msgstr "Trusted by over {} private networks"
-
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "try_again"
 msgid "Try again"
@@ -6225,11 +6106,6 @@ msgstr "You’ll unlock even faster speeds, and first dibs on new features like 
 msgctxt "unlock_supporter_tooltip"
 msgid "Unlock even faster speeds and first dibs on new features."
 msgstr "Unlock even faster speeds and first dibs on new features."
-
-#. Wallet Screen
-msgctxt "unpaid_data_provided"
-msgid "Unpaid data provided"
-msgstr "Unpaid data provided"
 
 #. Call to action
 msgctxt "unstable_providers_warning"
@@ -6320,14 +6196,6 @@ msgstr "URnetwork VPN disconnected"
 msgctxt "urnetwork_vpn_started"
 msgid "URnetwork VPN started"
 msgstr "URnetwork VPN started"
-
-msgctxt "usdc_addresses_on_solana_are_currently_supported"
-msgid "USDC addresses on Solana are currently supported"
-msgstr "USDC addresses on Solana are currently supported"
-
-msgctxt "usdc_wallet_address"
-msgid "USDC wallet address"
-msgstr "USDC wallet address"
 
 #. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
 msgctxt "use_most_stable_provider"
@@ -6467,21 +6335,6 @@ msgctxt "wallet"
 msgid "Wallet"
 msgstr "Wallet"
 
-#. Call to action
-msgctxt "wallet_address"
-msgid "Wallet Address"
-msgstr "Wallet Address"
-
-#. Wallets Screen
-msgctxt "wallet_address_label"
-msgid "Wallet address"
-msgstr "Wallet address"
-
-#. Wallets Screen
-msgctxt "wallet_address_placeholder"
-msgid "Copy and paste here"
-msgstr "Copy and paste here"
-
 #. Error when a wallet address is on the operator's ban list; the user cannot continue.
 msgctxt "wallet_blocked"
 msgid "This wallet can't be used with URnetwork."
@@ -6522,14 +6375,6 @@ msgctxt "wallet_not_retroactive"
 msgid "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not settled retroactively."
 msgstr "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not settled retroactively."
 
-msgctxt "wallet_provider"
-msgid "{} Wallet"
-msgstr "{} Wallet"
-
-msgctxt "wallet_provider_lower"
-msgid "{} wallet"
-msgstr "{} wallet"
-
 #. Error shown when signing in with a wallet fails.
 msgctxt "wallet_sign_in_failed"
 msgid "Wallet sign-in failed"
@@ -6544,11 +6389,6 @@ msgstr "Wallet sign-in method added"
 msgctxt "wallet_signature_mismatch_linux"
 msgid "The wallet that signed is not the address you entered."
 msgstr "The wallet that signed is not the address you entered."
-
-#. Wallets Screen
-msgctxt "wallets"
-msgid "Wallets"
-msgstr "Wallets"
 
 #. Body of the post-purchase screen while the confirmation poll runs (Shared/Views/PurchaseSuccessView.swift). Processing-shaped, not premium-shaped: the server learns of the purchase by webhook and has not confirmed yet.
 msgctxt "we_re_confirming_your_purchase_with_the_app_store"
