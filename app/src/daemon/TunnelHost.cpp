@@ -3,8 +3,10 @@
 
 #include <sys/stat.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <utility>
@@ -12,6 +14,7 @@
 
 #include <gio/gio.h>
 
+#include "IoLoopFd.hpp"
 #include "NetworkSpaceConfig.hpp"
 #include "daemon/DaemonLog.hpp"
 
@@ -760,7 +763,19 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       // (on shutdown) this TunnelHost, and it must never write through a
       // dangling pointer. Retirement below waits on exactly this flag.
       ioLoopFinished_ = std::make_shared<std::atomic<bool>>(false);
-      ioLoop_ = urnet::newIoLoop(*device_, tunnel_->fd(),
+      const int ioLoopFd = DuplicateIoLoopFd(tunnel_->fd());
+      if (ioLoopFd < 0) {
+        const int errorNumber = errno;
+        const std::string message =
+            "could not duplicate the tun descriptor for the SDK: " +
+            std::string(std::strerror(errorNumber));
+        PublishError(message, ctl::kCodeTunOpenFailed);
+        throw std::runtime_error(message);
+      }
+      // newIoLoop has no error return: ownership transfers during this call.
+      // Passing Tunnel::fd() itself would leave both runtimes closing one fd
+      // number and let a late IoLoop close hit an unrelated reused socket.
+      ioLoop_ = urnet::newIoLoop(*device_, ioLoopFd,
                                  [this, generation, finished = ioLoopFinished_] {
         // SDK THREAD. Publish only: the teardown (and arming the kill switch
         // on an unexpected drop) happens on the reaper, on the main loop.
@@ -961,10 +976,9 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
   //     [dns] resolvectl revert urnet0: exit 1: Failed to resolve interface
   //           "urnet0": No such device
   // The revert lived in ~Tunnel, and ~Tunnel runs at `tunnel_.reset()` below —
-  // AFTER `ioLoop_->close()`. urnet::newIoLoop was handed tunnel_->fd() (step 6
-  // of the start path), Go owns that descriptor, and a non-persistent tun
-  // disappears with its last descriptor: closing the loop destroys the link, so
-  // the revert was always addressed to a device that no longer existed. Every
+  // after `ioLoop_->close()`. Before the descriptor ownership fix, Go and C++
+  // both owned the same fd number and the asynchronous Go close could destroy
+  // the link first, so the revert addressed a device that no longer existed. Every
   // teardown left resolved's per-link override to be garbage-collected by the
   // link's disappearance instead of removed on purpose — benign on
   // systemd-resolved, NOT benign on the tier-2/3 hosts where the undo is a file

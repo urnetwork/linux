@@ -993,15 +993,11 @@ class Tunnel {
 
   // THE DNS UNDO, CALLABLE BEFORE THE LINK DIES.
   //
-  // It used to exist only inside ~Tunnel, and by the time ~Tunnel ran the tun
-  // was ALREADY GONE: TunnelHost hands tunnel_->fd() to urnet::newIoLoop, the
-  // Go loop owns that descriptor, and TunnelHost::StopInternalLocked closes the
-  // loop BEFORE it destroys this object. A non-persistent tun disappears with
-  // its last descriptor, so `resolvectl revert urnet0` was asked of a device
-  // that no longer existed and answered "No such device" on EVERY teardown in
-  // the journal. The revert was already first inside ~Tunnel — the ordering
-  // that was wrong was one level up, so the fix is an entry point the owner of
-  // the io loop can call while the link is still there.
+  // It used to exist only inside ~Tunnel. The Go IoLoop was stopped before the
+  // object was destroyed and could close its tun descriptor first, so
+  // `resolvectl revert urnet0` saw no device. The loop now owns an independent
+  // duplicate, but this early call remains the explicit ordering guarantee:
+  // DNS is restored before either owner starts closing the link.
   //
   // IDEMPOTENT, and ~Tunnel still calls it: an early call is the ordinary path,
   // the destructor call is the safety net for the throw/crash paths that never

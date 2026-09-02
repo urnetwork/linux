@@ -3598,12 +3598,11 @@ bool Tunnel::VerifyDnsStillApplied(std::string* detail) const {
 //
 // Nothing in the body below changed; what changed is WHO CAN CALL IT AND WHEN.
 // The measured defect: `resolvectl revert urnet0` failed with "Failed to
-// resolve interface urnet0: No such device" on every single teardown in the
-// journal, because TunnelHost hands tunnel_->fd() to urnet::newIoLoop and then
-// closes that io loop BEFORE it destroys this object — Go owns the descriptor,
-// a non-persistent tun dies with its last descriptor, and the link was already
-// gone by the time ~Tunnel got to speak. The revert was ALREADY the first thing
-// ~Tunnel did, so no reordering inside this file could have fixed it.
+// resolve interface urnet0: No such device" on every single teardown. The Go
+// IoLoop could close its tun descriptor before this object was destroyed, so
+// the link was already gone by the time ~Tunnel got to speak. The loop now
+// receives an independent duplicate, but the explicit early call remains the
+// guarantee that DNS restoration precedes both descriptor owners' teardown.
 //
 // It is idempotent, which is what lets TunnelHost::StopInternalLocked call it
 // early on the ordinary path while ~Tunnel keeps calling it for the paths that
