@@ -942,10 +942,24 @@ void SdkHost::SetupWalletCallbacks() {
   // Either way the wallet address is on the WalletConnect by now: solana set it
   // on the connect callback, bittensor returns it alongside the signature.
   wallet_.on_signature = [this](std::string signature) {
+    // a plain signing request (SignBittensorConnect) never authenticates: the
+    // signature goes back to the caller with the address and the message
+    std::function<void(WalletSignature)> signDone;
     bool creating = false;
     {
       std::scoped_lock lock(mutex_);
+      signDone = std::move(walletSignDone_);
+      walletSignDone_ = nullptr;
       creating = static_cast<bool>(walletCreateDone_);
+    }
+    if (signDone) {
+      WalletSignature out;
+      out.ok = true;
+      out.address = wallet_.publicKey();
+      out.signature = std::move(signature);
+      out.message = wallet_.message();
+      signDone(std::move(out));
+      return;
     }
     if (creating) {
       FinishCreateNetworkWithWallet(signature);
@@ -958,9 +972,12 @@ void SdkHost::SetupWalletCallbacks() {
   wallet_.on_error = [this](std::string err) {
     // walletAuthDone_ is set on the UI thread and consumed on wallet/SDK
     // callback threads: take it under the lock, invoke it outside
+    std::function<void(WalletSignature)> signDone;
     std::function<void(AuthResult)> done;
     {
       std::scoped_lock lock(mutex_);
+      signDone = std::move(walletSignDone_);
+      walletSignDone_ = nullptr;
       if (walletCreateDone_) {
         done = std::move(walletCreateDone_);
         pendingWalletNetworkName_.clear();
@@ -970,6 +987,12 @@ void SdkHost::SetupWalletCallbacks() {
       }
       walletAuthDone_ = nullptr;
       walletCreateDone_ = nullptr;
+    }
+    if (signDone) {
+      WalletSignature out;
+      out.error = err;
+      signDone(std::move(out));
+      return;
     }
     if (done) done({false, false, err});
   };
@@ -1033,9 +1056,12 @@ void SdkHost::RequestWalletChallenge(
 }
 
 void SdkHost::FailWalletOperation(const std::string& error) {
+  std::function<void(WalletSignature)> signDone;
   std::function<void(AuthResult)> done;
   {
     std::scoped_lock lock(mutex_);
+    signDone = std::move(walletSignDone_);
+    walletSignDone_ = nullptr;
     if (walletCreateDone_) {
       done = std::move(walletCreateDone_);
       pendingWalletNetworkName_.clear();
@@ -1046,7 +1072,37 @@ void SdkHost::FailWalletOperation(const std::string& error) {
     walletAuthDone_ = nullptr;
     walletCreateDone_ = nullptr;
   }
+  if (signDone) {
+    WalletSignature out;
+    out.error = error;
+    signDone(std::move(out));
+    return;
+  }
   if (done) done({false, false, error});
+}
+
+void SdkHost::SignBittensorConnect(const std::string& walletAddress,
+                                   std::function<void(WalletSignature)> done) {
+  {
+    std::scoped_lock lock(mutex_);
+    walletSignDone_ = std::move(done);
+  }
+  if (!api_) {
+    FailWalletOperation("no api");
+    return;
+  }
+  // the challenge is bound to the typed address when there is one, so a wallet
+  // that signs for a different account is caught by the page (address mismatch)
+  RequestWalletChallenge(urnet::TAO, walletAddress,
+                         [this](std::optional<std::string> message, std::string error) {
+    if (!message) {
+      FailWalletOperation(error.empty() ? "could not fetch wallet challenge" : error);
+      return;
+    }
+    // one hop, purpose "connect": the bridge signs and calls back on
+    // urnetwork://bittensor-sign-message with the address + signature
+    PostToMain([this, message = *message] { wallet_.SignInWithBittensor(message, "connect"); });
+  });
 }
 
 void SdkHost::FinishCreateNetworkWithWallet(const std::string& signature) {

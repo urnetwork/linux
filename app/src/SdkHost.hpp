@@ -425,6 +425,22 @@ class SdkHost {
   // blockchain urnet::TAO. Same deep-link routing as Solana (HandleDeepLink).
   void SignInWithBittensor(std::function<void(AuthResult)> done);
 
+  // The same bridge as a plain SIGNER (no sign-in): fetch a wallet challenge for
+  // `walletAddress` (empty = whichever wallet the bridge picks), open the bridge
+  // with purpose "connect", and hand back the ss58 address, the sr25519
+  // signature and the exact message that was signed. The Earnings page uses it
+  // to attach a Bittensor coldkey to the UR protocol (POST /sn/wallet verifies
+  // the signature server-side). Same deep-link routing as sign-in.
+  struct WalletSignature {
+    bool ok = false;
+    std::string address;
+    std::string signature;
+    std::string message;
+    std::string error;
+  };
+  void SignBittensorConnect(const std::string& walletAddress,
+                            std::function<void(WalletSignature)> done);
+
   // Route a urnetwork:// deep link (wallet callback, later OAuth) into the host.
   void HandleDeepLink(const std::string& url);
 
@@ -979,6 +995,7 @@ class SdkHost {
   std::string pendingWalletNetworkName_;
   std::string pendingWalletReferralCode_;
   std::function<void(AuthResult)> walletCreateDone_;
+  std::function<void(WalletSignature)> walletSignDone_;  // SignBittensorConnect
   // The instant account's jwt, held between CreateInstantAccount and the
   // seedphrase sheet's confirm (guarded by mutex_; a secret — never log it).
   std::optional<std::string> pendingInstantJwt_;

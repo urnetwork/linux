@@ -354,7 +354,11 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     // WINDOW CONSTRUCTOR would take the process down before anything renders
     // (measured). Navigating after the window exists is also what the real
     // app does; nothing may load from inside the constructor.
-    Glib::signal_idle().connect_once([this, tag] {
+    // A short TIMEOUT rather than an idle: the connect canvas keeps the frame
+    // clock busy, and a default-priority idle can starve behind redraws for
+    // the whole life of the process (observed on macOS: the shoot fired with
+    // the Connect page still up and this navigation never logged).
+    Glib::signal_timeout().connect_once([this, tag] {
       g_message("preview: navigating to '%s'", tag.c_str());
       try {
         if (shell_ && !tag.empty() && tag != "1") shell_->Navigate(tag);
@@ -367,6 +371,8 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
           earningsPage_->ShowPreviewState();
           if (g_getenv("URNETWORK_PREVIEW_SAMPLE")) earningsPage_->ApplyPreviewSample();
           if (tag == "wallet") earningsPage_->ShowPreviewSnackbar();
+          // the claim dialog over the sample's attached-wallet layer
+          if (g_getenv("URNETWORK_PREVIEW_CLAIM")) earningsPage_->ShowPreviewClaimDialog();
         }
       } catch (const std::exception& e) {
         g_warning("preview: navigate to '%s' failed: %s", tag.c_str(), e.what());
@@ -374,7 +380,7 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
         g_warning("preview: navigate to '%s' failed: non-std exception", tag.c_str());
       }
       g_message("preview: navigate done");
-    });
+    }, 100);
   }
 }
 
@@ -1518,16 +1524,6 @@ void MainWindow::BuildHome() {
     if (shell_) {
       shell_->snackbar().Show(message, error ? kit::Snackbar::Severity::Error
                                              : kit::Snackbar::Severity::Success);
-    }
-  };
-  // A guest has no account to attach a plan to: the upgrade door sends them
-  // through create-account first (the windows guest-upgrade path), everyone
-  // else straight into the plan sheet the drawer owns.
-  earningsPage_->on_open_upgrade = [this] {
-    if (balance_.IsGuest()) {
-      NavigateCreate(CreateNetworkPage::Mode::UpgradeGuest, "", /*fromHome=*/true);
-    } else if (drawer_) {
-      drawer_->OpenUpgrade();
     }
   };
   earningsPage_->sheet_open = [this] { return sheetOpen_; };

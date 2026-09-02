@@ -1,5 +1,22 @@
 # URnetwork — EARNINGS destination (Wallet + Leaderboard merged) — GTK4/C++ port spec
 
+> **2026-09-02 — points-first rewrite.** The destination described below (payout wallets,
+> USDC payouts, Solana/Polygon wallet validation, the payouts ledger, the Solana-based
+> Seeker verification) is gone. `app/src/EarningsPage.{hpp,cpp}` now renders the
+> points-first Earnings page from the earnings design review: the points headline with its
+> Providing / Referral / Reliability breakdown, the protocol note with the ur.xyz link, the
+> Unclaimed SN25α tile (only once a Bittensor coldkey is attached), the Bittensor wallet block
+> (connect through the ur.io wallet bridge with purpose `connect`, or enter an address manually —
+> validated locally, then through the unauthenticated validate endpoint, and still signed), the
+> Top 200 head-spot tile / bound status, the per-epoch History (points; the SN25α column and
+> status only with a wallet) beside the Leaderboard tab, and the claim dialog (claimable /
+> needs gas with the gas key's mirror address / sending / sent / claimed / expired / failed).
+> Claims are sent by the SDK on the device straight to the settlement vault; no URnetwork API
+> is in that path. Pane C keeps the ranking, the public-leaderboard switch and reliability.
+> The pane-fold table, the flow/gate discipline and the preview harness below still apply
+> (`URNETWORK_PREVIEW_WALLET`, `URNETWORK_PREVIEW_CLAIM`, `URNETWORK_PREVIEW_GAS=low`,
+> `URNETWORK_PREVIEW_MANUAL`, `URNETWORK_PREVIEW_TOP200=bound` extend the sample).
+
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 
 ---

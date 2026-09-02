@@ -103,6 +103,11 @@ msgctxt "add_sign_in_method_2"
 msgid "Add Sign-In Method"
 msgstr "Add Sign-In Method"
 
+#. State when the gas key has no TAO.
+msgctxt "add_tao_for_gas"
+msgid "Add TAO for gas"
+msgstr "Add TAO for gas"
+
 #. Wallets Screen
 msgctxt "add_wallet"
 msgid "Add wallet"
@@ -454,6 +459,11 @@ msgctxt "bittensor_sign_in"
 msgid "Sign in with Bittensor"
 msgstr "Sign in with Bittensor"
 
+#. Label of the connected wallet block.
+msgctxt "bittensor_wallet"
+msgid "Bittensor wallet"
+msgstr "Bittensor wallet"
+
 #. Call to action
 msgctxt "bittensor_wallet_future_use"
 msgid "Bittensor wallets are stored for future use and can't receive payouts yet."
@@ -549,6 +559,11 @@ msgctxt "cancel"
 msgid "Cancel"
 msgstr "Cancel"
 
+#. Error when the subnet RPC cannot be reached.
+msgctxt "chain_rpc_unreachable"
+msgid "The chain RPC is unreachable. Try again."
+msgstr "The chain RPC is unreachable. Try again."
+
 #. Wallet Screen
 msgctxt "chains_supported"
 msgid "Solana and Polygon wallets are currently supported"
@@ -604,6 +619,11 @@ msgctxt "checking_solana_transactions"
 msgid "Checking for Solana Transactions"
 msgstr "Checking for Solana Transactions"
 
+#. Progress text while the address is validated.
+msgctxt "checking_wallet_address"
+msgid "Checking address…"
+msgstr "Checking address…"
+
 #. Upgrade sheet: the system browser could not be opened for the hosted checkout url. The app appends the url itself on the next line (selectable) so the user can copy it into a browser by hand — never advancing to the waiting page with no payment page open.
 msgctxt "checkout_browser_launch_failed"
 msgid "We couldn't open your browser. Copy this link into a browser to finish checkout:"
@@ -644,6 +664,36 @@ msgctxt "claim"
 msgid "Claim"
 msgstr "Claim"
 
+#. Subtitle of the claim dialog.
+msgctxt "claim_across_epochs"
+msgid "Across {} finalized epochs"
+msgstr "Across {} finalized epochs"
+
+#. Title of the claim dialog.
+msgctxt "claim_alpha_title"
+msgid "Claim SN25α"
+msgstr "Claim SN25α"
+
+#. Claim button with the amount.
+msgctxt "claim_amount_button"
+msgid "Claim {}"
+msgstr "Claim {}"
+
+#. Claim state: confirmed on chain.
+msgctxt "claim_confirmed"
+msgid "Claimed"
+msgstr "Claimed"
+
+#. Claim state: past the vault's expiry block.
+msgctxt "claim_expired"
+msgid "Expired"
+msgstr "Expired"
+
+#. Claim state: failed.
+msgctxt "claim_failed"
+msgid "Failed"
+msgstr "Failed"
+
 #. Call to action
 msgctxt "claim_multiplier"
 msgid "Claim Multiplier"
@@ -653,6 +703,46 @@ msgstr "Claim Multiplier"
 msgctxt "claim_network_name_hint"
 msgid "Claim a custom network name to replace your auto-generated one"
 msgstr "Claim a custom network name to replace your auto-generated one"
+
+#. Per-epoch status while the claim transaction is being sent.
+msgctxt "claim_sending_linux"
+msgid "Sending…"
+msgstr "Sending…"
+
+#. Explainer under the claim button.
+msgctxt "claim_sends_from_device"
+msgid "Your device sends the claim to the vault contract. Gas is paid in TAO from your gas key. Alpha lands on your coldkey."
+msgstr "Your device sends the claim to the vault contract. Gas is paid in TAO from your gas key. Alpha lands on your coldkey."
+
+#. Claim state: transaction sent.
+msgctxt "claim_sent"
+msgid "Sent"
+msgstr "Sent"
+
+#. Destination line on the claim dialog: the coldkey the alpha lands on.
+msgctxt "claim_to_address_linux"
+msgid "To {}"
+msgstr "To {}"
+
+#. Shown when the device cannot send claims (no gas key on this host).
+msgctxt "claim_unavailable_linux"
+msgid "Claiming is not available on this device yet."
+msgstr "Claiming is not available on this device yet."
+
+#. Button on the Top 200 tile.
+msgctxt "claim_your_spot"
+msgid "Claim your spot"
+msgstr "Claim your spot"
+
+#. Error when an epoch can no longer be claimed.
+msgctxt "claims_for_epoch_expired"
+msgid "Claims for epoch {} have expired."
+msgstr "Claims for epoch {} have expired."
+
+#. Explainer in the claim dialog.
+msgctxt "claims_open_after_finalization"
+msgid "Claims open 48 hours after an epoch is finalized and stay open for the vault's expiry window."
+msgstr "Claims open 48 hours after an epoch is finalized and stay open for the vault's expiry window."
 
 #. transfer stats and split rules
 msgctxt "client_contracts"
@@ -749,6 +839,11 @@ msgctxt "connect_and_open"
 msgid "Connect and open link"
 msgstr "Connect and open link"
 
+#. Button to connect a Bittensor coldkey.
+msgctxt "connect_bittensor_wallet"
+msgid "Connect Bittensor wallet"
+msgstr "Connect Bittensor wallet"
+
 #. Wallets Screen
 msgctxt "connect_external_wallet"
 msgid "Connect external wallet"
@@ -788,6 +883,11 @@ msgstr "Connect URnetwork VPN"
 msgctxt "connect_wallet"
 msgid "Connect Wallet"
 msgstr "Connect Wallet"
+
+#. Error when claiming without a wallet.
+msgctxt "connect_wallet_first"
+msgid "Connect a Bittensor wallet first."
+msgstr "Connect a Bittensor wallet first."
 
 #. Used in Main/Connect/ConnectButton/StatusIndicator/ConnectStatusIndicator.swift.
 msgctxt "connected"
@@ -2010,10 +2110,70 @@ msgctxt "earnings"
 msgid "Earnings"
 msgstr "Earnings"
 
+#. Button on the Earnings page that starts connecting a different Bittensor wallet.
+msgctxt "earnings_change_wallet"
+msgid "Change wallet"
+msgstr "Change wallet"
+
+#. Progress text while a claim transaction is being sent.
+msgctxt "earnings_claim_sending"
+msgid "Sending…"
+msgstr "Sending…"
+
+#. Shown in place of the unclaimed figure when the app has no device session to read the chain with.
+msgctxt "earnings_claims_need_session"
+msgid "Claims load from the chain once the app has a session. Press Connect first."
+msgstr "Claims load from the chain once the app has a session. Press Connect first."
+
+#. Button that copies an address to the clipboard.
+msgctxt "earnings_copy_address"
+msgid "Copy address"
+msgstr "Copy address"
+
 #. Call to action
 msgctxt "earnings_doubled"
 msgid "You're earning x2 points"
 msgstr "You're earning x2 points"
+
+#. Line about past payouts.
+msgctxt "earnings_email_support"
+msgid "Questions about earlier payouts? Email support@ur.io."
+msgstr "Questions about earlier payouts? Email support@ur.io."
+
+#. Column header of the per-epoch history table.
+msgctxt "earnings_epoch_column"
+msgid "Epoch"
+msgstr "Epoch"
+
+#. Label of the gas key's TAO balance in the claim dialog.
+msgctxt "earnings_gas_balance"
+msgid "Gas balance"
+msgstr "Gas balance"
+
+#. Column header of the per-epoch history table: points earned in the epoch.
+msgctxt "earnings_points_column"
+msgid "Points"
+msgstr "Points"
+
+#. Column header of the per-epoch history table: the network's share of the block.
+msgctxt "earnings_share_column"
+msgid "Share"
+msgstr "Share"
+
+#. Column header of the per-epoch history table: the claim status of the epoch's alpha.
+msgctxt "earnings_status_column"
+msgid "Status"
+msgstr "Status"
+
+#. Link that opens a claim transaction in the block explorer.
+msgctxt "earnings_view_transaction"
+msgid "View transaction"
+msgstr "View transaction"
+
+#. Error when the wallet that signed the connect challenge is not the address the user entered.
+msgctxt "earnings_wallet_mismatch"
+msgid "The wallet that signed is not the address you entered."
+msgstr "The wallet that signed is not the address you entered."
 
 #. device
 msgctxt "edit_device_name"
@@ -2084,6 +2244,11 @@ msgctxt "enter_a_solana_usdc_wallet_address"
 msgid "Enter a Solana USDC wallet address"
 msgstr "Enter a Solana USDC wallet address"
 
+#. Fallback link to paste an ss58 address.
+msgctxt "enter_address_manually"
+msgid "Enter address manually"
+msgstr "Enter address manually"
+
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
@@ -2108,6 +2273,41 @@ msgstr "Enter URnetwork"
 msgctxt "enter_wallet_address"
 msgid "Enter wallet address"
 msgstr "Enter wallet address"
+
+#. History table column: the epoch number.
+msgctxt "epoch_column_epoch_linux"
+msgid "Epoch"
+msgstr "Epoch"
+
+#. History table column: points earned.
+msgctxt "epoch_column_points_linux"
+msgid "Points"
+msgstr "Points"
+
+#. History table column: the network's share of the block.
+msgctxt "epoch_column_share_linux"
+msgid "Share of block"
+msgstr "Share of block"
+
+#. History table column: the claim status of the epoch's alpha.
+msgctxt "epoch_column_status_linux"
+msgid "Status"
+msgstr "Status"
+
+#. Label of the per-epoch history list.
+msgctxt "epoch_history"
+msgid "History"
+msgstr "History"
+
+#. History row title.
+msgctxt "epoch_row_title"
+msgid "Epoch {}"
+msgstr "Epoch {}"
+
+#. History row: the network's share of the block.
+msgctxt "epoch_share_of_block"
+msgid "{} of block"
+msgstr "{} of block"
 
 #. Error message displayed in a snackbar when there was an error changing the network name.
 msgctxt "error_changing_network_name"
@@ -2283,6 +2483,11 @@ msgstr "Free"
 msgctxt "friends_save_too"
 msgid "Your friends save too -- everyone wins."
 msgstr "Your friends save too -- everyone wins."
+
+#. Label of the gas key row.
+msgctxt "gas_key"
+msgid "Gas key"
+msgstr "Gas key"
 
 #. Call to action
 msgctxt "general"
@@ -2541,6 +2746,11 @@ msgctxt "invalid_referral_code_please_try_again"
 msgid "Invalid referral code. Please try again."
 msgstr "Invalid referral code. Please try again."
 
+#. Validation error for a coldkey address.
+msgctxt "invalid_ss58_address"
+msgid "That is not a valid Bittensor address."
+msgstr "That is not a valid Bittensor address."
+
 #. dns settings
 msgctxt "ip_address"
 msgid "IP address"
@@ -2637,6 +2847,11 @@ msgstr "Leaderboard"
 msgctxt "leaderboard_description"
 msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
 msgstr "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
+
+#. Link text under the protocol note.
+msgctxt "learn_at_ur_xyz"
+msgid "Learn how it works at ur.xyz"
+msgstr "Learn how it works at ur.xyz"
 
 #. Call to action
 msgctxt "learn_more_about_multiplier"
@@ -3176,6 +3391,11 @@ msgctxt "no_blocked_locations"
 msgid "No blocked locations"
 msgstr "No blocked locations"
 
+#. Empty state of the unclaimed tile once a wallet is connected.
+msgctxt "no_claims_yet_linux"
+msgid "Nothing to claim yet. Alpha accrues from the next finalized epoch."
+msgstr "Nothing to claim yet. Alpha accrues from the next finalized epoch."
+
 #. A description of the benefits of creating an Instant Account.
 msgctxt "no_email_phone_or_password_needed_your"
 msgid "No email, phone, or password needed. Your account is secured by a seedphrase."
@@ -3210,6 +3430,11 @@ msgstr "No open contracts"
 msgctxt "no_payouts_found"
 msgid "No payouts found for this wallet"
 msgstr "No payouts found for this wallet"
+
+#. Empty state of the points history.
+msgctxt "no_points_yet"
+msgid "No epochs yet. Points appear after your first finalized epoch."
+msgstr "No epochs yet. Points appear after your first finalized epoch."
 
 #. Restore-purchases outcome: the sync succeeded and there is genuinely nothing to restore (Shared/ViewModels/AppStoreSubscriptionManager.swift).
 msgctxt "no_previous_purchases_were_found"
@@ -3315,6 +3540,11 @@ msgstr "Or use a wallet"
 msgctxt "other"
 msgid "Other"
 msgstr "Other"
+
+#. The one USDC mention: the Solana subscription payment note.
+msgctxt "paid_in_usdc_on_solana"
+msgid "Paid in USDC on Solana."
+msgstr "Paid in USDC on Solana."
 
 #. Call to action
 msgctxt "participate"
@@ -3527,6 +3757,16 @@ msgstr[1] "+ {} more"
 msgctxt "points_breakdown"
 msgid "Points breakdown"
 msgstr "Points breakdown"
+
+#. Headline label of the earnings screen.
+msgctxt "points_earned"
+msgid "Points earned"
+msgstr "Points earned"
+
+#. Points count with unit for history rows.
+msgctxt "points_short"
+msgid "{} pts"
+msgstr "{} pts"
 
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
@@ -4170,6 +4410,11 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "Seedphrase"
 
+#. Note on the Seeker verification action.
+msgctxt "seeker_points_only"
+msgid "The Seeker multiplier applies to points only."
+msgstr "The Seeker multiplier applies to points only."
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -4219,6 +4464,11 @@ msgstr "Send Reset Link"
 msgctxt "send_reset_link_2"
 msgid "Send reset link"
 msgstr "Send reset link"
+
+#. Instruction to fund the gas key.
+msgctxt "send_tao_to_mirror"
+msgid "Send about {0} TAO to {1} to cover gas."
+msgstr "Send about {0} TAO to {1} to cover gas."
 
 #. Used in Main/Feedback/FeedbackView.swift.
 msgctxt "send_us_your_feedback_directly_or_join_our"
@@ -5408,6 +5658,26 @@ msgctxt "skip"
 msgid "Skip"
 msgstr "Skip"
 
+#. Note on the earnings screen explaining alpha and the wallet.
+msgctxt "sn_protocol_note"
+msgid "SN25α are your earnings on the UR protocol. The UR protocol is an open source protocol from URnetwork. Connect a Bittensor wallet to settle them as SN25α through the UR protocol."
+msgstr "SN25α are your earnings on the UR protocol. The UR protocol is an open source protocol from URnetwork. Connect a Bittensor wallet to settle them as SN25α through the UR protocol."
+
+#. Claim status of an epoch whose alpha can be claimed now.
+msgctxt "sn_status_claimable"
+msgid "Claimable"
+msgstr "Claimable"
+
+#. Claim status of an epoch the vault has not finalized yet.
+msgctxt "sn_status_not_finalized"
+msgid "Not finalized"
+msgstr "Not finalized"
+
+#. Claim status of an epoch that is still open (not yet finalized on chain).
+msgctxt "sn_status_open"
+msgid "Open"
+msgstr "Open"
+
 #. Note under the Solana payment button on the plan picker: Solana is a one-time yearly payment, the free trial is Stripe only.
 msgctxt "solana_one_time_payment"
 msgid "Paying with Solana is a one-time yearly payment, with no free trial."
@@ -5625,6 +5895,11 @@ msgctxt "system"
 msgid "System"
 msgstr "System"
 
+#. A TAO amount with its unit (the gas key balance).
+msgctxt "tao_amount_linux"
+msgid "{} TAO"
+msgstr "{} TAO"
+
 #. Connect
 msgctxt "tap_to_connect"
 msgid "Tap to connect"
@@ -5718,6 +5993,36 @@ msgstr "Login"
 msgctxt "to_start_earning_connect_your_solana_wallet_to"
 msgid "To start earning, connect your Solana wallet to URnetwork."
 msgstr "To start earning, connect your Solana wallet to URnetwork."
+
+#. Badge text for the head mining spot.
+msgctxt "top200"
+msgid "Top 200"
+msgstr "Top 200"
+
+#. Detail under the bound status.
+msgctxt "top200_bound_detail"
+msgid "Emission is paid to your coldkey directly. Bindings renew per epoch."
+msgstr "Emission is paid to your coldkey directly. Bindings renew per epoch."
+
+#. Status row once bound.
+msgctxt "top200_bound_status"
+msgid "UID {0} · rank #{1}"
+msgstr "UID {0} · rank #{1}"
+
+#. Warning when the score nears the floor.
+msgctxt "top200_demotion_warning"
+msgid "Your score is close to the eviction floor. Add routable IPs to keep the spot."
+msgstr "Your score is close to the eviction floor. Add routable IPs to keep the spot."
+
+#. Detail of the Top 200 tile when eligible.
+msgctxt "top200_detail"
+msgid "Your network's routable IP breadth ranks about #{0} of {1} head spots. Head miners earn SN25α natively, every tempo."
+msgstr "Your network's routable IP breadth ranks about #{0} of {1} head spots. Head miners earn SN25α natively, every tempo."
+
+#. Headline of the Top 200 tile when eligible.
+msgctxt "top200_you_qualify"
+msgid "You qualify"
+msgstr "You qualify"
 
 #. Locations List
 msgctxt "top_matches"
@@ -5880,6 +6185,11 @@ msgstr "Try guest mode"
 msgctxt "tunnel_start_failed"
 msgid "Could not start the connection"
 msgstr "Could not start the connection"
+
+#. Label of the unclaimed alpha tile.
+msgctxt "unclaimed"
+msgid "Unclaimed"
+msgstr "Unclaimed"
 
 #. A label displayed in the custom dns settings section.
 msgctxt "unencrypted_dns"
@@ -6112,6 +6422,11 @@ msgctxt "verify_input_label"
 msgid "Verification code"
 msgstr "Verification code"
 
+#. Standalone Seeker verification action (points multiplier only).
+msgctxt "verify_seeker"
+msgid "Verify Seeker"
+msgstr "Verify Seeker"
+
 #. Call to action
 msgctxt "verify_seeker_token_btn"
 msgid "Verify Seeker Pre-Order Token"
@@ -6167,20 +6482,45 @@ msgctxt "wallet_address_placeholder"
 msgid "Copy and paste here"
 msgstr "Copy and paste here"
 
+#. Error when a wallet address is on the operator's ban list; the user cannot continue.
+msgctxt "wallet_blocked"
+msgid "This wallet can't be used with URnetwork."
+msgstr "This wallet can't be used with URnetwork."
+
 #. Error shown when connecting an external wallet to the account fails.
 msgctxt "wallet_connect_failed"
 msgid "Failed to connect the wallet."
 msgstr "Failed to connect the wallet."
+
+#. Note under the manual address entry: the wallet only signs a proof of ownership.
+msgctxt "wallet_connect_signed_note_linux"
+msgid "Your wallet signs a message to prove it is yours. Nothing is sent on chain."
+msgstr "Your wallet signs a message to prove it is yours. Nothing is sent on chain."
 
 #. Confirmation shown after an external wallet is connected to the account.
 msgctxt "wallet_connected"
 msgid "Wallet connected."
 msgstr "Wallet connected."
 
+#. Line under the connected coldkey.
+msgctxt "wallet_connected_to_protocol"
+msgid "Connected to the UR protocol. Claims land here. Alpha accrues from the next epoch after connecting."
+msgstr "Connected to the UR protocol. Claims land here. Alpha accrues from the next epoch after connecting."
+
+#. Warning when a wallet address has no activity on the Bittensor chain yet; the user may continue.
+msgctxt "wallet_looks_new_warning"
+msgid "This address has no activity on the Bittensor chain yet. It looks like a new wallet. Make sure it is yours before continuing."
+msgstr "This address has no activity on the Bittensor chain yet. It looks like a new wallet. Make sure it is yours before continuing."
+
 #. Shown on the create-network step after a wallet sign-in when the wallet isn't linked to any network yet. The user picks a network name and accepts the terms to create one; the wallet signature carries over.
 msgctxt "wallet_needs_network"
 msgid "This wallet isn't linked to a network yet. Pick a network name to create one."
 msgstr "This wallet isn't linked to a network yet. Pick a network name to create one."
+
+#. Line on the wallet block before a wallet is connected.
+msgctxt "wallet_not_retroactive"
+msgid "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not settled retroactively."
+msgstr "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not settled retroactively."
 
 msgctxt "wallet_provider"
 msgid "{} Wallet"
@@ -6199,6 +6539,11 @@ msgstr "Wallet sign-in failed"
 msgctxt "wallet_sign_in_method_added"
 msgid "Wallet sign-in method added"
 msgstr "Wallet sign-in method added"
+
+#. Error when the bridge signed with a different wallet than the address the user typed.
+msgctxt "wallet_signature_mismatch_linux"
+msgid "The wallet that signed is not the address you entered."
+msgstr "The wallet that signed is not the address you entered."
 
 #. Wallets Screen
 msgctxt "wallets"

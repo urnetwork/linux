@@ -150,7 +150,8 @@ void WalletConnect::SignMessage(const std::string& message) {
   OpenUrl(url);
 }
 
-void WalletConnect::SignInWithBittensor(const std::string& message) {
+void WalletConnect::SignInWithBittensor(const std::string& message,
+                                        const std::string& purpose) {
   // One hop: the bridge connects the substrate wallet AND signs in the same page
   // load, and sr25519 signatures are public — so there is no ephemeral keypair,
   // no session, and no shared secret on this path.
@@ -166,6 +167,7 @@ void WalletConnect::SignInWithBittensor(const std::string& message) {
   std::string url = std::string(kWebBridge) + "?provider=" + Host(Provider::Bittensor) +
                     "&method=signMessage&message=" + Esc(message) +
                     "&redirect_link=" + Esc(redirect);
+  if (!purpose.empty()) url += "&purpose=" + Esc(purpose);
   // The WalletConnect Cloud project id (Config.hpp) lets the bridge pair with a
   // wallet app over a QR code. Without one the bridge falls back to injected
   // wallets only (browser extension) — so an empty id is sent as no param at all.

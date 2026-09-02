@@ -171,11 +171,27 @@ button.link:hover label { color: #8AA9FF; }
 /* the signed-in user's own row in the earnings leaderboard: card fill against
    the pane, never an accent — the rank is the emphasis, not the row */
 .ur-earn-own-row { background-color: #1C1C1C; }
-/* the DEFAULT chip riding beside a payout wallet */
+/* the status chip on a history row (unclaimed / claimed / expired) */
 .ur-earn-tag {
   background-color: alpha(#F8F8F8, .04); border-radius: 6px; padding: 2px 6px;
   font-family: "PP NeueBit"; font-size: 16px; font-weight: bold; color: #989898;
 }
+/* the two gold tiles on the earnings page (unclaimed SN25α, Top 200): the
+   referral gold (Ui.hpp kReferralGold) on a faint fill, never the Pro gold */
+.ur-earn-gold-tile {
+  background-color: alpha(#F5B93C, .10); border: 1px solid alpha(#F5B93C, .45);
+  border-radius: 10px; padding: 12px;
+}
+.ur-earn-gold-text { color: #FFD76A; }
+button.ur-earn-gold-button {
+  background-color: #F5B93C; color: #241A05; border-radius: 8px; font-weight: 600;
+  padding: 6px 14px; min-height: 32px;
+}
+button.ur-earn-gold-button:hover { background-color: #FFD76A; }
+button.ur-earn-gold-button:active { background-color: #E0A52E; }
+button.ur-earn-gold-button:disabled { opacity: 0.38; }
+/* the wallet address in the bit face */
+.ur-earn-address { font-family: "PP NeueBit"; font-size: 18px; font-weight: bold; color: #F8F8F8; }
 .ur-col-header {
   font-family: "PP Neue Montreal"; font-size: 11px;
   letter-spacing: 0.7px; color: #5A5A5A;

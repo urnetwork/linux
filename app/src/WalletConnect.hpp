@@ -44,7 +44,9 @@ class WalletConnect {
   // no envelope). on_signature fires (sr25519 hex) on the
   // urnetwork://bittensor-sign-message callback, with publicKey() holding the
   // ss58 address the bridge returned alongside it.
-  void SignInWithBittensor(const std::string& message);
+  // `purpose` rides along to the bridge (and back in the callback) so the same
+  // page can sign a sign-in challenge or a wallet-attach proof ("connect").
+  void SignInWithBittensor(const std::string& message, const std::string& purpose = std::string());
 
   // Route a urnetwork:// callback here. Returns true if it was a wallet callback.
   bool HandleDeepLink(const std::string& url);
