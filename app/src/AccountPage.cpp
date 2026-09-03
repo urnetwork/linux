@@ -47,20 +47,17 @@ constexpr int kStatePadY = 8;        // a state line: padding 12,8
 constexpr int kPlanPadY = 14;        // the plan value row: padding 12,14
 constexpr int kPlanValuePx = 22;
 constexpr int kRingPx = 14;              // the confirmation ring
-constexpr int kSheetWidth = 400;         // referral / delete sheets (MinWidth 400)
+constexpr int kSheetWidth = 400;         // the delete sheet (MinWidth 400)
 constexpr int kSheetWidthNarrow = 380;   // add-auth / auth-code sheets
 constexpr int kConfirmWidth = 320;       // the remove-method confirm (MinWidth 320)
 constexpr int kMinPasswordLength = 12;   // AddAuthSheet gate
-constexpr int kMinReferralCodeLength = 6;  // ReferralNetworkSheet gate
 constexpr double kAuthCodeMinutes = 5.0;   // matches the caption
 constexpr int64_t kAuthCodeUses = 1;
 constexpr int kAuthCodeAbbreviateAbove = 14;  // longer than this -> 6…6
 constexpr int kAuthCodeShoulder = 6;
 constexpr int kMaskShoulder = 3;      // balance-code secret: first 3 + last 3
 constexpr int kIsoDatePrefix = 10;    // YYYY-MM-DD
-constexpr int kFrogPx = 40;
 constexpr int kValueChars = 22;       // client id / bonus code readouts (MaxWidth 220)
-constexpr int kReferralValueChars = 24;  // referral-network value (MaxWidth 240)
 
 // Pro gold now lives in Ui.hpp's palette beside the referral gold ramp (the
 // TODO(theme) that used to sit here).
@@ -347,16 +344,6 @@ std::string FirstMessage(const std::string& serverMessage,
   if (!serverMessage.empty()) return serverMessage;
   if (err && !err->empty()) return *err;
   return {};
-}
-
-// The frog mascot beside "You're referral royalty!". Resolved through the
-// RuntimePaths ladder; a miss hides the image and keeps the line. (The asset
-// IS in meson's install_data set now, so installed builds resolve it too —
-// the old flag about a missing install entry is obsolete.)
-std::string ReferralFrogPath() {
-  static const std::string path = ResolveRuntimePath(
-      UR_PKGDATADIR "/ReferralFrog.png", G_FILE_TEST_IS_REGULAR, "assets/ReferralFrog.png");
-  return path;
 }
 
 }  // namespace
@@ -893,304 +880,6 @@ class AccountAuthCodeSheet : public Gtk::Window {
 };
 
 // =============================================================================
-// §3.3.3 ReferralNetworkSheet — set or unlink the referral network
-// =============================================================================
-// The unlink is a TWO-STEP ON DIFFERENT CONTROLS because a dialog cannot open
-// a second dialog: the inline button ARMS (and the error line states the
-// consequence), the sheet's own primary COMMITS, and Enter is bound to Close
-// throughout.
-class AccountReferralNetworkSheet : public Gtk::Window {
- public:
-  AccountReferralNetworkSheet(Gtk::Window& parent, SdkHost& host,
-                              std::function<bool()> canAct)
-      : host_(host), canAct_(std::move(canAct)) {
-    set_transient_for(parent);
-    set_modal(true);
-    set_title(T_("update_referral_network", "Update referral network"));
-    set_default_size(kSheetWidth, -1);
-    set_resizable(false);
-    set_hide_on_close(true);
-    add_css_class("ur-sheet");
-    AddEscapeToClose(*this);
-
-    auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
-    box->set_margin(24);
-    box->set_size_request(kSheetWidth, -1);
-
-    auto* heading = Gtk::make_managed<Gtk::Label>(
-        T_("update_referral_network", "Update referral network"));
-    heading->add_css_class("ur-step-heading");
-    heading->set_xalign(0);
-    box->append(*heading);
-
-    auto* currentLabel = Gtk::make_managed<Gtk::Label>(
-        T_("current_referral_network", "Current referral network"));
-    currentLabel->add_css_class("ur-caption");
-    currentLabel->set_xalign(0);
-    box->append(*currentLabel);
-    current_ = MakeSizedLabel({}, 14, "ur-value");
-    ApplyFieldState(*current_, AccountFieldState::Loading);
-    box->append(*current_);
-
-    auto* codeLabel = Gtk::make_managed<Gtk::Label>(
-        T_("enter_network_referral_code", "Enter network referral code"));
-    codeLabel->add_css_class("ur-input-label");
-    codeLabel->set_xalign(0);
-    box->append(*codeLabel);
-    code_ = Gtk::make_managed<Gtk::Entry>();
-    code_->add_css_class("ur-input");
-    kit::SetAccessibleLabel(
-        *code_, T_("enter_network_referral_code", "Enter network referral code"));
-    code_->signal_changed().connect([this] { Gate(); });
-    box->append(*code_);
-
-    unlink_ = Gtk::make_managed<Gtk::Button>(
-        T_("unlink_referral_network", "Unlink referral network"));
-    unlink_->add_css_class("destructive-action");
-    unlink_->set_halign(Gtk::Align::START);
-    unlink_->set_visible(false);  // never offer to unlink a guess
-    unlink_->signal_clicked().connect([this] { Arm(); });
-    box->append(*unlink_);
-
-    error_ = MakeSizedLabel({}, 12, "ur-caption");
-    error_->set_visible(false);
-    box->append(*error_);
-
-    auto* actions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
-    actions->set_halign(Gtk::Align::END);
-    close_ = Gtk::make_managed<Gtk::Button>(T_("close", "Close"));
-    close_->signal_clicked().connect([this] { set_visible(false); });
-    actions->append(*close_);
-    primary_ = Gtk::make_managed<Gtk::Button>(T_("update", "Update"));
-    primary_->add_css_class("suggested-action");
-    primary_->set_sensitive(false);
-    primary_->signal_clicked().connect([this] {
-      if (armed_) {
-        CommitUnlink();
-      } else {
-        Update();
-      }
-    });
-    actions->append(*primary_);
-    box->append(*actions);
-
-    set_child(*box);
-    // DefaultButton = Close: Enter must never commit an unlink.
-    close_->set_receives_default(true);
-    set_default_widget(*close_);
-  }
-
-  ~AccountReferralNetworkSheet() override { ++*epoch_; }
-
-  // The page's referral-network row re-reads after any change.
-  std::function<void()> on_changed;
-  // fired after a successful link: the caller shows the royal welcome
-  std::function<void()> on_royal;
-
-  void Open() {
-    ++*epoch_;
-    loadFlow_.Abandon();
-    actionFlow_.Abandon();
-    busy_ = false;
-    Disarm();
-    code_->set_text("");
-    error_->set_visible(false);
-    LoadCurrent();
-    present();
-  }
-
- private:
-  bool CanAct() const { return canAct_ && canAct_(); }
-
-  void ApplyCurrent(AccountFieldState state, const std::string& name) {
-    state_ = state;
-    name_ = name;
-    ApplyFieldState(*current_, state, name);
-    // Unlink is offered ONLY against a loaded, non-empty name.
-    unlink_->set_visible(state == AccountFieldState::Loaded && !name.empty());
-    Gate();
-  }
-
-  void LoadCurrent() {
-    loadFlow_.Abandon();
-    const bool session = CanAct();
-    code_->set_sensitive(session);
-    if (!session) {
-      ApplyCurrent(AccountFieldState::NoSession, {});
-      return;
-    }
-    ApplyCurrent(AccountFieldState::Loading, {});
-    auto epoch = epoch_;
-    const uint64_t seen = *epoch_;
-    // 20 s: the current line may not sit on "Loading..." forever — the Unlink
-    // button's whole gate hangs off it.
-    const uint32_t flow = loadFlow_.Begin(
-        kApiTimeoutMs, [this] { ApplyCurrent(AccountFieldState::Failed, {}); });
-    host_.api().getReferralNetwork(
-        [this, epoch, seen, flow](std::optional<urnet::GetReferralNetworkResult> result,
-                                  std::optional<std::string> err) {
-          PostToMain([this, epoch, seen, flow, result = std::move(result),
-                      err = std::move(err)] {
-            if (*epoch != seen) return;
-            if (!loadFlow_.Settle(flow, "referral network read")) return;
-            // CRITICAL semantics (§3.3.3): the server answers "no referral
-            // network found" on the ERROR channel of a lookup that SUCCEEDED.
-            // Only a transport failure or a missing result is Failed.
-            if (!result || err) {
-              g_warning("account: getReferralNetwork failed: %s",
-                        err ? err->c_str() : "(no result)");
-              ApplyCurrent(AccountFieldState::Failed, {});
-              return;
-            }
-            const std::string name = result->network ? result->network->name : std::string();
-            ApplyCurrent(name.empty() ? AccountFieldState::Empty : AccountFieldState::Loaded,
-                         name);
-          });
-        });
-  }
-
-  void Gate() {
-    if (armed_) {
-      primary_->set_sensitive(!busy_);
-      return;
-    }
-    const std::string code = TrimSpace(code_->get_text().raw());
-    primary_->set_sensitive(!busy_ && CanAct() &&
-                            code.size() >= static_cast<size_t>(kMinReferralCodeLength));
-  }
-
-  void ShowError(const Glib::ustring& message) {
-    SetToned(*error_, kUrDanger, message);
-    error_->set_visible(true);
-  }
-
-  void Arm() {
-    armed_ = true;
-    ShowError(Format(T_("when_unlinking_your_referral_network_you_will_no",
-                        "When unlinking your referral network, you will no longer be able "
-                        "to earn points from {}."),
-                     name_));
-    code_->set_sensitive(false);
-    unlink_->set_sensitive(false);
-    primary_->set_label(T_("unlink_referral_network", "Unlink referral network"));
-    Gate();
-  }
-
-  void Disarm() {
-    armed_ = false;
-    code_->set_sensitive(CanAct());
-    unlink_->set_sensitive(true);
-    primary_->set_label(T_("update", "Update"));
-    Gate();
-  }
-
-  void Update() {
-    if (busy_ || !CanAct()) return;
-    const std::string code = TrimSpace(code_->get_text().raw());
-    if (code.size() < static_cast<size_t>(kMinReferralCodeLength)) return;
-    busy_ = true;
-    Gate();
-    error_->set_visible(false);
-
-    urnet::SetNetworkReferralArgs args{};
-    args.referral_code = code;
-    auto epoch = epoch_;
-    const uint64_t seen = *epoch_;
-    // 20 s. The timeout line is NOT "Invalid referral code": the server never
-    // answered, so nothing was decided about the code — saying it was rejected
-    // would be a verdict the client made up.
-    const uint32_t flow = actionFlow_.Begin(kApiTimeoutMs, [this] {
-      busy_ = false;
-      ShowError(T_("something_went_wrong", "Something went wrong."));
-      Gate();
-    });
-    host_.api().setNetworkReferral(
-        std::optional<urnet::SetNetworkReferralArgs>(args),
-        [this, epoch, seen, flow](std::optional<urnet::SetNetworkReferralResult> result,
-                                  std::optional<std::string> err) {
-          PostToMain([this, epoch, seen, flow, result = std::move(result),
-                      err = std::move(err)] {
-            if (*epoch != seen) return;
-            if (!actionFlow_.Settle(flow, "referral network update")) return;
-            busy_ = false;
-            const bool ok = result.has_value() && !err.has_value() && !result->error;
-            if (!ok) {
-              g_warning("account: setNetworkReferral failed: %s",
-                        err ? err->c_str()
-                            : (result && result->error ? result->error->message.c_str()
-                                                       : "(no result)"));
-              ShowError(T_("invalid_referral_code_please_try_again",
-                           "Invalid referral code. Please try again."));
-              Gate();
-              return;
-            }
-            code_->set_text("");
-            LoadCurrent();
-            if (on_changed) on_changed();
-            // linking a referral network is the royal-welcome moment
-            close();
-            if (on_royal) on_royal();
-          });
-        });
-  }
-
-  void CommitUnlink() {
-    if (busy_ || !CanAct()) return;
-    busy_ = true;
-    Gate();
-    auto epoch = epoch_;
-    const uint64_t seen = *epoch_;
-    const uint32_t flow = actionFlow_.Begin(kApiTimeoutMs, [this] {
-      busy_ = false;
-      Disarm();  // back to the normal shape either way
-      ShowError(T_("something_went_wrong", "Something went wrong."));
-    });
-    host_.api().unlinkReferralNetwork(
-        [this, epoch, seen, flow](std::optional<urnet::UnlinkReferralNetworkResult> result,
-                                  std::optional<std::string> err) {
-          PostToMain([this, epoch, seen, flow, result = std::move(result),
-                      err = std::move(err)] {
-            if (*epoch != seen) return;
-            if (!actionFlow_.Settle(flow, "referral network unlink")) return;
-            busy_ = false;
-            // No error field: success is strictly "a result AND no transport
-            // error" — anything else is a failure, never a silent success.
-            const bool ok = result.has_value() && !err.has_value();
-            Disarm();  // either way, back to the normal shape
-            if (!ok) {
-              g_warning("account: unlinkReferralNetwork failed: %s",
-                        err ? err->c_str() : "(no result)");
-              ShowError(err && !err->empty()
-                            ? Glib::ustring(*err)
-                            : Glib::ustring(T_("something_went_wrong",
-                                               "Something went wrong.")));
-              return;
-            }
-            error_->set_visible(false);
-            LoadCurrent();
-            if (on_changed) on_changed();
-          });
-        });
-  }
-
-  SdkHost& host_;
-  std::function<bool()> canAct_;
-  std::shared_ptr<uint64_t> epoch_ = std::make_shared<uint64_t>(0);
-  AccountFlow loadFlow_;    // the current-network read
-  AccountFlow actionFlow_;  // update / unlink (never both at once)
-  Gtk::Label* current_ = nullptr;
-  Gtk::Entry* code_ = nullptr;
-  Gtk::Button* unlink_ = nullptr;
-  Gtk::Label* error_ = nullptr;
-  Gtk::Button* primary_ = nullptr;
-  Gtk::Button* close_ = nullptr;
-  AccountFieldState state_ = AccountFieldState::Loading;
-  std::string name_;
-  bool busy_ = false;
-  bool armed_ = false;
-};
-
-// =============================================================================
 // §3.4 DeleteAccountSheet — typed confirmation
 // =============================================================================
 // FRESHNESS RULE: the sheet takes NO cached name. Api::networkDelete takes no
@@ -1461,7 +1150,6 @@ AccountPage::~AccountPage() {
   accountFlow_.Abandon();
   codesFlow_.Abandon();
   referralFlow_.Abandon();
-  referralNetworkFlow_.Abandon();
   nameFlow_.Abandon();
   resetFlow_.Abandon();
   portalFlow_.Abandon();
@@ -1512,7 +1200,6 @@ void AccountPage::Load() {
   // an empty account, and nothing may sit on a spinner.
   LoadAccount();
   LoadReferralInfo();
-  LoadReferralNetwork();
   LoadBalanceCodes();
 }
 
@@ -1547,7 +1234,6 @@ void AccountPage::ReleaseInFlight() {
   accountFlow_.Abandon();
   codesFlow_.Abandon();
   referralFlow_.Abandon();
-  referralNetworkFlow_.Abandon();
   nameFlow_.Abandon();
   resetFlow_.Abandon();
   portalFlow_.Abandon();
@@ -1574,7 +1260,6 @@ void AccountPage::CloseSheets() {
   };
   hide(addAuthSheet_.get());
   hide(authCodeSheet_.get());
-  hide(referralSheet_.get());
   hide(deleteSheet_.get());
   hide(confirmDialog_.get());
 }
@@ -1601,10 +1286,7 @@ void AccountPage::SettleNoSession() {
 
   methodsState_ = AccountFieldState::NoSession;
   RenderAuthMethods();
-  ApplyReferralCode(AccountFieldState::NoSession);
-  ApplyReferralSummary(AccountFieldState::NoSession);
-  ApplyReferralNetworkValue(AccountFieldState::NoSession, {});
-  royaltyBadge_->set_visible(false);
+  ApplyReferralsRow(AccountFieldState::NoSession);
   codesState_ = AccountFieldState::NoSession;
   RenderBalanceCodes();
   ApplyClientId();
@@ -1674,8 +1356,10 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   //    reads AccountPage::totalReferrals(), "0 until the referral load lands".
   referralTotals_->set_text(
       Format(T_("total_referrals_lld", "Total Referrals: {}"), totalReferrals_));
+  const ReferralTerms& terms = CurrentReferralTerms();
   const Glib::ustring bonus =
-      Format(T_("referral_bonus", "+{} GiB/Day"), totalReferrals_ * kReferralGiBPerDay);
+      Format(T_("referral_bonus", "+{} GiB/Day"),
+             terms.PaidReferrals(totalReferrals_) * terms.bonusGibPerDay);
   SetToned(*referralBonus_, kOffWhite, bonus);
   kit::SetAccessibleLabel(*referralBonus_, referralTotals_->get_text() + ", " + bonus);
 }
@@ -1850,7 +1534,7 @@ void AccountPage::BuildAccountPane() {
   kit::SetAccessibleLabel(*paneB_.root, T_("account", "Account"));
   BuildProfileGroup(*paneB_.content);
   BuildSecurityGroup(*paneB_.content);
-  BuildReferralGroup(*paneB_.content);
+  BuildReferralsRow(*paneB_.content);
   BuildDangerGroup(*paneB_.content);
 }
 
@@ -1965,78 +1649,16 @@ void AccountPage::BuildSecurityGroup(Gtk::Box& host) {
   }
 }
 
-void AccountPage::BuildReferralGroup(Gtk::Box& host) {
-  host.append(*kit::MakePaneGroupHeader(T_("referrals", "Referrals")).root);
-
-  // 1. the bonus referral code.
-  {
-    auto row = AddValueActionRow(host, T_("bonus_referral_code_label", "Bonus referral code"),
-                                 T_("copy", "Copy"));
-    bonusCodeValue_ = row.value;
-    bonusCodeCopy_ = row.action;
-    bonusCodeCopy_->signal_clicked().connect([this] {
-      CopyFull(referralCode_, T_("bonus_referral_code_copied_to_clipboard",
-                                 "Bonus referral code copied to clipboard"));
-    });
-  }
-
-  // 2. the referral network (opens the sheet).
-  referralNetworkRow_ =
-      kit::MakePaneTwoLineRowButton(T_("referral_network", "Referral network"), {}, kRowTall);
-  referralNetworkRow_.value->set_max_width_chars(kReferralValueChars);
-  referralNetworkRow_.root->signal_clicked().connect([this] { ShowReferralNetworkSheet(); });
-  host.append(*referralNetworkRow_.root);
-
-  // 2b. refer friends: opens the gold king-frog refer panel (parity with the
-  // account rows on android/apple).
-  {
-    auto referRow =
-        kit::MakePaneTwoLineRowButton(T_("refer_and_earn", "Refer and earn"), {}, kRowTall);
-    referRow.root->signal_clicked().connect([this] {
-      Gtk::Window* root = RootWindow();
-      if (root == nullptr) return;
-      ShowReferSheet(*root, totalReferrals_, referralCode_);
-    });
-    host.append(*referRow.root);
-  }
-
-  // 3. the referral summary (wraps; no trimming).
-  {
-    auto prose = MakeProseRow({}, kProsePadY);
-    prose.line->remove_css_class("ur-caption");
-    prose.line->add_css_class("ur-key");  // 13px muted, the key voice
-    referralSummary_ = prose.line;
-    host.append(*prose.root);
-  }
-
-  // 4. the royalty badge — visible iff totalReferrals > 0.
-  {
-    auto row = MakePaddedRow(kProsePadY);
-    auto* line = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 10);
-    const std::string frog = ReferralFrogPath();
-    if (!frog.empty()) {
-      auto* image = Gtk::make_managed<Gtk::Image>();
-      image->set(frog);
-      image->set_pixel_size(kFrogPx);
-      kit::MarkDecorative(*image);  // the crowned frog mascot says nothing new
-      line->append(*image);
-    } else {
-      // resolver miss (unusual — the asset is installed): the badge keeps its
-      // sentence rather than reserving a hole for a picture that never arrives
-      g_message("account: ReferralFrog.png not found; the royalty badge runs text-only");
-    }
-    auto* text = Gtk::make_managed<Gtk::Label>(
-        T_("referral_royalty", "You're referral royalty!"));
-    text->add_css_class("ur-key");
-    text->set_xalign(0);
-    text->set_wrap(true);
-    text->set_valign(Gtk::Align::CENTER);
-    line->append(*text);
-    row.content->append(*line);
-    royaltyBadge_ = row.root;
-    royaltyBadge_->set_visible(false);
-    host.append(*row.root);
-  }
+void AccountPage::BuildReferralsRow(Gtk::Box& host) {
+  // Referrals are their own section now (the "Refer and earn" page); this
+  // destination keeps one row that opens it, with the count on its second
+  // line. The row is live signed out too — the page settles on no-session.
+  host.append(*kit::MakePaneGroupHeader(T_("refer_and_earn", "Refer and earn")).root);
+  referralsRow_ = kit::MakePaneTwoLineRowButton(T_("referrals", "Referrals"), {}, kRowTall);
+  referralsRow_.root->signal_clicked().connect([this] {
+    if (on_open_referrals) on_open_referrals();
+  });
+  host.append(*referralsRow_.root);
 }
 
 void AccountPage::BuildDangerGroup(Gtk::Box& host) {
@@ -2613,48 +2235,15 @@ void AccountPage::ApplyClientId() {
 
 // ---- §3.3 referrals ----------------------------------------------------------
 
-void AccountPage::ApplyReferralCode(AccountFieldState state) {
-  ApplyFieldState(*bonusCodeValue_, state, referralCode_);
-  kit::SetAccessibleLabel(
-      *bonusCodeValue_,
-      Glib::ustring(T_("bonus_referral_code_label", "Bonus referral code")) + ", " +
-          bonusCodeValue_->get_text());
-  bonusCodeCopy_->set_sensitive(state == AccountFieldState::Loaded && !referralCode_.empty());
-}
-
-void AccountPage::ApplyReferralSummary(AccountFieldState state) {
-  switch (state) {
-    case AccountFieldState::Loaded:
-      SetToned(*referralSummary_, kUrTextMuted,
-               Format(T_("referral_summary",
-                         "Code: {0} · Referrals: {1} · Friends enter the code when they "
-                         "sign up"),
-                      referralCode_, totalReferrals_));
-      break;
-    case AccountFieldState::Failed:
-      SetToned(*referralSummary_, kUrDanger,
-               T_("something_went_wrong", "Something went wrong."));
-      break;
-    default:
-      ApplyFieldState(*referralSummary_, state);
-      break;
+void AccountPage::ApplyReferralsRow(AccountFieldState state) {
+  if (state == AccountFieldState::Loaded) {
+    ApplyFieldState(*referralsRow_.value, state,
+                    Format(T_("total_referrals_lld", "Total Referrals: {}"), totalReferrals_));
+  } else {
+    ApplyFieldState(*referralsRow_.value, state);
   }
-  // §3.3.5 — the badge follows the COUNT, not the code: a network with
-  // referrals but no referral code still earned it. "Hidden on failure and
-  // sign-out" comes free, because both zero the count; the extra gate is only
-  // there so a Loading state cannot leave the badge asserting a figure the
-  // current read has not confirmed.
-  const bool answered = state == AccountFieldState::Loaded ||
-                        state == AccountFieldState::Empty;
-  royaltyBadge_->set_visible(answered && totalReferrals_ > 0);
-}
-
-void AccountPage::ApplyReferralNetworkValue(AccountFieldState state,
-                                            const std::string& name) {
-  // The name is passed in rather than read back off the label: a label that
-  // has just been written with a state line would otherwise hand its own
-  // "Loading..." back as the loaded value.
-  ApplyFieldState(*referralNetworkRow_.value, state, name);
+  kit::SetAccessibleLabel(*referralsRow_.root, Glib::ustring(T_("referrals", "Referrals")) +
+                                                   ", " + referralsRow_.value->get_text());
 }
 
 void AccountPage::LoadReferralInfo() {
@@ -2662,22 +2251,19 @@ void AccountPage::LoadReferralInfo() {
   if (!CanCallApi()) {
     referralCode_.clear();
     totalReferrals_ = 0;
-    ApplyReferralCode(AccountFieldState::NoSession);
-    ApplyReferralSummary(AccountFieldState::NoSession);
+    ApplyReferralsRow(AccountFieldState::NoSession);
     ApplyBalance(balance_);  // pane A's referral rows follow the same figure
     return;
   }
-  ApplyReferralCode(AccountFieldState::Loading);
-  ApplyReferralSummary(AccountFieldState::Loading);
+  ApplyReferralsRow(AccountFieldState::Loading);
 
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
-  // 20 s: the bonus-code row and the referral summary both hang off this one.
+  // 20 s: the Referrals row and pane A's referral lines both hang off this one.
   const uint32_t flow = referralFlow_.Begin(kApiTimeoutMs, [this] {
     referralCode_.clear();
     totalReferrals_ = 0;
-    ApplyReferralCode(AccountFieldState::Failed);
-    ApplyReferralSummary(AccountFieldState::Failed);
+    ApplyReferralsRow(AccountFieldState::Failed);
     ApplyBalance(balance_);
   });
   host_.api().getNetworkReferralCode(
@@ -2694,58 +2280,17 @@ void AccountPage::LoadReferralInfo() {
                                                      : "(no result)"));
             referralCode_.clear();
             totalReferrals_ = 0;
-            ApplyReferralCode(AccountFieldState::Failed);
-            ApplyReferralSummary(AccountFieldState::Failed);
+            ApplyReferralsRow(AccountFieldState::Failed);
             ApplyBalance(balance_);
             return;
           }
           referralCode_ = result->referral_code.value_or(std::string());
           totalReferrals_ = result->total_referrals;
-          // The CODE ROW distinguishes "no code" — Empty renders the generic
-          // "None" (§3.3.2). The SUMMARY does not: §3.3.4 gives a successful
-          // read exactly ONE render, the referral sentence with its count.
-          // Routing an empty code through Empty here dropped a network's
-          // referral count on the floor and hid the badge it had earned.
-          ApplyReferralCode(referralCode_.empty() ? AccountFieldState::Empty
-                                                  : AccountFieldState::Loaded);
-          ApplyReferralSummary(AccountFieldState::Loaded);
+          // §3.3.4: a successful read gets exactly ONE render, the count —
+          // a network with referrals but no code still earned them.
+          ApplyReferralsRow(AccountFieldState::Loaded);
           // the referral load repaints pane A's two referral lines
           ApplyBalance(balance_);
-        });
-      });
-}
-
-void AccountPage::LoadReferralNetwork() {
-  referralNetworkFlow_.Abandon();
-  if (!CanCallApi()) {
-    ApplyReferralNetworkValue(AccountFieldState::NoSession, {});
-    return;
-  }
-  ApplyReferralNetworkValue(AccountFieldState::Loading, {});
-
-  auto epoch = epoch_;
-  const uint64_t seen = *epoch_;
-  const uint32_t flow = referralNetworkFlow_.Begin(
-      kApiTimeoutMs, [this] { ApplyReferralNetworkValue(AccountFieldState::Failed, {}); });
-  host_.api().getReferralNetwork(
-      [this, epoch, seen, flow](std::optional<urnet::GetReferralNetworkResult> result,
-                                std::optional<std::string> err) {
-        PostToMain([this, epoch, seen, flow, result = std::move(result),
-                    err = std::move(err)] {
-          if (*epoch != seen) return;
-          if (!referralNetworkFlow_.Settle(flow, "referral network load")) return;
-          // The server answers "no referral network found" on the ERROR
-          // channel of a lookup that SUCCEEDED: a structured response, error
-          // or not, renders name-or-"None"; only transport failure is Failed.
-          if (!result || err) {
-            g_warning("account: getReferralNetwork failed: %s",
-                      err ? err->c_str() : "(no result)");
-            ApplyReferralNetworkValue(AccountFieldState::Failed, {});
-            return;
-          }
-          const std::string name = result->network ? result->network->name : std::string();
-          ApplyReferralNetworkValue(
-              name.empty() ? AccountFieldState::Empty : AccountFieldState::Loaded, name);
         });
       });
 }
@@ -2814,23 +2359,6 @@ void AccountPage::ShowAuthCodeSheet() {
     WireSheet(*authCodeSheet_);
   }
   authCodeSheet_->Open();
-}
-
-void AccountPage::ShowReferralNetworkSheet() {
-  Gtk::Window* root = RootWindow();
-  if (root == nullptr) {
-    g_warning("account: no window root; the referral-network sheet was not opened");
-    return;
-  }
-  if (!BeginSheet("referral network")) return;
-  if (!referralSheet_) {
-    referralSheet_ = std::make_unique<AccountReferralNetworkSheet>(
-        *root, host_, [this] { return CanCallApi(); });
-    referralSheet_->on_changed = [this] { LoadReferralNetwork(); };
-    referralSheet_->on_royal = [this, root] { ShowRoyalWelcomeSheet(*root); };
-    WireSheet(*referralSheet_);
-  }
-  referralSheet_->Open();
 }
 
 void AccountPage::ShowDeleteAccountSheet() {

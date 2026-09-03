@@ -74,6 +74,11 @@ msgctxt "add_blocked_location"
 msgid "Add blocked location"
 msgstr "차단된 위치 추가"
 
+#. Points leaderboard: button that opens the emoji tag editor when no tag is set yet.
+msgctxt "add_emoji"
+msgid "Add emoji"
+msgstr "이모지 추가"
+
 #. Call to action
 msgctxt "add_referral_code"
 msgid "Add referral code"
@@ -140,6 +145,11 @@ msgstr "금액"
 msgctxt "amount_per_month"
 msgid "{}/month"
 msgstr "{}/월"
+
+#. Points leaderboard: the name shown for a listed network whose name is not public.
+msgctxt "anonymous"
+msgid "Anonymous"
+msgstr "익명"
 
 #. Header of the free-text box on the feedback form.
 msgctxt "anything_else"
@@ -432,6 +442,11 @@ msgctxt "blocked_locations_2"
 msgid "Blocked locations"
 msgstr "차단된 위치"
 
+#. Points leaderboard: stat tile label and sort chip. A block is one finalized payout epoch.
+msgctxt "blocks"
+msgid "Blocks"
+msgstr "블록"
+
 #. Snackbar shown after copying the bonus referral code. Used in Shared/Views/Introduction/ParticipateReferView.swift, Main/Account/Settings/SettingsForm-iOS.swift and Main/Account/Settings/SettingsForm-macOS.swift.
 msgctxt "bonus_referral_code_copied_to_clipboard"
 msgid "Bonus referral code copied to clipboard"
@@ -561,6 +576,11 @@ msgstr "배율 받기"
 msgctxt "claim_network_name_hint"
 msgid "Claim a custom network name to replace your auto-generated one"
 msgstr "자동 생성된 이름을 대체할 사용자 지정 네트워크 이름을 만드세요"
+
+#. General UI string: a button that clears a field or setting.
+msgctxt "clear"
+msgid "Clear"
+msgstr "지우기"
 
 #. transfer stats and split rules
 msgctxt "client_contracts"
@@ -1089,6 +1109,11 @@ msgctxt "edit_device_name"
 msgid "Edit device name"
 msgstr "기기 이름 편집"
 
+#. Points leaderboard: button that opens the emoji tag editor for an existing tag.
+msgctxt "edit_emoji"
+msgid "Edit emoji"
+msgstr "이모지 편집"
+
 #. Button on the profile screen to edit the network name.
 msgctxt "edit_network_name"
 msgid "Edit network name"
@@ -1108,6 +1133,31 @@ msgstr "추천 코드 편집"
 msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "분할 규칙 편집"
+
+#. Points leaderboard: the title of the emoji tag editor. One to six emoji shown next to the network.
+msgctxt "emoji_tag"
+msgid "Emoji tag"
+msgstr "이모지 태그"
+
+#. Points leaderboard: emoji editor error when the field has no emoji.
+msgctxt "emoji_tag_error_empty"
+msgid "Add at least one emoji."
+msgstr "이모지를 하나 이상 추가하세요."
+
+#. Points leaderboard: emoji editor error when the field contains anything that is not an emoji.
+msgctxt "emoji_tag_error_not_emoji"
+msgid "Only emoji are allowed."
+msgstr "이모지만 사용할 수 있습니다."
+
+#. Points leaderboard: emoji editor error when more than {max} emoji were entered.
+msgctxt "emoji_tag_error_too_many"
+msgid "Use at most {} emoji."
+msgstr "이모지는 최대 {}개까지 사용할 수 있습니다."
+
+#. Points leaderboard: the emoji editor's explanation. {max} is the most emoji allowed (6).
+msgctxt "emoji_tag_hint"
+msgid "Pick 1 to {} emoji to show next to your network."
+msgstr "네트워크 옆에 표시할 이모지를 1~{}개 고르세요."
 
 #. Call to action
 msgctxt "enjoying_urnetwork"
@@ -1717,6 +1767,11 @@ msgctxt "login_verify_header"
 msgid "You've got mail"
 msgstr "메일을 확인해주세요"
 
+#. Points leaderboard: secondary stat, the best run of consecutive blocks with points.
+msgctxt "longest_streak"
+msgid "Longest streak"
+msgstr "최장 연속"
+
 #. Call to action
 msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
@@ -2139,7 +2194,7 @@ msgctxt "no_wallets_found_alert_content"
 msgid "No Solana wallets were found installed on this device. Please install a wallet and try again."
 msgstr "이 장치에 설치된 Solana 지갑이 없습니다. 지갑을 설치하고 다시 시도하십시오."
 
-#. Call to action
+#. Empty value: the Referrals section shows it when no referral network is linked (apple), and the android referral network row.
 msgctxt "none"
 msgid "None"
 msgstr "없음"
@@ -2340,6 +2395,26 @@ msgid "+ {} more"
 msgid_plural "+ {} more"
 msgstr[0] "+ {}개 더"
 
+#. Points leaderboard: tab label, stat tile label and sort chip.
+msgctxt "points"
+msgid "Points"
+msgstr "포인트"
+
+#. Points leaderboard: the explanation under the list header.
+msgctxt "points_leaderboard_description"
+msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
+msgstr "누적 포인트입니다. 블록은 확정된 에포크 하나이며, 연속은 최신 블록까지 포인트를 얻은 연속 블록 수입니다."
+
+#. Points leaderboard: shown when no network has opted in yet.
+msgctxt "points_leaderboard_empty"
+msgid "No one is on the points leaderboard yet."
+msgstr "아직 포인트 리더보드에 아무도 없습니다."
+
+#. Points leaderboard: shown under the own-stats card while the network has not opted in.
+msgctxt "points_leaderboard_private_hint"
+msgid "Only you can see this. Turn it on to appear on the leaderboard."
+msgstr "나만 볼 수 있습니다. 켜면 리더보드에 표시됩니다."
+
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
 msgid "Post Quantum Encryption"
@@ -2501,6 +2576,11 @@ msgctxt "quit_urnetwork"
 msgid "Quit URnetwork"
 msgstr "URnetwork 종료"
 
+#. Points leaderboard: how many networks hold a rank. {count} is preformatted with separators.
+msgctxt "ranked_networks_count"
+msgid "{} ranked networks"
+msgstr "순위가 매겨진 네트워크 {}개"
+
 #. Call to action
 msgctxt "ready_to_connect"
 msgid "Ready to connect"
@@ -2647,6 +2727,11 @@ msgstr[0] "친구 {0}명이 가입했습니다. 평생 +{1} GiB/일을 받는 �
 msgctxt "referral_network"
 msgid "Referral network"
 msgstr "추천 네트워크"
+
+#. Referrals screen: label of the points a network earned from its referrals (the payout_linked_account points), shown next to the total referral count.
+msgctxt "referral_points"
+msgid "Referral points"
+msgstr "추천 포인트"
 
 #. A label displaying the number of referrals a user has made. The argument is the number of referrals.
 msgctxt "referral_progress_of_five"
@@ -2982,6 +3067,11 @@ msgctxt "show_icon_when_connected"
 msgid "Show UR icon when connected"
 msgstr "연결 시 UR 아이콘 표시"
 
+#. Points leaderboard: the opt-in switch label. Only opted-in networks are listed.
+msgctxt "show_on_points_leaderboard"
+msgid "Show on the points leaderboard"
+msgstr "포인트 리더보드에 표시"
+
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show_provider_list"
 msgid "Show Provider List"
@@ -3095,7 +3185,7 @@ msgctxt "site_app_fixed_ip"
 msgid "Fixed IP"
 msgstr "고정 IP"
 
-#. App sidebar: manage subscription button (opens the Stripe billing portal)
+#. App sidebar and account panel: opens Manage Subscription (every billing store, renewal date, auto-renew, cancel)
 msgctxt "site_app_manage_subscription"
 msgid "Manage Subscription"
 msgstr "구독 관리"
@@ -3190,6 +3280,81 @@ msgctxt "site_install_app"
 msgid "Install the app"
 msgstr "앱 설치"
 
+#. Account panel: the small button on the plan card that opens Manage Subscription in the app.
+msgctxt "site_manage"
+msgid "Manage"
+msgstr "관리"
+
+#. Account panel: hint under the plan card for Pro members, next to the Manage button that opens Manage Subscription.
+msgctxt "site_manage_subscription_hint"
+msgid "See your renewal date, auto-renew status and cancel options."
+msgstr "갱신일, 자동 갱신 상태, 해지 옵션을 확인하세요."
+
+#. Subscription: date line when the store did not answer whether it auto-renews. {date} is a localized date.
+msgctxt "site_sub_active_until"
+msgid "Active until {date}"
+msgstr "{date}까지 활성"
+
+#. Subscription: status chip — the subscription will not renew itself.
+msgctxt "site_sub_auto_renew_off"
+msgid "Auto-renew off"
+msgstr "자동 갱신 꺼짐"
+
+#. Subscription: status chip — the subscription renews itself.
+msgctxt "site_sub_auto_renew_on"
+msgid "Auto-renew on"
+msgstr "자동 갱신 켜짐"
+
+#. Subscription: status chip — the store did not answer whether it auto-renews.
+msgctxt "site_sub_auto_renew_unknown"
+msgid "Auto-renew unknown"
+msgstr "자동 갱신 알 수 없음"
+
+#. Subscription: store sentence for a Pro year paid with USDC on Solana.
+msgctxt "site_sub_billed_solana"
+msgid "Paid with USDC on Solana."
+msgstr "Solana에서 USDC로 결제됨."
+
+#. Subscription: secondary link that opens Stripe's billing portal (payment details, invoices). Shown only when the network has a Stripe customer.
+msgctxt "site_sub_billing_details"
+msgid "Billing details"
+msgstr "결제 정보"
+
+#. Subscription: the cancel button for a Stripe-billed subscription (cancels at the end of the paid period).
+msgctxt "site_sub_cancel"
+msgid "Cancel subscription"
+msgstr "구독 해지"
+
+#. Subscription: inline confirmation before cancelling. {date} is the end of the paid period, a localized date.
+msgctxt "site_sub_cancel_confirm"
+msgid "Cancel at the end of the period? You keep Pro until {date}."
+msgstr "기간 종료 시 해지할까요? {date}까지 Pro가 유지됩니다."
+
+#. Subscription: back out of the cancellation.
+msgctxt "site_sub_cancel_keep"
+msgid "Keep it"
+msgstr "유지하기"
+
+#. Subscription: confirm the cancellation.
+msgctxt "site_sub_cancel_yes"
+msgid "Yes, cancel"
+msgstr "예, 해지합니다"
+
+#. Subscription: a cancel or resume request failed.
+msgctxt "site_sub_change_error"
+msgid "Could not update the subscription. Please try again."
+msgstr "구독을 변경하지 못했습니다. 다시 시도해 주세요."
+
+#. Subscription: shown when the details request (dates, auto-renew) failed and the screen falls back to the list of billing stores.
+msgctxt "site_sub_details_error"
+msgid "Could not load the renewal details. Showing what we know."
+msgstr "갱신 정보를 불러오지 못했습니다. 알고 있는 정보만 표시합니다."
+
+#. Subscription: date line when auto-renew is off (cancelled, or a one-time USDC year). {date} is a localized date.
+msgctxt "site_sub_ends_on"
+msgid "Ends on {date}"
+msgstr "{date}에 종료"
+
 #. Subscription: free plan body
 msgctxt "site_sub_free_body"
 msgid "You're on the Free plan. Upgrade to Pro for more data and features."
@@ -3234,6 +3399,21 @@ msgstr "Pro 구독은 App Store에서 청구됩니다. 변경하거나 취소하
 msgctxt "site_sub_platform_body_google"
 msgid "Your Pro subscription is billed through Google Play. To change or cancel it, manage your subscriptions in Google Play."
 msgstr "Pro 구독은 Google Play에서 청구됩니다. 변경하거나 취소하려면 Google Play에서 구독을 관리하세요."
+
+#. Subscription: date line when auto-renew is on. {date} is a localized date.
+msgctxt "site_sub_renews_on"
+msgid "Renews on {date}"
+msgstr "{date}에 갱신"
+
+#. Subscription: undo a pending cancellation while the paid period is still running.
+msgctxt "site_sub_resume"
+msgid "Resume subscription"
+msgstr "구독 재개"
+
+#. Subscription: note under a USDC-paid year — it is a one-time payment with nothing to cancel.
+msgctxt "site_sub_solana_no_renew"
+msgid "Does not renew. Pay again with USDC when it ends."
+msgstr "자동 갱신되지 않습니다. 종료 시 USDC로 다시 결제하세요."
 
 #. Subscription: Stripe-billed body
 msgctxt "site_sub_stripe_body"
@@ -3345,6 +3525,11 @@ msgstr "1단계"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "2단계"
+
+#. Points leaderboard: stat tile label and sort chip. Consecutive blocks with points.
+msgctxt "streak"
+msgid "Streak"
+msgstr "연속"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"

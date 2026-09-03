@@ -208,6 +208,8 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       snapshot.timedOut = balance_.PurchaseConfirmationTimedOut();
       accountPage_->ApplyBalance(snapshot);
     }
+    // The Refer and earn page paints its card from the same store.
+    if (referralsPage_) referralsPage_->OnBalanceChanged();
     // The free -> Pro upgrade side effect (mac MainView reacts to
     // didDetectUpgradeToPro): reset provide mode to never at the upgrade,
     // exactly once — the user can opt back in afterward and that sticks.
@@ -363,6 +365,7 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     // rather than sit on a spinner forever with no session behind it.
     if (earningsPage_) earningsPage_->SetPreviewMode(true);
     if (accountPage_) accountPage_->SetPreviewMode(true);
+    if (referralsPage_) referralsPage_->SetPreviewMode(true);
     // DEFERRED to idle, and guarded: a destination's Load() runs API/SDK
     // reads, and in preview there is no session — an exception escaping the
     // WINDOW CONSTRUCTOR would take the process down before anything renders
@@ -377,6 +380,7 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       try {
         if (shell_ && !tag.empty() && tag != "1") shell_->Navigate(tag);
         if (tag == "account" && accountPage_) accountPage_->ShowPreviewState();
+        if (tag == "referrals" && referralsPage_) referralsPage_->ShowPreviewState();
         if (tag == "wallet" && earningsPage_) shell_->Navigate("earnings");
         if ((tag == "earnings" || tag == "wallet") && earningsPage_) {
           // ORDER MATTERS: the empty settle is what a no-session preview looks
@@ -1608,6 +1612,24 @@ void MainWindow::BuildHome() {
   accountPage_->sheet_open = [this] { return sheetOpen_; };
   accountPage_->on_sheet_open_changed = [this](bool open) { sheetOpen_ = open; };
   shell_->SetPage("account", *accountPage_);
+  // The "Refer and earn" page: a destination without a rail item, reached from
+  // Account's Referrals row and left through its own "‹ Account".
+  referralsPage_ = Gtk::make_managed<ReferralsPage>(host_, balance_);
+  referralsPage_->on_snackbar = [this](const Glib::ustring& message, bool error) {
+    if (shell_) {
+      shell_->snackbar().Show(message, error ? kit::Snackbar::Severity::Error
+                                             : kit::Snackbar::Severity::Success);
+    }
+  };
+  referralsPage_->sheet_open = [this] { return sheetOpen_; };
+  referralsPage_->on_sheet_open_changed = [this](bool open) { sheetOpen_ = open; };
+  referralsPage_->on_back = [this] {
+    if (shell_) shell_->Navigate("account");
+  };
+  accountPage_->on_open_referrals = [this] {
+    if (shell_) shell_->Navigate("referrals");
+  };
+  shell_->SetPage("referrals", *referralsPage_);
   supportPage_ = Gtk::make_managed<SupportPage>(host_);
   supportPage_->on_snackbar = [this](const Glib::ustring& message, bool error) {
     if (shell_) {
@@ -1644,6 +1666,10 @@ void MainWindow::BuildHome() {
     if (tag == "account" && accountPage_) {
       accountPage_->Load();
       balance_.FetchNow();  // the plan pane is painted from the store's snapshot
+    }
+    if (tag == "referrals" && referralsPage_) {
+      referralsPage_->Load();
+      balance_.FetchNow();  // the card is painted from the store's referral figures
     }
     // Settings owns the account-subject sheets too, so it loads for both tags.
     if ((tag == "settings" || tag == "account") && settingsPage_) settingsPage_->Load();
@@ -2025,6 +2051,7 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
     // Account carries account-SUBJECT state (name, login methods, referral
     // code, the departed plan): a sign-out must wipe it, not merely reload it.
     if (accountPage_) accountPage_->ResetForSignOut();
+    if (referralsPage_) referralsPage_->ResetForSignOut();
     // sign-out lands back on the initial step with a clean login flow
     loginUserAuth_.clear();
     password_.set_text("");

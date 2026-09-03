@@ -74,6 +74,11 @@ msgctxt "add_blocked_location"
 msgid "Add blocked location"
 msgstr "Blockierten Standort hinzufügen"
 
+#. Points leaderboard: button that opens the emoji tag editor when no tag is set yet.
+msgctxt "add_emoji"
+msgid "Add emoji"
+msgstr "Emoji hinzufügen"
+
 #. Call to action
 msgctxt "add_referral_code"
 msgid "Add referral code"
@@ -140,6 +145,11 @@ msgstr "Betrag"
 msgctxt "amount_per_month"
 msgid "{}/month"
 msgstr "{}/Monat"
+
+#. Points leaderboard: the name shown for a listed network whose name is not public.
+msgctxt "anonymous"
+msgid "Anonymous"
+msgstr "Anonym"
 
 #. Header of the free-text box on the feedback form.
 msgctxt "anything_else"
@@ -434,6 +444,11 @@ msgctxt "blocked_locations_2"
 msgid "Blocked locations"
 msgstr "Blockierte Standorte"
 
+#. Points leaderboard: stat tile label and sort chip. A block is one finalized payout epoch.
+msgctxt "blocks"
+msgid "Blocks"
+msgstr "Blöcke"
+
 #. Snackbar shown after copying the bonus referral code. Used in Shared/Views/Introduction/ParticipateReferView.swift, Main/Account/Settings/SettingsForm-iOS.swift and Main/Account/Settings/SettingsForm-macOS.swift.
 msgctxt "bonus_referral_code_copied_to_clipboard"
 msgid "Bonus referral code copied to clipboard"
@@ -563,6 +578,11 @@ msgstr "Multiplikator beanspruchen"
 msgctxt "claim_network_name_hint"
 msgid "Claim a custom network name to replace your auto-generated one"
 msgstr "Sichere dir einen eigenen Netzwerknamen, der deinen automatisch generierten ersetzt"
+
+#. General UI string: a button that clears a field or setting.
+msgctxt "clear"
+msgid "Clear"
+msgstr "Löschen"
 
 #. transfer stats and split rules
 msgctxt "client_contracts"
@@ -1093,6 +1113,11 @@ msgctxt "edit_device_name"
 msgid "Edit device name"
 msgstr "Gerätenamen bearbeiten"
 
+#. Points leaderboard: button that opens the emoji tag editor for an existing tag.
+msgctxt "edit_emoji"
+msgid "Edit emoji"
+msgstr "Emoji bearbeiten"
+
 #. Button on the profile screen to edit the network name.
 msgctxt "edit_network_name"
 msgid "Edit network name"
@@ -1112,6 +1137,31 @@ msgstr "Empfehlungscode bearbeiten"
 msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "Split-Regel bearbeiten"
+
+#. Points leaderboard: the title of the emoji tag editor. One to six emoji shown next to the network.
+msgctxt "emoji_tag"
+msgid "Emoji tag"
+msgstr "Emoji-Tag"
+
+#. Points leaderboard: emoji editor error when the field has no emoji.
+msgctxt "emoji_tag_error_empty"
+msgid "Add at least one emoji."
+msgstr "Füge mindestens ein Emoji hinzu."
+
+#. Points leaderboard: emoji editor error when the field contains anything that is not an emoji.
+msgctxt "emoji_tag_error_not_emoji"
+msgid "Only emoji are allowed."
+msgstr "Nur Emoji sind erlaubt."
+
+#. Points leaderboard: emoji editor error when more than {max} emoji were entered.
+msgctxt "emoji_tag_error_too_many"
+msgid "Use at most {} emoji."
+msgstr "Verwende höchstens {} Emoji."
+
+#. Points leaderboard: the emoji editor's explanation. {max} is the most emoji allowed (6).
+msgctxt "emoji_tag_hint"
+msgid "Pick 1 to {} emoji to show next to your network."
+msgstr "Wähle 1 bis {} Emoji, die neben deinem Netzwerk erscheinen."
 
 #. Call to action
 msgctxt "enjoying_urnetwork"
@@ -1723,6 +1773,11 @@ msgctxt "login_verify_header"
 msgid "You've got mail"
 msgstr "Du hast eine E-Mail"
 
+#. Points leaderboard: secondary stat, the best run of consecutive blocks with points.
+msgctxt "longest_streak"
+msgid "Longest streak"
+msgstr "Längste Serie"
+
 #. Call to action
 msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
@@ -2147,7 +2202,7 @@ msgctxt "no_wallets_found_alert_content"
 msgid "No Solana wallets were found installed on this device. Please install a wallet and try again."
 msgstr "Es wurden keine Solana Wallets auf diesem Gerät gefunden. Bitte installiere eine Wallet und versuche es erneut."
 
-#. Call to action
+#. Empty value: the Referrals section shows it when no referral network is linked (apple), and the android referral network row.
 msgctxt "none"
 msgid "None"
 msgstr "Keine"
@@ -2349,6 +2404,26 @@ msgid_plural "+ {} more"
 msgstr[0] "+ {} weiterer"
 msgstr[1] "+ {} weitere"
 
+#. Points leaderboard: tab label, stat tile label and sort chip.
+msgctxt "points"
+msgid "Points"
+msgstr "Punkte"
+
+#. Points leaderboard: the explanation under the list header.
+msgctxt "points_leaderboard_description"
+msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
+msgstr "Punkte seit Beginn. Ein Block ist eine abgeschlossene Epoche; die Serie zählt aufeinanderfolgende Blöcke mit Punkten bis zum letzten."
+
+#. Points leaderboard: shown when no network has opted in yet.
+msgctxt "points_leaderboard_empty"
+msgid "No one is on the points leaderboard yet."
+msgstr "Noch niemand ist in der Punkte-Bestenliste."
+
+#. Points leaderboard: shown under the own-stats card while the network has not opted in.
+msgctxt "points_leaderboard_private_hint"
+msgid "Only you can see this. Turn it on to appear on the leaderboard."
+msgstr "Nur du siehst das. Schalte es ein, um in der Bestenliste zu erscheinen."
+
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
 msgid "Post Quantum Encryption"
@@ -2511,6 +2586,11 @@ msgstr "Beenden"
 msgctxt "quit_urnetwork"
 msgid "Quit URnetwork"
 msgstr "URnetwork beenden"
+
+#. Points leaderboard: how many networks hold a rank. {count} is preformatted with separators.
+msgctxt "ranked_networks_count"
+msgid "{} ranked networks"
+msgstr "{} platzierte Netzwerke"
 
 #. Call to action
 msgctxt "ready_to_connect"
@@ -2675,6 +2755,11 @@ msgstr "Freunde einladen und Sie beide bekommen kostenlose Daten"
 msgctxt "referral_panel_none"
 msgid "No friends yet. Share your code and watch the crown appear. 👑"
 msgstr "Noch keine Freunde – teilen Sie Ihren Code und die Krone erscheint. 👑"
+
+#. Referrals screen: label of the points a network earned from its referrals (the payout_linked_account points), shown next to the total referral count.
+msgctxt "referral_points"
+msgid "Referral points"
+msgstr "Empfehlungspunkte"
 
 #. A label displaying the number of referrals a user has made. The argument is the number of referrals.
 msgctxt "referral_progress_of_five"
@@ -3011,6 +3096,11 @@ msgctxt "show_icon_when_connected"
 msgid "Show UR icon when connected"
 msgstr "UR-Symbol bei Verbindung anzeigen"
 
+#. Points leaderboard: the opt-in switch label. Only opted-in networks are listed.
+msgctxt "show_on_points_leaderboard"
+msgid "Show on the points leaderboard"
+msgstr "In der Punkte-Bestenliste anzeigen"
+
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show_provider_list"
 msgid "Show Provider List"
@@ -3143,11 +3233,6 @@ msgstr "blockiert"
 msgctxt "site_app_blocked_locations"
 msgid "Blocked locations"
 msgstr "Blockierte Standorte"
-
-#. App settings: bonus referral code section
-msgctxt "site_app_bonus_referral"
-msgid "Bonus referral code"
-msgstr "Bonus-Empfehlungscode"
 
 #. App wallets: canceled payout status
 msgctxt "site_app_canceled"
@@ -3434,7 +3519,7 @@ msgctxt "site_app_login_methods"
 msgid "Login methods"
 msgstr "Anmeldemethoden"
 
-#. App sidebar: manage subscription button (opens the Stripe billing portal)
+#. App sidebar and account panel: opens Manage Subscription (every billing store, renewal date, auto-renew, cancel)
 msgctxt "site_app_manage_subscription"
 msgid "Manage Subscription"
 msgstr "Abonnement verwalten"
@@ -3583,11 +3668,6 @@ msgstr "Empfangen"
 msgctxt "site_app_redeemed_on"
 msgid "Redeemed {date}"
 msgstr "Eingelöst {date}"
-
-#. App account: refer friends card
-msgctxt "site_app_refer_friends"
-msgid "Refer friends"
-msgstr "Freunde einladen"
 
 #. App settings: referral network section
 msgctxt "site_app_referral_network"
@@ -3879,10 +3959,15 @@ msgctxt "site_locations"
 msgid "Locations"
 msgstr "Standorte"
 
-#. Account panel: billing portal hint for Pro users
-msgctxt "site_manage_billing_hint"
-msgid "Manage payment details, see invoices, or cancel your subscription."
-msgstr "Zahlungsdetails verwalten, Rechnungen ansehen oder Abonnement kündigen."
+#. Account panel: the small button on the plan card that opens Manage Subscription in the app.
+msgctxt "site_manage"
+msgid "Manage"
+msgstr "Verwalten"
+
+#. Account panel: hint under the plan card for Pro members, next to the Manage button that opens Manage Subscription.
+msgctxt "site_manage_subscription_hint"
+msgid "See your renewal date, auto-renew status and cancel options."
+msgstr "Verlängerungsdatum, automatische Verlängerung und Kündigungsoptionen ansehen."
 
 #. Account panel: empty redeemed-codes list
 msgctxt "site_no_balance_codes"
@@ -3954,6 +4039,71 @@ msgctxt "site_socks_cred_note"
 msgid "Username is the token in the URL; password is empty."
 msgstr "Der Benutzername ist das Token in der URL; das Passwort ist leer."
 
+#. Subscription: date line when the store did not answer whether it auto-renews. {date} is a localized date.
+msgctxt "site_sub_active_until"
+msgid "Active until {date}"
+msgstr "Aktiv bis {date}"
+
+#. Subscription: status chip — the subscription will not renew itself.
+msgctxt "site_sub_auto_renew_off"
+msgid "Auto-renew off"
+msgstr "Automatische Verlängerung aus"
+
+#. Subscription: status chip — the subscription renews itself.
+msgctxt "site_sub_auto_renew_on"
+msgid "Auto-renew on"
+msgstr "Automatische Verlängerung an"
+
+#. Subscription: status chip — the store did not answer whether it auto-renews.
+msgctxt "site_sub_auto_renew_unknown"
+msgid "Auto-renew unknown"
+msgstr "Automatische Verlängerung unbekannt"
+
+#. Subscription: store sentence for a Pro year paid with USDC on Solana.
+msgctxt "site_sub_billed_solana"
+msgid "Paid with USDC on Solana."
+msgstr "Mit USDC auf Solana bezahlt."
+
+#. Subscription: secondary link that opens Stripe's billing portal (payment details, invoices). Shown only when the network has a Stripe customer.
+msgctxt "site_sub_billing_details"
+msgid "Billing details"
+msgstr "Zahlungsdetails"
+
+#. Subscription: the cancel button for a Stripe-billed subscription (cancels at the end of the paid period).
+msgctxt "site_sub_cancel"
+msgid "Cancel subscription"
+msgstr "Abo kündigen"
+
+#. Subscription: inline confirmation before cancelling. {date} is the end of the paid period, a localized date.
+msgctxt "site_sub_cancel_confirm"
+msgid "Cancel at the end of the period? You keep Pro until {date}."
+msgstr "Zum Ende des Zeitraums kündigen? Pro bleibt bis {date} aktiv."
+
+#. Subscription: back out of the cancellation.
+msgctxt "site_sub_cancel_keep"
+msgid "Keep it"
+msgstr "Behalten"
+
+#. Subscription: confirm the cancellation.
+msgctxt "site_sub_cancel_yes"
+msgid "Yes, cancel"
+msgstr "Ja, kündigen"
+
+#. Subscription: a cancel or resume request failed.
+msgctxt "site_sub_change_error"
+msgid "Could not update the subscription. Please try again."
+msgstr "Das Abo konnte nicht geändert werden. Bitte versuche es erneut."
+
+#. Subscription: shown when the details request (dates, auto-renew) failed and the screen falls back to the list of billing stores.
+msgctxt "site_sub_details_error"
+msgid "Could not load the renewal details. Showing what we know."
+msgstr "Verlängerungsdetails konnten nicht geladen werden. Wir zeigen, was bekannt ist."
+
+#. Subscription: date line when auto-renew is off (cancelled, or a one-time USDC year). {date} is a localized date.
+msgctxt "site_sub_ends_on"
+msgid "Ends on {date}"
+msgstr "Endet am {date}"
+
 #. Subscription: free plan body
 msgctxt "site_sub_free_body"
 msgid "You're on the Free plan. Upgrade to Pro for more data and features."
@@ -3998,6 +4148,21 @@ msgstr "Dein Pro-Abo wird über den App Store abgerechnet. Zum Ändern oder Kün
 msgctxt "site_sub_platform_body_google"
 msgid "Your Pro subscription is billed through Google Play. To change or cancel it, manage your subscriptions in Google Play."
 msgstr "Dein Pro-Abo wird über Google Play abgerechnet. Zum Ändern oder Kündigen verwalte deine Abos in Google Play."
+
+#. Subscription: date line when auto-renew is on. {date} is a localized date.
+msgctxt "site_sub_renews_on"
+msgid "Renews on {date}"
+msgstr "Verlängert sich am {date}"
+
+#. Subscription: undo a pending cancellation while the paid period is still running.
+msgctxt "site_sub_resume"
+msgid "Resume subscription"
+msgstr "Abo fortsetzen"
+
+#. Subscription: note under a USDC-paid year — it is a one-time payment with nothing to cancel.
+msgctxt "site_sub_solana_no_renew"
+msgid "Does not renew. Pay again with USDC when it ends."
+msgstr "Verlängert sich nicht. Bezahle nach Ablauf erneut mit USDC."
 
 #. Subscription: Stripe-billed body
 msgctxt "site_sub_stripe_body"
@@ -4115,6 +4280,11 @@ msgstr "Schritt 1"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "Schritt 2"
+
+#. Points leaderboard: stat tile label and sort chip. Consecutive blocks with points.
+msgctxt "streak"
+msgid "Streak"
+msgstr "Serie"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"

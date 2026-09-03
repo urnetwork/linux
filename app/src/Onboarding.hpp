@@ -28,6 +28,7 @@ class RouteLine;
 class StepBubbles;
 class GoldPlanCard;
 class ReferralPanel;
+class ReferralProgressBox;
 
 class OnboardingWindow : public Gtk::Window {
  public:
@@ -96,8 +97,7 @@ class OnboardingWindow : public Gtk::Window {
 
   Gtk::Box* perkYou_ = nullptr;
   Gtk::Box* perkFriend_ = nullptr;
-  Gtk::Label* referralProgressCount_ = nullptr;
-  Gtk::DrawingArea* referralBar_ = nullptr;
+  ReferralProgressBox* referralProgress_ = nullptr;
   ReferralPanel* referralPanel_ = nullptr;
 };
 

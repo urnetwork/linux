@@ -74,6 +74,11 @@ msgctxt "add_blocked_location"
 msgid "Add blocked location"
 msgstr "הוסף מיקום חסום"
 
+#. Points leaderboard: button that opens the emoji tag editor when no tag is set yet.
+msgctxt "add_emoji"
+msgid "Add emoji"
+msgstr "הוסף אימוג'י"
+
 #. Call to action
 msgctxt "add_referral_code"
 msgid "Add referral code"
@@ -140,6 +145,11 @@ msgstr "סכום"
 msgctxt "amount_per_month"
 msgid "{}/month"
 msgstr "{}/חודש"
+
+#. Points leaderboard: the name shown for a listed network whose name is not public.
+msgctxt "anonymous"
+msgid "Anonymous"
+msgstr "אנונימי"
 
 #. Header of the free-text box on the feedback form.
 msgctxt "anything_else"
@@ -438,6 +448,11 @@ msgctxt "blocked_locations_2"
 msgid "Blocked locations"
 msgstr "מיקומים חסומים"
 
+#. Points leaderboard: stat tile label and sort chip. A block is one finalized payout epoch.
+msgctxt "blocks"
+msgid "Blocks"
+msgstr "בלוקים"
+
 #. Snackbar shown after copying the bonus referral code. Used in Shared/Views/Introduction/ParticipateReferView.swift, Main/Account/Settings/SettingsForm-iOS.swift and Main/Account/Settings/SettingsForm-macOS.swift.
 msgctxt "bonus_referral_code_copied_to_clipboard"
 msgid "Bonus referral code copied to clipboard"
@@ -567,6 +582,11 @@ msgstr "מכפיל תביעה"
 msgctxt "claim_network_name_hint"
 msgid "Claim a custom network name to replace your auto-generated one"
 msgstr "בחר שם רשת מותאם אישית שיחליף את השם שנוצר אוטומטית"
+
+#. General UI string: a button that clears a field or setting.
+msgctxt "clear"
+msgid "Clear"
+msgstr "נקה"
 
 #. transfer stats and split rules
 msgctxt "client_contracts"
@@ -1101,6 +1121,11 @@ msgctxt "edit_device_name"
 msgid "Edit device name"
 msgstr "ערוך את שם המכשיר"
 
+#. Points leaderboard: button that opens the emoji tag editor for an existing tag.
+msgctxt "edit_emoji"
+msgid "Edit emoji"
+msgstr "ערוך אימוג'י"
+
 #. Button on the profile screen to edit the network name.
 msgctxt "edit_network_name"
 msgid "Edit network name"
@@ -1120,6 +1145,31 @@ msgstr "ערוך קוד הפניה"
 msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "ערוך כלל פיצול"
+
+#. Points leaderboard: the title of the emoji tag editor. One to six emoji shown next to the network.
+msgctxt "emoji_tag"
+msgid "Emoji tag"
+msgstr "תג אימוג'י"
+
+#. Points leaderboard: emoji editor error when the field has no emoji.
+msgctxt "emoji_tag_error_empty"
+msgid "Add at least one emoji."
+msgstr "הוסף לפחות אימוג'י אחד."
+
+#. Points leaderboard: emoji editor error when the field contains anything that is not an emoji.
+msgctxt "emoji_tag_error_not_emoji"
+msgid "Only emoji are allowed."
+msgstr "מותר להשתמש באימוג'י בלבד."
+
+#. Points leaderboard: emoji editor error when more than {max} emoji were entered.
+msgctxt "emoji_tag_error_too_many"
+msgid "Use at most {} emoji."
+msgstr "השתמש לכל היותר ב-{} אימוג'י."
+
+#. Points leaderboard: the emoji editor's explanation. {max} is the most emoji allowed (6).
+msgctxt "emoji_tag_hint"
+msgid "Pick 1 to {} emoji to show next to your network."
+msgstr "בחר 1 עד {} אימוג'י שיוצגו ליד הרשת שלך."
 
 #. Call to action
 msgctxt "enjoying_urnetwork"
@@ -1735,6 +1785,11 @@ msgctxt "login_verify_header"
 msgid "You've got mail"
 msgstr "קיבלת מייל"
 
+#. Points leaderboard: secondary stat, the best run of consecutive blocks with points.
+msgctxt "longest_streak"
+msgid "Longest streak"
+msgstr "הרצף הארוך ביותר"
+
 #. Call to action
 msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
@@ -2163,7 +2218,7 @@ msgctxt "no_wallets_found_alert_content"
 msgid "No Solana wallets were found installed on this device. Please install a wallet and try again."
 msgstr "לא נמצאו ארנקי Solana מותקנים במכשיר זה. התקן ארנק ונסה שוב."
 
-#. Call to action
+#. Empty value: the Referrals section shows it when no referral network is linked (apple), and the android referral network row.
 msgctxt "none"
 msgid "None"
 msgstr "ללא"
@@ -2367,6 +2422,26 @@ msgstr[1] "+ {} נוספים"
 msgstr[2] "+ {} נוספים"
 msgstr[3] "+ {} נוספים"
 
+#. Points leaderboard: tab label, stat tile label and sort chip.
+msgctxt "points"
+msgid "Points"
+msgstr "נקודות"
+
+#. Points leaderboard: the explanation under the list header.
+msgctxt "points_leaderboard_description"
+msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
+msgstr "נקודות מאז ומעולם. בלוק הוא תקופה שהושלמה; הרצף סופר בלוקים רצופים עם נקודות עד האחרון."
+
+#. Points leaderboard: shown when no network has opted in yet.
+msgctxt "points_leaderboard_empty"
+msgid "No one is on the points leaderboard yet."
+msgstr "עדיין אין אף אחד בטבלת הנקודות."
+
+#. Points leaderboard: shown under the own-stats card while the network has not opted in.
+msgctxt "points_leaderboard_private_hint"
+msgid "Only you can see this. Turn it on to appear on the leaderboard."
+msgstr "רק אתה רואה זאת. הפעל כדי להופיע בטבלה."
+
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
 msgid "Post Quantum Encryption"
@@ -2534,6 +2609,11 @@ msgctxt "quit_urnetwork"
 msgid "Quit URnetwork"
 msgstr "צא מ-URnetwork"
 
+#. Points leaderboard: how many networks hold a rank. {count} is preformatted with separators.
+msgctxt "ranked_networks_count"
+msgid "{} ranked networks"
+msgstr "{} רשתות מדורגות"
+
 #. Call to action
 msgctxt "ready_to_connect"
 msgid "Ready to connect"
@@ -2686,6 +2766,11 @@ msgstr[3] "{0} חברים הצטרפו — אתה מרוויח +{1} GiB ליום
 msgctxt "referral_network"
 msgid "Referral network"
 msgstr "רשת הפניות"
+
+#. Referrals screen: label of the points a network earned from its referrals (the payout_linked_account points), shown next to the total referral count.
+msgctxt "referral_points"
+msgid "Referral points"
+msgstr "נקודות הפניה"
 
 #. A label displaying the number of referrals a user has made. The argument is the number of referrals.
 msgctxt "referral_progress_of_five"
@@ -3024,6 +3109,11 @@ msgctxt "show_icon_when_connected"
 msgid "Show UR icon when connected"
 msgstr "הצג את סמל UR כשמחובר"
 
+#. Points leaderboard: the opt-in switch label. Only opted-in networks are listed.
+msgctxt "show_on_points_leaderboard"
+msgid "Show on the points leaderboard"
+msgstr "הצג בטבלת הנקודות"
+
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show_provider_list"
 msgid "Show Provider List"
@@ -3137,7 +3227,7 @@ msgctxt "site_app_fixed_ip"
 msgid "Fixed IP"
 msgstr "IP קבוע"
 
-#. App sidebar: manage subscription button (opens the Stripe billing portal)
+#. App sidebar and account panel: opens Manage Subscription (every billing store, renewal date, auto-renew, cancel)
 msgctxt "site_app_manage_subscription"
 msgid "Manage Subscription"
 msgstr "נהל מנוי"
@@ -3232,6 +3322,81 @@ msgctxt "site_install_app"
 msgid "Install the app"
 msgstr "התקן את האפליקציה"
 
+#. Account panel: the small button on the plan card that opens Manage Subscription in the app.
+msgctxt "site_manage"
+msgid "Manage"
+msgstr "ניהול"
+
+#. Account panel: hint under the plan card for Pro members, next to the Manage button that opens Manage Subscription.
+msgctxt "site_manage_subscription_hint"
+msgid "See your renewal date, auto-renew status and cancel options."
+msgstr "צפו בתאריך החידוש, במצב החידוש האוטומטי ובאפשרויות הביטול."
+
+#. Subscription: date line when the store did not answer whether it auto-renews. {date} is a localized date.
+msgctxt "site_sub_active_until"
+msgid "Active until {date}"
+msgstr "פעיל עד {date}"
+
+#. Subscription: status chip — the subscription will not renew itself.
+msgctxt "site_sub_auto_renew_off"
+msgid "Auto-renew off"
+msgstr "חידוש אוטומטי כבוי"
+
+#. Subscription: status chip — the subscription renews itself.
+msgctxt "site_sub_auto_renew_on"
+msgid "Auto-renew on"
+msgstr "חידוש אוטומטי פעיל"
+
+#. Subscription: status chip — the store did not answer whether it auto-renews.
+msgctxt "site_sub_auto_renew_unknown"
+msgid "Auto-renew unknown"
+msgstr "חידוש אוטומטי לא ידוע"
+
+#. Subscription: store sentence for a Pro year paid with USDC on Solana.
+msgctxt "site_sub_billed_solana"
+msgid "Paid with USDC on Solana."
+msgstr "שולם ב-USDC ברשת Solana."
+
+#. Subscription: secondary link that opens Stripe's billing portal (payment details, invoices). Shown only when the network has a Stripe customer.
+msgctxt "site_sub_billing_details"
+msgid "Billing details"
+msgstr "פרטי חיוב"
+
+#. Subscription: the cancel button for a Stripe-billed subscription (cancels at the end of the paid period).
+msgctxt "site_sub_cancel"
+msgid "Cancel subscription"
+msgstr "ביטול המינוי"
+
+#. Subscription: inline confirmation before cancelling. {date} is the end of the paid period, a localized date.
+msgctxt "site_sub_cancel_confirm"
+msgid "Cancel at the end of the period? You keep Pro until {date}."
+msgstr "לבטל בסוף התקופה? Pro יישאר פעיל עד {date}."
+
+#. Subscription: back out of the cancellation.
+msgctxt "site_sub_cancel_keep"
+msgid "Keep it"
+msgstr "להשאיר"
+
+#. Subscription: confirm the cancellation.
+msgctxt "site_sub_cancel_yes"
+msgid "Yes, cancel"
+msgstr "כן, לבטל"
+
+#. Subscription: a cancel or resume request failed.
+msgctxt "site_sub_change_error"
+msgid "Could not update the subscription. Please try again."
+msgstr "לא ניתן לעדכן את המינוי. נסו שוב."
+
+#. Subscription: shown when the details request (dates, auto-renew) failed and the screen falls back to the list of billing stores.
+msgctxt "site_sub_details_error"
+msgid "Could not load the renewal details. Showing what we know."
+msgstr "לא ניתן לטעון את פרטי החידוש. מציגים את מה שידוע."
+
+#. Subscription: date line when auto-renew is off (cancelled, or a one-time USDC year). {date} is a localized date.
+msgctxt "site_sub_ends_on"
+msgid "Ends on {date}"
+msgstr "מסתיים ב-{date}"
+
 #. Subscription: free plan body
 msgctxt "site_sub_free_body"
 msgid "You're on the Free plan. Upgrade to Pro for more data and features."
@@ -3276,6 +3441,21 @@ msgstr "המנוי Pro שלך מחויב דרך App Store. כדי לשנות א�
 msgctxt "site_sub_platform_body_google"
 msgid "Your Pro subscription is billed through Google Play. To change or cancel it, manage your subscriptions in Google Play."
 msgstr "המנוי Pro שלך מחויב דרך Google Play. כדי לשנות או לבטל אותו, נהל את המנויים שלך ב-Google Play."
+
+#. Subscription: date line when auto-renew is on. {date} is a localized date.
+msgctxt "site_sub_renews_on"
+msgid "Renews on {date}"
+msgstr "מתחדש ב-{date}"
+
+#. Subscription: undo a pending cancellation while the paid period is still running.
+msgctxt "site_sub_resume"
+msgid "Resume subscription"
+msgstr "חידוש המינוי"
+
+#. Subscription: note under a USDC-paid year — it is a one-time payment with nothing to cancel.
+msgctxt "site_sub_solana_no_renew"
+msgid "Does not renew. Pay again with USDC when it ends."
+msgstr "לא מתחדש. שלמו שוב ב-USDC כשהוא מסתיים."
 
 #. Subscription: Stripe-billed body
 msgctxt "site_sub_stripe_body"
@@ -3390,6 +3570,11 @@ msgstr "שלב 1"
 msgctxt "step_two"
 msgid "Step 2"
 msgstr "שלב 2"
+
+#. Points leaderboard: stat tile label and sort chip. Consecutive blocks with points.
+msgctxt "streak"
+msgid "Streak"
+msgstr "רצף"
 
 #. Connect drawer: strong anonymization toggle — the inverse of allow direct (direct connections expose the real source IP to the provider).
 msgctxt "strong_anonymization"

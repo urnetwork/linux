@@ -19,8 +19,8 @@
 //   <   900  history(*) only — the HISTORY survives to the smallest width.
 //
 // Pane A (earnings): the points headline with its Providing / Referral /
-// Reliability breakdown (and the Seeker multiplier, points-only), the referral
-// count, the protocol note with the ur.xyz link, the Unclaimed SN25α tile
+// Reliability breakdown (and the Seeker multiplier, points-only), the protocol
+// note with the ur.xyz link, the Unclaimed SN25α tile
 // (wallet only), the Bittensor wallet block (connect through the bridge, or
 // enter an address manually — validated locally and then against
 // /sn/wallet/validate before anything is sent — and still sign it), and the
@@ -186,7 +186,6 @@ class EarningsPage : public Gtk::Box {
 
   // ---- appliers (one writer per surface) -------------------------------------
   void ApplyPoints(std::optional<urnet::AccountPointsList> points, Fetch state);
-  void ApplyReferrals(bool ok, int64_t totalReferrals);
   void ApplyEpochs(std::optional<std::vector<AccountEpochRow>> epochs, Fetch state);
   void ApplySnWallet(std::optional<SnWalletInfo> wallet, Fetch state);
   void ApplyClaims(std::optional<std::vector<SnClaimRow>> claims, int64_t totalClaimableRao,
@@ -271,7 +270,6 @@ class EarningsPage : public Gtk::Box {
   Gtk::Label* pointsStatus_ = nullptr;
   Gtk::Box* pointsCard_ = nullptr;
   Gtk::Box* pointsPanel_ = nullptr;
-  Gtk::Label* referralsValue_ = nullptr;
   Gtk::Box* unclaimedCard_ = nullptr;
   Gtk::Label* unclaimedValue_ = nullptr;
   Gtk::Label* unclaimedStatus_ = nullptr;

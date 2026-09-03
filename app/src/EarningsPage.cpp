@@ -1160,7 +1160,6 @@ EarningsPage::EarningsPage(SdkHost& host)
 
   // every panel opens on its LOADING state and the stat values on the faint
   // dash: an unloaded blank destination would read "there is nothing"
-  SetStatValue(referralsValue_, T_("total_referrals", "Total referrals"), {}, false);
   SetStatValue(netProvidedValue_, T_("net_provided", "Net Provided"), {}, false);
   SetStatValue(rankValue_, T_("current_ranking", "Current Ranking"), {}, false);
   RebuildWalletBlock();
@@ -1310,7 +1309,6 @@ void EarningsPage::ShowPreviewSnackbar() {
 
 void EarningsPage::SettleAllEmpty() {
   ApplyPoints(urnet::AccountPointsList{}, Fetch::Ready);
-  ApplyReferrals(false, 0);
   ApplyEpochs(std::vector<AccountEpochRow>{}, Fetch::Ready);
   ApplySnWallet(std::nullopt, Fetch::Ready);
   ApplyClaims(std::vector<SnClaimRow>{}, 0, Fetch::Ready);
@@ -1350,11 +1348,6 @@ void EarningsPage::BuildEarningsPane() {
     pointsPanel_ = row.content;
     pointsCard_->set_visible(false);  // collapsed until Ready
     content->append(*row.root);
-  }
-  {
-    auto referrals = kit::MakePaneKeyValueRow(T_("total_referrals", "Total referrals"));
-    referralsValue_ = referrals.value;
-    content->append(*referrals.root);
   }
 
   // 2. the protocol note + the ur.xyz link
@@ -1663,23 +1656,7 @@ void EarningsPage::LoadEarnings() {
         });
       });
 
-  // 2. total referrals
-  host_.api().getNetworkReferralCode(
-      [this, epoch, seen](std::optional<urnet::GetNetworkReferralCodeResult> result,
-                          std::optional<std::string> err) {
-        PostToMain([this, epoch, seen, result = std::move(result), err = std::move(err)] {
-          if (*epoch != seen) return;
-          if (err || !result || result->error) {
-            g_warning("earnings: getNetworkReferralCode failed: %s",
-                      err ? err->c_str() : "(server error)");
-            ApplyReferrals(false, 0);
-            return;
-          }
-          ApplyReferrals(true, result->total_referrals);
-        });
-      });
-
-  // 3. the per-epoch history
+  // 2. the per-epoch history
   sn::FetchEpochs(host_, [this, epoch, seen](std::optional<std::vector<AccountEpochRow>> rows,
                                               std::string err) {
     PostToMain([this, epoch, seen, rows = std::move(rows), err = std::move(err)] {
@@ -1862,11 +1839,6 @@ void EarningsPage::ApplyPoints(std::optional<urnet::AccountPointsList> points, F
   kit::SetTextOrCollapse(*pointsStatus_, {});
   pointsCard_->set_visible(true);
   RebuildPointsCard();
-}
-
-void EarningsPage::ApplyReferrals(bool ok, int64_t totalReferrals) {
-  SetStatValue(referralsValue_, T_("total_referrals", "Total referrals"),
-               ok ? Glib::ustring(std::to_string(totalReferrals)) : Glib::ustring(), ok);
 }
 
 void EarningsPage::ApplyEpochs(std::optional<std::vector<AccountEpochRow>> epochs, Fetch state) {
@@ -2237,12 +2209,6 @@ void EarningsPage::RebuildHistory() {
       historyPanel_->append(*note.root);
     }
   }
-  // the old ledger lives with support, not in the app
-  auto support = MakePaddedRow(8);
-  support.content->append(*MakeWrappedNote(
-      T_("earnings_email_support", "Questions about earlier payouts? Email support@ur.io."),
-      "ur-row-note"));
-  historyPanel_->append(*support.root);
   ApplyLedgerMeta();
 }
 
@@ -2998,7 +2964,6 @@ void EarningsPage::ApplyPreviewSample() {
   }
 
   ApplyPoints(samplePoints, Fetch::Ready);
-  ApplyReferrals(true, 7);
   ApplyEpochs(sampleEpochs, Fetch::Ready);
   ApplyReliability(window, Fetch::Ready);
   ApplyRanking(ranking, true);

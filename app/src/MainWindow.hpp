@@ -28,6 +28,7 @@
 #include "NetworkServerSheet.hpp"
 #include "Onboarding.hpp"
 #include "ProviderLocationsSheet.hpp"
+#include "ReferralsPage.hpp"
 #include "SdkHost.hpp"
 #include "SeedphraseSheet.hpp"
 #include "SubscriptionBalance.hpp"
@@ -229,6 +230,7 @@ class MainWindow : public Gtk::ApplicationWindow {
   SupportPage* supportPage_ = nullptr;
   EarningsPage* earningsPage_ = nullptr;
   AccountPage* accountPage_ = nullptr;
+  ReferralsPage* referralsPage_ = nullptr;  // reached from Account's Referrals row
   // Account's Redeem row opens the same sheet the drawer owns, but the
   // drawer exposes no opener, so the window keeps its own (lazily built).
   std::unique_ptr<RedeemCodeSheet> redeemSheet_;
