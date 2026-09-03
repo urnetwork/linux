@@ -240,8 +240,9 @@ void EmojiTagSheet::ApplyDraft() {
     }
   } else {
     // the counter is the store's untranslatable "{count} / {max}" key; the
-    // English fallback renders the same until the po files carry the key
-    support = Format(T_("emoji_tag_counter", "{} / {}"), count, urnet::EmojiTagMaxCount);
+    // the msgid must be the store's lowered form ({0} / {1}: two placeholders) or
+    // the pgettext lookup misses and the fallback renders instead
+    support = Format(T_("emoji_tag_counter", "{0} / {1}"), count, urnet::EmojiTagMaxCount);
   }
   supportLabel_->set_text(support);
   if (showsError) {

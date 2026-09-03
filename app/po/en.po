@@ -181,6 +181,10 @@ msgctxt "app_included_toast"
 msgid "{} will route through the VPN"
 msgstr "{} will route through the VPN"
 
+msgctxt "app_name"
+msgid "URnetwork"
+msgstr "URnetwork"
+
 #. Android app string: app pinned toast.
 msgctxt "app_pinned_toast"
 msgid "{} will use one provider"
@@ -268,6 +272,11 @@ msgstr "Are you sure you want to delete your account?"
 msgctxt "are_you_sure_you_want_to_remove"
 msgid "Are you sure you want to remove {} as a sign-in method?"
 msgstr "Are you sure you want to remove {} as a sign-in method?"
+
+#. Call to action
+msgctxt "asset_statements"
+msgid "[{ \"include\": \"https://ur.io/.well-known/assetlinks.json\" }]"
+msgstr "[{ \"include\": \"https://ur.io/.well-known/assetlinks.json\" }]"
 
 #. Call to action
 msgctxt "auth_code"
@@ -424,11 +433,6 @@ msgctxt "balance_codes_title"
 msgid "Balance Codes"
 msgstr "Balance Codes"
 
-#. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
-msgctxt "become_a"
-msgid "Become a"
-msgstr "Become a"
-
 #. Settings
 msgctxt "become_supporter"
 msgid "Get UR Pro"
@@ -448,6 +452,11 @@ msgstr "Best matches"
 msgctxt "best_value"
 msgid "Best value"
 msgstr "Best value"
+
+#. Used in Main/Account/Wallet/WalletView.swift.
+msgctxt "bittensor"
+msgid "Bittensor"
+msgstr "Bittensor"
 
 #. Call to action
 msgctxt "bittensor_sign_in"
@@ -1415,6 +1424,46 @@ msgctxt "dev_heartbeat_detail"
 msgid "How often one line summarizing live state is written to the log for later forensics. Off silences it; shorter spots a transition, longer keeps more buffer"
 msgstr "How often one line summarizing live state is written to the log for later forensics. Off silences it; shorter spots a transition, longer keeps more buffer"
 
+#. Developer screen: title of the control-plane IP family setting.
+msgctxt "dev_ip_family"
+msgid "Control connections"
+msgstr "Control connections"
+
+#. Developer screen: the automatic IP family option.
+msgctxt "dev_ip_family_auto"
+msgid "Automatic"
+msgstr "Automatic"
+
+#. Developer screen: the automatic option's detail when one family was demoted; {reason} is the demotion reason.
+msgctxt "dev_ip_family_auto_demoted_detail"
+msgid "Automatic. {}."
+msgstr "Automatic. {}."
+
+#. Developer screen: detail line of the automatic IP family option.
+msgctxt "dev_ip_family_auto_detail"
+msgid "Uses whichever family connects first, and routes around one that fails after connecting."
+msgstr "Uses whichever family connects first, and routes around one that fails after connecting."
+
+#. Developer screen: the IPv4-only option.
+msgctxt "dev_ip_family_force4"
+msgid "Force IPv4"
+msgstr "Force IPv4"
+
+#. Developer screen: detail line of the IPv4-only option.
+msgctxt "dev_ip_family_force4_detail"
+msgid "Control-plane connections use IPv4 only. Turn this off on an IPv6-only network."
+msgstr "Control-plane connections use IPv4 only. Turn this off on an IPv6-only network."
+
+#. Developer screen: the IPv6-only option.
+msgctxt "dev_ip_family_force6"
+msgid "Force IPv6"
+msgstr "Force IPv6"
+
+#. Developer screen: detail line of the IPv6-only option.
+msgctxt "dev_ip_family_force6_detail"
+msgid "Control-plane connections use IPv6 only. Turn this off if the app cannot reach the server."
+msgstr "Control-plane connections use IPv6 only. Turn this off if the app cannot reach the server."
+
 #. Developer tools screen (reliability surface): load corroboration control label.
 msgctxt "dev_load_corroboration"
 msgid "Load corroboration"
@@ -2010,6 +2059,11 @@ msgctxt "dns_using_secure"
 msgid "Using most secure default settings"
 msgstr "Using most secure default settings"
 
+#. Placeholder in the DNS-over-HTTPS URL inputs: the required URL scheme. Not prose; never translated.
+msgctxt "doh_url_placeholder"
+msgid "https://"
+msgstr "https://"
+
 #. A button that dismisses a sheet.
 msgctxt "done"
 msgid "Done"
@@ -2174,6 +2228,11 @@ msgstr "Travel & places"
 msgctxt "emoji_tag"
 msgid "Emoji tag"
 msgstr "Emoji tag"
+
+#. Points leaderboard: the emoji editor's counter, {count} emoji entered out of {max} allowed.
+msgctxt "emoji_tag_counter"
+msgid "{0} / {1}"
+msgstr "{0} / {1}"
 
 #. Points leaderboard: the emoji editor's backspace key, removes the last emoji of the tag.
 msgctxt "emoji_tag_delete_last"
@@ -3592,6 +3651,11 @@ msgctxt "pending_mb_provided"
 msgid "Pending: {} MB provided"
 msgstr "Pending: {} MB provided"
 
+#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+msgctxt "phantom"
+msgid "Phantom"
+msgstr "Phantom"
+
 #. Android app string: pin app.
 msgctxt "pin_app"
 msgid "Pin to one provider"
@@ -3617,6 +3681,11 @@ msgctxt "plan"
 msgid "Plan"
 msgstr "Plan"
 
+#. The monthly plan card's price on the Linux onboarding page.
+msgctxt "plan_monthly_price"
+msgid "$5/month"
+msgstr "$5/month"
+
 #. Monthly plan card label: the store-formatted price per month.
 msgctxt "plan_price_per_month"
 msgid "{}/month"
@@ -3626,6 +3695,11 @@ msgstr "{}/month"
 msgctxt "plan_price_per_year"
 msgid "{}/year"
 msgstr "{}/year"
+
+#. The yearly plan card's price on the Linux onboarding page.
+msgctxt "plan_yearly_price"
+msgid "$40/year"
+msgstr "$40/year"
 
 #. Used in Shared/Views/SolanaSignMessageSheet.swift.
 msgctxt "please_install_phantom_or_solflare_to_use_this"
@@ -3651,6 +3725,10 @@ msgstr "Please try again."
 msgctxt "please_wait"
 msgid "Please wait a few minutes and try again."
 msgstr "Please wait a few minutes and try again."
+
+msgctxt "plus_amount"
+msgid "+{}"
+msgstr "+{}"
 
 #. Suffix appended to a truncated list of host names and addresses ("a, b, …, c + 3 more"). The argument is the number of values omitted from the list.
 msgctxt "plus_n_more"
@@ -4045,6 +4123,11 @@ msgstr[1] "{0} friends have joined — you're earning +{1} GiB/day, for life."
 msgctxt "referral_network"
 msgid "Referral network"
 msgstr "Referral network"
+
+#. Snackbar on the Referrals screen after the referral network was changed.
+msgctxt "referral_network_updated"
+msgid "Referral network updated"
+msgstr "Referral network updated"
 
 #. Detail line of the gold referral panel. The amount is the daily GiB each side earns per verified referral (pro.yml referral).
 msgctxt "referral_panel_detail"
@@ -5414,6 +5497,11 @@ msgctxt "site_copied"
 msgid "Copied"
 msgstr "Copied"
 
+#. Instant account creation: button that copies the seedphrase to the clipboard.
+msgctxt "site_copy_seedphrase"
+msgid "Copy Seedphrase"
+msgstr "Copy Seedphrase"
+
 #. Account panel: copy a proxy's URL
 msgctxt "site_copy_url"
 msgid "Copy URL"
@@ -5509,6 +5597,16 @@ msgctxt "site_install_app"
 msgid "Install the app"
 msgstr "Install the app"
 
+#. Instant account creation: error when the server returned no seedphrase for the new account.
+msgctxt "site_instant_no_seedphrase"
+msgid "The account was created without a recoverable seedphrase. Please contact support."
+msgstr "The account was created without a recoverable seedphrase. Please contact support."
+
+#. Instant account creation: hint that the seedphrase is the only way to recover the account.
+msgctxt "site_instant_seedphrase_only_recovery"
+msgid "No email or password is needed. A 24-word seedphrase is the only way to recover the account."
+msgstr "No email or password is needed. A 24-word seedphrase is the only way to recover the account."
+
 #. Account panel: invalid balance code
 msgctxt "site_invalid_balance_code"
 msgid "Invalid balance code."
@@ -5558,6 +5656,11 @@ msgstr "Search for any location"
 msgctxt "site_locations"
 msgid "Locations"
 msgstr "Locations"
+
+#. Login stack: hint above the seedphrase field when signing in with an instant account's seed.
+msgctxt "site_login_seed_hint"
+msgid "Enter the 24-word seedphrase shown when the instant account was created."
+msgstr "Enter the 24-word seedphrase shown when the instant account was created."
 
 #. Login stack: error when the entered seed does not match an account.
 msgctxt "site_login_seed_not_recognized"
@@ -5659,6 +5762,11 @@ msgctxt "site_roles"
 msgid "Roles"
 msgstr "Roles"
 
+#. Instant account creation: heading of the view that shows the new seedphrase once.
+msgctxt "site_save_your_seedphrase"
+msgid "Save Your Seedphrase"
+msgstr "Save Your Seedphrase"
+
 #. Account panel: preference saved flash
 msgctxt "site_saved"
 msgid "Saved"
@@ -5668,6 +5776,11 @@ msgstr "Saved"
 msgctxt "site_searching"
 msgid "Searching…"
 msgstr "Searching…"
+
+#. Instant account creation: the clipboard copy of the seedphrase failed.
+msgctxt "site_seedphrase_copy_failed"
+msgid "Could not copy the seedphrase. Select and copy the words below."
+msgstr "Could not copy the seedphrase. Select and copy the words below."
 
 #. Account panel: SOCKS credential note
 msgctxt "site_socks_cred_note"
@@ -5834,6 +5947,11 @@ msgctxt "skip"
 msgid "Skip"
 msgstr "Skip"
 
+#. The subnet alpha token symbol.
+msgctxt "sn_alpha_symbol"
+msgid "SN25α"
+msgstr "SN25α"
+
 #. Note on the earnings screen explaining alpha and the wallet.
 msgctxt "sn_protocol_note"
 msgid "SN25α are your earnings on the UR protocol. The UR protocol is an open source protocol from URnetwork. Connect a Bittensor wallet to settle them as SN25α through the UR protocol."
@@ -5854,6 +5972,11 @@ msgctxt "sn_status_open"
 msgid "Open"
 msgstr "Open"
 
+#. Blockchain name. A product name: never translated.
+msgctxt "solana"
+msgid "Solana"
+msgstr "Solana"
+
 #. Note under the Solana payment button on the plan picker: Solana is a one-time yearly payment, the free trial is Stripe only.
 msgctxt "solana_one_time_payment"
 msgid "Paying with Solana is a one-time yearly payment, with no free trial."
@@ -5863,6 +5986,11 @@ msgstr "Paying with Solana is a one-time yearly payment, with no free trial."
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "Sign in with Solana"
+
+#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+msgctxt "solflare"
+msgid "Solflare"
+msgstr "Solflare"
 
 #. Something went wrong error message
 msgctxt "something_went_wrong"
@@ -6016,11 +6144,6 @@ msgctxt "supporter"
 msgid "Pro"
 msgstr "Pro"
 
-#. Used in Shared/ViewModels/SubscriptionBalanceViewModel.swift.
-msgctxt "supporter_2"
-msgid "Supporter"
-msgstr "Supporter"
-
 #. Call to action
 msgctxt "switch_account"
 msgid "Switch Account"
@@ -6031,10 +6154,31 @@ msgctxt "switch_account_details"
 msgid "Do you want to disconnect from {} and switch accounts?"
 msgstr "Do you want to disconnect from {} and switch accounts?"
 
+msgctxt "symbol_dash"
+msgid "-"
+msgstr "-"
+
 #. An ellipsis character used to indicate ongoing processing.
 msgctxt "symbol_ellipsis"
 msgid "..."
 msgstr "..."
+
+msgctxt "symbol_empty"
+msgid ""
+msgstr ""
+
+#. Used in Authenticate/CreateNetwork/CreateNetworkView.swift.
+msgctxt "symbol_masked"
+msgid "************"
+msgstr "************"
+
+msgctxt "symbol_space"
+msgid " "
+msgstr " "
+
+msgctxt "symbol_tao"
+msgid "τ"
+msgstr "τ"
 
 #. Toggle that makes the device report the location of the longest-connected provider (Android mock location) instead of the real location.
 msgctxt "sync_device_location_with_oldest_provider"
@@ -6427,11 +6571,6 @@ msgctxt "urnetwork_status"
 msgid "URnetwork Status"
 msgstr "URnetwork Status"
 
-#. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
-msgctxt "urnetwork_supporter"
-msgid "URnetwork Supporter"
-msgstr "URnetwork Supporter"
-
 #. Used in NetworkApp.swift.
 msgctxt "urnetwork_system_menu"
 msgid "URnetwork System Menu"
@@ -6491,6 +6630,14 @@ msgstr "Enter your phone number or email"
 msgctxt "uses_ur_protocol"
 msgid "Uses the UR Protocol"
 msgstr "Uses the UR Protocol"
+
+msgctxt "value_float"
+msgid "{}"
+msgstr "{}"
+
+msgctxt "value_int"
+msgid "{}"
+msgstr "{}"
 
 msgctxt "value_string"
 msgid "{}"
@@ -6925,3 +7072,7 @@ msgstr "Your referral link"
 msgctxt "your_seedphrase"
 msgid "Your Seedphrase"
 msgstr "Your Seedphrase"
+
+msgctxt "zero"
+msgid "0"
+msgstr "0"

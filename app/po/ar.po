@@ -171,6 +171,10 @@ msgctxt "app_included_toast"
 msgid "{} will route through the VPN"
 msgstr "سيتم توجيه {} عبر VPN"
 
+msgctxt "app_name"
+msgid "URnetwork"
+msgstr "URnetwork"
+
 #. Android app string: app pinned toast.
 msgctxt "app_pinned_toast"
 msgid "{} will use one provider"
@@ -261,6 +265,11 @@ msgstr "هل أنت متأكد أنك تريد حذف حسابك؟"
 msgctxt "are_you_sure_you_want_to_remove"
 msgid "Are you sure you want to remove {} as a sign-in method?"
 msgstr "هل أنت متأكد أنك تريد إزالة {} كطريقة لتسجيل الدخول؟"
+
+#. Call to action
+msgctxt "asset_statements"
+msgid "[{ \"include\": \"https://ur.io/.well-known/assetlinks.json\" }]"
+msgstr "[{ \"include\": \"https://ur.io/.well-known/assetlinks.json\" }]"
 
 #. Call to action
 msgctxt "auth_code"
@@ -397,11 +406,6 @@ msgctxt "balance_codes_title"
 msgid "Balance Codes"
 msgstr "رموز الرصيد"
 
-#. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
-msgctxt "become_a"
-msgid "Become a"
-msgstr "كن"
-
 #. Settings
 msgctxt "become_supporter"
 msgid "Get UR Pro"
@@ -416,6 +420,11 @@ msgstr "أفضل مزود متاح"
 msgctxt "best_matches"
 msgid "Best matches"
 msgstr "أفضل النتائج المطابقة"
+
+#. Used in Main/Account/Wallet/WalletView.swift.
+msgctxt "bittensor"
+msgid "Bittensor"
+msgstr "Bittensor"
 
 #. Call to action
 msgctxt "bittensor_sign_in"
@@ -1099,6 +1108,11 @@ msgctxt "dns_using_secure"
 msgid "Using most secure default settings"
 msgstr "استخدام الإعدادات الافتراضية الأكثر أمانًا"
 
+#. Placeholder in the DNS-over-HTTPS URL inputs: the required URL scheme. Not prose; never translated.
+msgctxt "doh_url_placeholder"
+msgid "https://"
+msgstr "https://"
+
 #. A button that dismisses a sheet.
 msgctxt "done"
 msgid "Done"
@@ -1193,6 +1207,11 @@ msgstr "السفر والأماكن"
 msgctxt "emoji_tag"
 msgid "Emoji tag"
 msgstr "وسم الإيموجي"
+
+#. Points leaderboard: the emoji editor's counter, {count} emoji entered out of {max} allowed.
+msgctxt "emoji_tag_counter"
+msgid "{0} / {1}"
+msgstr "{0} / {1}"
 
 #. Points leaderboard: the emoji editor's backspace key, removes the last emoji of the tag.
 msgctxt "emoji_tag_delete_last"
@@ -2419,6 +2438,11 @@ msgctxt "pending_mb_provided"
 msgid "Pending: {} MB provided"
 msgstr "قيد الانتظار: تم توفير {} ميغابايت"
 
+#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+msgctxt "phantom"
+msgid "Phantom"
+msgstr "Phantom"
+
 #. Android app string: pin app.
 msgctxt "pin_app"
 msgid "Pin to one provider"
@@ -2444,6 +2468,16 @@ msgctxt "plan"
 msgid "Plan"
 msgstr "خطة"
 
+#. The monthly plan card's price on the Linux onboarding page.
+msgctxt "plan_monthly_price"
+msgid "$5/month"
+msgstr "$5/month"
+
+#. The yearly plan card's price on the Linux onboarding page.
+msgctxt "plan_yearly_price"
+msgid "$40/year"
+msgstr "$40/year"
+
 #. Used in Shared/Views/SolanaSignMessageSheet.swift.
 msgctxt "please_install_phantom_or_solflare_to_use_this"
 msgid "Please install Phantom or Solflare to use this feature"
@@ -2468,6 +2502,10 @@ msgstr "يرجى المحاولة مرة أخرى."
 msgctxt "please_wait"
 msgid "Please wait a few minutes and try again."
 msgstr "يرجى الانتظار بضع دقائق وحاول مرة أخرى."
+
+msgctxt "plus_amount"
+msgid "+{}"
+msgstr "+{}"
 
 #. Suffix appended to a truncated list of host names and addresses ("a, b, …, c + 3 more"). The argument is the number of values omitted from the list.
 msgctxt "plus_n_more"
@@ -2827,6 +2865,11 @@ msgstr[5] "انضم {0} من الأصدقاء — تكسب +{1} GiB يوميًا
 msgctxt "referral_network"
 msgid "Referral network"
 msgstr "شبكة الإحالة"
+
+#. Snackbar on the Referrals screen after the referral network was changed.
+msgctxt "referral_network_updated"
+msgid "Referral network updated"
+msgstr "تم تحديث شبكة الإحالة"
 
 #. Detail line of the gold referral panel. The amount is the daily GiB each side earns per verified referral (pro.yml referral).
 msgctxt "referral_panel_detail"
@@ -3930,6 +3973,11 @@ msgctxt "site_connect_ready"
 msgid "Ready to connect"
 msgstr "جاهز للاتصال"
 
+#. Instant account creation: button that copies the seedphrase to the clipboard.
+msgctxt "site_copy_seedphrase"
+msgid "Copy Seedphrase"
+msgstr "نسخ عبارة الاسترداد"
+
 #. Account panel: copy a proxy's URL
 msgctxt "site_copy_url"
 msgid "Copy URL"
@@ -4020,6 +4068,16 @@ msgctxt "site_install_app"
 msgid "Install the app"
 msgstr "ثبّت التطبيق"
 
+#. Instant account creation: error when the server returned no seedphrase for the new account.
+msgctxt "site_instant_no_seedphrase"
+msgid "The account was created without a recoverable seedphrase. Please contact support."
+msgstr "تم إنشاء الحساب بدون عبارة استرداد قابلة للاستعادة. يرجى التواصل مع الدعم."
+
+#. Instant account creation: hint that the seedphrase is the only way to recover the account.
+msgctxt "site_instant_seedphrase_only_recovery"
+msgid "No email or password is needed. A 24-word seedphrase is the only way to recover the account."
+msgstr "لا حاجة إلى بريد إلكتروني أو كلمة مرور. عبارة الاسترداد المكونة من 24 كلمة هي الطريقة الوحيدة لاستعادة الحساب."
+
 #. Account panel: invalid balance code
 msgctxt "site_invalid_balance_code"
 msgid "Invalid balance code."
@@ -4064,6 +4122,11 @@ msgstr "ابحث عن أي موقع"
 msgctxt "site_locations"
 msgid "Locations"
 msgstr "المواقع"
+
+#. Login stack: hint above the seedphrase field when signing in with an instant account's seed.
+msgctxt "site_login_seed_hint"
+msgid "Enter the 24-word seedphrase shown when the instant account was created."
+msgstr "أدخل عبارة الاسترداد المكونة من 24 كلمة التي ظهرت عند إنشاء الحساب الفوري."
 
 #. Login stack: error when the entered seed does not match an account.
 msgctxt "site_login_seed_not_recognized"
@@ -4145,6 +4208,11 @@ msgctxt "site_roles"
 msgid "Roles"
 msgstr "الأدوار"
 
+#. Instant account creation: heading of the view that shows the new seedphrase once.
+msgctxt "site_save_your_seedphrase"
+msgid "Save Your Seedphrase"
+msgstr "احفظ عبارة الاسترداد"
+
 #. Account panel: preference saved flash
 msgctxt "site_saved"
 msgid "Saved"
@@ -4154,6 +4222,11 @@ msgstr "تم الحفظ"
 msgctxt "site_searching"
 msgid "Searching…"
 msgstr "جارٍ البحث…"
+
+#. Instant account creation: the clipboard copy of the seedphrase failed.
+msgctxt "site_seedphrase_copy_failed"
+msgid "Could not copy the seedphrase. Select and copy the words below."
+msgstr "تعذر نسخ عبارة الاسترداد. حدد الكلمات أدناه وانسخها."
 
 #. Account panel: SOCKS credential note
 msgctxt "site_socks_cred_note"
@@ -4295,10 +4368,25 @@ msgctxt "site_unexpected_error"
 msgid "Something unexpected happened."
 msgstr "حدث خطأ غير متوقع."
 
+#. The subnet alpha token symbol.
+msgctxt "sn_alpha_symbol"
+msgid "SN25α"
+msgstr "SN25α"
+
+#. Blockchain name. A product name: never translated.
+msgctxt "solana"
+msgid "Solana"
+msgstr "Solana"
+
 #. Call to action
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "تسجيل الدخول باستخدام Solana"
+
+#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+msgctxt "solflare"
+msgid "Solflare"
+msgstr "Solflare"
 
 #. Something went wrong error message
 msgctxt "something_went_wrong"
@@ -4441,11 +4529,6 @@ msgctxt "supporter"
 msgid "Pro"
 msgstr "Pro"
 
-#. Used in Shared/ViewModels/SubscriptionBalanceViewModel.swift.
-msgctxt "supporter_2"
-msgid "Supporter"
-msgstr "داعم"
-
 #. Call to action
 msgctxt "switch_account"
 msgid "Switch Account"
@@ -4455,6 +4538,27 @@ msgstr "تبديل الحساب"
 msgctxt "switch_account_details"
 msgid "Do you want to disconnect from {} and switch accounts?"
 msgstr "هل تريد قطع الاتصال من {} والتبديل بين الحسابات؟"
+
+msgctxt "symbol_dash"
+msgid "-"
+msgstr "-"
+
+msgctxt "symbol_empty"
+msgid ""
+msgstr ""
+
+#. Used in Authenticate/CreateNetwork/CreateNetworkView.swift.
+msgctxt "symbol_masked"
+msgid "************"
+msgstr "************"
+
+msgctxt "symbol_space"
+msgid " "
+msgstr " "
+
+msgctxt "symbol_tao"
+msgid "τ"
+msgstr "τ"
 
 #. Toggle that makes the device report the location of the longest-connected provider (Android mock location) instead of the real location.
 msgctxt "sync_device_location_with_oldest_provider"
@@ -4731,11 +4835,6 @@ msgctxt "urnetwork_status"
 msgid "URnetwork Status"
 msgstr "حالة URnetwork"
 
-#. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
-msgctxt "urnetwork_supporter"
-msgid "URnetwork Supporter"
-msgstr "داعم URnetwork"
-
 #. Used in NetworkApp.swift.
 msgctxt "urnetwork_system_menu"
 msgid "URnetwork System Menu"
@@ -4795,6 +4894,14 @@ msgstr "أدخل رقم هاتفك أو بريدك الإلكتروني"
 msgctxt "uses_ur_protocol"
 msgid "Uses the UR Protocol"
 msgstr "يستخدم UR Protocol"
+
+msgctxt "value_float"
+msgid "{}"
+msgstr "{}"
+
+msgctxt "value_int"
+msgid "{}"
+msgstr "{}"
 
 msgctxt "value_with_unit"
 msgid "{0} {1}"
@@ -5032,3 +5139,7 @@ msgstr "رابط الإحالة الخاص بك"
 msgctxt "your_seedphrase"
 msgid "Your Seedphrase"
 msgstr "عبارة الاسترداد الخاصة بك"
+
+msgctxt "zero"
+msgid "0"
+msgstr "0"
