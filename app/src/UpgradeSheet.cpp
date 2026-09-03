@@ -95,15 +95,11 @@ void UpgradeSheet::BuildUi() {
   // ---- product options (mac UpgradeSubscriptionSheet) ------------------------
   optionsBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
 
-  auto* becomeA = Gtk::make_managed<Gtk::Label>(T_("become_a", "Become a"));
-  becomeA->add_css_class("title-3");
-  becomeA->set_xalign(0);
-  optionsBox_->append(*becomeA);
-  auto* supporter =
-      Gtk::make_managed<Gtk::Label>(T_("urnetwork_supporter", "URnetwork Supporter"));
-  supporter->add_css_class("title-1");
-  supporter->set_xalign(0);
-  optionsBox_->append(*supporter);
+  // "Get Pro", the same heading onboarding, Android and Apple give this sheet
+  auto* proTitle = Gtk::make_managed<Gtk::Label>(T_("get_pro", "Get Pro"));
+  proTitle->add_css_class("title-1");
+  proTitle->set_xalign(0);
+  optionsBox_->append(*proTitle);
 
   auto* supportUs = Gtk::make_managed<Gtk::Label>(
       T_("support_us",
