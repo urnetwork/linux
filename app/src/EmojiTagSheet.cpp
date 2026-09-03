@@ -239,8 +239,9 @@ void EmojiTagSheet::ApplyDraft() {
         break;
     }
   } else {
-    // the counter is the store's untranslatable "{count} / {max}"
-    support = std::to_string(count) + " / " + std::to_string(urnet::EmojiTagMaxCount);
+    // the counter is the store's untranslatable "{count} / {max}" key; the
+    // English fallback renders the same until the po files carry the key
+    support = Format(T_("emoji_tag_counter", "{} / {}"), count, urnet::EmojiTagMaxCount);
   }
   supportLabel_->set_text(support);
   if (showsError) {
