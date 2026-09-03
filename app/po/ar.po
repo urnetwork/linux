@@ -2487,6 +2487,11 @@ msgctxt "leaderboard_description"
 msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
 msgstr "لوحة الصدارة هي مجموع آخر 4 دفعات. يتم تحديثها كل دورة دفع."
 
+#. Generic 'Learn more' link label placed after an explanatory sentence, opening an external page (e.g. the Earnings wallet note linking to the protocol site).
+msgctxt "learn_more"
+msgid "Learn more"
+msgstr "اعرف المزيد"
+
 #. Call to action
 msgctxt "learn_more_about_multiplier"
 msgid "Learn more about the multiplier"

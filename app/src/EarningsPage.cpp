@@ -1430,29 +1430,29 @@ void EarningsPage::BuildEarningsPane() {
     auto row = MakePaddedRow(12);
     row.content->set_spacing(10);
     walletConnectPanel_ = row.root;
-    // plain note; the whole sentence opens the protocol site, the outward arrow
-    // after the last word (inline, so it wraps with the sentence) says the click
-    // leaves the app
-    {
-      auto* note = Gtk::make_managed<Gtk::Label>();
-      note->set_markup(
-          Glib::Markup::escape_text(
-              T_("wallet_not_retroactive",
-                 "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not "
-                 "settled retroactively.")) +
-          "\xC2\xA0<span alpha=\"70%\">\xE2\x86\x97</span>");
-      note->add_css_class("ur-row-note");
-      note->set_xalign(0);
-      note->set_wrap(true);
-      note->set_ellipsize(Pango::EllipsizeMode::NONE);
-      walletConnectNote_ = Gtk::make_managed<Gtk::Button>();
-      walletConnectNote_->set_child(*note);
-      walletConnectNote_->add_css_class("flat");
-      walletConnectNote_->set_has_frame(false);
-      walletConnectNote_->set_halign(Gtk::Align::FILL);
-      walletConnectNote_->signal_clicked().connect([this] { OpenLink(kUrXyzUrl); });
-      row.content->append(*walletConnectNote_);
-    }
+    // plain note (not a link), then a "Learn more" link in the pink accent with
+    // an outward arrow that opens the protocol site; inline, so it shares the
+    // last line when it fits
+    walletConnectNote_ = Gtk::make_managed<Gtk::Label>();
+    walletConnectNote_->set_markup(
+        Glib::Markup::escape_text(
+            T_("wallet_not_retroactive",
+               "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not "
+               "settled retroactively.")) +
+        "\xC2\xA0<a href=\"" + Glib::Markup::escape_text(kUrXyzUrl) + "\">" +
+        Glib::Markup::escape_text(T_("learn_more", "Learn more")) + "\xC2\xA0\xE2\x86\x97</a>");
+    walletConnectNote_->add_css_class("ur-row-note");
+    walletConnectNote_->add_css_class("ur-learn-more");
+    walletConnectNote_->set_xalign(0);
+    walletConnectNote_->set_wrap(true);
+    walletConnectNote_->set_ellipsize(Pango::EllipsizeMode::NONE);
+    walletConnectNote_->signal_activate_link().connect(
+        [this](const Glib::ustring& uri) -> bool {
+          OpenLink(uri.raw());
+          return true;  // handled; GTK must not launch a second time
+        },
+        false);
+    row.content->append(*walletConnectNote_);
     connectBridgeButton_ =
         Gtk::make_managed<Gtk::Button>(T_("connect_bittensor_wallet", "Connect Bittensor wallet"));
     connectBridgeButton_->add_css_class("ur-pane-primary");
@@ -3799,7 +3799,10 @@ void EarningsPage::ApplyProvideState(const LiveStats& stats) {
   provideModeDot_.set_markup("<span foreground='" + HexForMarkup(visual.color) + "'>" +
                              visual.glyph + "</span>");
   if (provideModeValue_) provideModeValue_->set_text(ProvideModeValueText(host_.GetProvideControlMode()));
-  const bool enabled = stats.provideEnabled;
+  // the gate reads the same value the row shows: the provide mode the user
+  // picked. Never hides every provider plot behind the disabled message,
+  // whatever the device's live provide state says.
+  const bool enabled = host_.GetProvideControlMode() != "never";
   if (enabled == providingEnabled_) return;
   providingEnabled_ = enabled;
   ApplyReliability(lastReliability_, lastReliabilityState_);  // repaint under the new gate

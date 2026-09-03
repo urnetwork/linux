@@ -161,6 +161,8 @@ button.link:hover label { color: #8AA9FF; }
 .ur-value { font-family: "PP Neue Montreal"; font-size: 13px; color: #F8F8F8; }
 .ur-row-title { font-family: "PP Neue Montreal"; font-size: 13px; color: #F8F8F8; }
 .ur-row-note { font-family: "PP Neue Montreal"; font-size: 11px; color: #989898; }
+/* the "Learn more" link inside a note: the pink accent, no underline */
+.ur-learn-more link { color: #ED8FFF; text-decoration-line: none; }
 /* TONE ON TOP OF A ROW CLASS. This provider outranks the one Ui.cpp installs
    (APPLICATION + 1), so a bare `.dim-label` added beside `.ur-value` LOSES and
    the label renders full white — every muted meta/value the kit builds was

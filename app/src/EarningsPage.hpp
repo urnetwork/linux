@@ -348,7 +348,7 @@ class EarningsPage : public Gtk::Box {
   Gtk::Label* walletAddressLabel_ = nullptr;
   Gtk::Button* changeWalletButton_ = nullptr;
   Gtk::Box* walletConnectPanel_ = nullptr;
-  Gtk::Button* walletConnectNote_ = nullptr;
+  Gtk::Label* walletConnectNote_ = nullptr;
   // provide mode row + gate
   Gtk::Label provideModeDot_;
   Gtk::Label* provideModeValue_ = nullptr;
