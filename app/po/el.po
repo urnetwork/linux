@@ -1138,6 +1138,41 @@ msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "Επεξεργασία κανόνα διαχωρισμού"
 
+#. Emoji keyboard group: sports, games and activities.
+msgctxt "emoji_group_activities"
+msgid "Activities"
+msgstr "Δραστηριότητες"
+
+#. Emoji keyboard group: animals and nature.
+msgctxt "emoji_group_animals"
+msgid "Animals & nature"
+msgstr "Ζώα & φύση"
+
+#. Emoji keyboard group: food and drink.
+msgctxt "emoji_group_food"
+msgid "Food & drink"
+msgstr "Φαγητό & ποτό"
+
+#. Emoji keyboard group: objects.
+msgctxt "emoji_group_objects"
+msgid "Objects"
+msgstr "Αντικείμενα"
+
+#. Emoji keyboard group: smileys and faces.
+msgctxt "emoji_group_smileys"
+msgid "Smileys"
+msgstr "Φατσούλες"
+
+#. Emoji keyboard group: symbols.
+msgctxt "emoji_group_symbols"
+msgid "Symbols"
+msgstr "Σύμβολα"
+
+#. Emoji keyboard group: travel and places.
+msgctxt "emoji_group_travel"
+msgid "Travel & places"
+msgstr "Ταξίδια & μέρη"
+
 #. Points leaderboard: the title of the emoji tag editor. One to six emoji shown next to the network.
 msgctxt "emoji_tag"
 msgid "Emoji tag"
@@ -1516,11 +1551,6 @@ msgstr "Συμπερίληψη στο VPN"
 msgctxt "included"
 msgid "Included"
 msgstr "Συμπερίληψη"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "includes_2_week_free_trial"
-msgid "Includes 2 week free trial"
-msgstr "Περιλαμβάνει δωρεάν δοκιμή δύο εβδομάδων"
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -1927,11 +1957,6 @@ msgstr "Αναμονή για τοποθεσία παρόχου"
 msgctxt "monthly"
 msgid "Monthly"
 msgstr "Μηνιαία"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "most_popular"
-msgid "Most Popular"
-msgstr "Πιο δημοφιλές"
 
 #. Android app string: multiple ips.
 msgctxt "multiple_ips"
@@ -2991,6 +3016,21 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "Φράση ανάκτησης"
 
+#. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
+msgctxt "seedphrase_invalid_word_count"
+msgid "Seedphrase must be 12 or 24 words"
+msgstr "Η φράση ανάκτησης πρέπει να έχει 12 ή 24 λέξεις"
+
+#. Seed sign-in sheet: placeholder of the seedphrase field (android accepts 12 or 24 words).
+msgctxt "seedphrase_paste_hint"
+msgid "Paste your 12 or 24-word seedphrase here"
+msgstr "Επικολλήστε εδώ τη φράση ανάκτησης 12 ή 24 λέξεων"
+
+#. Seed sign-in sheet: error when Sign in is tapped with an empty seedphrase field.
+msgctxt "seedphrase_required"
+msgid "Please enter a seedphrase"
+msgstr "Εισαγάγετε μια φράση ανάκτησης"
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -3304,6 +3344,21 @@ msgctxt "site_install_app"
 msgid "Install the app"
 msgstr "Εγκατάσταση της εφαρμογής"
 
+#. Login stack: error when the entered seed does not match an account.
+msgctxt "site_login_seed_not_recognized"
+msgid "Seed not recognized."
+msgstr "Το seed δεν αναγνωρίστηκε."
+
+#. Login stack: tooltip on the Seed tile, signing in with an instant account's seed.
+msgctxt "site_login_seed_title"
+msgid "Sign in with the seed of an instant account"
+msgstr "Σύνδεση με το seed ενός άμεσου λογαριασμού"
+
+#. Login stack: title of the seed sign-in view.
+msgctxt "site_login_seed_view_title"
+msgid "Sign in with Seed"
+msgstr "Σύνδεση με seed"
+
 #. Account panel: the small button on the plan card that opens Manage Subscription in the app.
 msgctxt "site_manage"
 msgid "Manage"
@@ -3500,11 +3555,6 @@ msgstr "Πατήστε την κίνηση παρακάτω για να δρομ
 msgctxt "split_rules_info_note"
 msgid "Exclusions apply to the whole co-associated network cluster, so related traffic is caught together."
 msgstr "Οι εξαιρέσεις ισχύουν για ολόκληρη τη συσχετισμένη ομάδα δικτύων, ώστε η σχετική κίνηση να καλύπτεται μαζί."
-
-#. Used in Shared/Views/Introduction/IntroductionView.swift.
-msgctxt "start_2_week_free_trial"
-msgid "Start 2 week free trial"
-msgstr "Ξεκινήστε τη δωρεάν δοκιμή δύο εβδομάδων"
 
 #. Guest mode overlay
 msgctxt "start_earning_join"

@@ -116,6 +116,7 @@ struct SnWalletCheck {
 };
 
 class ClaimAlphaSheet;
+class EmojiTagSheet;
 
 class EarningsPage : public Gtk::Box {
  public:
@@ -126,6 +127,34 @@ class EarningsPage : public Gtk::Box {
   // stale-async epoch first, so every completion armed for the previous
   // session is dropped before it touches a widget.
   void Load();
+
+  // The points board's row and stat tile (public: a free helper in the .cpp builds rows).
+  struct PointsRowUi {
+    std::string networkId;
+    std::string displayName;  // empty when anonymous: the row shows "Anonymous"
+    std::string emojiTag;     // shows either way
+    bool anonymous = false;
+    std::string totalPointsText;
+    std::string blocksText;
+    std::string streakText;
+    std::string longestStreakText;
+    std::string rankPointsText;
+    std::string rankBlocksText;
+    std::string rankStreakText;
+    bool operator==(const PointsRowUi& o) const {
+      return networkId == o.networkId && displayName == o.displayName &&
+             emojiTag == o.emojiTag && anonymous == o.anonymous &&
+             totalPointsText == o.totalPointsText && blocksText == o.blocksText &&
+             streakText == o.streakText && longestStreakText == o.longestStreakText &&
+             rankPointsText == o.rankPointsText && rankBlocksText == o.rankBlocksText &&
+             rankStreakText == o.rankStreakText;
+    }
+    bool operator!=(const PointsRowUi& o) const { return !(*this == o); }
+  };
+  struct PointsStatTile {
+    Gtk::Label* value = nullptr;
+    Gtk::Label* rank = nullptr;
+  };
 
   // The spec's pane-fold table (window width in dip).
   void ApplyBreakpoint(int widthDip);
@@ -178,6 +207,38 @@ class EarningsPage : public Gtk::Box {
   void BuildEarningsPane();
   void BuildLedgerPane();
   void BuildNetworkPane();
+
+  // ---- the points board (android/POINTSLEADERBOARD.md) ----------------------
+  // The leaderboard is two boards behind one switch: Data (the last-4-payments
+  // board) and Points (the all-time points board). The Points board is the
+  // SDK's PointsLeaderboardViewController rendered as it is: rows, ranks, sort
+  // and pages all come from the controller; nothing here sorts, ranks or
+  // pages. The controller is opened the first time the Points board shows and
+  // closed with the page.
+  void BuildPointsBoard();         // pane B: the switch, the sort chips, the rows
+  void BuildPointsNetworkBlock();  // pane C: this network's block
+  void OnBoardTabChanged();
+  // Opens the controller on the current device (or shows why it cannot);
+  // safe to call on every look: a controller on a device that is still the
+  // device is kept.
+  void EnsurePointsBoard();
+  void ClosePointsBoard(bool deviceAlive);
+  // Mirrors the controller into the page: rows (value-compared, so a no-op
+  // event does not re-render the table), sort, loading, end, error, `me`.
+  void ReadPointsBoard();
+  void RebuildPointsRows();
+  void RenderPointsHeader();
+  void RenderPointsFooter();
+  void OnPointsSortChanged(const std::string& sort);
+  void OnPointsScrolled();
+  void OnPointsRetry();
+  void OnPointsPublicToggled();
+  void SetPointsToggle(bool on);
+  void ApplyPointsPublicResult(uint32_t generation, bool ok, bool requested,
+                               const std::string& serverError);
+  void OnEditEmoji();
+  void SaveEmojiTag(std::string tag, std::function<void(std::string)> done);
+  void SettlePointsBoardPreview();
 
   // ---- loads -----------------------------------------------------------------
   void LoadEarnings();
@@ -300,12 +361,37 @@ class EarningsPage : public Gtk::Box {
   Gtk::Box* leaderboardHost_ = nullptr;
   Gtk::Box* leaderboardRows_ = nullptr;
   Gtk::Label* leaderboardStatus_ = nullptr;
+  // the points board (pane B)
+  Gtk::ToggleButton* dataBoardTab_ = nullptr;
+  Gtk::ToggleButton* pointsBoardTab_ = nullptr;
+  Gtk::Box* leaderboardDataHost_ = nullptr;  // the data board's rows + status
+  Gtk::Box* pointsHost_ = nullptr;
+  Gtk::ToggleButton* pointsSortTabs_[3] = {nullptr, nullptr, nullptr};  // points, blocks, streak
+  Gtk::Box* pointsRows_ = nullptr;
+  Gtk::Box* pointsFooter_ = nullptr;
+  Gtk::Spinner* pointsFooterSpinner_ = nullptr;
+  Gtk::Label* pointsFooterLabel_ = nullptr;
+  Gtk::Button* pointsRetryButton_ = nullptr;
+  Gtk::Label* pointsBoardStatus_ = nullptr;
+  sigc::connection pointsScrollConn_;
 
   // pane C widgets
   Gtk::Label* netProvidedValue_ = nullptr;
   Gtk::Label* rankValue_ = nullptr;
   Gtk::Switch* publicToggle_ = nullptr;
   kit::Snackbar leaderboardInfo_;
+  // the data board's own-ranking block, hidden while the Points board shows
+  std::vector<Gtk::Widget*> dataRankingWidgets_;
+  // the points board's block (pane C)
+  Gtk::Box* pointsGroup_ = nullptr;
+  Gtk::Label* pointsGroupMeta_ = nullptr;
+  Gtk::Label* pointsEmojiLabel_ = nullptr;
+  Gtk::Label* pointsNameLabel_ = nullptr;
+  Gtk::Button* editEmojiButton_ = nullptr;
+  PointsStatTile pointsTiles_[3];
+  Gtk::Label* pointsLongestLabel_ = nullptr;
+  Gtk::Switch* pointsPublicToggle_ = nullptr;
+  Gtk::Widget* pointsPrivateHintRow_ = nullptr;
   Gtk::Label* reliabilityStatus_ = nullptr;
   Gtk::Box* reliabilityCard_ = nullptr;
   Gtk::Box* reliabilityPanel_ = nullptr;
@@ -331,6 +417,31 @@ class EarningsPage : public Gtk::Box {
   int leaderboardCount_ = 0;
   std::string ownNetworkId_;
   bool rankingPublic_ = false;
+  // the points board's mirror of its controller
+  std::optional<urnet::PointsLeaderboardViewController> pointsVc_;
+  std::optional<urnet::Sub> pointsSub_;
+  uint64_t pointsVcDevice_ = 0;  // the device handle the controller was opened on
+  bool pointsBoardShowing_ = false;
+  std::vector<PointsRowUi> pointsRowsUi_;
+  std::string pointsSort_ = urnet::PointsLeaderboardSortPoints;
+  std::string pointsRenderedSort_;
+  bool pointsLoading_ = false;
+  bool pointsEnd_ = false;
+  bool pointsHasLoaded_ = false;  // the first page landed (rows, an empty end, or an error)
+  std::string pointsError_;
+  int64_t pointsTotalRanked_ = 0;
+  std::optional<PointsRowUi> pointsMe_;
+  bool pointsPublic_ = false;  // this network's opt-in, from `me`, updated locally on toggle
+  std::string emojiTag_;       // this network's tag, from `me`, updated locally on save
+  bool settingPointsPublic_ = false;
+  bool applyingPointsToggle_ = false;  // ECHO GUARD on the opt-in switch
+  bool savingEmojiTag_ = false;
+  // after a local toggle or save, `me` from an older in-flight page could
+  // briefly disagree with what the user just did; the local values win until
+  // a response newer than the edit lands
+  uint64_t ownFlagsClock_ = 0;
+  uint64_t ownFlagsEditedAt_ = 0;
+  uint64_t ownFlagsAppliedAt_ = 0;
 
   // in-flight gates
   bool connecting_ = false;      // bridge / set-wallet in flight
@@ -350,6 +461,7 @@ class EarningsPage : public Gtk::Box {
 
   Flow connectFlow_;   // 180s: the user legitimately spends minutes in a browser
   Flow setWalletFlow_; // 20s: POST /sn/wallet
+  Flow pointsPublicFlow_;  // 20s: POST /network/points-ranking-visibility
   Flow claimFlow_;     // 180s: chain round trips
   Flow rankingFlow_;   // 20s
 

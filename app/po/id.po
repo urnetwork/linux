@@ -1134,6 +1134,41 @@ msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "Edit aturan pemisahan"
 
+#. Emoji keyboard group: sports, games and activities.
+msgctxt "emoji_group_activities"
+msgid "Activities"
+msgstr "Aktivitas"
+
+#. Emoji keyboard group: animals and nature.
+msgctxt "emoji_group_animals"
+msgid "Animals & nature"
+msgstr "Hewan & alam"
+
+#. Emoji keyboard group: food and drink.
+msgctxt "emoji_group_food"
+msgid "Food & drink"
+msgstr "Makanan & minuman"
+
+#. Emoji keyboard group: objects.
+msgctxt "emoji_group_objects"
+msgid "Objects"
+msgstr "Benda"
+
+#. Emoji keyboard group: smileys and faces.
+msgctxt "emoji_group_smileys"
+msgid "Smileys"
+msgstr "Smiley"
+
+#. Emoji keyboard group: symbols.
+msgctxt "emoji_group_symbols"
+msgid "Symbols"
+msgstr "Simbol"
+
+#. Emoji keyboard group: travel and places.
+msgctxt "emoji_group_travel"
+msgid "Travel & places"
+msgstr "Perjalanan & tempat"
+
 #. Points leaderboard: the title of the emoji tag editor. One to six emoji shown next to the network.
 msgctxt "emoji_tag"
 msgid "Emoji tag"
@@ -1511,11 +1546,6 @@ msgstr "Sertakan dalam VPN"
 msgctxt "included"
 msgid "Included"
 msgstr "Disertakan"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "includes_2_week_free_trial"
-msgid "Includes 2 week free trial"
-msgstr "Termasuk uji coba gratis 2 minggu"
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -1921,11 +1951,6 @@ msgstr "Menunggu lokasi penyedia"
 msgctxt "monthly"
 msgid "Monthly"
 msgstr "Bulanan"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "most_popular"
-msgid "Most Popular"
-msgstr "Paling Populer"
 
 #. Android app string: multiple ips.
 msgctxt "multiple_ips"
@@ -2977,6 +3002,21 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "Frasa pemulihan"
 
+#. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
+msgctxt "seedphrase_invalid_word_count"
+msgid "Seedphrase must be 12 or 24 words"
+msgstr "Frasa pemulihan harus terdiri dari 12 atau 24 kata"
+
+#. Seed sign-in sheet: placeholder of the seedphrase field (android accepts 12 or 24 words).
+msgctxt "seedphrase_paste_hint"
+msgid "Paste your 12 or 24-word seedphrase here"
+msgstr "Tempel frasa pemulihan 12 atau 24 kata Anda di sini"
+
+#. Seed sign-in sheet: error when Sign in is tapped with an empty seedphrase field.
+msgctxt "seedphrase_required"
+msgid "Please enter a seedphrase"
+msgstr "Masukkan frasa pemulihan"
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -3290,6 +3330,21 @@ msgctxt "site_install_app"
 msgid "Install the app"
 msgstr "Pasang aplikasi"
 
+#. Login stack: error when the entered seed does not match an account.
+msgctxt "site_login_seed_not_recognized"
+msgid "Seed not recognized."
+msgstr "Seed tidak dikenali."
+
+#. Login stack: tooltip on the Seed tile, signing in with an instant account's seed.
+msgctxt "site_login_seed_title"
+msgid "Sign in with the seed of an instant account"
+msgstr "Masuk dengan seed akun instan"
+
+#. Login stack: title of the seed sign-in view.
+msgctxt "site_login_seed_view_title"
+msgid "Sign in with Seed"
+msgstr "Masuk dengan seed"
+
 #. Account panel: the small button on the plan card that opens Manage Subscription in the app.
 msgctxt "site_manage"
 msgid "Manage"
@@ -3485,11 +3540,6 @@ msgstr "Ketuk lalu lintas di bawah untuk merutekannya secara lokal, melewati ter
 msgctxt "split_rules_info_note"
 msgid "Exclusions apply to the whole co-associated network cluster, so related traffic is caught together."
 msgstr "Pengecualian berlaku untuk seluruh klaster jaringan terkait, sehingga lalu lintas yang berhubungan tercakup bersama."
-
-#. Used in Shared/Views/Introduction/IntroductionView.swift.
-msgctxt "start_2_week_free_trial"
-msgid "Start 2 week free trial"
-msgstr "Mulai uji coba gratis 2 minggu"
 
 #. Guest mode overlay
 msgctxt "start_earning_join"

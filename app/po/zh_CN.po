@@ -1134,6 +1134,41 @@ msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "编辑分流规则"
 
+#. Emoji keyboard group: sports, games and activities.
+msgctxt "emoji_group_activities"
+msgid "Activities"
+msgstr "活动"
+
+#. Emoji keyboard group: animals and nature.
+msgctxt "emoji_group_animals"
+msgid "Animals & nature"
+msgstr "动物与自然"
+
+#. Emoji keyboard group: food and drink.
+msgctxt "emoji_group_food"
+msgid "Food & drink"
+msgstr "食物与饮品"
+
+#. Emoji keyboard group: objects.
+msgctxt "emoji_group_objects"
+msgid "Objects"
+msgstr "物品"
+
+#. Emoji keyboard group: smileys and faces.
+msgctxt "emoji_group_smileys"
+msgid "Smileys"
+msgstr "表情"
+
+#. Emoji keyboard group: symbols.
+msgctxt "emoji_group_symbols"
+msgid "Symbols"
+msgstr "符号"
+
+#. Emoji keyboard group: travel and places.
+msgctxt "emoji_group_travel"
+msgid "Travel & places"
+msgstr "旅行与地点"
+
 #. Points leaderboard: the title of the emoji tag editor. One to six emoji shown next to the network.
 msgctxt "emoji_tag"
 msgid "Emoji tag"
@@ -1511,11 +1546,6 @@ msgstr "纳入 VPN"
 msgctxt "included"
 msgid "Included"
 msgstr "已包含"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "includes_2_week_free_trial"
-msgid "Includes 2 week free trial"
-msgstr "包含2周免费试用"
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -1921,11 +1951,6 @@ msgstr "正在等待提供商位置"
 msgctxt "monthly"
 msgid "Monthly"
 msgstr "按月"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "most_popular"
-msgid "Most Popular"
-msgstr "最受欢迎"
 
 #. Android app string: multiple ips.
 msgctxt "multiple_ips"
@@ -2992,6 +3017,21 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "助记词"
 
+#. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
+msgctxt "seedphrase_invalid_word_count"
+msgid "Seedphrase must be 12 or 24 words"
+msgstr "助记词必须是 12 或 24 个单词"
+
+#. Seed sign-in sheet: placeholder of the seedphrase field (android accepts 12 or 24 words).
+msgctxt "seedphrase_paste_hint"
+msgid "Paste your 12 or 24-word seedphrase here"
+msgstr "在此粘贴你的 12 或 24 个单词的助记词"
+
+#. Seed sign-in sheet: error when Sign in is tapped with an empty seedphrase field.
+msgctxt "seedphrase_required"
+msgid "Please enter a seedphrase"
+msgstr "请输入助记词"
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -3955,6 +3995,21 @@ msgctxt "site_locations"
 msgid "Locations"
 msgstr "位置"
 
+#. Login stack: error when the entered seed does not match an account.
+msgctxt "site_login_seed_not_recognized"
+msgid "Seed not recognized."
+msgstr "无法识别助记词。"
+
+#. Login stack: tooltip on the Seed tile, signing in with an instant account's seed.
+msgctxt "site_login_seed_title"
+msgid "Sign in with the seed of an instant account"
+msgstr "使用即时账户的助记词登录"
+
+#. Login stack: title of the seed sign-in view.
+msgctxt "site_login_seed_view_title"
+msgid "Sign in with Seed"
+msgstr "使用助记词登录"
+
 #. Account panel: the small button on the plan card that opens Manage Subscription in the app.
 msgctxt "site_manage"
 msgid "Manage"
@@ -4225,11 +4280,6 @@ msgstr "点击下方流量，将其改走本地路由，绕过隧道。"
 msgctxt "split_rules_info_note"
 msgid "Exclusions apply to the whole co-associated network cluster, so related traffic is caught together."
 msgstr "排除会应用到整个关联网络集群，因此相关流量会被一并排除。"
-
-#. Used in Shared/Views/Introduction/IntroductionView.swift.
-msgctxt "start_2_week_free_trial"
-msgid "Start 2 week free trial"
-msgstr "开始2周免费试用"
 
 #. Guest mode overlay
 msgctxt "start_earning_join"

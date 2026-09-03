@@ -2135,6 +2135,41 @@ msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "Edit split rule"
 
+#. Emoji keyboard group: sports, games and activities.
+msgctxt "emoji_group_activities"
+msgid "Activities"
+msgstr "Activities"
+
+#. Emoji keyboard group: animals and nature.
+msgctxt "emoji_group_animals"
+msgid "Animals & nature"
+msgstr "Animals & nature"
+
+#. Emoji keyboard group: food and drink.
+msgctxt "emoji_group_food"
+msgid "Food & drink"
+msgstr "Food & drink"
+
+#. Emoji keyboard group: objects.
+msgctxt "emoji_group_objects"
+msgid "Objects"
+msgstr "Objects"
+
+#. Emoji keyboard group: smileys and faces.
+msgctxt "emoji_group_smileys"
+msgid "Smileys"
+msgstr "Smileys"
+
+#. Emoji keyboard group: symbols.
+msgctxt "emoji_group_symbols"
+msgid "Symbols"
+msgstr "Symbols"
+
+#. Emoji keyboard group: travel and places.
+msgctxt "emoji_group_travel"
+msgid "Travel & places"
+msgstr "Travel & places"
+
 #. Points leaderboard: the title of the emoji tag editor. One to six emoji shown next to the network.
 msgctxt "emoji_tag"
 msgid "Emoji tag"
@@ -2581,11 +2616,6 @@ msgstr "Include in VPN"
 msgctxt "included"
 msgid "Included"
 msgstr "Included"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "includes_2_week_free_trial"
-msgid "Includes 2 week free trial"
-msgstr "Includes 2 week free trial"
 
 #. Line under the annual plan card. The number of days is the free trial length.
 msgctxt "includes_free_trial_days"
@@ -3077,11 +3107,6 @@ msgstr "Waiting for a provider location"
 msgctxt "monthly"
 msgid "Monthly"
 msgstr "Monthly"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "most_popular"
-msgid "Most Popular"
-msgstr "Most Popular"
 
 #. Android app string: multiple ips.
 msgctxt "multiple_ips"
@@ -4301,6 +4326,21 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "Seedphrase"
 
+#. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
+msgctxt "seedphrase_invalid_word_count"
+msgid "Seedphrase must be 12 or 24 words"
+msgstr "Seedphrase must be 12 or 24 words"
+
+#. Seed sign-in sheet: placeholder of the seedphrase field (android accepts 12 or 24 words).
+msgctxt "seedphrase_paste_hint"
+msgid "Paste your 12 or 24-word seedphrase here"
+msgstr "Paste your 12 or 24-word seedphrase here"
+
+#. Seed sign-in sheet: error when Sign in is tapped with an empty seedphrase field.
+msgctxt "seedphrase_required"
+msgid "Please enter a seedphrase"
+msgstr "Please enter a seedphrase"
+
 #. Note on the Seeker verification action.
 msgctxt "seeker_points_only"
 msgid "The Seeker multiplier applies to points only."
@@ -5519,6 +5559,21 @@ msgctxt "site_locations"
 msgid "Locations"
 msgstr "Locations"
 
+#. Login stack: error when the entered seed does not match an account.
+msgctxt "site_login_seed_not_recognized"
+msgid "Seed not recognized."
+msgstr "Seed not recognized."
+
+#. Login stack: tooltip on the Seed tile, signing in with an instant account's seed.
+msgctxt "site_login_seed_title"
+msgid "Sign in with the seed of an instant account"
+msgstr "Sign in with the seed of an instant account"
+
+#. Login stack: title of the seed sign-in view.
+msgctxt "site_login_seed_view_title"
+msgid "Sign in with Seed"
+msgstr "Sign in with Seed"
+
 #. Account panel: the small button on the plan card that opens Manage Subscription in the app.
 msgctxt "site_manage"
 msgid "Manage"
@@ -5860,11 +5915,6 @@ msgstr "Tap traffic below to route it locally, bypassing the tunnel."
 msgctxt "split_rules_info_note"
 msgid "Exclusions apply to the whole co-associated network cluster, so related traffic is caught together."
 msgstr "Exclusions apply to the whole co-associated network cluster, so related traffic is caught together."
-
-#. Used in Shared/Views/Introduction/IntroductionView.swift.
-msgctxt "start_2_week_free_trial"
-msgid "Start 2 week free trial"
-msgstr "Start 2 week free trial"
 
 #. Guest mode overlay
 msgctxt "start_earning_join"

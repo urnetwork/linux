@@ -694,7 +694,7 @@ void MainWindow::BuildLogin() {
 
   // ---- the tiles: the less common ways in ----------------------------------
   auto* secretKey =
-      MakeUrTileButton(BrandIcon::Kind::Key, T_("login_tile_secret_key", "Secret key"));
+      MakeUrTileButton(BrandIcon::Kind::Key, T_("login_tile_secret_key", "Seed"));
   secretKey->signal_clicked().connect([this] {
     loginError_.set_text("");
     if (seedphraseView_) seedphraseView_->get_buffer()->set_text("");

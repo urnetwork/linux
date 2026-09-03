@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <utility>
 
+#include "EmojiKeyboard.hpp"
+#include "EmojiTagSheet.hpp"
 #include "Formatters.hpp"
 #include "I18n.hpp"
 #include "UrTheme.hpp"
@@ -1165,6 +1167,8 @@ EarningsPage::EarningsPage(SdkHost& host)
   RebuildWalletBlock();
   RebuildUnclaimedTile();
   RebuildTop200();
+  RenderPointsHeader();
+  RenderPointsFooter();
 }
 
 EarningsPage::~EarningsPage() {
@@ -1174,6 +1178,9 @@ EarningsPage::~EarningsPage() {
   connectFlow_.timer.disconnect();
   setWalletFlow_.timer.disconnect();
   claimFlow_.timer.disconnect();
+  pointsPublicFlow_.timer.disconnect();
+  pointsScrollConn_.disconnect();
+  ClosePointsBoard(/*deviceAlive=*/true);
   rankingFlow_.timer.disconnect();
   sheet_.reset();
 }
@@ -1277,6 +1284,7 @@ void EarningsPage::Load() {
   if (leaderboardTab_ != nullptr && leaderboardTab_->get_active()) {
     leaderboardRequested_ = true;
     LoadLeaderboard();
+    if (pointsBoardShowing_) EnsurePointsBoard();
   } else {
     leaderboardRequested_ = false;
   }
@@ -1324,6 +1332,7 @@ void EarningsPage::SettleAllEmpty() {
   } else {
     ApplyLeaderboard(std::nullopt, Fetch::NoSession);
   }
+  SettlePointsBoardPreview();
 }
 
 // ---- PANE A: earnings (360) --------------------------------------------------
@@ -1528,13 +1537,39 @@ void EarningsPage::BuildLedgerPane() {
   historyHost_->append(*historyStatus_);
   paneB_.content->append(*historyHost_);
 
+  // Two boards behind one more switch: Data (the last-4-payments board) and
+  // Points (the all-time points board, android/POINTSLEADERBOARD.md).
   leaderboardHost_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
   leaderboardHost_->set_vexpand(true);
   leaderboardHost_->set_visible(false);
+  {
+    auto* boards = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
+    boards->add_css_class("linked");
+    boards->set_halign(Gtk::Align::START);
+    boards->set_margin_start(12);
+    boards->set_margin_end(12);
+    boards->set_margin_top(6);
+    boards->set_margin_bottom(6);
+    dataBoardTab_ = Gtk::make_managed<Gtk::ToggleButton>(T_("data", "Data"));
+    pointsBoardTab_ = Gtk::make_managed<Gtk::ToggleButton>(T_("points", "Points"));
+    pointsBoardTab_->set_group(*dataBoardTab_);
+    dataBoardTab_->set_active(true);  // Data is the default board
+    for (Gtk::ToggleButton* tab : {dataBoardTab_, pointsBoardTab_}) {
+      boards->append(*tab);
+      tab->signal_toggled().connect([this, tab] {
+        if (tab->get_active()) OnBoardTabChanged();
+      });
+    }
+    leaderboardHost_->append(*boards);
+  }
+  leaderboardDataHost_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+  leaderboardDataHost_->set_vexpand(true);
   leaderboardRows_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
-  leaderboardHost_->append(*leaderboardRows_);
+  leaderboardDataHost_->append(*leaderboardRows_);
   leaderboardStatus_ = kit::MakePaneEmptyLine(T_("loading", "Loading..."));
-  leaderboardHost_->append(*leaderboardStatus_);
+  leaderboardDataHost_->append(*leaderboardStatus_);
+  leaderboardHost_->append(*leaderboardDataHost_);
+  BuildPointsBoard();
   paneB_.content->append(*leaderboardHost_);
 }
 
@@ -1548,7 +1583,12 @@ void EarningsPage::BuildNetworkPane() {
   Gtk::Box* content = paneC_.content;
 
   // 1 + 2. own ranking
-  content->append(*kit::MakePaneGroupHeader(T_("current_ranking", "Current Ranking")).root);
+  {
+    Gtk::Widget* header =
+        kit::MakePaneGroupHeader(T_("current_ranking", "Current Ranking")).root;
+    content->append(*header);
+    dataRankingWidgets_.push_back(header);
+  }
   {
     auto row = MakePaddedRow(12);
     auto* grid = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
@@ -1567,6 +1607,7 @@ void EarningsPage::BuildNetworkPane() {
     grid->append(*figures);
     row.content->append(*grid);
     content->append(*row.root);
+    dataRankingWidgets_.push_back(row.root);
   }
 
   // 3. the public-leaderboard switch
@@ -1581,6 +1622,7 @@ void EarningsPage::BuildNetworkPane() {
         sigc::mem_fun(*this, &EarningsPage::OnLeaderboardPublicToggled));
     row.trailing->append(*publicToggle_);
     content->append(*row.root);
+    dataRankingWidgets_.push_back(row.root);
   }
 
   // 4. what the board actually measures
@@ -1592,7 +1634,11 @@ void EarningsPage::BuildNetworkPane() {
            "cycle."),
         "ur-row-note"));
     content->append(*row.root);
+    dataRankingWidgets_.push_back(row.root);
   }
+
+  // 4b. the points board's block, in the data block's place while that board shows
+  BuildPointsNetworkBlock();
 
   // 5. the network pane's snackbar surface
   leaderboardInfo_.root().set_margin_top(8);
@@ -2321,8 +2367,10 @@ void EarningsPage::RebuildReliabilityCard() {
 }
 
 void EarningsPage::ApplyLedgerMeta() {
+  const int boardCount =
+      pointsBoardShowing_ ? static_cast<int>(pointsRowsUi_.size()) : leaderboardCount_;
   const int count = (leaderboardTab_ != nullptr && leaderboardTab_->get_active())
-                        ? leaderboardCount_
+                        ? boardCount
                         : static_cast<int>(epochs_.size());
   kit::SetTextOrCollapse(
       *paneB_.meta, count > 0 ? Glib::ustring(std::to_string(count)) : Glib::ustring());
@@ -2337,6 +2385,7 @@ void EarningsPage::OnLedgerTabChanged() {
     leaderboardRequested_ = true;
     LoadLeaderboard();
   }
+  if (!history && pointsBoardShowing_) EnsurePointsBoard();
 }
 
 // ---- attach a Bittensor wallet -----------------------------------------------
@@ -3027,6 +3076,678 @@ void EarningsPage::ShowPreviewClaimDialog() {
     return;
   }
   OpenClaimSheet(/*allowActions=*/false);
+}
+
+// ---- the points board --------------------------------------------------------
+//
+// The all-time points leaderboard (android/POINTSLEADERBOARD.md), the Android
+// screen's structure on the ledger pane: a Data | Points switch above the
+// board, sort chips above the rows, rows paged in by the SDK controller as the
+// list nears its end, and this network's own block beside it on pane C. The
+// controller (PointsLeaderboardViewController) is the ONLY source of rows,
+// ranks, sort and pages; this file only mirrors its state and forwards the
+// sort, load-more and refresh intents.
+
+namespace {
+
+constexpr int kPointsRowHeight = 36;
+
+EarningsPage::PointsRowUi ToPointsRowUi(const urnet::PointsLeaderboardRow& row) {
+  EarningsPage::PointsRowUi out;
+  out.networkId = row.network_id.value_or(std::string());
+  out.displayName = row.display_name.value_or(std::string());
+  out.emojiTag = row.emoji_tag.value_or(std::string());
+  out.anonymous = row.anonymous;
+  out.totalPointsText = row.total_points_text.value_or(std::string());
+  out.blocksText = row.blocks_with_points_text.value_or(std::string());
+  out.streakText = row.streak_text.value_or(std::string());
+  out.longestStreakText = row.longest_streak_text.value_or(std::string());
+  out.rankPointsText = row.rank_points_text.value_or(std::string());
+  out.rankBlocksText = row.rank_blocks_text.value_or(std::string());
+  out.rankStreakText = row.rank_streak_text.value_or(std::string());
+  return out;
+}
+
+Gtk::ScrolledWindow* PaneScroller(Gtk::Box* content) {
+  if (content == nullptr) return nullptr;
+  return dynamic_cast<Gtk::ScrolledWindow*>(content->get_ancestor(GTK_TYPE_SCROLLED_WINDOW));
+}
+
+}  // namespace
+
+void EarningsPage::BuildPointsBoard() {
+  pointsHost_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+  pointsHost_->set_vexpand(true);
+  pointsHost_->set_visible(false);
+
+  // the sort chips: the board re-sorts through the controller
+  auto* sorts = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 0);
+  sorts->add_css_class("linked");
+  sorts->set_halign(Gtk::Align::START);
+  sorts->set_margin_start(12);
+  sorts->set_margin_end(12);
+  sorts->set_margin_bottom(6);
+  const char* const sortIds[3] = {urnet::PointsLeaderboardSortPoints,
+                                  urnet::PointsLeaderboardSortBlocks,
+                                  urnet::PointsLeaderboardSortStreak};
+  const Glib::ustring sortLabels[3] = {T_("points", "Points"), T_("blocks", "Blocks"),
+                                       T_("streak", "Streak")};
+  for (int i = 0; i < 3; ++i) {
+    auto* tab = Gtk::make_managed<Gtk::ToggleButton>(sortLabels[i]);
+    if (i > 0) tab->set_group(*pointsSortTabs_[0]);
+    pointsSortTabs_[i] = tab;
+    const std::string sort = sortIds[i];
+    tab->signal_toggled().connect([this, tab, sort] {
+      if (tab->get_active()) OnPointsSortChanged(sort);
+    });
+    sorts->append(*tab);
+  }
+  pointsSortTabs_[0]->set_active(true);
+  pointsHost_->append(*sorts);
+
+  pointsRows_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+  pointsHost_->append(*pointsRows_);
+
+  // the footer: the page spinner, or the error with its retry
+  pointsFooter_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+  pointsFooter_->set_margin(12);
+  pointsFooter_->set_halign(Gtk::Align::CENTER);
+  pointsFooterSpinner_ = Gtk::make_managed<Gtk::Spinner>();
+  pointsFooterSpinner_->set_visible(false);
+  pointsFooter_->append(*pointsFooterSpinner_);
+  pointsFooterLabel_ = Gtk::make_managed<Gtk::Label>();
+  pointsFooterLabel_->add_css_class("dim-label");
+  pointsFooterLabel_->set_wrap(true);
+  pointsFooterLabel_->set_justify(Gtk::Justification::CENTER);
+  pointsFooterLabel_->set_visible(false);
+  pointsFooter_->append(*pointsFooterLabel_);
+  pointsRetryButton_ = Gtk::make_managed<Gtk::Button>(T_("try_again", "Try again"));
+  pointsRetryButton_->set_halign(Gtk::Align::CENTER);
+  pointsRetryButton_->set_visible(false);
+  pointsRetryButton_->signal_clicked().connect([this] { OnPointsRetry(); });
+  pointsFooter_->append(*pointsRetryButton_);
+  pointsHost_->append(*pointsFooter_);
+
+  pointsBoardStatus_ = kit::MakePaneEmptyLine(T_("loading", "Loading..."));
+  pointsHost_->append(*pointsBoardStatus_);
+  leaderboardHost_->append(*pointsHost_);
+
+  // the next page is asked for as the pane scrolls near the end of the rows
+  if (Gtk::ScrolledWindow* scroller = PaneScroller(paneB_.content)) {
+    pointsScrollConn_ =
+        scroller->get_vadjustment()->signal_value_changed().connect([this] { OnPointsScrolled(); });
+  }
+}
+
+// Pane C's block for the Points board: the group strip with the ranked count,
+// the identity line (emoji tag, own name, the pencil), the three dimensions
+// each with its rank chip, the longest streak, the opt-in switch with its
+// hint, and what the board measures. The Android header card, on the pane's
+// row rhythm.
+void EarningsPage::BuildPointsNetworkBlock() {
+  pointsGroup_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+  pointsGroup_->set_visible(false);
+
+  auto group = kit::MakePaneGroupHeader(T_("points", "Points"));
+  pointsGroupMeta_ = group.meta;
+  pointsGroup_->append(*group.root);
+
+  // identity
+  {
+    auto row = MakePaddedRow(10);
+    auto* line = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 10);
+    pointsEmojiLabel_ = Gtk::make_managed<Gtk::Label>();
+    pointsEmojiLabel_->set_valign(Gtk::Align::CENTER);
+    pointsEmojiLabel_->set_visible(false);
+    {
+      Pango::AttrList attrs;
+      auto size = Pango::Attribute::create_attr_size_absolute(26 * PANGO_SCALE);
+      attrs.insert(size);
+      pointsEmojiLabel_->set_attributes(attrs);
+    }
+    line->append(*pointsEmojiLabel_);
+    pointsNameLabel_ = Gtk::make_managed<Gtk::Label>("-");
+    pointsNameLabel_->add_css_class("ur-row-title");
+    pointsNameLabel_->set_xalign(0);
+    pointsNameLabel_->set_hexpand(true);
+    pointsNameLabel_->set_valign(Gtk::Align::CENTER);
+    pointsNameLabel_->set_ellipsize(Pango::EllipsizeMode::END);
+    line->append(*pointsNameLabel_);
+    editEmojiButton_ = Gtk::make_managed<Gtk::Button>();
+    editEmojiButton_->set_icon_name("document-edit-symbolic");
+    editEmojiButton_->add_css_class("flat");
+    editEmojiButton_->set_valign(Gtk::Align::CENTER);
+    editEmojiButton_->signal_clicked().connect([this] { OnEditEmoji(); });
+    line->append(*editEmojiButton_);
+    row.content->append(*line);
+    pointsGroup_->append(*row.root);
+  }
+
+  // the three dimensions, each with its own rank
+  {
+    auto row = MakePaddedRow(10);
+    auto* tiles = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    const Glib::ustring labels[3] = {T_("points", "Points"), T_("blocks", "Blocks"),
+                                     T_("streak", "Streak")};
+    for (int i = 0; i < 3; ++i) {
+      auto* tile = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
+      tile->set_hexpand(true);
+      auto* caption = Gtk::make_managed<Gtk::Label>(labels[i]);
+      caption->add_css_class("ur-caption");
+      caption->set_xalign(0);
+      caption->set_ellipsize(Pango::EllipsizeMode::END);
+      tile->append(*caption);
+      pointsTiles_[i].value = MakeCondensedValue("-", 22);
+      pointsTiles_[i].value->add_css_class("ur-label-faint");
+      tile->append(*pointsTiles_[i].value);
+      pointsTiles_[i].rank = MakeStatusChip("-");
+      pointsTiles_[i].rank->set_halign(Gtk::Align::START);
+      tile->append(*pointsTiles_[i].rank);
+      tiles->append(*tile);
+    }
+    row.content->append(*tiles);
+    pointsLongestLabel_ = MakeWrappedNote({}, "ur-row-note");
+    pointsLongestLabel_->set_margin_top(6);
+    pointsLongestLabel_->set_visible(false);
+    row.content->append(*pointsLongestLabel_);
+    pointsGroup_->append(*row.root);
+  }
+
+  // the opt-in switch
+  {
+    auto row = kit::MakePaneTwoLineRow(
+        T_("show_on_points_leaderboard", "Show on the points leaderboard"), {}, 44);
+    pointsPublicToggle_ = Gtk::make_managed<Gtk::Switch>();
+    pointsPublicToggle_->set_valign(Gtk::Align::CENTER);
+    kit::SetAccessibleLabel(*pointsPublicToggle_,
+                            T_("show_on_points_leaderboard", "Show on the points leaderboard"));
+    pointsPublicToggle_->property_active().signal_changed().connect(
+        sigc::mem_fun(*this, &EarningsPage::OnPointsPublicToggled));
+    row.trailing->append(*pointsPublicToggle_);
+    pointsGroup_->append(*row.root);
+  }
+  {
+    auto row = MakePaddedRow(8);
+    row.content->append(*MakeWrappedNote(
+        T_("points_leaderboard_private_hint",
+           "Only you can see this. Turn it on to appear on the leaderboard."),
+        "ur-row-note"));
+    pointsPrivateHintRow_ = row.root;
+    pointsGroup_->append(*row.root);
+  }
+
+  // what the board measures
+  {
+    auto row = MakePaddedRow(8);
+    row.content->append(*MakeWrappedNote(
+        T_("points_leaderboard_description",
+           "All-time points. A block is one finalized epoch; the streak counts consecutive "
+           "blocks with points, ending at the latest one."),
+        "ur-row-note"));
+    pointsGroup_->append(*row.root);
+  }
+
+  paneC_.content->append(*pointsGroup_);
+}
+
+void EarningsPage::OnBoardTabChanged() {
+  const bool points = pointsBoardTab_ != nullptr && pointsBoardTab_->get_active();
+  pointsBoardShowing_ = points;
+  if (leaderboardDataHost_ != nullptr) leaderboardDataHost_->set_visible(!points);
+  if (pointsHost_ != nullptr) pointsHost_->set_visible(points);
+  for (Gtk::Widget* widget : dataRankingWidgets_) widget->set_visible(!points);
+  if (pointsGroup_ != nullptr) pointsGroup_->set_visible(points);
+  ApplyLedgerMeta();
+  if (points) EnsurePointsBoard();
+}
+
+void EarningsPage::EnsurePointsBoard() {
+  if (previewMode_) {
+    SettlePointsBoardPreview();
+    return;
+  }
+  // the controller lives on the device: no session or no device, no board
+  if (!host_.IsLoggedIn() || !host_.hasDevice()) {
+    ClosePointsBoard(/*deviceAlive=*/false);
+    kit::SetTextOrCollapse(*pointsBoardStatus_,
+                           T_("please_login_to_urnetwork", "Please login to URnetwork"));
+    return;
+  }
+  const uint64_t device = host_.device().handle();
+  if (pointsVc_ && pointsVcDevice_ == device) return;  // still the device it was opened on
+  ClosePointsBoard(pointsVcDevice_ == device);
+  pointsVcDevice_ = device;
+  try {
+    pointsVc_.emplace(host_.device().openPointsLeaderboardViewController());
+  } catch (const std::exception& e) {
+    g_warning("points board: could not open the controller: %s", e.what());
+    pointsVc_.reset();
+    pointsVcDevice_ = 0;
+    kit::SetTextOrCollapse(*pointsBoardStatus_, T_("something_went_wrong", "Something went wrong."));
+    return;
+  }
+  auto alive = alive_;
+  // the SDK calls from its own thread; the state is read on the main loop
+  pointsSub_.emplace(pointsVc_->addPointsLeaderboardListener([this, alive] {
+    PostToMain([this, alive] {
+      if (!*alive) return;
+      ReadPointsBoard();
+    });
+  }));
+  pointsVc_->start();
+  // a sort picked before the controller existed is applied now
+  if (pointsVc_->getSort() != pointsSort_) pointsVc_->setSort(pointsSort_);
+  kit::SetTextOrCollapse(*pointsBoardStatus_, T_("loading", "Loading..."));
+  ReadPointsBoard();
+}
+
+void EarningsPage::ClosePointsBoard(bool deviceAlive) {
+  pointsSub_.reset();  // unsubscribes
+  if (pointsVc_) {
+    // the controller must be closed on the device that opened it; a device
+    // that is gone took its controllers with it
+    if (deviceAlive && host_.hasDevice() && host_.device().handle() == pointsVcDevice_) {
+      host_.device().closePointsLeaderboardViewController(*pointsVc_);
+    }
+    pointsVc_.reset();
+  }
+  pointsVcDevice_ = 0;
+  pointsRowsUi_.clear();
+  pointsHasLoaded_ = false;
+  pointsLoading_ = false;
+  pointsEnd_ = false;
+  pointsError_.clear();
+  pointsMe_.reset();
+  if (pointsRows_ != nullptr) RebuildPointsRows();
+  RenderPointsHeader();
+  RenderPointsFooter();
+}
+
+void EarningsPage::ReadPointsBoard() {
+  if (!pointsVc_) return;
+  std::vector<PointsRowUi> next;
+  try {
+    if (auto list = pointsVc_->getRows()) {
+      next.reserve(list->size());
+      for (const auto& row : *list) next.push_back(ToPointsRowUi(row));
+    }
+    pointsSort_ = pointsVc_->getSort();
+    if (pointsSort_.empty()) pointsSort_ = urnet::PointsLeaderboardSortPoints;
+    pointsLoading_ = pointsVc_->isLoading();
+    pointsEnd_ = pointsVc_->isEndReached();
+    pointsError_ = pointsVc_->getErrorMessage();
+    pointsTotalRanked_ = pointsVc_->getTotalRanked();
+    if (auto me = pointsVc_->getMe()) {
+      pointsMe_ = me->Row ? std::optional<PointsRowUi>(ToPointsRowUi(*me->Row)) : std::nullopt;
+      if (ownFlagsAppliedAt_ >= ownFlagsEditedAt_) {
+        pointsPublic_ = me->PointsLeaderboardPublic;
+        emojiTag_ = pointsMe_ ? pointsMe_->emojiTag : std::string();
+      }
+    }
+  } catch (const std::exception& e) {
+    // a malformed document must never take the page down
+    g_warning("points board: reading the controller failed: %s", e.what());
+    return;
+  }
+  const bool rowsChanged = next != pointsRowsUi_ || pointsRenderedSort_ != pointsSort_;
+  if (next != pointsRowsUi_) pointsRowsUi_ = std::move(next);
+  if (!pointsLoading_ && (!pointsRowsUi_.empty() || pointsEnd_ || !pointsError_.empty())) {
+    pointsHasLoaded_ = true;
+  }
+
+  // the sort chips follow the controller (a same-sort reselect is a no-op)
+  const int sortIndex = pointsSort_ == urnet::PointsLeaderboardSortBlocks   ? 1
+                        : pointsSort_ == urnet::PointsLeaderboardSortStreak ? 2
+                                                                            : 0;
+  if (pointsSortTabs_[sortIndex] != nullptr && !pointsSortTabs_[sortIndex]->get_active()) {
+    pointsSortTabs_[sortIndex]->set_active(true);
+  }
+
+  if (rowsChanged) RebuildPointsRows();
+  RenderPointsHeader();
+  RenderPointsFooter();
+  if (pointsBoardShowing_) ApplyLedgerMeta();
+
+  // a page that does not fill the pane can never be scrolled to its end, so
+  // the next one is asked for once layout has run (the controller refuses a
+  // second in-flight page and a page past the end)
+  if (!pointsLoading_ && !pointsEnd_ && !pointsRowsUi_.empty()) {
+    auto alive = alive_;
+    Glib::signal_idle().connect_once([this, alive] {
+      if (!*alive || !pointsVc_ || pointsLoading_ || pointsEnd_) return;
+      Gtk::ScrolledWindow* scroller = PaneScroller(paneB_.content);
+      if (scroller == nullptr) return;
+      auto adjustment = scroller->get_vadjustment();
+      if (adjustment->get_upper() <= adjustment->get_page_size()) pointsVc_->loadMore();
+    });
+  }
+}
+
+void EarningsPage::RebuildPointsRows() {
+  RemoveAllChildren(*pointsRows_);
+  pointsRenderedSort_ = pointsSort_;
+  if (pointsRowsUi_.empty()) return;
+
+  // the same table builder the data board uses; rank and network read as
+  // text, the three figures read right
+  const std::vector<int> weights{1, 5, 2, 1, 1};
+  pointsRows_->append(*kit::MakePaneTableHeader(
+      weights,
+      {T_("current_ranking", "Current Ranking"), T_("network", "Network"),
+       T_("points", "Points"), T_("blocks", "Blocks"), T_("streak", "Streak")},
+      2));
+  const bool byBlocks = pointsSort_ == urnet::PointsLeaderboardSortBlocks;
+  const bool byStreak = pointsSort_ == urnet::PointsLeaderboardSortStreak;
+  const size_t activeColumn = byBlocks ? 3 : (byStreak ? 4 : 2);
+  const std::string ownId = pointsMe_ ? pointsMe_->networkId : std::string();
+  const Glib::ustring anonymous = T_("anonymous", "Anonymous");
+
+  for (const auto& r : pointsRowsUi_) {
+    const bool isOwn = !ownId.empty() && r.networkId == ownId;
+    auto row = kit::MakePaneTableRow(weights, kPointsRowHeight, 2);
+    row.cells[0]->set_text(byBlocks ? r.rankBlocksText
+                                    : (byStreak ? r.rankStreakText : r.rankPointsText));
+    // the emoji tag shows either way; the name only when the network is not anonymous
+    const bool anon = r.anonymous || r.displayName.empty();
+    Glib::ustring name = anon ? anonymous : Glib::ustring(r.displayName);
+    if (!r.emojiTag.empty()) name = Glib::ustring(r.emojiTag) + "  " + name;
+    row.cells[1]->set_text(name);
+    row.cells[2]->set_text(r.totalPointsText);
+    row.cells[3]->set_text(r.blocksText);
+    row.cells[4]->set_text(r.streakText);
+    // the sorted figure reads in the text voice; the other two step back
+    for (size_t i = 2; i < row.cells.size(); ++i) {
+      row.cells[i]->add_css_class(i == activeColumn ? "ur-value" : "dim-label");
+    }
+    if (anon) row.cells[1]->add_css_class("dim-label");
+    // the account's own row is the point of the table: colour AND the pane's
+    // fill step, because colour alone is never the only signal
+    if (isOwn) {
+      for (Gtk::Label* cell : row.cells) {
+        cell->remove_css_class("dim-label");
+        cell->add_css_class("ur-value-on");
+      }
+      row.root->add_css_class("ur-earn-own-row");
+    }
+    pointsRows_->append(*row.root);
+  }
+}
+
+void EarningsPage::RenderPointsHeader() {
+  if (pointsNameLabel_ == nullptr) return;  // not built yet
+  const bool hasMe = pointsMe_.has_value();
+
+  pointsEmojiLabel_->set_text(emojiTag_);
+  pointsEmojiLabel_->set_visible(!emojiTag_.empty());
+  pointsNameLabel_->set_text(hasMe && !pointsMe_->displayName.empty() ? pointsMe_->displayName
+                                                                      : std::string("-"));
+  const Glib::ustring editName =
+      emojiTag_.empty() ? T_("add_emoji", "Add emoji") : T_("edit_emoji", "Edit emoji");
+  editEmojiButton_->set_tooltip_text(editName);
+  kit::SetAccessibleLabel(*editEmojiButton_, editName);
+  kit::SetTextOrCollapse(
+      *pointsGroupMeta_,
+      pointsTotalRanked_ > 0
+          ? Glib::ustring(Format(T_("ranked_networks_count", "{} ranked networks"),
+                                 urnet::formatPoints(static_cast<double>(pointsTotalRanked_))))
+          : Glib::ustring());
+
+  const std::string values[3] = {hasMe ? pointsMe_->totalPointsText : std::string(),
+                                 hasMe ? pointsMe_->blocksText : std::string(),
+                                 hasMe ? pointsMe_->streakText : std::string()};
+  const std::string ranks[3] = {hasMe ? pointsMe_->rankPointsText : std::string(),
+                                hasMe ? pointsMe_->rankBlocksText : std::string(),
+                                hasMe ? pointsMe_->rankStreakText : std::string()};
+  const bool emphasized[3] = {pointsSort_ == urnet::PointsLeaderboardSortPoints,
+                              pointsSort_ == urnet::PointsLeaderboardSortBlocks,
+                              pointsSort_ == urnet::PointsLeaderboardSortStreak};
+  for (int i = 0; i < 3; ++i) {
+    pointsTiles_[i].value->set_text(values[i].empty() ? std::string("-") : values[i]);
+    if (values[i].empty()) {
+      pointsTiles_[i].value->add_css_class("ur-label-faint");
+    } else {
+      pointsTiles_[i].value->remove_css_class("ur-label-faint");
+    }
+    pointsTiles_[i].rank->set_text(ranks[i].empty() ? std::string("-") : ranks[i]);
+    if (emphasized[i]) {
+      pointsTiles_[i].rank->add_css_class("ur-value-on");
+    } else {
+      pointsTiles_[i].rank->remove_css_class("ur-value-on");
+    }
+  }
+  if (hasMe) {
+    pointsLongestLabel_->set_text(Glib::ustring(T_("longest_streak", "Longest streak")) + ": " +
+                                  pointsMe_->longestStreakText);
+  }
+  pointsLongestLabel_->set_visible(hasMe);
+
+  SetPointsToggle(pointsPublic_);
+  pointsPublicToggle_->set_sensitive(!settingPointsPublic_);
+  if (pointsPrivateHintRow_ != nullptr) pointsPrivateHintRow_->set_visible(!pointsPublic_);
+}
+
+void EarningsPage::RenderPointsFooter() {
+  if (pointsFooter_ == nullptr) return;  // not built yet
+  const bool showError = !pointsLoading_ && !pointsError_.empty();
+  // the page spinner only once there are rows to page after; before the first
+  // page the centred status line says "Loading..." on its own
+  const bool paging = pointsLoading_ && !pointsRowsUi_.empty();
+  pointsFooterSpinner_->set_visible(paging);
+  if (paging) {
+    pointsFooterSpinner_->start();
+  } else {
+    pointsFooterSpinner_->stop();
+  }
+  kit::SetTextOrCollapse(*pointsFooterLabel_, showError ? Glib::ustring(pointsError_) : Glib::ustring());
+  pointsRetryButton_->set_visible(showError);
+  if (!pointsVc_) return;  // the status line already says why there is no board
+  if (pointsRowsUi_.empty() && !showError) {
+    kit::SetTextOrCollapse(
+        *pointsBoardStatus_,
+        pointsHasLoaded_
+            ? Glib::ustring(T_("points_leaderboard_empty", "No one is on the points leaderboard yet."))
+            : Glib::ustring(T_("loading", "Loading...")));
+  } else {
+    kit::SetTextOrCollapse(*pointsBoardStatus_, {});
+  }
+}
+
+// Switches the sort; the controller clears its rows and reloads.
+void EarningsPage::OnPointsSortChanged(const std::string& sort) {
+  if (sort == pointsSort_ || !urnet::isPointsLeaderboardSort(sort)) return;
+  // reflect the chip immediately; the controller confirms on its event
+  pointsSort_ = sort;
+  if (pointsVc_) pointsVc_->setSort(sort);
+  if (pointsRows_ != nullptr) RebuildPointsRows();
+  RenderPointsHeader();
+}
+
+// Asks for the next page when the last visible row is within reach of the end.
+void EarningsPage::OnPointsScrolled() {
+  if (!pointsVc_ || !pointsBoardShowing_ || leaderboardTab_ == nullptr ||
+      !leaderboardTab_->get_active()) {
+    return;
+  }
+  Gtk::ScrolledWindow* scroller = PaneScroller(paneB_.content);
+  if (scroller == nullptr) return;
+  auto adjustment = scroller->get_vadjustment();
+  const double remainingBelow =
+      adjustment->get_upper() - (adjustment->get_value() + adjustment->get_page_size());
+  // the rows end at the footer, so the rows still below the fold are the
+  // remaining height less the footer, in whole rows
+  const double footer = pointsFooter_ != nullptr ? pointsFooter_->get_height() : 0.0;
+  const int64_t rowCount = static_cast<int64_t>(pointsRowsUi_.size());
+  const int64_t hiddenRows =
+      static_cast<int64_t>(std::max(0.0, remainingBelow - footer) / kPointsRowHeight);
+  const int64_t lastVisible = rowCount - 1 - hiddenRows;
+  if (emoji::ShouldLoadMore(lastVisible, rowCount, pointsLoading_, pointsEnd_)) {
+    pointsVc_->loadMore();
+  }
+}
+
+// Retries after an error: the controller re-requests the same page.
+void EarningsPage::OnPointsRetry() {
+  if (!pointsVc_) {
+    EnsurePointsBoard();
+    return;
+  }
+  if (pointsRowsUi_.empty()) {
+    ownFlagsAppliedAt_ = ++ownFlagsClock_;  // the next `me` is newer than any local edit
+    pointsVc_->refresh();
+  } else {
+    pointsVc_->loadMore();
+  }
+}
+
+void EarningsPage::SetPointsToggle(bool on) {
+  if (pointsPublicToggle_ == nullptr) return;
+  // THE ECHO GUARD: the handler cannot tell a user flip from the programmatic
+  // render of the server's answer, so every programmatic write goes here
+  applyingPointsToggle_ = true;
+  pointsPublicToggle_->set_active(on);
+  applyingPointsToggle_ = false;
+}
+
+void EarningsPage::OnPointsPublicToggled() {
+  if (applyingPointsToggle_) return;
+  const bool requested = pointsPublicToggle_->get_active();
+  if (requested == pointsPublic_) return;
+  if (settingPointsPublic_) {
+    SetPointsToggle(pointsPublic_);  // one in flight: snap back
+    return;
+  }
+  if (!CanCallApi()) {
+    SetPointsToggle(pointsPublic_);
+    RefuseNoSession();
+    return;
+  }
+  settingPointsPublic_ = true;
+  pointsPublicToggle_->set_sensitive(false);
+  const uint32_t generation = BeginFlow(pointsPublicFlow_, kApiTimeoutMs, [this] {
+    settingPointsPublic_ = false;
+    pointsPublicToggle_->set_sensitive(true);
+    SetPointsToggle(pointsPublic_);
+    Notify(T_("something_went_wrong", "Something went wrong."),
+           kit::Snackbar::Severity::Error);
+  });
+
+  urnet::SetPointsLeaderboardPublicArgs args;
+  args.public_ = requested;
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  host_.api().setPointsLeaderboardPublic(
+      args, [this, epoch, seen, generation, requested](
+                std::optional<urnet::SetPointsLeaderboardPublicResult> result,
+                std::optional<std::string> err) {
+        std::string detail = err.value_or(std::string());
+        if (detail.empty() && result && result->error) detail = result->error->message;
+        const bool ok = !err.has_value() && result.has_value() && !result->error;
+        PostToMain([this, epoch, seen, generation, ok, requested, detail] {
+          if (*epoch != seen) return;
+          ApplyPointsPublicResult(generation, ok, requested, detail);
+        });
+      });
+}
+
+void EarningsPage::ApplyPointsPublicResult(uint32_t generation, bool ok, bool requested,
+                                           const std::string& serverError) {
+  if (!SettleFlow(pointsPublicFlow_, generation, "points leaderboard visibility set")) return;
+  settingPointsPublic_ = false;
+  pointsPublicToggle_->set_sensitive(true);
+  if (!ok) {
+    SetPointsToggle(pointsPublic_);
+    Notify(serverError.empty()
+               ? Glib::ustring(T_("something_went_wrong", "Something went wrong."))
+               : Glib::ustring(serverError),
+           kit::Snackbar::Severity::Error);
+    return;
+  }
+  // the local value wins until a `me` newer than this edit lands
+  ownFlagsEditedAt_ = ++ownFlagsClock_;
+  pointsPublic_ = requested;
+  RenderPointsHeader();
+  // the list shows or hides the own row; `me` is re-read too
+  if (pointsVc_) {
+    ownFlagsAppliedAt_ = ++ownFlagsClock_;
+    pointsVc_->refresh();
+  }
+}
+
+void EarningsPage::OnEditEmoji() {
+  if (sheet_ || (sheet_open && sheet_open())) {
+    g_message("earnings: emoji sheet suppressed — a modal is already open");
+    return;
+  }
+  if (!CanCallApi()) {
+    RefuseNoSession();
+    return;
+  }
+  auto* root = dynamic_cast<Gtk::Window*>(get_root());
+  if (root == nullptr) {
+    g_warning("earnings: no window root; the emoji sheet was not opened");
+    return;
+  }
+  auto alive = alive_;
+  auto sheet = std::make_shared<EmojiTagSheet>(
+      *root, [this, alive](std::string tag, std::function<void(std::string)> done) {
+        if (!*alive) return;
+        SaveEmojiTag(std::move(tag), std::move(done));
+      });
+  sheet->Open(emojiTag_);
+  PresentSheet(sheet);
+}
+
+// Stores the tag (already normalized by the SDK), or an empty string to clear
+// it; `done` gets the server's message on failure, on the main loop.
+void EarningsPage::SaveEmojiTag(std::string tag, std::function<void(std::string)> done) {
+  if (savingEmojiTag_) return;
+  if (!CanCallApi()) {
+    RefuseNoSession();
+    if (done) done(T_("please_login_to_urnetwork", "Please login to URnetwork"));
+    return;
+  }
+  savingEmojiTag_ = true;
+  urnet::SetEmojiTagArgs args;
+  args.emoji_tag = tag;
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  auto alive = alive_;
+  host_.api().setEmojiTag(
+      args, [this, epoch, seen, alive, done](std::optional<urnet::SetEmojiTagResult> result,
+                                             std::optional<std::string> err) {
+        std::string error = err.value_or(std::string());
+        if (error.empty() && result && result->error) error = result->error->message;
+        if (error.empty() && !result) error = "set emoji tag: no result";
+        const std::string stored =
+            error.empty() && result && result->emoji_tag ? *result->emoji_tag : std::string();
+        if (!error.empty()) g_warning("points board: setEmojiTag failed: %s", error.c_str());
+        PostToMain([this, epoch, seen, alive, done, error, stored] {
+          if (!*alive) return;
+          savingEmojiTag_ = false;
+          if (*epoch != seen) return;  // the session moved on; the sheet is gone with it
+          if (error.empty()) {
+            ownFlagsEditedAt_ = ++ownFlagsClock_;
+            emojiTag_ = stored;
+            RenderPointsHeader();
+            if (pointsVc_) {
+              ownFlagsAppliedAt_ = ++ownFlagsClock_;
+              pointsVc_->refresh();
+            }
+          }
+          if (done) done(error);
+        });
+      });
+}
+
+// --preview-ui: the board on its real empty state, with no controller
+void EarningsPage::SettlePointsBoardPreview() {
+  ClosePointsBoard(/*deviceAlive=*/false);
+  pointsHasLoaded_ = true;
+  if (pointsBoardStatus_ != nullptr) {
+    kit::SetTextOrCollapse(
+        *pointsBoardStatus_,
+        T_("points_leaderboard_empty", "No one is on the points leaderboard yet."));
+  }
 }
 
 }  // namespace urnw

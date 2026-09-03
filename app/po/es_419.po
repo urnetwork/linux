@@ -1113,6 +1113,41 @@ msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "Editar regla de división"
 
+#. Emoji keyboard group: sports, games and activities.
+msgctxt "emoji_group_activities"
+msgid "Activities"
+msgstr "Actividades"
+
+#. Emoji keyboard group: animals and nature.
+msgctxt "emoji_group_animals"
+msgid "Animals & nature"
+msgstr "Animales y naturaleza"
+
+#. Emoji keyboard group: food and drink.
+msgctxt "emoji_group_food"
+msgid "Food & drink"
+msgstr "Comida y bebida"
+
+#. Emoji keyboard group: objects.
+msgctxt "emoji_group_objects"
+msgid "Objects"
+msgstr "Objetos"
+
+#. Emoji keyboard group: smileys and faces.
+msgctxt "emoji_group_smileys"
+msgid "Smileys"
+msgstr "Caritas"
+
+#. Emoji keyboard group: symbols.
+msgctxt "emoji_group_symbols"
+msgid "Symbols"
+msgstr "Símbolos"
+
+#. Emoji keyboard group: travel and places.
+msgctxt "emoji_group_travel"
+msgid "Travel & places"
+msgstr "Viajes y lugares"
+
 #. Call to action
 msgctxt "enjoying_urnetwork"
 msgid "Enjoying URnetwork?"
@@ -1456,11 +1491,6 @@ msgstr "Incluir en la VPN"
 msgctxt "included"
 msgid "Included"
 msgstr "Incluidas"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "includes_2_week_free_trial"
-msgid "Includes 2 week free trial"
-msgstr "Incluye prueba gratuita de 2 semanas"
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -1857,11 +1887,6 @@ msgstr "Esperando la ubicación de un proveedor"
 msgctxt "monthly"
 msgid "Monthly"
 msgstr "Mensual"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "most_popular"
-msgid "Most Popular"
-msgstr "Más popular"
 
 #. Android app string: multiple ips.
 msgctxt "multiple_ips"
@@ -3204,6 +3229,21 @@ msgctxt "site_install_app"
 msgid "Install the app"
 msgstr "Instalar la app"
 
+#. Login stack: error when the entered seed does not match an account.
+msgctxt "site_login_seed_not_recognized"
+msgid "Seed not recognized."
+msgstr "Semilla no reconocida."
+
+#. Login stack: tooltip on the Seed tile, signing in with an instant account's seed.
+msgctxt "site_login_seed_title"
+msgid "Sign in with the seed of an instant account"
+msgstr "Iniciar sesión con la semilla de una cuenta instantánea"
+
+#. Login stack: title of the seed sign-in view.
+msgctxt "site_login_seed_view_title"
+msgid "Sign in with Seed"
+msgstr "Iniciar sesión con semilla"
+
 #. Account panel: the small button on the plan card that opens Manage Subscription in the app.
 msgctxt "site_manage"
 msgid "Manage"
@@ -3400,11 +3440,6 @@ msgstr "Toca el tráfico de abajo para enrutarlo localmente, evitando el túnel.
 msgctxt "split_rules_info_note"
 msgid "Exclusions apply to the whole co-associated network cluster, so related traffic is caught together."
 msgstr "Las exclusiones se aplican a todo el clúster de red asociado, así que el tráfico relacionado queda cubierto en conjunto."
-
-#. Used in Shared/Views/Introduction/IntroductionView.swift.
-msgctxt "start_2_week_free_trial"
-msgid "Start 2 week free trial"
-msgstr "Comienza la prueba gratuita de 2 semanas"
 
 #. Guest mode overlay
 msgctxt "start_earning_join"

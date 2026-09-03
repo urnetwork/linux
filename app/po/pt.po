@@ -1138,6 +1138,41 @@ msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "Editar regra de divisão"
 
+#. Emoji keyboard group: sports, games and activities.
+msgctxt "emoji_group_activities"
+msgid "Activities"
+msgstr "Atividades"
+
+#. Emoji keyboard group: animals and nature.
+msgctxt "emoji_group_animals"
+msgid "Animals & nature"
+msgstr "Animais e natureza"
+
+#. Emoji keyboard group: food and drink.
+msgctxt "emoji_group_food"
+msgid "Food & drink"
+msgstr "Comida e bebida"
+
+#. Emoji keyboard group: objects.
+msgctxt "emoji_group_objects"
+msgid "Objects"
+msgstr "Objetos"
+
+#. Emoji keyboard group: smileys and faces.
+msgctxt "emoji_group_smileys"
+msgid "Smileys"
+msgstr "Smileys"
+
+#. Emoji keyboard group: symbols.
+msgctxt "emoji_group_symbols"
+msgid "Symbols"
+msgstr "Símbolos"
+
+#. Emoji keyboard group: travel and places.
+msgctxt "emoji_group_travel"
+msgid "Travel & places"
+msgstr "Viagens e lugares"
+
 #. Points leaderboard: the title of the emoji tag editor. One to six emoji shown next to the network.
 msgctxt "emoji_tag"
 msgid "Emoji tag"
@@ -1516,11 +1551,6 @@ msgstr "Incluir na VPN"
 msgctxt "included"
 msgid "Included"
 msgstr "Incluídas"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "includes_2_week_free_trial"
-msgid "Includes 2 week free trial"
-msgstr "Inclui teste gratuito de 2 semanas"
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -1927,11 +1957,6 @@ msgstr "A aguardar a localização de um fornecedor"
 msgctxt "monthly"
 msgid "Monthly"
 msgstr "Mensal"
-
-#. Used in Shared/Views/ProductOptionCard.swift.
-msgctxt "most_popular"
-msgid "Most Popular"
-msgstr "Mais popular"
 
 #. Android app string: multiple ips.
 msgctxt "multiple_ips"
@@ -2991,6 +3016,21 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "Frase-semente"
 
+#. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
+msgctxt "seedphrase_invalid_word_count"
+msgid "Seedphrase must be 12 or 24 words"
+msgstr "A frase-semente tem de ter 12 ou 24 palavras"
+
+#. Seed sign-in sheet: placeholder of the seedphrase field (android accepts 12 or 24 words).
+msgctxt "seedphrase_paste_hint"
+msgid "Paste your 12 or 24-word seedphrase here"
+msgstr "Cole aqui a sua frase-semente de 12 ou 24 palavras"
+
+#. Seed sign-in sheet: error when Sign in is tapped with an empty seedphrase field.
+msgctxt "seedphrase_required"
+msgid "Please enter a seedphrase"
+msgstr "Introduza uma frase-semente"
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -3304,6 +3344,21 @@ msgctxt "site_install_app"
 msgid "Install the app"
 msgstr "Instalar a aplicação"
 
+#. Login stack: error when the entered seed does not match an account.
+msgctxt "site_login_seed_not_recognized"
+msgid "Seed not recognized."
+msgstr "Semente não reconhecida."
+
+#. Login stack: tooltip on the Seed tile, signing in with an instant account's seed.
+msgctxt "site_login_seed_title"
+msgid "Sign in with the seed of an instant account"
+msgstr "Iniciar sessão com a semente de uma conta instantânea"
+
+#. Login stack: title of the seed sign-in view.
+msgctxt "site_login_seed_view_title"
+msgid "Sign in with Seed"
+msgstr "Iniciar sessão com semente"
+
 #. Account panel: the small button on the plan card that opens Manage Subscription in the app.
 msgctxt "site_manage"
 msgid "Manage"
@@ -3500,11 +3555,6 @@ msgstr "Toque no tráfego abaixo para o encaminhar localmente, contornando o tú
 msgctxt "split_rules_info_note"
 msgid "Exclusions apply to the whole co-associated network cluster, so related traffic is caught together."
 msgstr "As exclusões aplicam-se a todo o cluster de rede coassociado, para que o tráfego relacionado seja abrangido em conjunto."
-
-#. Used in Shared/Views/Introduction/IntroductionView.swift.
-msgctxt "start_2_week_free_trial"
-msgid "Start 2 week free trial"
-msgstr "Inicie o teste gratuito de 2 semanas"
 
 #. Guest mode overlay
 msgctxt "start_earning_join"
