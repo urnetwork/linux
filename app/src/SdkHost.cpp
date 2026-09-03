@@ -27,6 +27,7 @@
 // the one translation unit that links libsecret, and urnetworkd (which builds
 // in a container that has no libsecret at all) never sees this header.
 #include "SecretServiceRpcSessionStore.hpp"
+#include "SsoBridge.hpp"
 #include "Ui.hpp"  // PostToMain — the only UI dependency here, and only to marshal
 
 // The release version, threaded in via the -Dapp_version meson option (the
@@ -969,6 +970,42 @@ void SdkHost::SetupWalletCallbacks() {
     AuthLoginWithWallet(wallet_.publicKey(), signature, wallet_.message(),
                         bittensor ? urnet::TAO : kSolanaBlockchain);
   };
+  // The sso bridge's return: only the attempt in flight is accepted (echoed
+  // state, token minted for the nonce), then the identity token signs in.
+  wallet_.on_sso = [this](std::string provider, std::string jwt, std::string state,
+                          std::string error) {
+    sso::Return r;
+    r.provider = provider;
+    r.authJwt = jwt;
+    r.state = state;
+    r.error = error;
+    sso::Verdict verdict;
+    std::string expectedProvider;
+    {
+      std::scoped_lock lock(mutex_);
+      verdict = sso::CheckReturn(r, ssoProvider_, ssoState_, ssoNonce_);
+      expectedProvider = ssoProvider_;
+      // a return that echoes the state ends the attempt either way; a stray
+      // one (no attempt, another state) leaves a live attempt untouched
+      if (r.state == ssoState_ && !ssoState_.empty()) {
+        ssoProvider_.clear();
+        ssoState_.clear();
+        ssoNonce_.clear();
+      }
+    }
+    if (!verdict.ok) {
+      std::fprintf(stderr, "[sso] rejected return for %s: %s\n", provider.c_str(),
+                   verdict.error.c_str());
+      // a stray return must not fail the attempt in flight
+      if (verdict.error == "unexpected sign-in return" && !expectedProvider.empty() &&
+          r.state != state) {
+        return;
+      }
+      FailWalletOperation(verdict.error);
+      return;
+    }
+    AuthLoginWithSso(provider, jwt);
+  };
   wallet_.on_error = [this](std::string err) {
     // walletAuthDone_ is set on the UI thread and consumed on wallet/SDK
     // callback threads: take it under the lock, invoke it outside
@@ -1024,6 +1061,120 @@ void SdkHost::SignInWithBittensor(std::function<void(AuthResult)> done) {
     // continues on the urnetwork://bittensor-sign-message callback
     PostToMain([this, message = *message] { wallet_.SignInWithBittensor(message); });
   });
+}
+
+void SdkHost::SignInWithSso(const std::string& provider, std::function<void(AuthResult)> done) {
+  // a fresh state + nonce per attempt, never reused: the return is accepted
+  // exactly once and only for this attempt
+  std::string state;
+  std::string nonce;
+  if (char* s = g_uuid_string_random()) { state = s; g_free(s); }
+  if (char* n = g_uuid_string_random()) { nonce = n; g_free(n); }
+  {
+    std::scoped_lock lock(mutex_);
+    pendingWalletAuth_.reset();
+    pendingSsoAuth_ = false;
+    pendingSsoType_.clear();
+    pendingSsoJwt_.clear();
+    ssoProvider_ = provider;
+    ssoState_ = state;
+    ssoNonce_ = nonce;
+    walletAuthDone_ = std::move(done);
+  }
+  wallet_.SignInWithSso(provider, state, nonce);  // opens the browser; the rest continues on the deep-link callback
+}
+
+void SdkHost::AuthLoginWithSso(const std::string& provider, const std::string& jwt) {
+  urnet::AuthLoginArgs args;
+  args.auth_jwt_type = provider;
+  args.auth_jwt = jwt;
+  api_->authLogin(args, [this, provider, jwt](std::optional<urnet::AuthLoginResult> result,
+                                              std::optional<std::string> err) {
+    std::function<void(AuthResult)> done;
+    {
+      std::scoped_lock lock(mutex_);
+      done = std::move(walletAuthDone_);
+      walletAuthDone_ = nullptr;
+    }
+    auto fail = [&done](const std::string& message) {
+      AuthResult r;
+      r.error = message;
+      r.sso = true;
+      if (done) done(r);
+    };
+    if (err) { fail(*err); return; }
+    if (!result) { fail("no result"); return; }
+    if (result->error && !result->error->message.empty()) { fail(result->error->message); return; }
+    if (result->network && !result->network->by_jwt.empty()) {
+      RegisterNetworkClient(result->network->by_jwt, done ? done : [](AuthResult) {});
+      return;
+    }
+    if (result->auth_allowed && !result->auth_allowed->empty()) {
+      // the account exists under other sign-in methods
+      AuthResult r;
+      r.sso = true;
+      for (const auto& method : *result->auth_allowed) {
+        if (!r.authAllowed.empty()) r.authAllowed += ", ";
+        r.authAllowed += method;
+      }
+      if (done) done(r);
+      return;
+    }
+    // Authenticated identity with no network yet: keep the token and route
+    // into the create-network page (the web's ssoCreateNetworkView).
+    {
+      std::scoped_lock lock(mutex_);
+      pendingSsoAuth_ = true;
+      pendingSsoType_ = provider;
+      pendingSsoJwt_ = jwt;
+    }
+    if (done) {
+      AuthResult r;
+      r.sso = true;
+      r.sso_needs_network = true;
+      done(r);
+    }
+  });
+}
+
+void SdkHost::CreateNetworkWithPendingSso(const std::string& networkName,
+                                          const std::string& referralCode,
+                                          std::function<void(AuthResult)> done) {
+  std::string type;
+  std::string jwt;
+  {
+    std::scoped_lock lock(mutex_);
+    if (!pendingSsoAuth_) {
+      done({false, false, "no sign-in pending"});
+      return;
+    }
+    type = pendingSsoType_;
+    jwt = pendingSsoJwt_;
+  }
+  urnet::NetworkCreateArgs args;
+  args.user_name = std::string();  // mac parity: always empty
+  args.auth_jwt_type = type;
+  args.auth_jwt = jwt;
+  args.network_name = networkName;
+  args.terms = true;  // the page's continue button is gated on the terms switch
+  if (!referralCode.empty()) args.referral_code = referralCode;
+  api_->networkCreate(args, [this, done](std::optional<urnet::NetworkCreateResult> result,
+                                         std::optional<std::string> err) {
+    HandleNetworkCreateResult(std::move(result), std::move(err), [this, done](AuthResult r) {
+      if (r.ok) {
+        std::scoped_lock lock(mutex_);
+        pendingSsoAuth_ = false;
+        pendingSsoType_.clear();
+        pendingSsoJwt_.clear();
+      }
+      done(r);
+    });
+  });
+}
+
+bool SdkHost::HasPendingSsoAuth() {
+  std::scoped_lock lock(mutex_);
+  return pendingSsoAuth_;
 }
 
 void SdkHost::RequestWalletChallenge(

@@ -37,6 +37,7 @@ class CreateNetworkPage : public Gtk::Box {
   enum class Mode {
     Password,      // full sign-up: email + network name + password
     Wallet,        // wallet sign-in with no network yet: name + terms only
+    Sso,           // Google/Apple (ur.io/sso bridge) with no network yet: name + terms only
     UpgradeGuest,  // guest -> full account (email + name + password)
   };
 

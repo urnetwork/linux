@@ -48,7 +48,20 @@ class WalletConnect {
   // page can sign a sign-in challenge or a wallet-attach proof ("connect").
   void SignInWithBittensor(const std::string& message, const std::string& purpose = std::string());
 
-  // Route a urnetwork:// callback here. Returns true if it was a wallet callback.
+  // Google / Apple through the ur.io/sso bridge (SsoBridge.hpp, the login
+  // stack's two full-width providers): the browser runs the provider's own
+  // sign-in and the identity token comes back on urnetwork://sso. on_sso
+  // fires with the RAW return (provider, token, echoed state, error); the
+  // host checks the state and the token's nonce against the attempt it
+  // minted before anything reaches the api.
+  void SignInWithSso(const std::string& provider, const std::string& state,
+                     const std::string& nonce);
+  std::function<void(std::string provider, std::string authJwt, std::string state,
+                     std::string error)>
+      on_sso;
+
+  // Route a urnetwork:// callback here. Returns true if it was a wallet or
+  // sso callback.
   bool HandleDeepLink(const std::string& url);
 
   bool connected() const { return connectedPublicKey_.has_value(); }
@@ -72,6 +85,7 @@ class WalletConnect {
   void HandleConnect(Provider p, const std::string& query);
   void HandleSignMessage(Provider p, const std::string& query);
   void HandleBittensorSignMessage(const std::string& query);
+  void HandleSso(const std::string& query);
 
   std::optional<urnet::WalletKeyPair> dappKeyPair_;
   std::optional<std::string> connectedPublicKey_;

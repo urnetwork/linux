@@ -44,6 +44,42 @@ constexpr const char* kAuthCodePath =
     "M12.19,12.19h1.52v7.62h-1.52Z M16.76,12.19h1.53v7.62h-1.53Z M21.34,12.19h1.52v7.62h-1.52Z "
     "M25.9,12.19h1.53v7.62H25.9Z";
 
+// A key (24x24 box): the bow is an outer ring with its hole drawn the other
+// way round (nonzero winding), the blade a rotated bar with two teeth.
+constexpr const char* kKeyPath =
+    "M7.5 11 a4.5 4.5 0 1 0 0 9 a4.5 4.5 0 1 0 0 -9 z "
+    "M7.5 13.2 a2.3 2.3 0 1 1 0 4.6 a2.3 2.3 0 1 1 0 -4.6 z "
+    "M10.18 11.26 L19.72 1.72 L21.28 3.28 L11.74 12.82 z "
+    "M16.64 7.92 L18.2 9.48 L18.9 8.78 L17.34 7.22 z "
+    "M19.02 5.54 L20.58 7.1 L21.28 6.4 L19.72 4.84 z";
+
+// The Apple mark (24x24 box), the same path the site's login dialog draws.
+constexpr const char* kApplePath =
+    "M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82"
+    "-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 "
+    "1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28"
+    "-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 "
+    "2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z";
+
+// The Google "G" (18x18 box): four segments in the brand colours, the same
+// paths the site's login dialog draws.
+constexpr const char* kGooglePaths[4] = {
+    "M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4814h4.8436c-.2086 1.125-.8427 "
+    "2.0782-1.7959 2.7164v2.2581h2.9087c1.7018-1.5668 2.6836-3.874 2.6836-6.615z",
+    "M9 18c2.43 0 4.4673-.806 5.9564-2.1805l-2.9087-2.2581c-.8059.54-1.8368.8591-3.0477.8591"
+    "-2.344 0-4.3282-1.5831-5.036-3.7104H.9574v2.3318C2.4382 15.9832 5.4818 18 9 18z",
+    "M3.964 10.71c-.18-.54-.2822-1.1168-.2822-1.71s.1023-1.17.2823-1.71V4.9582H.9573A8.9965 "
+    "8.9965 0 0 0 0 9c0 1.4523.3477 2.8268.9573 4.0418L3.964 10.71z",
+    "M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.346l2.5813-2.5814C13.4632.8918 11.426 0 9 0 "
+    "5.4818 0 2.4382 2.0168.9573 4.9582L3.964 7.29C4.6718 5.1627 6.656 3.5795 9 3.5795z",
+};
+constexpr GdkRGBA kGoogleColors[4] = {
+    {0x42 / 255.f, 0x85 / 255.f, 0xF4 / 255.f, 1.f},
+    {0x34 / 255.f, 0xA8 / 255.f, 0x53 / 255.f, 1.f},
+    {0xFB / 255.f, 0xBC / 255.f, 0x05 / 255.f, 1.f},
+    {0xEA / 255.f, 0x43 / 255.f, 0x35 / 255.f, 1.f},
+};
+
 struct Spec {
   const char* path;
   double viewW;
@@ -54,6 +90,9 @@ Spec SpecFor(BrandIcon::Kind kind) {
   switch (kind) {
     case BrandIcon::Kind::Bittensor: return {kBittensorPath, 24, 24};
     case BrandIcon::Kind::Solana: return {kSolanaPath, 101, 88};
+    case BrandIcon::Kind::Key: return {kKeyPath, 24, 24};
+    case BrandIcon::Kind::Apple: return {kApplePath, 24, 24};
+    case BrandIcon::Kind::Google: return {kGooglePaths[0], 18, 18};
     default: return {kAuthCodePath, 32, 32};
   }
 }
@@ -72,23 +111,43 @@ void BrandIcon::measure_vfunc(Gtk::Orientation, int, int& minimum, int& natural,
 
 void BrandIcon::snapshot_vfunc(const Glib::RefPtr<Gtk::Snapshot>& snapshot) {
   const Spec spec = SpecFor(kind_);
-  static GskPath* paths[3] = {nullptr, nullptr, nullptr};
-  GskPath*& path = paths[static_cast<int>(kind_)];
-  if (!path) path = gsk_path_parse(spec.path);
-  if (!path) return;
-
   GtkSnapshot* snap = snapshot->gobj();
   const double w = get_width();
   const double h = get_height();
   const double scale = std::min(w / spec.viewW, h / spec.viewH);
+  const graphene_rect_t bounds{{0, 0},
+                               {static_cast<float>(spec.viewW), static_cast<float>(spec.viewH)}};
+
+  if (kind_ == Kind::Google) {
+    // four segments, each its own colour
+    static GskPath* googlePaths[4] = {nullptr, nullptr, nullptr, nullptr};
+    gtk_snapshot_save(snap);
+    const graphene_point_t origin{static_cast<float>((w - spec.viewW * scale) / 2.0),
+                                  static_cast<float>((h - spec.viewH * scale) / 2.0)};
+    gtk_snapshot_translate(snap, &origin);
+    gtk_snapshot_scale(snap, static_cast<float>(scale), static_cast<float>(scale));
+    for (int i = 0; i < 4; ++i) {
+      if (!googlePaths[i]) googlePaths[i] = gsk_path_parse(kGooglePaths[i]);
+      if (!googlePaths[i]) continue;
+      gtk_snapshot_push_fill(snap, googlePaths[i], GSK_FILL_RULE_WINDING);
+      gtk_snapshot_append_color(snap, &kGoogleColors[i], &bounds);
+      gtk_snapshot_pop(snap);
+    }
+    gtk_snapshot_restore(snap);
+    return;
+  }
+
+  static GskPath* paths[kKindCount] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+  GskPath*& path = paths[static_cast<int>(kind_)];
+  if (!path) path = gsk_path_parse(spec.path);
+  if (!path) return;
+
   gtk_snapshot_save(snap);
   const graphene_point_t origin{static_cast<float>((w - spec.viewW * scale) / 2.0),
                                 static_cast<float>((h - spec.viewH * scale) / 2.0)};
   gtk_snapshot_translate(snap, &origin);
   gtk_snapshot_scale(snap, static_cast<float>(scale), static_cast<float>(scale));
   gtk_snapshot_push_fill(snap, path, GSK_FILL_RULE_WINDING);
-  const graphene_rect_t bounds{{0, 0},
-                               {static_cast<float>(spec.viewW), static_cast<float>(spec.viewH)}};
   if (kind_ == Kind::Solana) {
     const GskColorStop stops[] = {
         {0.08f, {0x99 / 255.f, 0x45 / 255.f, 0xFF / 255.f, 1.f}},

@@ -64,6 +64,15 @@ button.ur-btn-secondary:active { background-color: mix(#ffffff, #000000, 0.12); 
 button.ur-btn-secondary:disabled { background-color: #ffffff; color: #000000; opacity: 0.38; }
 button.ur-btn-secondary image { color: #000000; }
 
+/* ---- login tiles (LOGIN_STACK_SPEC) ----------------------------------------
+   The less common ways in, four per row with each row filled: a SECONDARY
+   pill in square form, the mark over a small caption. The caption overrides
+   the pill's NeueBit label face (button.ur-btn label above). */
+button.ur-btn.ur-tile { min-height: 64px; padding: 8px 4px; }
+button.ur-btn.ur-tile label.ur-tile-caption {
+  font-family: "PP Neue Montreal"; font-size: 11px; font-weight: 500;
+}
+
 /* ---- URTextInput (android URTextInput.kt / windows TextControl* keys) --
    Not a filled box: a transparent field over a 1px underline that is
    TextFaint at rest and BlueMedium while focused; text renders #D3D3D3. */

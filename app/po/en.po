@@ -2863,6 +2863,11 @@ msgctxt "login_password_header"
 msgid "It's nice to\nsee you again"
 msgstr "It's nice to\nsee you again"
 
+#. Login stack: small tile caption for signing in with an instant account's secret key
+msgctxt "login_tile_secret_key"
+msgid "Secret key"
+msgstr "Secret key"
+
 #. Call to action
 msgctxt "login_verify_check_phone"
 msgid "Check your phone"
@@ -4395,6 +4400,11 @@ msgctxt "sign_in_methods"
 msgid "Sign-In Methods"
 msgstr "Sign-In Methods"
 
+#. Login stack: full-width Apple sign-in button on platforms that use the ur.io browser bridge
+msgctxt "sign_in_with_apple"
+msgid "Sign in with Apple"
+msgstr "Sign in with Apple"
+
 #. Button that signs in with a pasted auth code instead of a password.
 msgctxt "sign_in_with_code"
 msgid "Sign in with code"
@@ -4898,6 +4908,21 @@ msgstr "No reliability data yet."
 msgctxt "site_app_no_traffic"
 msgid "No traffic yet"
 msgstr "No traffic yet"
+
+#. Onboarding: install-the-extension step body
+msgctxt "site_app_onboarding_ext_body"
+msgid "URnetwork routes this browser through its extension. Install it, and the Connect button here is ready to go."
+msgstr "URnetwork routes this browser through its extension. Install it, and the Connect button here is ready to go."
+
+#. Onboarding: install-the-extension step, supported browsers note
+msgctxt "site_app_onboarding_ext_browsers"
+msgid "Available for Chrome, Edge, Brave and Firefox."
+msgstr "Available for Chrome, Edge, Brave and Firefox."
+
+#. Onboarding: install-the-extension step title
+msgctxt "site_app_onboarding_ext_title"
+msgid "Connect this browser"
+msgstr "Connect this browser"
 
 #. App payout detail: paid time
 msgctxt "site_app_paid_on"

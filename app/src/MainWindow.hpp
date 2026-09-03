@@ -76,6 +76,9 @@ class MainWindow : public Gtk::ApplicationWindow {
   void OnGetStarted();  // authLogin discovery -> password / create / inline error
   void OnSignIn();
   void OnUseCode();     // auth-code login: a modal sheet, not an inline field
+  void OnGoogle();         // Google through the ur.io/sso bridge
+  void OnApple();          // Apple through the ur.io/sso bridge
+  void OnSso(const std::string& provider);
   void OnSolanaChooser();  // ONE Solana button -> a Phantom/Solflare chooser
   void OnSolana(WalletConnect::Provider provider);
   void OnBittensor();
@@ -160,8 +163,8 @@ class MainWindow : public Gtk::ApplicationWindow {
   motion::MotionBin* emailGroupBin_ = nullptr;
   motion::MotionBin* getStartedBin_ = nullptr;
   motion::MotionBin* orBin_ = nullptr;
-  motion::MotionBin* walletBin_ = nullptr;
-  motion::MotionBin* secondaryBin_ = nullptr;
+  motion::MotionBin* walletBin_ = nullptr;     // the three full-width pills
+  motion::MotionBin* secondaryBin_ = nullptr;  // the icon tiles (four per row)
   std::vector<Gtk::Widget*> loginAffordances_;  // everything SetLoginBusy toggles
 
   // ---- seedphrase + instant steps (windows parity) -------------------------

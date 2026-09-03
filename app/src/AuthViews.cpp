@@ -228,8 +228,9 @@ void CreateNetworkPage::Configure(Mode mode, const std::string& userAuth) {
                     nullptr);
   SetCreating(false);
 
-  // wallet sign-up authenticates with the signed challenge: no email/password
-  const bool wantsUserAuth = mode != Mode::Wallet;
+  // wallet and sso sign-ups authenticate with the signed challenge / the
+  // identity token: no email/password
+  const bool wantsUserAuth = mode != Mode::Wallet && mode != Mode::Sso;
   email_->set_visible(wantsUserAuth);
   emailCaption_->set_visible(wantsUserAuth);
   password_->set_visible(wantsUserAuth);
@@ -344,7 +345,7 @@ void CreateNetworkPage::UpdateFormValid() {
   // mac validateForm: name available, terms agreed, and (for the password auth
   // type) a 12+ character password
   bool valid = nameState_ == NameState::Valid && termsSwitch_->get_active();
-  if (mode_ != Mode::Wallet) {
+  if (mode_ != Mode::Wallet && mode_ != Mode::Sso) {
     valid = valid && !TrimWhitespace(email_->get_text()).empty() &&
             std::string(password_->get_text()).size() >= kMinPasswordLength;
   }
@@ -407,6 +408,9 @@ void CreateNetworkPage::OnContinue() {
       break;
     case Mode::Wallet:
       host_.CreateNetworkWithPendingWallet(networkName, referralCode, done);
+      break;
+    case Mode::Sso:
+      host_.CreateNetworkWithPendingSso(networkName, referralCode, done);
       break;
     case Mode::UpgradeGuest:
       // UpgradeGuestArgs has no referral_code field — the bonus only applies

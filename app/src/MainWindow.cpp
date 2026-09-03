@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "MainWindow.hpp"
 
+#include "SsoBridge.hpp"
+
 #include <adwaita.h>
 #include <glib.h>
 
@@ -330,6 +332,18 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     ApplyAuthState(false);
   }
 
+  // Verification hook for the ur.io/sso round trip (with URNETWORK_SSO_SIMULATE,
+  // WalletConnect.cpp): URNETWORK_SSO_AUTOSTART=<google|apple> presses that
+  // pill shortly after the window shows, so the whole return path — minted
+  // state + nonce, the simulated return, the login call, the error line the
+  // server's rejection of an unsigned token paints — runs without a click and
+  // lands in a URNETWORK_SHOOT frame. Debug only; inert without SIMULATE.
+  if (const char* provider = g_getenv("URNETWORK_SSO_AUTOSTART");
+      provider && g_getenv("URNETWORK_SSO_SIMULATE")) {
+    const std::string p(provider);
+    Glib::signal_timeout().connect_once([this, p] { OnSso(p); }, 1200);
+  }
+
   // The preview harness (windows --preview-ui): URNETWORK_PREVIEW_UI=<tag>
   // renders the signed-in shell with NO session — API loads are skipped (no
   // jwt, no balance poll) and every panel settles on its real empty state.
@@ -574,6 +588,47 @@ Gtk::Button* MakeUrIconButton(BrandIcon::Kind kind, const Glib::ustring& label) 
   return button;
 }
 
+// A login tile (LOGIN_STACK_SPEC): a SECONDARY pill in square form, the
+// brand mark over a small caption. Rows of four are laid out by MakeTileRows.
+Gtk::Button* MakeUrTileButton(BrandIcon::Kind kind, const Glib::ustring& caption) {
+  auto* button = Gtk::make_managed<Gtk::Button>();
+  button->add_css_class("ur-btn");
+  button->add_css_class("ur-btn-secondary");
+  button->add_css_class("ur-tile");
+  button->set_hexpand(true);
+  auto* content = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 6);
+  content->set_halign(Gtk::Align::CENTER);
+  content->set_valign(Gtk::Align::CENTER);
+  content->append(*Gtk::make_managed<BrandIcon>(kind, 22));
+  auto* text = Gtk::make_managed<Gtk::Label>(caption);
+  text->add_css_class("ur-tile-caption");
+  content->append(*text);
+  button->set_child(*content);
+  gtk_accessible_update_property(GTK_ACCESSIBLE(button->gobj()),
+                                 GTK_ACCESSIBLE_PROPERTY_LABEL, caption.c_str(), -1);
+  return button;
+}
+
+// Four tiles per row, each row's tiles stretched to fill it (a homogeneous
+// row: a last row of two is two half-width tiles), the rows as wide as the
+// full-width pills above.
+Gtk::Box* MakeTileRows(const std::vector<Gtk::Button*>& tiles) {
+  auto* rows = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+  Gtk::Box* row = nullptr;
+  int inRow = 0;
+  for (Gtk::Button* tile : tiles) {
+    if (!row || inRow == 4) {
+      row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+      row->set_homogeneous(true);
+      rows->append(*row);
+      inRow = 0;
+    }
+    row->append(*tile);
+    ++inRow;
+  }
+  return rows;
+}
+
 // Wrap a widget in a MotionBin (a reveal ring / translated element).
 urnw::motion::MotionBin* WrapInBin(Gtk::Widget& child) {
   auto* bin = Gtk::make_managed<urnw::motion::MotionBin>();
@@ -583,12 +638,16 @@ urnw::motion::MotionBin* WrapInBin(Gtk::Widget& child) {
 
 }  // namespace
 
-// The initial step (windows LoginPanel / android LoginInitial.kt, in its
-// order): carousel hero, field, Get started, "or", the wallet + auth-code
-// pills, then the seedphrase pair. There is deliberately NO heading (the
-// carousel supplies the headline) and NO guest button (superseded by
-// seedphrase accounts). Wide (>=1000dip) the carousel moves to an art pane
-// beside a fixed 544dip form column; narrow it rides atop the single column.
+// The initial step, in the login stack's order (LOGIN_STACK_SPEC, shared by
+// every app): carousel hero, then up to three full-width pills — Google,
+// Apple, Create Instant Account — then the remaining ways in as square icon
+// tiles four per row (secret key, auth code, Bittensor, Solana), then "or",
+// the email/phone field and Get started. Google and Apple sign in through the
+// ur.io/sso browser bridge (Linux has no native provider flow). There is
+// deliberately NO heading (the carousel supplies the headline) and NO guest
+// button (superseded by seedphrase accounts). Wide (>=1000dip) the carousel
+// moves to an art pane beside a fixed 544dip form column; narrow it rides
+// atop the single column.
 void MainWindow::BuildLogin() {
   loginPanel_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
   loginPanel_->set_margin(16);
@@ -602,7 +661,62 @@ void MainWindow::BuildLogin() {
   heroBin_->set_size_request(-1, 200);  // the narrow slot's cap
   loginPanel_->append(*heroBin_);
 
-  // URTextInput: a label above the underlined field
+  // ---- the three full-width pills ----------------------------------------
+  auto* pillGroup = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+  auto* google = MakeUrIconButton(BrandIcon::Kind::Google,
+                                  T_("sign_in_with_google", "Sign in with Google"));
+  google->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnGoogle));
+  pillGroup->append(*google);
+  auto* apple = MakeUrIconButton(BrandIcon::Kind::Apple,
+                                 T_("sign_in_with_apple", "Sign in with Apple"));
+  apple->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnApple));
+  pillGroup->append(*apple);
+  auto* instant =
+      MakeUrButton(T_("create_instant_account", "Create Instant Account"), false);
+  instant->signal_clicked().connect([this] {
+    loginError_.set_text("");
+    creatingInstant_ = false;
+    if (instantTerms_) {
+      instantTerms_->set_active(false);
+      instantTerms_->set_sensitive(true);
+    }
+    if (instantError_) instantError_->set_text("");
+    if (instantCreate_) instantCreate_->set_sensitive(false);
+    stack_.set_visible_child("instant");
+  });
+  pillGroup->append(*instant);
+  walletBin_ = WrapInBin(*pillGroup);
+  loginPanel_->append(*walletBin_);
+
+  // ---- the tiles: the less common ways in ----------------------------------
+  auto* secretKey =
+      MakeUrTileButton(BrandIcon::Kind::Key, T_("login_tile_secret_key", "Secret key"));
+  secretKey->signal_clicked().connect([this] {
+    loginError_.set_text("");
+    if (seedphraseView_) seedphraseView_->get_buffer()->set_text("");
+    if (seedphraseError_) seedphraseError_->set_text("");
+    OnSeedphraseChanged();
+    stack_.set_visible_child("seedphrase");
+    if (seedphraseView_) seedphraseView_->grab_focus();
+  });
+  auto* authCode = MakeUrTileButton(BrandIcon::Kind::AuthCode, T_("auth_code", "Auth code"));
+  authCode->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnUseCode));
+  auto* bittensor = MakeUrTileButton(BrandIcon::Kind::Bittensor, T_("bittensor", "Bittensor"));
+  bittensor->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnBittensor));
+  // ONE Solana tile, as android has: the bridge needs a provider up front,
+  // so this presents a Phantom/Solflare chooser
+  auto* solana = MakeUrTileButton(BrandIcon::Kind::Solana, T_("solana", "Solana"));
+  solana->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnSolanaChooser));
+  auto* tiles = MakeTileRows({secretKey, authCode, bittensor, solana});
+  secondaryBin_ = WrapInBin(*tiles);
+  loginPanel_->append(*secondaryBin_);
+
+  auto* orDivider = Gtk::make_managed<Gtk::Label>(T_("or", "or"));
+  orDivider->add_css_class("dim-label");
+  orBin_ = WrapInBin(*orDivider);
+  loginPanel_->append(*orBin_);
+
+  // ---- email / phone (URTextInput: a label above the underlined field) -----
   auto* emailGroup = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
   auto* emailLabel = Gtk::make_managed<Gtk::Label>(T_("user_auth_label", "Email or phone"));
   emailLabel->add_css_class("ur-input-label");
@@ -630,65 +744,6 @@ void MainWindow::BuildLogin() {
   getStartedBtn_->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnGetStarted));
   getStartedBin_ = WrapInBin(*getStartedBtn_);
   loginPanel_->append(*getStartedBin_);
-
-  auto* orDivider = Gtk::make_managed<Gtk::Label>(T_("or", "or"));
-  orDivider->add_css_class("dim-label");
-  orBin_ = WrapInBin(*orDivider);
-  loginPanel_->append(*orBin_);
-
-  // the wallet + auth-code pills (one ripple ring). Google SSO is absent by
-  // the windows rule: the network space reports sso_google=false and no OAuth
-  // client id is compiled in — a visible, always-failing button reads worse
-  // than an absent one.
-  auto* walletGroup = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
-  auto* bittensor = MakeUrIconButton(BrandIcon::Kind::Bittensor,
-                                     T_("bittensor_sign_in", "Sign in with Bittensor"));
-  bittensor->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnBittensor));
-  walletGroup->append(*bittensor);
-  // ONE Solana button, as android has: the bridge needs a provider up front,
-  // so this presents a Phantom/Solflare chooser
-  auto* solana = MakeUrIconButton(BrandIcon::Kind::Solana,
-                                  T_("solana_sign_in", "Sign in with Solana"));
-  solana->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnSolanaChooser));
-  walletGroup->append(*solana);
-  auto* authCode = MakeUrIconButton(BrandIcon::Kind::AuthCode,
-                                    T_("auth_code_login_button_text", "Log in with Auth Code"));
-  authCode->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnUseCode));
-  walletGroup->append(*authCode);
-  walletBin_ = WrapInBin(*walletGroup);
-  loginPanel_->append(*walletBin_);
-
-  // the seedphrase pair is its OWN group, set off by a larger gap and held
-  // tighter to each other; neither carries an icon (iOS parity)
-  auto* secondaryRow = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
-  secondaryRow->set_margin_top(16);
-  auto* seedphrase =
-      MakeUrButton(T_("sign_in_with_seedphrase", "Sign in with Seedphrase"), false);
-  seedphrase->signal_clicked().connect([this] {
-    loginError_.set_text("");
-    if (seedphraseView_) seedphraseView_->get_buffer()->set_text("");
-    if (seedphraseError_) seedphraseError_->set_text("");
-    OnSeedphraseChanged();
-    stack_.set_visible_child("seedphrase");
-    if (seedphraseView_) seedphraseView_->grab_focus();
-  });
-  secondaryRow->append(*seedphrase);
-  auto* instant =
-      MakeUrButton(T_("create_instant_account", "Create Instant Account"), false);
-  instant->signal_clicked().connect([this] {
-    loginError_.set_text("");
-    creatingInstant_ = false;
-    if (instantTerms_) {
-      instantTerms_->set_active(false);
-      instantTerms_->set_sensitive(true);
-    }
-    if (instantError_) instantError_->set_text("");
-    if (instantCreate_) instantCreate_->set_sensitive(false);
-    stack_.set_visible_child("instant");
-  });
-  secondaryRow->append(*instant);
-  secondaryBin_ = WrapInBin(*secondaryRow);
-  loginPanel_->append(*secondaryBin_);
 
   // URInlineErrorText: a line of coral body text, not an info bar
   loginError_.add_css_class("ur-error-text");
@@ -721,7 +776,7 @@ void MainWindow::BuildLogin() {
   });
   loginPanel_->append(*networkServerLink);
 
-  loginAffordances_ = {getStartedBtn_, bittensor, solana, authCode, seedphrase, instant};
+  loginAffordances_ = {getStartedBtn_, google, apple, instant, secretKey, authCode, bittensor, solana};
 
   // ---- wide | narrow assembly (the app-wide 1000dip breakpoint) ------------
   auto* clamp = Gtk::make_managed<Gtk::Box>();  // host for the adw clamp below
@@ -898,11 +953,11 @@ void MainWindow::RunSignedOutReveal() {
   // the brand beat: the wordmark joins mid-hero-settle — the signed-out table's
   // AppTitleBar row (+8 -> rises up, delay 120)
   if (brandBin_) RiseIn(*brandBin_, Rise::Up, kDist8, kBrandBeatMs);
-  RiseIn(*emailGroupBin_, Rise::Down, kDist8, 240);
-  RiseIn(*getStartedBin_, Rise::Down, kDist8, 280);
-  RiseIn(*orBin_, Rise::Down, kDist8, 280);
-  RiseIn(*walletBin_, Rise::Down, kDist12, 320);
-  RiseIn(*secondaryBin_, Rise::Down, kDist12, 360);
+  RiseIn(*walletBin_, Rise::Down, kDist12, 240);
+  RiseIn(*secondaryBin_, Rise::Down, kDist12, 280);
+  RiseIn(*orBin_, Rise::Down, kDist8, 300);
+  RiseIn(*emailGroupBin_, Rise::Down, kDist8, 320);
+  RiseIn(*getStartedBin_, Rise::Down, kDist8, 360);
 }
 
 // CancelToFinal: every pose the reveal ever writes is either animated back to
@@ -1842,6 +1897,19 @@ void MainWindow::OnSolana(WalletConnect::Provider provider) {
   host_.SignInWithSolana(provider, [this](AuthResult r) { OnWalletAuth(r); });
 }
 
+void MainWindow::OnGoogle() { OnSso(sso::kProviderGoogle); }
+
+void MainWindow::OnApple() { OnSso(sso::kProviderApple); }
+
+// Google / Apple: the browser carries the provider's sign-in (the ur.io/sso
+// bridge); the identity token returns on urnetwork://sso and lands in
+// OnWalletAuth like the wallet flows.
+void MainWindow::OnSso(const std::string& provider) {
+  loginError_.set_text("");
+  SetLoginBusy(true);
+  host_.SignInWithSso(provider, [this](AuthResult r) { OnWalletAuth(r); });
+}
+
 void MainWindow::OnBittensor() {
   SetLoginNotice(T_("opening_bittensor_wallet_in_browser",
                     "Opening your Bittensor wallet in the browser…"));
@@ -1858,10 +1926,22 @@ void MainWindow::OnWalletAuth(const AuthResult& result) {
       // wallet_auth; finish sign-up on the create page (name + terms)
       loginError_.set_text("");
       NavigateCreate(CreateNetworkPage::Mode::Wallet, "", /*fromHome=*/false);
+    } else if (result.sso_needs_network) {
+      // an sso identity with no network: the host kept the identity token
+      loginError_.set_text("");
+      NavigateCreate(CreateNetworkPage::Mode::Sso, "", /*fromHome=*/false);
+    } else if (!result.ok && !result.authAllowed.empty()) {
+      // the account exists under other sign-in methods
+      SetLoginError(Format(T_("login_error_auth_allowed", "Please login with one of: {}."),
+                           result.authAllowed));
     } else if (!result.ok) {
-      SetLoginError(result.error.empty()
-                        ? T_("wallet_sign_in_failed", "Wallet sign-in failed")
-                        : result.error.c_str());
+      if (!result.error.empty()) {
+        SetLoginError(result.error.c_str());
+      } else if (result.sso) {
+        SetLoginError(T_("there_was_an_error_logging_in", "There was an error logging in"));
+      } else {
+        SetLoginError(T_("wallet_sign_in_failed", "Wallet sign-in failed"));
+      }
     } else {
       loginError_.set_text("");
       StartTunnelUi();  // auth handler flips the view

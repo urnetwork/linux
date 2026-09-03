@@ -11,7 +11,11 @@ namespace urnw {
 
 class BrandIcon : public Gtk::Widget {
  public:
-  enum class Kind { Bittensor, Solana, AuthCode };
+  // Key / Apple / Google joined for the login stack's tiles and pills
+  // (LOGIN_STACK_SPEC): the key and the Apple mark draw in the content
+  // colour; the Google "G" keeps its four brand colours like the Solana mark.
+  enum class Kind { Bittensor, Solana, AuthCode, Key, Apple, Google };
+  static constexpr int kKindCount = 6;
 
   explicit BrandIcon(Kind kind, int sizePx = 18);
 

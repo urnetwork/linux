@@ -44,6 +44,15 @@ struct AuthResult {
   // kept the signed wallet_auth (see CreateNetworkWithPendingWallet) and the
   // UI routes into the create-network page instead of dead-ending.
   bool wallet_needs_network = false;
+  // Google/Apple (the ur.io/sso bridge) authenticated but the identity has
+  // no network yet: the host kept the identity token (see
+  // CreateNetworkWithPendingSso) and the UI routes into the create-network
+  // page the same way.
+  bool sso_needs_network = false;
+  // The account exists under other sign-in methods (comma-joined), so this
+  // attempt cannot sign it in; the UI names them (login_error_auth_allowed).
+  std::string authAllowed = {};
+  bool sso = false;  // the outcome of an sso attempt (its generic error copy)
 };
 
 // Outcome of the authLogin account discovery (macOS LoginInitialViewModel
@@ -425,6 +434,15 @@ class SdkHost {
   // blockchain urnet::TAO. Same deep-link routing as Solana (HandleDeepLink).
   void SignInWithBittensor(std::function<void(AuthResult)> done);
 
+  // Sign in with Google or Apple through the ur.io/sso browser bridge
+  // (SsoBridge.hpp): the host mints a state + nonce for the attempt, the
+  // bridge returns the provider's identity token on urnetwork://sso, and only
+  // a return echoing that state with a token minted for that nonce reaches
+  // authLogin{auth_jwt_type, auth_jwt}. A new identity (no network) reports
+  // sso_needs_network and the create page finishes with
+  // CreateNetworkWithPendingSso.
+  void SignInWithSso(const std::string& provider, std::function<void(AuthResult)> done);
+
   // The same bridge as a plain SIGNER (no sign-in): fetch a wallet challenge for
   // `walletAddress` (empty = whichever wallet the bridge picks), open the bridge
   // with purpose "connect", and hand back the ss58 address, the sr25519
@@ -456,6 +474,12 @@ class SdkHost {
                                       const std::string& referralCode,
                                       std::function<void(AuthResult)> done);
   bool HasPendingWalletAuth();
+  // Create a network bound to the identity token captured by an sso sign-in
+  // that had no network yet (name + terms, no password).
+  void CreateNetworkWithPendingSso(const std::string& networkName,
+                                   const std::string& referralCode,
+                                   std::function<void(AuthResult)> done);
+  bool HasPendingSsoAuth();
   // Guest -> full account (Api::upgradeGuest). On success the guest device is
   // torn down and the network client re-registered under the upgraded jwt;
   // the UI restarts the tunnel.
@@ -996,6 +1020,19 @@ class SdkHost {
   std::string pendingWalletReferralCode_;
   std::function<void(AuthResult)> walletCreateDone_;
   std::function<void(WalletSignature)> walletSignDone_;  // SignBittensorConnect
+  // The sso attempt in flight (guarded by mutex_): the provider it was opened
+  // for and the state + nonce minted for it; cleared by the first return that
+  // echoes the state. walletAuthDone_ carries its completion, so the shared
+  // error path (FailWalletOperation / on_error) covers it too.
+  std::string ssoProvider_;
+  std::string ssoState_;
+  std::string ssoNonce_;
+  // Identity from an sso sign-in with no network: the token and its type,
+  // consumed by CreateNetworkWithPendingSso.
+  bool pendingSsoAuth_ = false;
+  std::string pendingSsoType_;
+  std::string pendingSsoJwt_;
+  void AuthLoginWithSso(const std::string& provider, const std::string& jwt);
   // The instant account's jwt, held between CreateInstantAccount and the
   // seedphrase sheet's confirm (guarded by mutex_; a secret — never log it).
   std::optional<std::string> pendingInstantJwt_;
