@@ -2880,6 +2880,11 @@ msgctxt "referrals"
 msgid "Referrals"
 msgstr "Реферали"
 
+#. Generic refresh action (a button that reloads the current list or view), e.g. the points leaderboard tab.
+msgctxt "refresh"
+msgid "Refresh"
+msgstr "Оновити"
+
 msgctxt "regenerate_seedphrase"
 msgid "Regenerate Seedphrase"
 msgstr "Створити сід-фразу заново"
