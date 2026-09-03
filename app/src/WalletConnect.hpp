@@ -56,6 +56,12 @@ class WalletConnect {
   // minted before anything reaches the api.
   void SignInWithSso(const std::string& provider, const std::string& state,
                      const std::string& nonce);
+  // Sign in with Apple straight against Apple (SsoBridge.hpp, "Sign in with
+  // Apple"): the browser opens Apple's authorize page, the api's callback
+  // redirects to urnetwork://oauth/apple, and on_sso fires with the raw return
+  // as for the bridge (provider "apple", the id token, the echoed state).
+  void SignInWithApple(const std::string& apiUrl, const std::string& state,
+                       const std::string& nonce);
   std::function<void(std::string provider, std::string authJwt, std::string state,
                      std::string error)>
       on_sso;
@@ -86,6 +92,7 @@ class WalletConnect {
   void HandleSignMessage(Provider p, const std::string& query);
   void HandleBittensorSignMessage(const std::string& query);
   void HandleSso(const std::string& query);
+  void HandleAppleOAuth(const std::string& url);
 
   std::optional<urnet::WalletKeyPair> dappKeyPair_;
   std::optional<std::string> connectedPublicKey_;

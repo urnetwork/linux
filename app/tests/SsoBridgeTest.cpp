@@ -14,6 +14,10 @@ using urnw::sso::JwtClaimString;
 using urnw::sso::ParseReturn;
 using urnw::sso::Return;
 using urnw::sso::SimulatedIdentityToken;
+using urnw::sso::AppleAuthorizeUrl;
+using urnw::sso::AppleOAuthState;
+using urnw::sso::ParseAppleReturn;
+using urnw::sso::UrlPath;
 
 UR_TEST(bridgeUrlCarriesProviderRedirectStateAndNonce) {
   const std::string url = BridgeUrl("apple", "st ate", "n&once");
@@ -55,4 +59,42 @@ UR_TEST(checkAcceptsOnlyTheAttemptInFlight) {
   // a bridge error for ANOTHER attempt is still not this attempt's error
   Return foreignError{"google", "", "s9", "denied"};
   UR_EXPECT_TRUE_MSG(std::string("foreign error"), CheckReturn(foreignError, "google", "s1", "n1").error == "unexpected sign-in return");
+}
+
+UR_TEST(appleAuthorizeUrlCarriesClientRedirectStateAndNonce) {
+  const std::string url = AppleAuthorizeUrl("https://api.bringyour.com/", "st ate", "n&once");
+  UR_EXPECT_TRUE_MSG(url, url == "https://appleid.apple.com/auth/authorize?client_id=network.ur.service"
+                              "&redirect_uri=https%3A%2F%2Fapi.bringyour.com%2Fauth%2Fapple%2Fcallback"
+                              "&response_type=code%20id_token&response_mode=form_post&scope=name%20email"
+                              "&state=st%20ate&nonce=n%26once");
+}
+
+UR_TEST(appleStateCarriesThePlatformClaim) {
+  const std::string state = AppleOAuthState("tok-1");
+  const auto bytes = urnw::sso::detail::Base64UrlDecode(state);
+  UR_EXPECT_TRUE_MSG(state, bytes.has_value());
+  const std::string json(bytes->begin(), bytes->end());
+  UR_EXPECT_TRUE_MSG(json, json == "{\"platform\":\"linux\",\"token\":\"tok-1\"}");
+  UR_EXPECT_TRUE_MSG(state, state.find('=') == std::string::npos && state.find('+') == std::string::npos);
+}
+
+UR_TEST(appleReturnParsesTheIdTokenAsTheIdentityToken) {
+  const Return r = ParseAppleReturn("state=s1&id_token=a.b.c&code=xyz");
+  UR_EXPECT_TRUE_MSG(r.provider, r.provider == "apple");
+  UR_EXPECT_TRUE_MSG(r.authJwt, r.authJwt == "a.b.c");
+  UR_EXPECT_TRUE_MSG(r.state, r.state == "s1");
+  UR_EXPECT_TRUE_MSG(r.error, r.error.empty());
+  const Return e = ParseAppleReturn("state=s1&error=user_cancelled_authorize");
+  UR_EXPECT_TRUE_MSG(e.error, e.error == "user_cancelled_authorize" && e.authJwt.empty());
+  // the same checks accept it exactly like a bridge return
+  const std::string token = SimulatedIdentityToken("n1", "test");
+  const Return good = ParseAppleReturn("state=s1&id_token=" + token);
+  UR_EXPECT_TRUE_MSG(std::string("good"), CheckReturn(good, "apple", "s1", "n1").ok);
+  UR_EXPECT_TRUE_MSG(std::string("wrong nonce"), !CheckReturn(good, "apple", "s1", "n2").ok);
+}
+
+UR_TEST(urlPathOfAReturn) {
+  UR_EXPECT_TRUE_MSG(std::string("path"), UrlPath("urnetwork://oauth/apple?state=1") == "/apple");
+  UR_EXPECT_TRUE_MSG(std::string("no path"), UrlPath("urnetwork://sso?state=1").empty());
+  UR_EXPECT_TRUE_MSG(std::string("bare host"), UrlPath("urnetwork://sso").empty());
 }

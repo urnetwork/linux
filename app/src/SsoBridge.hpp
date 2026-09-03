@@ -31,6 +31,27 @@ inline constexpr const char* kReturnHost = "sso";  // the host of the return url
 inline constexpr const char* kProviderGoogle = "google";
 inline constexpr const char* kProviderApple = "apple";
 
+// Sign in with Apple has no desktop SDK either, but unlike Google it also has
+// no popup flow the bridge page could run for us without Apple JS. So Apple
+// goes straight to Apple: the app opens
+//   https://appleid.apple.com/auth/authorize?client_id=<services id>
+//       &redirect_uri=<api>/auth/apple/callback&response_type=code%20id_token
+//       &response_mode=form_post&scope=name%20email&state=<attempt>&nonce=<attempt>
+// in the browser, Apple posts the result to the api, and the api answers a
+// redirect to
+//   urnetwork://oauth/apple?state=<state>&id_token=<identity token>[&code=…&user=…]
+//   urnetwork://oauth/apple?state=<state>&error=<message>
+// which the same deep-link handler routes back here. The api picks the
+// `urnetwork://` scheme from the `platform` claim inside `state` (base64url
+// JSON {"platform":"linux","token":<random>}); the state is otherwise opaque
+// and the same two checks (echoed state, token nonce) accept the return.
+inline constexpr const char* kAppleAuthorizeUrl = "https://appleid.apple.com/auth/authorize";
+inline constexpr const char* kAppleServicesId = "network.ur.service";  // the web client id
+inline constexpr const char* kAppleCallbackPath = "/auth/apple/callback";
+inline constexpr const char* kAppleReturnHost = "oauth";   // the host of the return url
+inline constexpr const char* kAppleReturnPath = "/apple";  // its path
+inline constexpr const char* kPlatform = "linux";
+
 namespace detail {
 
 inline std::string PercentEncode(const std::string& s) {
@@ -128,6 +149,38 @@ inline std::string BridgeUrl(const std::string& provider, const std::string& sta
          "&state=" + detail::PercentEncode(state) + "&nonce=" + detail::PercentEncode(nonce);
 }
 
+// The state of one Apple attempt: base64url of {"platform":"linux","token":…}.
+// Opaque to Apple; the api's callback reads the platform claim to pick the
+// return scheme, the token is what makes it unique.
+inline std::string AppleOAuthState(const std::string& token,
+                                   const std::string& platform = kPlatform) {
+  const nlohmann::json claims = {{"platform", platform}, {"token", token}};
+  return detail::Base64UrlEncode(claims.dump());
+}
+
+// Apple's authorize url for one attempt; `apiUrl` is the api origin the
+// callback lives on (a trailing slash is tolerated).
+inline std::string AppleAuthorizeUrl(const std::string& apiUrl, const std::string& state,
+                                     const std::string& nonce) {
+  std::string origin = apiUrl;
+  while (!origin.empty() && origin.back() == '/') origin.pop_back();
+  return std::string(kAppleAuthorizeUrl) + "?client_id=" + detail::PercentEncode(kAppleServicesId) +
+         "&redirect_uri=" + detail::PercentEncode(origin + kAppleCallbackPath) +
+         "&response_type=" + detail::PercentEncode("code id_token") +
+         "&response_mode=form_post" + "&scope=" + detail::PercentEncode("name email") +
+         "&state=" + detail::PercentEncode(state) + "&nonce=" + detail::PercentEncode(nonce);
+}
+
+// The path of a url (between the host and the query), "" when there is none.
+inline std::string UrlPath(const std::string& url) {
+  const auto scheme = url.find("://");
+  const size_t start = (scheme == std::string::npos) ? 0 : scheme + 3;
+  const auto q = url.find('?', start);
+  const auto slash = url.find('/', start);
+  if (slash == std::string::npos || (q != std::string::npos && q < slash)) return std::string();
+  return url.substr(slash, q == std::string::npos ? std::string::npos : q - slash);
+}
+
 inline std::map<std::string, std::string> ParseQuery(const std::string& query) {
   std::map<std::string, std::string> out;
   size_t i = 0;
@@ -158,6 +211,19 @@ inline Return ParseReturn(const std::string& query) {
   Return r;
   r.provider = params.count("provider") ? params["provider"] : std::string();
   r.authJwt = params.count("auth_jwt") ? params["auth_jwt"] : std::string();
+  r.state = params.count("state") ? params["state"] : std::string();
+  r.error = params.count("error") ? params["error"] : std::string();
+  return r;
+}
+
+// What Apple's callback sent back (the query of urnetwork://oauth/apple?...),
+// in the shape of a bridge return so the same checks apply: the identity
+// token arrives as `id_token`, the provider is implied.
+inline Return ParseAppleReturn(const std::string& query) {
+  auto params = ParseQuery(query);
+  Return r;
+  r.provider = kProviderApple;
+  r.authJwt = params.count("id_token") ? params["id_token"] : std::string();
   r.state = params.count("state") ? params["state"] : std::string();
   r.error = params.count("error") ? params["error"] : std::string();
   return r;

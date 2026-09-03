@@ -199,8 +199,42 @@ void WalletConnect::SignInWithSso(const std::string& provider, const std::string
   OpenUrl(sso::BridgeUrl(provider, state, nonce));
 }
 
+void WalletConnect::SignInWithApple(const std::string& apiUrl, const std::string& state,
+                                    const std::string& nonce) {
+  // the same debug hook as the bridge: URNETWORK_SSO_SIMULATE posts the return
+  // the api's callback would send, so the whole return path runs without an
+  // Apple account (the unsigned token is rejected by the server)
+  if (const char* sim = g_getenv("URNETWORK_SSO_SIMULATE")) {
+    const std::string given(sim);
+    const std::string token = given.find('.') != std::string::npos
+                                  ? given
+                                  : sso::SimulatedIdentityToken(nonce, "simulated");
+    const std::string uri = std::string("urnetwork://") + sso::kAppleReturnHost +
+                            sso::kAppleReturnPath + "?state=" + Esc(state) +
+                            "&id_token=" + Esc(token);
+    Glib::signal_timeout().connect_once([this, uri] { HandleDeepLink(uri); }, 400);
+    return;
+  }
+  if (apiUrl.empty()) {
+    if (on_error) on_error("no api url for the Apple sign-in callback");
+    return;
+  }
+  OpenUrl(sso::AppleAuthorizeUrl(apiUrl, state, nonce));
+}
+
 void WalletConnect::HandleSso(const std::string& query) {
   const sso::Return r = sso::ParseReturn(query);
+  if (on_sso) on_sso(r.provider, r.authJwt, r.state, r.error);
+}
+
+void WalletConnect::HandleAppleOAuth(const std::string& url) {
+  // urnetwork://oauth/apple?state=…&id_token=…  (or &error=…)
+  if (sso::UrlPath(url) != sso::kAppleReturnPath) {
+    if (on_error) on_error("unknown oauth callback");
+    return;
+  }
+  const auto q = url.find('?');
+  const sso::Return r = sso::ParseAppleReturn(q == std::string::npos ? std::string() : url.substr(q + 1));
   if (on_sso) on_sso(r.provider, r.authJwt, r.state, r.error);
 }
 
@@ -209,6 +243,10 @@ bool WalletConnect::HandleDeepLink(const std::string& url) {
   SplitUrl(url, host, query);
   if (host == sso::kReturnHost) {
     HandleSso(query);
+    return true;
+  }
+  if (host == sso::kAppleReturnHost) {
+    HandleAppleOAuth(url);
     return true;
   }
   auto provider = ProviderForHost(host);
