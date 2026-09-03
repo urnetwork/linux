@@ -340,7 +340,7 @@ class EarningsPage : public Gtk::Box {
   Gtk::Label* walletAddressLabel_ = nullptr;
   Gtk::Button* changeWalletButton_ = nullptr;
   Gtk::Box* walletConnectPanel_ = nullptr;
-  Gtk::Label* walletConnectNote_ = nullptr;
+  Gtk::Button* walletConnectNote_ = nullptr;
   Gtk::Button* connectBridgeButton_ = nullptr;
   Gtk::Button* manualToggleButton_ = nullptr;
   Gtk::Box* manualPanel_ = nullptr;

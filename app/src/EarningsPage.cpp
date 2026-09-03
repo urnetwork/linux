@@ -1420,13 +1420,29 @@ void EarningsPage::BuildEarningsPane() {
     auto row = MakePaddedRow(12);
     row.content->set_spacing(10);
     walletConnectPanel_ = row.root;
-    // the whole sentence opens the protocol site
-    walletConnectNote_ = MakeLinkLabel(
-        T_("wallet_not_retroactive",
-           "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not "
-           "settled retroactively."),
-        kUrXyzUrl, [this](const std::string& url) { OpenLink(url); });
-    row.content->append(*walletConnectNote_);
+    // plain note; the whole sentence opens the protocol site, the outward arrow
+    // after the last word (inline, so it wraps with the sentence) says the click
+    // leaves the app
+    {
+      auto* note = Gtk::make_managed<Gtk::Label>();
+      note->set_markup(
+          Glib::Markup::escape_text(
+              T_("wallet_not_retroactive",
+                 "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not "
+                 "settled retroactively.")) +
+          "\xC2\xA0<span alpha=\"70%\">\xE2\x86\x97</span>");
+      note->add_css_class("ur-row-note");
+      note->set_xalign(0);
+      note->set_wrap(true);
+      note->set_ellipsize(Pango::EllipsizeMode::NONE);
+      walletConnectNote_ = Gtk::make_managed<Gtk::Button>();
+      walletConnectNote_->set_child(*note);
+      walletConnectNote_->add_css_class("flat");
+      walletConnectNote_->set_has_frame(false);
+      walletConnectNote_->set_halign(Gtk::Align::FILL);
+      walletConnectNote_->signal_clicked().connect([this] { OpenLink(kUrXyzUrl); });
+      row.content->append(*walletConnectNote_);
+    }
     connectBridgeButton_ =
         Gtk::make_managed<Gtk::Button>(T_("connect_bittensor_wallet", "Connect Bittensor wallet"));
     connectBridgeButton_->add_css_class("ur-pane-primary");
