@@ -2878,11 +2878,6 @@ msgctxt "leaderboard_description"
 msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
 msgstr "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
 
-#. Link text under the protocol note.
-msgctxt "learn_at_ur_xyz"
-msgid "Learn how it works at ur.xyz"
-msgstr "Learn how it works at ur.xyz"
-
 #. Call to action
 msgctxt "learn_more_about_multiplier"
 msgid "Learn more about the multiplier"
@@ -5957,11 +5952,6 @@ msgctxt "sn_alpha_symbol"
 msgid "SN25α"
 msgstr "SN25α"
 
-#. Note on the earnings screen explaining alpha and the wallet.
-msgctxt "sn_protocol_note"
-msgid "SN25α are your earnings on the UR protocol. The UR protocol is an open source protocol from URnetwork. Connect a Bittensor wallet to settle them as SN25α through the UR protocol."
-msgstr "SN25α are your earnings on the UR protocol. The UR protocol is an open source protocol from URnetwork. Connect a Bittensor wallet to settle them as SN25α through the UR protocol."
-
 #. Claim status of an epoch whose alpha can be claimed now.
 msgctxt "sn_status_claimable"
 msgid "Claimable"
@@ -6954,6 +6944,11 @@ msgstr "Updated {}"
 msgctxt "widget_updated_just_now"
 msgid "Updated just now"
 msgstr "Updated just now"
+
+#. Account: the Widgets section (quick connect control and Home Screen widgets, with how to add them).
+msgctxt "widgets"
+msgid "Widgets"
+msgstr "Widgets"
 
 #. Connect drawer: the auto connection mode (no fixed window type).
 msgctxt "window_type_auto"

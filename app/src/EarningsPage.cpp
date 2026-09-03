@@ -1359,22 +1359,6 @@ void EarningsPage::BuildEarningsPane() {
     content->append(*row.root);
   }
 
-  // 2. the protocol note + the ur.xyz link
-  {
-    auto row = MakePaddedRow(10);
-    row.content->set_spacing(6);
-    row.content->append(*MakeWrappedNote(
-        T_("sn_protocol_note",
-           "SN25α are your earnings on the UR protocol. The UR protocol is an open source "
-           "protocol from URnetwork. Connect a Bittensor wallet to settle them as SN25α "
-           "through the UR protocol."),
-        "ur-key"));
-    row.content->append(*MakeLinkLabel(T_("learn_at_ur_xyz", "Learn how it works at ur.xyz"),
-                                       kUrXyzUrl, [this](const std::string& url) {
-                                         OpenLink(url);
-                                       }));
-    content->append(*row.root);
-  }
 
   // 3. the unclaimed tile — wallet only
   {
@@ -1436,11 +1420,12 @@ void EarningsPage::BuildEarningsPane() {
     auto row = MakePaddedRow(12);
     row.content->set_spacing(10);
     walletConnectPanel_ = row.root;
-    walletConnectNote_ = MakeWrappedNote(
+    // the whole sentence opens the protocol site
+    walletConnectNote_ = MakeLinkLabel(
         T_("wallet_not_retroactive",
            "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not "
            "settled retroactively."),
-        "ur-key");
+        kUrXyzUrl, [this](const std::string& url) { OpenLink(url); });
     row.content->append(*walletConnectNote_);
     connectBridgeButton_ =
         Gtk::make_managed<Gtk::Button>(T_("connect_bittensor_wallet", "Connect Bittensor wallet"));
@@ -2099,12 +2084,8 @@ void EarningsPage::RebuildWalletBlock() {
   }
   const bool offerConnect = walletState_ != Fetch::Loading && (!connected || changingWallet_);
   walletConnectPanel_->set_visible(offerConnect);
-  kit::SetTextOrCollapse(
-      *walletConnectNote_,
-      connected ? Glib::ustring()
-                : Glib::ustring(T_("wallet_not_retroactive",
-                                   "Connect a wallet to earn SN25α from the next epoch. "
-                                   "Earlier epochs are not settled retroactively.")));
+  // a link label keeps its markup; only its visibility follows the wallet state
+  walletConnectNote_->set_visible(!connected);
   connectBridgeButton_->set_sensitive(!connecting_);
   manualToggleButton_->set_sensitive(!connecting_);
   manualPanel_->set_visible(manualEntryOpen_);
