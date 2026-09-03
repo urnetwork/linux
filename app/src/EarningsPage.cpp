@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+#include "ProvideModeGlyph.hpp"
 #include "EarningsPage.hpp"
 
 #include <gio/gio.h>
@@ -261,6 +262,15 @@ Gtk::Label* MakeStatusChip(const Glib::ustring& text) {
   chip->add_css_class("ur-earn-tag");
   chip->set_valign(Gtk::Align::CENTER);
   return chip;
+}
+
+// The provide control mode's label; the mode strings are the store keys of
+// their labels.
+Glib::ustring ProvideModeValueText(const std::string& mode) {
+  if (mode == "auto") return T_("auto", "Auto");
+  if (mode == "always") return T_("always", "Always");
+  if (mode == "network") return T_("network", "Network");
+  return T_("never", "Never");
 }
 
 // A label whose text is a link: the whole line opens `url` in the browser.
@@ -1646,6 +1656,34 @@ void EarningsPage::BuildNetworkPane() {
   leaderboardInfo_.root().set_margin_bottom(8);
   content->append(leaderboardInfo_.root());
 
+  // 5b. provide mode: the connect page's indicator + label with the current
+  // mode; the whole row opens the connect page where it is changed
+  {
+    auto* rowBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    provideModeDot_.set_valign(Gtk::Align::CENTER);
+    rowBox->append(provideModeDot_);
+    auto* label = Gtk::make_managed<Gtk::Label>(T_("provide_mode", "Provide mode"));
+    label->set_xalign(0);
+    label->set_hexpand(true);
+    rowBox->append(*label);
+    provideModeValue_ = Gtk::make_managed<Gtk::Label>(ProvideModeValueText(host_.GetProvideControlMode()));
+    provideModeValue_->add_css_class("dim-label");
+    rowBox->append(*provideModeValue_);
+    auto* chevron = Gtk::make_managed<Gtk::Image>();
+    chevron->set_from_icon_name("go-next-symbolic");
+    chevron->add_css_class("dim-label");
+    rowBox->append(*chevron);
+    provideModeRow_ = Gtk::make_managed<Gtk::Button>();
+    provideModeRow_->set_child(*rowBox);
+    provideModeRow_->add_css_class("flat");
+    provideModeRow_->set_has_frame(false);
+    provideModeRow_->set_margin_bottom(8);
+    provideModeRow_->signal_clicked().connect([this] {
+      if (on_open_provide_settings) on_open_provide_settings();
+    });
+    content->append(*provideModeRow_);
+  }
+
   // 6 + 7. network reliability
   {
     auto group = kit::MakePaneGroupHeader(
@@ -1968,6 +2006,15 @@ void EarningsPage::ApplyHead(std::optional<SnHeadInfo> head, Fetch state) {
 void EarningsPage::ApplyReliability(std::optional<urnet::ReliabilityWindow> window,
                                     Fetch state) {
   reliabilityState_ = state;
+  lastReliability_ = window;
+  lastReliabilityState_ = state;
+  if (!providingEnabled_) {
+    // providing is off: the chart hides and the group says so, the same gate
+    // and message as the stats widget
+    kit::SetTextOrCollapse(*reliabilityStatus_, T_("providing_disabled", "Providing is disabled"));
+    reliabilityCard_->set_visible(false);
+    return;
+  }
   if (state == Fetch::Loading) {
     kit::SetTextOrCollapse(*reliabilityStatus_, T_("loading", "Loading..."));
     reliabilityCard_->set_visible(false);
@@ -3745,6 +3792,17 @@ void EarningsPage::SettlePointsBoardPreview() {
         *pointsBoardStatus_,
         T_("points_leaderboard_empty", "No one is on the points leaderboard yet."));
   }
+}
+
+void EarningsPage::ApplyProvideState(const LiveStats& stats) {
+  const auto visual = ProvideModeGlyphFor(stats.provideMode, stats.providePaused);
+  provideModeDot_.set_markup("<span foreground='" + HexForMarkup(visual.color) + "'>" +
+                             visual.glyph + "</span>");
+  if (provideModeValue_) provideModeValue_->set_text(ProvideModeValueText(host_.GetProvideControlMode()));
+  const bool enabled = stats.provideEnabled;
+  if (enabled == providingEnabled_) return;
+  providingEnabled_ = enabled;
+  ApplyReliability(lastReliability_, lastReliabilityState_);  // repaint under the new gate
 }
 
 }  // namespace urnw

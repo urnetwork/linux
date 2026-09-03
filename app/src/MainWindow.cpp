@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MPL-2.0
+#include "ProvideModeGlyph.hpp"
 #include "MainWindow.hpp"
 
 #include "SsoBridge.hpp"
@@ -1587,6 +1588,11 @@ void MainWindow::BuildHome() {
   };
   earningsPage_->sheet_open = [this] { return sheetOpen_; };
   earningsPage_->on_sheet_open_changed = [this](bool open) { sheetOpen_ = open; };
+  // the provide mode is changed on the connect page (its provide row); the
+  // earnings row is a shortcut there
+  earningsPage_->on_open_provide_settings = [this] {
+    if (shell_) shell_->Navigate("connect");
+  };
   shell_->SetPage("earnings", *earningsPage_);
   accountPage_ = Gtk::make_managed<AccountPage>(host_);
   accountPage_->on_snackbar = [this](const Glib::ustring& message, bool error) {
@@ -2216,6 +2222,7 @@ void MainWindow::ApplyStats(const LiveStats& stats) {
   // the drawer surfaces the insufficient-balance banner (upgrade flow CTA)
   if (drawer_) drawer_->SetInsufficientBalance(stats.insufficientBalance);
   if (connectPage_) connectPage_->ApplyStats(stats);
+  if (earningsPage_) earningsPage_->ApplyProvideState(stats);  // the provide row + gate
   // the status strip: provider + traffic (+ the Advanced raw field)
   if (shell_) {
     shell_->SetStatusProvider(T_("best_available_provider", "Best available provider"));
@@ -2265,22 +2272,9 @@ void MainWindow::ApplyStats(const LiveStats& stats) {
   // provide indicator (apple parity). The effective provide mode is a bit
   // set (0 none, 1 network, 2 friends-and-family, 3 public) — per-case only.
   // "●" = solid dot (Network tier), "◉" = dot with outer ring (Public tier).
-  const char* provideGlyph = "●";
-  Rgba provideColor = kUrCoral;
-  switch (stats.provideMode) {
-    case 3:  // public
-      provideGlyph = "◉";
-      provideColor = stats.providePaused ? kUrAmber : kUrGreen;
-      break;
-    case 1:  // network (also Auto while idle)
-    case 2:  // friends-and-family
-      provideColor = kUrGreen;
-      break;
-    default:
-      break;
-  }
-  provideModeDot_.set_markup("<span foreground='" + HexForMarkup(provideColor) + "'>" +
-                             provideGlyph + "</span>");
+  const auto provideVisual = ProvideModeGlyphFor(stats.provideMode, stats.providePaused);
+  provideModeDot_.set_markup("<span foreground='" + HexForMarkup(provideVisual.color) + "'>" +
+                             provideVisual.glyph + "</span>");
 
   // discoverability line (apple/android parity): a paused device stays
   // discoverable — pause stops public provide only

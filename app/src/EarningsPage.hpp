@@ -128,6 +128,14 @@ class EarningsPage : public Gtk::Box {
   // session is dropped before it touches a widget.
   void Load();
 
+  // The provide-mode row (the connect page's indicator + label with the
+  // current mode) and the providing gate: with providing off the reliability
+  // chart hides and the group says so, the same gate and message as the stats
+  // widget. Fed from the same live stats the connect page paints.
+  void ApplyProvideState(const LiveStats& stats);
+  // the provide mode is changed on the connect page; the row opens it there
+  std::function<void()> on_open_provide_settings;
+
   // The points board's row and stat tile (public: a free helper in the .cpp builds rows).
   struct PointsRowUi {
     std::string networkId;
@@ -341,6 +349,13 @@ class EarningsPage : public Gtk::Box {
   Gtk::Button* changeWalletButton_ = nullptr;
   Gtk::Box* walletConnectPanel_ = nullptr;
   Gtk::Button* walletConnectNote_ = nullptr;
+  // provide mode row + gate
+  Gtk::Label provideModeDot_;
+  Gtk::Label* provideModeValue_ = nullptr;
+  Gtk::Button* provideModeRow_ = nullptr;
+  bool providingEnabled_ = true;
+  std::optional<urnet::ReliabilityWindow> lastReliability_;
+  Fetch lastReliabilityState_ = Fetch::Loading;
   Gtk::Button* connectBridgeButton_ = nullptr;
   Gtk::Button* manualToggleButton_ = nullptr;
   Gtk::Box* manualPanel_ = nullptr;
