@@ -62,6 +62,13 @@ class WalletConnect {
   // as for the bridge (provider "apple", the id token, the echoed state).
   void SignInWithApple(const std::string& apiUrl, const std::string& state,
                        const std::string& nonce);
+  // Sign in with Google straight against Google (SsoBridge.hpp, "Sign in with
+  // Google"): the browser opens Google's authorize page (code flow), the api's
+  // callback exchanges the code and redirects to urnetwork://oauth/google, and
+  // on_sso fires with the raw return (provider "google", the id token, the
+  // echoed state).
+  void SignInWithGoogle(const std::string& apiUrl, const std::string& state,
+                        const std::string& nonce);
   std::function<void(std::string provider, std::string authJwt, std::string state,
                      std::string error)>
       on_sso;
@@ -92,7 +99,8 @@ class WalletConnect {
   void HandleSignMessage(Provider p, const std::string& query);
   void HandleBittensorSignMessage(const std::string& query);
   void HandleSso(const std::string& query);
-  void HandleAppleOAuth(const std::string& url);
+  // urnetwork://oauth/<apple|google>?state=…&id_token=… (or &error=…)
+  void HandleOAuthReturn(const std::string& url);
 
   std::optional<urnet::WalletKeyPair> dappKeyPair_;
   std::optional<std::string> connectedPublicKey_;

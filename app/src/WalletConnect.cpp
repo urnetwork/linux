@@ -227,14 +227,40 @@ void WalletConnect::HandleSso(const std::string& query) {
   if (on_sso) on_sso(r.provider, r.authJwt, r.state, r.error);
 }
 
-void WalletConnect::HandleAppleOAuth(const std::string& url) {
-  // urnetwork://oauth/apple?state=…&id_token=…  (or &error=…)
-  if (sso::UrlPath(url) != sso::kAppleReturnPath) {
+void WalletConnect::SignInWithGoogle(const std::string& apiUrl, const std::string& state,
+                                     const std::string& nonce) {
+  // the same debug hook as the bridge and Apple: URNETWORK_SSO_SIMULATE posts
+  // the return the api's callback would send, so the whole return path runs
+  // without a Google account (the unsigned token is rejected by the server)
+  if (const char* sim = g_getenv("URNETWORK_SSO_SIMULATE")) {
+    const std::string given(sim);
+    const std::string token = given.find('.') != std::string::npos
+                                  ? given
+                                  : sso::SimulatedIdentityToken(nonce, "simulated");
+    const std::string uri = std::string("urnetwork://") + sso::kOAuthReturnHost +
+                            sso::kGoogleReturnPath + "?state=" + Esc(state) +
+                            "&id_token=" + Esc(token);
+    Glib::signal_timeout().connect_once([this, uri] { HandleDeepLink(uri); }, 400);
+    return;
+  }
+  if (apiUrl.empty()) {
+    if (on_error) on_error("no api url for the Google sign-in callback");
+    return;
+  }
+  OpenUrl(sso::GoogleAuthorizeUrl(apiUrl, state, nonce));
+}
+
+void WalletConnect::HandleOAuthReturn(const std::string& url) {
+  // urnetwork://oauth/apple?state=…&id_token=…  (or &error=…), and the same
+  // shape on urnetwork://oauth/google: the path names the provider
+  const std::string provider = sso::OAuthReturnProvider(sso::UrlPath(url));
+  if (provider.empty()) {
     if (on_error) on_error("unknown oauth callback");
     return;
   }
   const auto q = url.find('?');
-  const sso::Return r = sso::ParseAppleReturn(q == std::string::npos ? std::string() : url.substr(q + 1));
+  const sso::Return r =
+      sso::ParseOAuthReturn(provider, q == std::string::npos ? std::string() : url.substr(q + 1));
   if (on_sso) on_sso(r.provider, r.authJwt, r.state, r.error);
 }
 
@@ -245,8 +271,8 @@ bool WalletConnect::HandleDeepLink(const std::string& url) {
     HandleSso(query);
     return true;
   }
-  if (host == sso::kAppleReturnHost) {
-    HandleAppleOAuth(url);
+  if (host == sso::kOAuthReturnHost) {
+    HandleOAuthReturn(url);
     return true;
   }
   auto provider = ProviderForHost(host);

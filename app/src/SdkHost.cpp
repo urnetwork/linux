@@ -1070,10 +1070,13 @@ void SdkHost::SignInWithSso(const std::string& provider, std::function<void(Auth
   std::string nonce;
   if (char* s = g_uuid_string_random()) { state = s; g_free(s); }
   if (char* n = g_uuid_string_random()) { nonce = n; g_free(n); }
-  // Apple goes straight to Apple (no bridge page): its state carries the
-  // platform claim the api's callback reads to redirect back to this app
+  // Google and Apple go straight to the provider (no bridge page): the state
+  // carries the platform claim the api's callback reads to redirect back to
+  // this app (urnetwork://oauth/<provider>); any other provider still rides
+  // the ur.io/sso bridge
   const bool apple = provider == sso::kProviderApple;
-  if (apple) state = sso::AppleOAuthState(state);
+  const bool google = provider == sso::kProviderGoogle;
+  if (apple || google) state = sso::OAuthState(state);
   std::string apiUrl;
   {
     std::scoped_lock lock(mutex_);
@@ -1085,11 +1088,13 @@ void SdkHost::SignInWithSso(const std::string& provider, std::function<void(Auth
     ssoState_ = state;
     ssoNonce_ = nonce;
     walletAuthDone_ = std::move(done);
-    if (apple && networkSpace_) apiUrl = networkSpace_->getApiUrl();
+    if ((apple || google) && networkSpace_) apiUrl = networkSpace_->getApiUrl();
   }
   // opens the browser; the rest continues on the deep-link callback
   if (apple) {
     wallet_.SignInWithApple(apiUrl, state, nonce);
+  } else if (google) {
+    wallet_.SignInWithGoogle(apiUrl, state, nonce);
   } else {
     wallet_.SignInWithSso(provider, state, nonce);
   }

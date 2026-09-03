@@ -1,5 +1,7 @@
-// The ur.io/sso browser bridge contract for Google and Apple sign-in on hosts
-// with no native provider flow (LOGIN_STACK_SPEC, 2026-09-02): the app opens
+// The browser sign-in contract for Google and Apple on hosts with no native
+// provider flow (LOGIN_STACK_SPEC, 2026-09-02). Both providers now run their
+// own web flow with the api's callback as the redirect (below); the ur.io/sso
+// bridge contract stays for any other provider: the app opens
 //   https://ur.io/sso?provider=<google|apple>&redirect_link=urnetwork://sso
 //                     &state=<attempt>&nonce=<attempt>
 // and the page comes back through the urnetwork:// scheme with
@@ -48,9 +50,29 @@ inline constexpr const char* kProviderApple = "apple";
 inline constexpr const char* kAppleAuthorizeUrl = "https://appleid.apple.com/auth/authorize";
 inline constexpr const char* kAppleServicesId = "network.ur.service";  // the web client id
 inline constexpr const char* kAppleCallbackPath = "/auth/apple/callback";
-inline constexpr const char* kAppleReturnHost = "oauth";   // the host of the return url
+inline constexpr const char* kOAuthReturnHost = "oauth";   // the host of both return urls
+inline constexpr const char* kAppleReturnHost = kOAuthReturnHost;
 inline constexpr const char* kAppleReturnPath = "/apple";  // its path
 inline constexpr const char* kPlatform = "linux";
+
+// Sign in with Google goes to Google the same way (2026-09-03): the app opens
+//   https://accounts.google.com/o/oauth2/v2/auth?client_id=<web client id>
+//       &redirect_uri=<api>/auth/google/callback&response_type=code
+//       &scope=openid%20email%20profile&state=<attempt>&nonce=<attempt>
+//       &prompt=select_account
+// Google only hands an identity token to a server, so the browser returns to
+// the api with an authorization code; the api exchanges it (the web client's
+// secret lives there) and answers a redirect to
+//   urnetwork://oauth/google?state=<state>&id_token=<identity token>
+//   urnetwork://oauth/google?state=<state>&error=<message>
+// The same platform claim in `state` picks the scheme, the same two checks
+// accept the return. The ur.io/sso bridge is no longer opened for Google.
+inline constexpr const char* kGoogleAuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth";
+// the ur.io web sign-in client (SsoBridge.jsx); the api's callback holds its secret
+inline constexpr const char* kGoogleClientId =
+    "338638865390-cg4m0t700mq9073smhn9do81mr640ig1.apps.googleusercontent.com";
+inline constexpr const char* kGoogleCallbackPath = "/auth/google/callback";
+inline constexpr const char* kGoogleReturnPath = "/google";  // its path
 
 namespace detail {
 
@@ -149,13 +171,30 @@ inline std::string BridgeUrl(const std::string& provider, const std::string& sta
          "&state=" + detail::PercentEncode(state) + "&nonce=" + detail::PercentEncode(nonce);
 }
 
-// The state of one Apple attempt: base64url of {"platform":"linux","token":…}.
-// Opaque to Apple; the api's callback reads the platform claim to pick the
-// return scheme, the token is what makes it unique.
-inline std::string AppleOAuthState(const std::string& token,
-                                   const std::string& platform = kPlatform) {
+// The state of one Apple or Google attempt: base64url of
+// {"platform":"linux","token":…}. Opaque to the provider; the api's callback
+// reads the platform claim to pick the return scheme, the token is what makes
+// it unique.
+inline std::string OAuthState(const std::string& token, const std::string& platform = kPlatform) {
   const nlohmann::json claims = {{"platform", platform}, {"token", token}};
   return detail::Base64UrlEncode(claims.dump());
+}
+inline std::string AppleOAuthState(const std::string& token,
+                                   const std::string& platform = kPlatform) {
+  return OAuthState(token, platform);
+}
+
+// Google's authorize url for one attempt (the code flow); `apiUrl` is the api
+// origin the callback lives on (a trailing slash is tolerated).
+inline std::string GoogleAuthorizeUrl(const std::string& apiUrl, const std::string& state,
+                                      const std::string& nonce) {
+  std::string origin = apiUrl;
+  while (!origin.empty() && origin.back() == '/') origin.pop_back();
+  return std::string(kGoogleAuthorizeUrl) + "?client_id=" + detail::PercentEncode(kGoogleClientId) +
+         "&redirect_uri=" + detail::PercentEncode(origin + kGoogleCallbackPath) +
+         "&response_type=code" + "&scope=" + detail::PercentEncode("openid email profile") +
+         "&state=" + detail::PercentEncode(state) + "&nonce=" + detail::PercentEncode(nonce) +
+         "&prompt=select_account";
 }
 
 // Apple's authorize url for one attempt; `apiUrl` is the api origin the
@@ -216,17 +255,31 @@ inline Return ParseReturn(const std::string& query) {
   return r;
 }
 
-// What Apple's callback sent back (the query of urnetwork://oauth/apple?...),
-// in the shape of a bridge return so the same checks apply: the identity
-// token arrives as `id_token`, the provider is implied.
-inline Return ParseAppleReturn(const std::string& query) {
+// What the api's callback sent back (the query of
+// urnetwork://oauth/<provider>?...), in the shape of a bridge return so the
+// same checks apply: the identity token arrives as `id_token`, the provider is
+// the one the path names.
+inline Return ParseOAuthReturn(const std::string& provider, const std::string& query) {
   auto params = ParseQuery(query);
   Return r;
-  r.provider = kProviderApple;
+  r.provider = provider;
   r.authJwt = params.count("id_token") ? params["id_token"] : std::string();
   r.state = params.count("state") ? params["state"] : std::string();
   r.error = params.count("error") ? params["error"] : std::string();
   return r;
+}
+inline Return ParseAppleReturn(const std::string& query) {
+  return ParseOAuthReturn(kProviderApple, query);
+}
+inline Return ParseGoogleReturn(const std::string& query) {
+  return ParseOAuthReturn(kProviderGoogle, query);
+}
+
+// The provider a return path names, "" for any other path.
+inline std::string OAuthReturnProvider(const std::string& path) {
+  if (path == kAppleReturnPath) return kProviderApple;
+  if (path == kGoogleReturnPath) return kProviderGoogle;
+  return std::string();
 }
 
 // One string claim of a JWT payload — decoded, never verified: the server
