@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "UpgradeSheet.hpp"
 
-#include "Onboarding.hpp"
+#include "PlanPicker.hpp"
 
 #include <gio/gio.h>
 
@@ -87,26 +87,6 @@ UpgradeSheet::UpgradeSheet(Gtk::Window& parent, SdkHost& host, SubscriptionBalan
   BuildUi();
 }
 
-Gtk::ToggleButton* UpgradeSheet::MakeOptionCard(const std::string& title,
-                                                const std::string& subtitle) {
-  auto* card = Gtk::make_managed<Gtk::ToggleButton>();
-  card->add_css_class("ur-option");
-  auto* column = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
-  auto* titleLabel = Gtk::make_managed<Gtk::Label>(title);
-  titleLabel->add_css_class("title-3");
-  titleLabel->set_xalign(0);
-  column->append(*titleLabel);
-  if (!subtitle.empty()) {
-    auto* subtitleLabel = Gtk::make_managed<Gtk::Label>(subtitle);
-    subtitleLabel->add_css_class("dim-label");
-    subtitleLabel->add_css_class("caption");
-    subtitleLabel->set_xalign(0);
-    column->append(*subtitleLabel);
-  }
-  card->set_child(*column);
-  return card;
-}
-
 void UpgradeSheet::BuildUi() {
   auto* root = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
   root->set_margin(24);
@@ -143,26 +123,15 @@ void UpgradeSheet::BuildUi() {
   unlock->set_margin_top(8);
   optionsBox_->append(*unlock);
 
-  // yearly (preselected, "Most Popular" — mac parity), then monthly. Prices are
-  // shown by Stripe's checkout, so the cards carry the cadence + trial.
-  yearlyCard_ = MakeOptionCard(T_("yearly", "Yearly"),
-                               Format(T_("includes_free_trial_days", "Includes {} day free trial"),
-                                      kFreeTrialDays));
-  auto* yearlyOverlay = Gtk::make_managed<Gtk::Overlay>();
-  yearlyOverlay->set_child(*yearlyCard_);
-  auto* popularChip = MakeChip(T_("best_value", "Best value"), "gold", true);
-  popularChip->set_halign(Gtk::Align::END);
-  popularChip->set_valign(Gtk::Align::START);
-  popularChip->set_margin_end(12);
-  yearlyOverlay->add_overlay(*popularChip);
-  yearlyOverlay->set_margin_top(20);
-  optionsBox_->append(*yearlyOverlay);
-
-  monthlyCard_ = MakeOptionCard(T_("monthly", "Monthly"), "");
-  monthlyCard_->set_group(*yearlyCard_);
-  monthlyCard_->set_margin_top(12);
-  optionsBox_->append(*monthlyCard_);
-  yearlyCard_->set_active(true);
+  // the plan picker the onboarding welcome page shows: yearly in the gold
+  // dress with the trial, selected by default, monthly plain below it. One
+  // component, so Get Pro and onboarding cannot drift.
+  plans_ = Gtk::make_managed<PlanPicker>();
+  plans_->set_margin_top(36);  // room for the halo and the Best value pill
+  plans_->on_select = [this](bool yearly) {
+    if (joinLabel_) joinLabel_->set_text(PlanPicker::CtaLabel(yearly));
+  };
+  optionsBox_->append(*plans_);
 
   joinBtn_ = Gtk::make_managed<Gtk::Button>();
   auto* joinContent = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
@@ -170,8 +139,9 @@ void UpgradeSheet::BuildUi() {
   joinSpinner_ = Gtk::make_managed<Gtk::Spinner>();
   joinSpinner_->set_visible(false);
   joinContent->append(*joinSpinner_);
-  joinContent->append(
-      *Gtk::make_managed<Gtk::Label>(T_("start_free_trial", "Start free trial")));
+  // only the yearly plan carries the trial: the button says what the click does
+  joinLabel_ = Gtk::make_managed<Gtk::Label>(PlanPicker::CtaLabel(plans_->Yearly()));
+  joinContent->append(*joinLabel_);
   joinBtn_->set_child(*joinContent);
   joinBtn_->add_css_class("suggested-action");
   joinBtn_->add_css_class("pill");
@@ -337,22 +307,22 @@ void UpgradeSheet::SetState(State state) {
     joinSpinner_->stop();
   }
   joinBtn_->set_sensitive(!launching);
-  yearlyCard_->set_sensitive(!launching);
-  monthlyCard_->set_sensitive(!launching);
+  plans_->set_sensitive(!launching);
 }
 
 void UpgradeSheet::Open() {
   ++*epoch_;
   errorLabel_->set_visible(false);
-  yearlyCard_->set_active(true);
+  plans_->Select(true);
+  joinLabel_->set_text(PlanPicker::CtaLabel(true));
   // resuming a still-running confirmation poll re-opens onto the waiting state
   SetState(balance_.IsPolling() ? State::Waiting : State::Options);
   present();
 }
 
 void UpgradeSheet::OpenCheckout(bool yearly) {
-  if (yearlyCard_) yearlyCard_->set_active(yearly);
-  if (monthlyCard_) monthlyCard_->set_active(!yearly);
+  if (plans_) plans_->Select(yearly);
+  if (joinLabel_) joinLabel_->set_text(PlanPicker::CtaLabel(yearly));
   present();
   StartCheckout();
 }
@@ -374,7 +344,7 @@ void UpgradeSheet::StartCheckout() {
 
 void UpgradeSheet::RequestSession(bool embedded) {
   urnet::StripeCreateCheckoutSessionArgs args;
-  args.item_id = monthlyCard_->get_active() ? kItemProMonthly : kItemProYearly;
+  args.item_id = plans_->Yearly() ? kItemProYearly : kItemProMonthly;
   args.ui_mode = embedded ? kUiModeEmbedded : kUiModeHosted;
   auto epoch = epoch_;
   const uint64_t issued = *epoch;

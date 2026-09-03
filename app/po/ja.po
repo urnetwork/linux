@@ -1139,6 +1139,11 @@ msgctxt "emoji_tag"
 msgid "Emoji tag"
 msgstr "絵文字タグ"
 
+#. Points leaderboard: the emoji editor's backspace key, removes the last emoji of the tag.
+msgctxt "emoji_tag_delete_last"
+msgid "Delete last emoji"
+msgstr "最後の絵文字を削除"
+
 #. Points leaderboard: emoji editor error when the field has no emoji.
 msgctxt "emoji_tag_error_empty"
 msgid "Add at least one emoji."
@@ -1158,6 +1163,11 @@ msgstr "絵文字は最大{}個までです。"
 msgctxt "emoji_tag_hint"
 msgid "Pick 1 to {} emoji to show next to your network."
 msgstr "ネットワーク名の横に表示する絵文字を1〜{}個選んでください。"
+
+#. Points leaderboard: the emoji editor's shuffle button, replaces the draft with a new random suggestion.
+msgctxt "emoji_tag_shuffle"
+msgid "Suggest another"
+msgstr "別の候補"
 
 #. Call to action
 msgctxt "enjoying_urnetwork"
@@ -1751,6 +1761,11 @@ msgstr "以下のいずれかでログインしてください：{}"
 msgctxt "login_password_header"
 msgid "It's nice to\nsee you again"
 msgstr "お帰りなさい"
+
+#. Login stack: small tile caption for signing in with an instant account's seed (the seedphrase). One short word: the tile is a quarter of the row wide.
+msgctxt "login_tile_secret_key"
+msgid "Seed"
+msgstr "シード"
 
 #. Call to action
 msgctxt "login_verify_check_phone"
@@ -2434,11 +2449,6 @@ msgstr "ポスト量子ID"
 msgctxt "post_quantum_identity_explanation"
 msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
 msgstr "あなたのIDキーはこのデバイスにローカル保存されます。いずれかのピアのキーがローカルに保存されたキーと異なって表示される場合、そのネットワーク運営者は信頼できません。"
-
-#. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
-msgctxt "pricing_shown_at_checkout"
-msgid "Pricing is shown at checkout."
-msgstr "価格はチェックアウト時に表示されます。"
 
 #. Network name when privacy is enabled
 msgctxt "private_network"

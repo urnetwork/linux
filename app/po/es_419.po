@@ -2369,11 +2369,6 @@ msgctxt "post_quantum_identity_explanation"
 msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
 msgstr "Tu clave de identidad se guarda localmente en este dispositivo. Si la clave de algún par se ve diferente de la clave guardada localmente, significa que no se puede confiar en el operador de la red."
 
-#. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
-msgctxt "pricing_shown_at_checkout"
-msgid "Pricing is shown at checkout."
-msgstr "El precio se muestra al pagar."
-
 #. Network name when privacy is enabled
 msgctxt "private_network"
 msgid "Private Network"

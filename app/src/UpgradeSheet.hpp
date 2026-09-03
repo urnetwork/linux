@@ -31,6 +31,8 @@
 
 namespace urnw {
 
+class PlanPicker;
+
 class UpgradeSheet : public Gtk::Window {
  public:
   UpgradeSheet(Gtk::Window& parent, SdkHost& host, SubscriptionBalanceStore& balance);
@@ -46,7 +48,6 @@ class UpgradeSheet : public Gtk::Window {
   enum class State { Options, Launching, Checkout, Waiting, Success, TimedOut };
 
   void BuildUi();
-  Gtk::ToggleButton* MakeOptionCard(const std::string& title, const std::string& subtitle);
   void StartCheckout();
   // One createStripeCheckoutSession round trip. An embedded failure retries
   // once as hosted; sessions are only ever created in sequence, never both.
@@ -75,9 +76,9 @@ class UpgradeSheet : public Gtk::Window {
   Gtk::Box* waitingBox_ = nullptr;
   Gtk::Box* successBox_ = nullptr;
   Gtk::Box* timedOutBox_ = nullptr;
-  Gtk::ToggleButton* yearlyCard_ = nullptr;
-  Gtk::ToggleButton* monthlyCard_ = nullptr;
+  PlanPicker* plans_ = nullptr;  // the onboarding plan picker, shared
   Gtk::Button* joinBtn_ = nullptr;
+  Gtk::Label* joinLabel_ = nullptr;  // follows the selection: trial vs subscribe
   Gtk::Spinner* joinSpinner_ = nullptr;
   Gtk::Label* errorLabel_ = nullptr;
   // waiting-state headline: "complete in the browser" (hosted) vs

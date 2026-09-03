@@ -13,6 +13,7 @@
 
 #include <gtkmm.h>
 
+#include "PlanPicker.hpp"
 #include "RedeemCodeSheet.hpp"
 #include "SdkHost.hpp"
 #include "SubscriptionBalance.hpp"
@@ -22,11 +23,9 @@
 namespace urnw {
 
 inline constexpr int kOnboardingSteps = 4;
-inline constexpr int64_t kFreeTrialDays = 15;  // the Stripe checkout's trial (server pro terms)
 
 class RouteLine;
 class StepBubbles;
-class GoldPlanCard;
 class ReferralPanel;
 class ReferralProgressBox;
 
@@ -82,10 +81,8 @@ class OnboardingWindow : public Gtk::Window {
   bool connectorInHeader_ = false;
 
   RouteLine* route_ = nullptr;
-  GoldPlanCard* yearlyCard_ = nullptr;
-  Gtk::Button* monthlyCard_ = nullptr;
+  PlanPicker* plans_ = nullptr;
   Gtk::Button* startButton_ = nullptr;
-  Gtk::Label* monthlyDot_ = nullptr;
   std::unique_ptr<UpgradeSheet> checkout_;
   std::unique_ptr<RedeemCodeSheet> redeem_;
 

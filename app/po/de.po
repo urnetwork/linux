@@ -1143,6 +1143,11 @@ msgctxt "emoji_tag"
 msgid "Emoji tag"
 msgstr "Emoji-Tag"
 
+#. Points leaderboard: the emoji editor's backspace key, removes the last emoji of the tag.
+msgctxt "emoji_tag_delete_last"
+msgid "Delete last emoji"
+msgstr "Letztes Emoji löschen"
+
 #. Points leaderboard: emoji editor error when the field has no emoji.
 msgctxt "emoji_tag_error_empty"
 msgid "Add at least one emoji."
@@ -1162,6 +1167,11 @@ msgstr "Verwende höchstens {} Emoji."
 msgctxt "emoji_tag_hint"
 msgid "Pick 1 to {} emoji to show next to your network."
 msgstr "Wähle 1 bis {} Emoji, die neben deinem Netzwerk erscheinen."
+
+#. Points leaderboard: the emoji editor's shuffle button, replaces the draft with a new random suggestion.
+msgctxt "emoji_tag_shuffle"
+msgid "Suggest another"
+msgstr "Anderen Vorschlag"
 
 #. Call to action
 msgctxt "enjoying_urnetwork"
@@ -1757,6 +1767,11 @@ msgstr "Bitte melde dich mit einem der folgenden an: {}."
 msgctxt "login_password_header"
 msgid "It's nice to\nsee you again"
 msgstr "Schön, dich\nwiederzusehen"
+
+#. Login stack: small tile caption for signing in with an instant account's seed (the seedphrase). One short word: the tile is a quarter of the row wide.
+msgctxt "login_tile_secret_key"
+msgid "Seed"
+msgstr "Seed"
 
 #. Call to action
 msgctxt "login_verify_check_phone"
@@ -2443,11 +2458,6 @@ msgstr "Post-Quanten-Identität"
 msgctxt "post_quantum_identity_explanation"
 msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
 msgstr "Dein Identitätsschlüssel wird lokal auf diesem Gerät gespeichert. Wenn der Schlüssel eines Peers von seinem lokal gespeicherten Schlüssel abweicht, bedeutet das, dass dem Netzwerkbetreiber nicht vertraut werden kann."
-
-#. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
-msgctxt "pricing_shown_at_checkout"
-msgid "Pricing is shown at checkout."
-msgstr "Der Preis wird beim Bezahlen angezeigt."
 
 #. Network name when privacy is enabled
 msgctxt "private_network"

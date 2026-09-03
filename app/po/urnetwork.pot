@@ -2065,11 +2065,6 @@ msgctxt "earnings_date_column"
 msgid "Date"
 msgstr ""
 
-#. Line about past payouts.
-msgctxt "earnings_email_support"
-msgid "Questions about earlier payouts? Email support@ur.io."
-msgstr ""
-
 #. Column header of the per-epoch history table.
 msgctxt "earnings_epoch_column"
 msgid "Epoch"
@@ -2145,6 +2140,11 @@ msgctxt "emoji_tag"
 msgid "Emoji tag"
 msgstr ""
 
+#. Points leaderboard: the emoji editor's backspace key, removes the last emoji of the tag.
+msgctxt "emoji_tag_delete_last"
+msgid "Delete last emoji"
+msgstr ""
+
 #. Points leaderboard: emoji editor error when the field has no emoji.
 msgctxt "emoji_tag_error_empty"
 msgid "Add at least one emoji."
@@ -2163,6 +2163,11 @@ msgstr ""
 #. Points leaderboard: the emoji editor's explanation. {max} is the most emoji allowed (6).
 msgctxt "emoji_tag_hint"
 msgid "Pick 1 to {} emoji to show next to your network."
+msgstr ""
+
+#. Points leaderboard: the emoji editor's shuffle button, replaces the draft with a new random suggestion.
+msgctxt "emoji_tag_shuffle"
+msgid "Suggest another"
 msgstr ""
 
 #. Section header of the per-transport enable toggles shown when the transport mode is Auto.
@@ -2913,9 +2918,9 @@ msgctxt "login_password_header"
 msgid "It's nice to\nsee you again"
 msgstr ""
 
-#. Login stack: small tile caption for signing in with an instant account's secret key
+#. Login stack: small tile caption for signing in with an instant account's seed (the seedphrase). One short word: the tile is a quarter of the row wide.
 msgctxt "login_tile_secret_key"
-msgid "Secret key"
+msgid "Seed"
 msgstr ""
 
 #. Call to action
@@ -3677,11 +3682,6 @@ msgstr ""
 #. Account tab: explanation under the post quantum identity panel — what the identity key is and how verifying provider keys detects interception.
 msgctxt "post_quantum_identity_explanation"
 msgid "Your identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
-msgstr ""
-
-#. Note under the subscription product cards on desktop: the app has no price API, so the authoritative price appears on the Stripe checkout page.
-msgctxt "pricing_shown_at_checkout"
-msgid "Pricing is shown at checkout."
 msgstr ""
 
 #. Network name when privacy is enabled
