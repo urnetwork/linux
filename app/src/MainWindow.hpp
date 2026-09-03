@@ -77,8 +77,8 @@ class MainWindow : public Gtk::ApplicationWindow {
   void OnGetStarted();  // authLogin discovery -> password / create / inline error
   void OnSignIn();
   void OnUseCode();     // auth-code login: a modal sheet, not an inline field
-  void OnGoogle();         // Google through the ur.io/sso bridge
-  void OnApple();          // Apple through the ur.io/sso bridge
+  void OnGoogle();         // Google through Google's web flow (SdkHost::SignInWithSso)
+  void OnApple();          // Apple through Apple's web flow (SdkHost::SignInWithSso)
   void OnSso(const std::string& provider);
   void OnSolanaChooser();  // ONE Solana button -> a Phantom/Solflare chooser
   void OnSolana(WalletConnect::Provider provider);

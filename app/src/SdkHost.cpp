@@ -970,7 +970,7 @@ void SdkHost::SetupWalletCallbacks() {
     AuthLoginWithWallet(wallet_.publicKey(), signature, wallet_.message(),
                         bittensor ? urnet::TAO : kSolanaBlockchain);
   };
-  // The sso bridge's return: only the attempt in flight is accepted (echoed
+  // The sign-in return (the api's oauth callback): only the attempt in flight is accepted (echoed
   // state, token minted for the nonce), then the identity token signs in.
   wallet_.on_sso = [this](std::string provider, std::string jwt, std::string state,
                           std::string error) {
@@ -1070,13 +1070,18 @@ void SdkHost::SignInWithSso(const std::string& provider, std::function<void(Auth
   std::string nonce;
   if (char* s = g_uuid_string_random()) { state = s; g_free(s); }
   if (char* n = g_uuid_string_random()) { nonce = n; g_free(n); }
-  // Google and Apple go straight to the provider (no bridge page): the state
-  // carries the platform claim the api's callback reads to redirect back to
-  // this app (urnetwork://oauth/<provider>); any other provider still rides
-  // the ur.io/sso bridge
+  // Google and Apple run their own web flow: the state carries the platform
+  // claim the api's callback reads to redirect back to this app
+  // (urnetwork://oauth/<provider>). No other provider signs in this way.
   const bool apple = provider == sso::kProviderApple;
   const bool google = provider == sso::kProviderGoogle;
-  if (apple || google) state = sso::OAuthState(state);
+  if (!apple && !google) {
+    AuthResult r;
+    r.error = "unknown sign-in provider";
+    if (done) done(r);
+    return;
+  }
+  state = sso::OAuthState(state);
   std::string apiUrl;
   {
     std::scoped_lock lock(mutex_);
@@ -1088,15 +1093,13 @@ void SdkHost::SignInWithSso(const std::string& provider, std::function<void(Auth
     ssoState_ = state;
     ssoNonce_ = nonce;
     walletAuthDone_ = std::move(done);
-    if ((apple || google) && networkSpace_) apiUrl = networkSpace_->getApiUrl();
+    if (networkSpace_) apiUrl = networkSpace_->getApiUrl();
   }
   // opens the browser; the rest continues on the deep-link callback
   if (apple) {
     wallet_.SignInWithApple(apiUrl, state, nonce);
   } else if (google) {
     wallet_.SignInWithGoogle(apiUrl, state, nonce);
-  } else {
-    wallet_.SignInWithSso(provider, state, nonce);
   }
 }
 

@@ -1,6 +1,6 @@
-// The ur.io/sso bridge contract: the url the app opens, the return it accepts,
-// and the two checks (echoed state, token nonce) that keep a stray or replayed
-// return from starting a login. Mirrors SsoBridge.hpp's header comment.
+// The Google / Apple sign-in contract: the authorize urls the app opens, the
+// returns it accepts, and the two checks (echoed state, token nonce) that keep
+// a stray or replayed return from starting a login. Mirrors SsoBridge.hpp.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -8,10 +8,9 @@
 
 #include "SsoBridge.hpp"
 
-using urnw::sso::BridgeUrl;
 using urnw::sso::CheckReturn;
 using urnw::sso::JwtClaimString;
-using urnw::sso::ParseReturn;
+using urnw::sso::ParseOAuthReturn;
 using urnw::sso::Return;
 using urnw::sso::SimulatedIdentityToken;
 using urnw::sso::AppleAuthorizeUrl;
@@ -23,18 +22,13 @@ using urnw::sso::ParseGoogleReturn;
 using urnw::sso::OAuthReturnProvider;
 using urnw::sso::UrlPath;
 
-UR_TEST(bridgeUrlCarriesProviderRedirectStateAndNonce) {
-  const std::string url = BridgeUrl("apple", "st ate", "n&once");
-  UR_EXPECT_TRUE_MSG(url, url == "https://ur.io/sso?provider=apple&redirect_link=urnetwork%3A%2F%2Fsso&state=st%20ate&nonce=n%26once");
-}
-
 UR_TEST(returnParsesTokenAndStateAndDecodesEscapes) {
-  const Return r = ParseReturn("provider=google&auth_jwt=a.b.c&state=x%20y");
+  const Return r = ParseOAuthReturn("google", "id_token=a.b.c&state=x%20y");
   UR_EXPECT_TRUE_MSG(r.provider, r.provider == "google");
   UR_EXPECT_TRUE_MSG(r.authJwt, r.authJwt == "a.b.c");
   UR_EXPECT_TRUE_MSG(r.state, r.state == "x y");
   UR_EXPECT_TRUE_MSG(r.error, r.error.empty());
-  const Return e = ParseReturn("provider=apple&error=User%20cancelled&state=x");
+  const Return e = ParseOAuthReturn("apple", "error=User%20cancelled&state=x");
   UR_EXPECT_TRUE_MSG(e.error, e.error == "User cancelled");
 }
 
@@ -60,7 +54,7 @@ UR_TEST(checkAcceptsOnlyTheAttemptInFlight) {
   Return failed{"google", "", "s1", "denied"};
   const auto v = CheckReturn(failed, "google", "s1", "n1");
   UR_EXPECT_TRUE_MSG(v.error, !v.ok && v.error == "denied");
-  // a bridge error for ANOTHER attempt is still not this attempt's error
+  // an error for ANOTHER attempt is still not this attempt's error
   Return foreignError{"google", "", "s9", "denied"};
   UR_EXPECT_TRUE_MSG(std::string("foreign error"), CheckReturn(foreignError, "google", "s1", "n1").error == "unexpected sign-in return");
 }
@@ -90,7 +84,7 @@ UR_TEST(appleReturnParsesTheIdTokenAsTheIdentityToken) {
   UR_EXPECT_TRUE_MSG(r.error, r.error.empty());
   const Return e = ParseAppleReturn("state=s1&error=user_cancelled_authorize");
   UR_EXPECT_TRUE_MSG(e.error, e.error == "user_cancelled_authorize" && e.authJwt.empty());
-  // the same checks accept it exactly like a bridge return
+  // the same checks accept it
   const std::string token = SimulatedIdentityToken("n1", "test");
   const Return good = ParseAppleReturn("state=s1&id_token=" + token);
   UR_EXPECT_TRUE_MSG(std::string("good"), CheckReturn(good, "apple", "s1", "n1").ok);
@@ -99,8 +93,8 @@ UR_TEST(appleReturnParsesTheIdTokenAsTheIdentityToken) {
 
 UR_TEST(urlPathOfAReturn) {
   UR_EXPECT_TRUE_MSG(std::string("path"), UrlPath("urnetwork://oauth/apple?state=1") == "/apple");
-  UR_EXPECT_TRUE_MSG(std::string("no path"), UrlPath("urnetwork://sso?state=1").empty());
-  UR_EXPECT_TRUE_MSG(std::string("bare host"), UrlPath("urnetwork://sso").empty());
+  UR_EXPECT_TRUE_MSG(std::string("no path"), UrlPath("urnetwork://oauth?state=1").empty());
+  UR_EXPECT_TRUE_MSG(std::string("bare host"), UrlPath("urnetwork://oauth").empty());
 }
 
 UR_TEST(googleAuthorizeUrlCarriesClientRedirectStateNonceAndTheCodeFlow) {
@@ -115,8 +109,7 @@ UR_TEST(googleAuthorizeUrlCarriesClientRedirectStateNonceAndTheCodeFlow) {
   UR_EXPECT_TRUE(url.find("state=st%20ate") != std::string::npos);
   UR_EXPECT_TRUE(url.find("nonce=n%26once") != std::string::npos);
   UR_EXPECT_TRUE(url.find("prompt=select_account") != std::string::npos);
-  // never the bridge, never an id_token response the server could not receive
-  UR_EXPECT_TRUE(url.find("ur.io/sso") == std::string::npos);
+  // never an id_token response the server could not receive
   UR_EXPECT_TRUE(url.find("id_token") == std::string::npos);
 }
 

@@ -1,12 +1,9 @@
 // The browser sign-in contract for Google and Apple on hosts with no native
-// provider flow (LOGIN_STACK_SPEC, 2026-09-02). Both providers now run their
-// own web flow with the api's callback as the redirect (below); the ur.io/sso
-// bridge contract stays for any other provider: the app opens
-//   https://ur.io/sso?provider=<google|apple>&redirect_link=urnetwork://sso
-//                     &state=<attempt>&nonce=<attempt>
-// and the page comes back through the urnetwork:// scheme with
-//   urnetwork://sso?provider=<p>&auth_jwt=<identity token>&state=<state>
-//   urnetwork://sso?provider=<p>&error=<message>&state=<state>
+// provider flow (LOGIN_STACK_SPEC, 2026-09-02). Both providers run their own
+// web flow in the browser with the api's callback as the redirect (below), and
+// the api answers a redirect back through the urnetwork:// scheme:
+//   urnetwork://oauth/<provider>?state=<state>&id_token=<identity token>
+//   urnetwork://oauth/<provider>?state=<state>&error=<message>
 // Two checks make a return usable: the echoed `state` must be the one this
 // app minted (no stray or replayed return can start a login), and the identity
 // token's `nonce` claim must be the one sent with it (the token was issued for
@@ -26,16 +23,11 @@
 
 namespace urnw::sso {
 
-inline constexpr const char* kBridgeUrl = "https://ur.io/sso";
-inline constexpr const char* kRedirectLink = "urnetwork://sso";
-inline constexpr const char* kReturnHost = "sso";  // the host of the return url
-
 inline constexpr const char* kProviderGoogle = "google";
 inline constexpr const char* kProviderApple = "apple";
 
-// Sign in with Apple has no desktop SDK either, but unlike Google it also has
-// no popup flow the bridge page could run for us without Apple JS. So Apple
-// goes straight to Apple: the app opens
+// Sign in with Apple has no desktop SDK, so the app goes straight to Apple: it
+// opens
 //   https://appleid.apple.com/auth/authorize?client_id=<services id>
 //       &redirect_uri=<api>/auth/apple/callback&response_type=code%20id_token
 //       &response_mode=form_post&scope=name%20email&state=<attempt>&nonce=<attempt>
@@ -66,9 +58,9 @@ inline constexpr const char* kPlatform = "linux";
 //   urnetwork://oauth/google?state=<state>&id_token=<identity token>
 //   urnetwork://oauth/google?state=<state>&error=<message>
 // The same platform claim in `state` picks the scheme, the same two checks
-// accept the return. The ur.io/sso bridge is no longer opened for Google.
+// accept the return.
 inline constexpr const char* kGoogleAuthorizeUrl = "https://accounts.google.com/o/oauth2/v2/auth";
-// the ur.io web sign-in client (SsoBridge.jsx); the api's callback holds its secret
+// the ur.io web sign-in client (the login dialog's); the api's callback holds its secret
 inline constexpr const char* kGoogleClientId =
     "338638865390-cg4m0t700mq9073smhn9do81mr640ig1.apps.googleusercontent.com";
 inline constexpr const char* kGoogleCallbackPath = "/auth/google/callback";
@@ -162,15 +154,6 @@ inline std::string Base64UrlEncode(const std::string& in) {
 
 }  // namespace detail
 
-// The bridge url for one attempt. `state` and `nonce` are minted per attempt
-// by the caller and kept in memory until the return.
-inline std::string BridgeUrl(const std::string& provider, const std::string& state,
-                             const std::string& nonce) {
-  return std::string(kBridgeUrl) + "?provider=" + detail::PercentEncode(provider) +
-         "&redirect_link=" + detail::PercentEncode(kRedirectLink) +
-         "&state=" + detail::PercentEncode(state) + "&nonce=" + detail::PercentEncode(nonce);
-}
-
 // The state of one Apple or Google attempt: base64url of
 // {"platform":"linux","token":…}. Opaque to the provider; the api's callback
 // reads the platform claim to pick the return scheme, the token is what makes
@@ -237,7 +220,7 @@ inline std::map<std::string, std::string> ParseQuery(const std::string& query) {
   return out;
 }
 
-// What the bridge sent back (the query of urnetwork://sso?...)
+// What the api's callback sent back (ParseOAuthReturn below)
 struct Return {
   std::string provider;
   std::string authJwt;
@@ -245,20 +228,8 @@ struct Return {
   std::string error;
 };
 
-inline Return ParseReturn(const std::string& query) {
-  auto params = ParseQuery(query);
-  Return r;
-  r.provider = params.count("provider") ? params["provider"] : std::string();
-  r.authJwt = params.count("auth_jwt") ? params["auth_jwt"] : std::string();
-  r.state = params.count("state") ? params["state"] : std::string();
-  r.error = params.count("error") ? params["error"] : std::string();
-  return r;
-}
-
-// What the api's callback sent back (the query of
-// urnetwork://oauth/<provider>?...), in the shape of a bridge return so the
-// same checks apply: the identity token arrives as `id_token`, the provider is
-// the one the path names.
+// The query of urnetwork://oauth/<provider>?...: the identity token arrives
+// as `id_token`, the provider is the one the path names.
 inline Return ParseOAuthReturn(const std::string& provider, const std::string& query) {
   auto params = ParseQuery(query);
   Return r;

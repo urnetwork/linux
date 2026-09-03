@@ -334,7 +334,7 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     ApplyAuthState(false);
   }
 
-  // Verification hook for the ur.io/sso round trip (with URNETWORK_SSO_SIMULATE,
+  // Verification hook for the Google / Apple sign-in round trip (with URNETWORK_SSO_SIMULATE,
   // WalletConnect.cpp): URNETWORK_SSO_AUTOSTART=<google|apple> presses that
   // pill shortly after the window shows, so the whole return path — minted
   // state + nonce, the simulated return, the login call, the error line the
@@ -647,7 +647,7 @@ urnw::motion::MotionBin* WrapInBin(Gtk::Widget& child) {
 // Apple, Create Instant Account — then the remaining ways in as square icon
 // tiles four per row (secret key, auth code, Bittensor, Solana), then "or",
 // the email/phone field and Get started. Google and Apple sign in through the
-// ur.io/sso browser bridge (Linux has no native provider flow). There is
+// provider's own web flow in the browser (Linux has no native provider flow). There is
 // deliberately NO heading (the carousel supplies the headline) and NO guest
 // button (superseded by seedphrase accounts). Wide (>=1000dip) the carousel
 // moves to an art pane beside a fixed 544dip form column; narrow it rides
@@ -1927,9 +1927,9 @@ void MainWindow::OnGoogle() { OnSso(sso::kProviderGoogle); }
 
 void MainWindow::OnApple() { OnSso(sso::kProviderApple); }
 
-// Google / Apple: the browser carries the provider's sign-in (the ur.io/sso
-// bridge); the identity token returns on urnetwork://sso and lands in
-// OnWalletAuth like the wallet flows.
+// Google / Apple: the browser carries the provider's own sign-in; the api's
+// callback returns the identity token on urnetwork://oauth/<provider> and it
+// lands in OnWalletAuth like the wallet flows.
 void MainWindow::OnSso(const std::string& provider) {
   loginError_.set_text("");
   SetLoginBusy(true);

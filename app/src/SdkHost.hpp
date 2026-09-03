@@ -44,7 +44,7 @@ struct AuthResult {
   // kept the signed wallet_auth (see CreateNetworkWithPendingWallet) and the
   // UI routes into the create-network page instead of dead-ending.
   bool wallet_needs_network = false;
-  // Google/Apple (the ur.io/sso bridge) authenticated but the identity has
+  // Google/Apple (the provider's web flow) authenticated but the identity has
   // no network yet: the host kept the identity token (see
   // CreateNetworkWithPendingSso) and the UI routes into the create-network
   // page the same way.
@@ -434,10 +434,11 @@ class SdkHost {
   // blockchain urnet::TAO. Same deep-link routing as Solana (HandleDeepLink).
   void SignInWithBittensor(std::function<void(AuthResult)> done);
 
-  // Sign in with Google or Apple through the ur.io/sso browser bridge
-  // (SsoBridge.hpp): the host mints a state + nonce for the attempt, the
-  // bridge returns the provider's identity token on urnetwork://sso, and only
-  // a return echoing that state with a token minted for that nonce reaches
+  // Sign in with Google or Apple through the provider's own web flow
+  // (SsoBridge.hpp): the host mints a state + nonce for the attempt, the api's
+  // callback returns the provider's identity token on
+  // urnetwork://oauth/<provider>, and only a return echoing that state with a
+  // token minted for that nonce reaches
   // authLogin{auth_jwt_type, auth_jwt}. A new identity (no network) reports
   // sso_needs_network and the create page finishes with
   // CreateNetworkWithPendingSso.

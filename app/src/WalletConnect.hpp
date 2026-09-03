@@ -48,18 +48,12 @@ class WalletConnect {
   // page can sign a sign-in challenge or a wallet-attach proof ("connect").
   void SignInWithBittensor(const std::string& message, const std::string& purpose = std::string());
 
-  // Google / Apple through the ur.io/sso bridge (SsoBridge.hpp, the login
-  // stack's two full-width providers): the browser runs the provider's own
-  // sign-in and the identity token comes back on urnetwork://sso. on_sso
-  // fires with the RAW return (provider, token, echoed state, error); the
-  // host checks the state and the token's nonce against the attempt it
-  // minted before anything reaches the api.
-  void SignInWithSso(const std::string& provider, const std::string& state,
-                     const std::string& nonce);
   // Sign in with Apple straight against Apple (SsoBridge.hpp, "Sign in with
   // Apple"): the browser opens Apple's authorize page, the api's callback
-  // redirects to urnetwork://oauth/apple, and on_sso fires with the raw return
-  // as for the bridge (provider "apple", the id token, the echoed state).
+  // redirects to urnetwork://oauth/apple, and on_sso fires with the RAW return
+  // (provider "apple", the id token, the echoed state, error); the host checks
+  // the state and the token's nonce against the attempt it minted before
+  // anything reaches the api.
   void SignInWithApple(const std::string& apiUrl, const std::string& state,
                        const std::string& nonce);
   // Sign in with Google straight against Google (SsoBridge.hpp, "Sign in with
@@ -98,7 +92,6 @@ class WalletConnect {
   void HandleConnect(Provider p, const std::string& query);
   void HandleSignMessage(Provider p, const std::string& query);
   void HandleBittensorSignMessage(const std::string& query);
-  void HandleSso(const std::string& query);
   // urnetwork://oauth/<apple|google>?state=…&id_token=… (or &error=…)
   void HandleOAuthReturn(const std::string& url);
 
