@@ -1451,7 +1451,7 @@ void DeveloperPage::ApplyMetrics(const urnet::ReliabilityMetrics& metrics) {
         visible = anyLoss;
         break;
       case 10:
-        value = Format(T_("dev_worst_single_failure_value", "{0} connections"),
+        value = Format(T_("dev_worst_single_failure_value", "{} connections"),
                        metrics.MaxFlowsLostInOneEvent);
         visible = anyLoss;
         break;
