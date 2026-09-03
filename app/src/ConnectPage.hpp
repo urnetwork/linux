@@ -184,6 +184,14 @@ class ConnectPage : public Gtk::Box {
            renderedState_ == health::State::Blocked ||
            renderedState_ == health::State::Disconnecting;
   }
+  // A session is up but no provider is proven yet. The provider-count row
+  // reads "Connecting to providers" here and still opens the provider
+  // locations sheet, which lists whatever providers are known so far
+  // (android/apple parity: the status label is the tap target in both states).
+  bool ConnectingNow() const {
+    return renderedState_ == health::State::Connecting ||
+           renderedState_ == health::State::Evaluating;
+  }
   void ApplyContractsList();
   void ApplySplitRuleCount();
   void ApplyDnsCard();

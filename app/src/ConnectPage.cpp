@@ -889,7 +889,9 @@ void ConnectPage::BuildDataUsageGroup() {
   providerCountRow->append(*providerCountChevron);
   providerCountLine_->set_child(*providerCountRow);
   providerCountLine_->signal_clicked().connect([this] {
-    if (!ConnectedNow()) return;  // the globe has nothing to plot without a session
+    // the globe has nothing to plot without a session; while connecting the
+    // sheet lists the providers known so far
+    if (!ConnectedNow() && !ConnectingNow()) return;
     if (on_open_provider_locations) on_open_provider_locations();
   });
   liveStatsGroup_->append(*providerCountLine_);
@@ -1254,15 +1256,18 @@ void ConnectPage::ApplyStats(const LiveStats& stats) {
 // a third question again.
 void ConnectPage::ApplyLiveStatsGroup() {
   if (!liveStatsGroup_ || !providerCountText_) return;
-  const bool show = ConnectedNow();
+  const bool connected = ConnectedNow();
+  const bool connecting = ConnectingNow();
+  const bool show = connected || connecting;
   liveStatsGroup_->set_visible(show);
   kit::SetTextOrCollapse(
       *providerCountText_,
-      show ? Glib::ustring(Format(TN_("connected_provider_count", "Connected to {} provider",
-                                      "Connected to {} providers",
-                                      static_cast<unsigned long>(stats_.providerCount)),
-                                  stats_.providerCount))
-           : Glib::ustring());
+      connected ? Glib::ustring(Format(TN_("connected_provider_count", "Connected to {} provider",
+                                           "Connected to {} providers",
+                                           static_cast<unsigned long>(stats_.providerCount)),
+                                       stats_.providerCount))
+      : connecting ? Glib::ustring(T_("connecting_status_indicator", "Connecting to providers"))
+                   : Glib::ustring());
   if (providerCountLine_) {
     kit::SetAccessibleLabel(*providerCountLine_, providerCountText_->get_text());
     // A row that cannot act must not claim it can: with the callback
