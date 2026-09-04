@@ -2229,6 +2229,11 @@ msgctxt "get_urnetwork_free_for_life_by_participating"
 msgid "Get URnetwork free for life by participating"
 msgstr "Krijg URnetwork gratis voor altijd door deel te nemen"
 
+#. Confirmation button that leaves the seedphrase screen after the warning.
+msgctxt "go_back"
+msgid "Go Back"
+msgstr "Terug"
+
 #. Login initial
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
@@ -2340,6 +2345,11 @@ msgstr "Geen e-mail, telefoon of wachtwoord nodig. Je account is beveiligd met e
 msgctxt "instant_account_failed"
 msgid "Could not create the account. Please try again."
 msgstr "Het account kon niet worden aangemaakt. Probeer het opnieuw."
+
+#. Instant account creation: explains that the account has no email or password and is secured by the seedphrase.
+msgctxt "instant_account_no_email_password"
+msgid "No email or password needed. Your account is secured by a seedphrase."
+msgstr "Geen e-mail of wachtwoord nodig. Je account wordt beveiligd met een seedphrase."
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -3272,7 +3282,7 @@ msgctxt "points_leaderboard_description"
 msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
 msgstr "Punten aller tijden. Een blok is één afgeronde epoch; de reeks telt opeenvolgende blokken met punten tot het laatste."
 
-#. Points leaderboard: shown when no network has opted in yet.
+#. Points leaderboard: shown when no network has points yet (every ranked network is listed, so the list is empty only before the first snapshot).
 msgctxt "points_leaderboard_empty"
 msgid "No one is on the points leaderboard yet."
 msgstr "Er staat nog niemand op het puntenscorebord."
@@ -3844,10 +3854,20 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "Seedphrase"
 
+#. Toast shown after the seedphrase is copied to the clipboard.
+msgctxt "seedphrase_copied_to_clipboard"
+msgid "Seedphrase copied to clipboard"
+msgstr "Seedphrase gekopieerd naar het klembord"
+
 #. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
 msgctxt "seedphrase_invalid_word_count"
 msgid "Seedphrase must be 12 or 24 words"
 msgstr "De seedphrase moet 12 of 24 woorden bevatten"
+
+#. Instant account creation: body of the confirmation shown when the user tries to leave the seedphrase screen without saving.
+msgctxt "seedphrase_leave_confirm_body"
+msgid "Are you sure? This is the ONLY time you'll see your seedphrase. Make sure you've saved it before going back."
+msgstr "Weet je het zeker? Dit is de ENIGE keer dat je je seedphrase ziet. Sla hem op voordat je teruggaat."
 
 #. Login: error title when signing in with a seedphrase failed.
 msgctxt "seedphrase_login_failed"
@@ -4453,6 +4473,11 @@ msgstr "Uitsluitingen gelden voor het hele samenhangende netwerkcluster, zodat g
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
 msgstr "Om te beginnen met verdienen, sluit je aan bij ons netwerk"
+
+#. Confirmation button that keeps the user on the seedphrase screen after the warning.
+msgctxt "stay"
+msgid "Stay"
+msgstr "Blijven"
 
 #. Used as a headline in the Initial Auth carousel.
 msgctxt "stay_completely_private_and_anonymous"

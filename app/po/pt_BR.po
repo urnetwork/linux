@@ -2229,6 +2229,11 @@ msgctxt "get_urnetwork_free_for_life_by_participating"
 msgid "Get URnetwork free for life by participating"
 msgstr "Tenha URnetwork grátis para sempre ao participar"
 
+#. Confirmation button that leaves the seedphrase screen after the warning.
+msgctxt "go_back"
+msgid "Go Back"
+msgstr "Voltar"
+
 #. Login initial
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
@@ -2340,6 +2345,11 @@ msgstr "Não precisa de e-mail, telefone ou senha. Sua conta é protegida por um
 msgctxt "instant_account_failed"
 msgid "Could not create the account. Please try again."
 msgstr "Não foi possível criar a conta. Tente de novo."
+
+#. Instant account creation: explains that the account has no email or password and is secured by the seedphrase.
+msgctxt "instant_account_no_email_password"
+msgid "No email or password needed. Your account is secured by a seedphrase."
+msgstr "Sem e-mail nem senha. Sua conta é protegida por uma frase-semente."
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -3272,7 +3282,7 @@ msgctxt "points_leaderboard_description"
 msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
 msgstr "Pontos de todos os tempos. Um bloco é uma época finalizada; a sequência conta blocos consecutivos com pontos até o último."
 
-#. Points leaderboard: shown when no network has opted in yet.
+#. Points leaderboard: shown when no network has points yet (every ranked network is listed, so the list is empty only before the first snapshot).
 msgctxt "points_leaderboard_empty"
 msgid "No one is on the points leaderboard yet."
 msgstr "Ainda não há ninguém no placar de pontos."
@@ -3844,10 +3854,20 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "Frase-semente"
 
+#. Toast shown after the seedphrase is copied to the clipboard.
+msgctxt "seedphrase_copied_to_clipboard"
+msgid "Seedphrase copied to clipboard"
+msgstr "Frase-semente copiada para a área de transferência"
+
 #. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
 msgctxt "seedphrase_invalid_word_count"
 msgid "Seedphrase must be 12 or 24 words"
 msgstr "A frase-semente deve ter 12 ou 24 palavras"
+
+#. Instant account creation: body of the confirmation shown when the user tries to leave the seedphrase screen without saving.
+msgctxt "seedphrase_leave_confirm_body"
+msgid "Are you sure? This is the ONLY time you'll see your seedphrase. Make sure you've saved it before going back."
+msgstr "Tem certeza? Esta é a ÚNICA vez que você verá sua frase-semente. Salve-a antes de voltar."
 
 #. Login: error title when signing in with a seedphrase failed.
 msgctxt "seedphrase_login_failed"
@@ -4453,6 +4473,11 @@ msgstr "As exclusões se aplicam a todo o cluster de rede coassociado, para que 
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
 msgstr "Para começar a ganhar, entre na rede"
+
+#. Confirmation button that keeps the user on the seedphrase screen after the warning.
+msgctxt "stay"
+msgid "Stay"
+msgstr "Ficar"
 
 #. Used as a headline in the Initial Auth carousel.
 msgctxt "stay_completely_private_and_anonymous"

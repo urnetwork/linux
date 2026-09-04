@@ -2225,6 +2225,11 @@ msgctxt "get_urnetwork_free_for_life_by_participating"
 msgid "Get URnetwork free for life by participating"
 msgstr "Dapatkan URnetwork gratis seumur hidup dengan berpartisipasi"
 
+#. Confirmation button that leaves the seedphrase screen after the warning.
+msgctxt "go_back"
+msgid "Go Back"
+msgstr "Kembali"
+
 #. Login initial
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
@@ -2335,6 +2340,11 @@ msgstr "Tidak perlu email, telepon, atau kata sandi. Akun Anda diamankan dengan 
 msgctxt "instant_account_failed"
 msgid "Could not create the account. Please try again."
 msgstr "Tidak dapat membuat akun. Silakan coba lagi."
+
+#. Instant account creation: explains that the account has no email or password and is secured by the seedphrase.
+msgctxt "instant_account_no_email_password"
+msgid "No email or password needed. Your account is secured by a seedphrase."
+msgstr "Tidak perlu email atau kata sandi. Akun Anda diamankan dengan seedphrase."
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -3263,7 +3273,7 @@ msgctxt "points_leaderboard_description"
 msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
 msgstr "Poin sepanjang waktu. Satu blok adalah satu epoch yang difinalisasi; runtutan menghitung blok berturut-turut dengan poin hingga yang terakhir."
 
-#. Points leaderboard: shown when no network has opted in yet.
+#. Points leaderboard: shown when no network has points yet (every ranked network is listed, so the list is empty only before the first snapshot).
 msgctxt "points_leaderboard_empty"
 msgid "No one is on the points leaderboard yet."
 msgstr "Belum ada siapa pun di papan peringkat poin."
@@ -3830,10 +3840,20 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "Frasa pemulihan"
 
+#. Toast shown after the seedphrase is copied to the clipboard.
+msgctxt "seedphrase_copied_to_clipboard"
+msgid "Seedphrase copied to clipboard"
+msgstr "Seedphrase disalin ke papan klip"
+
 #. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
 msgctxt "seedphrase_invalid_word_count"
 msgid "Seedphrase must be 12 or 24 words"
 msgstr "Frasa pemulihan harus terdiri dari 12 atau 24 kata"
+
+#. Instant account creation: body of the confirmation shown when the user tries to leave the seedphrase screen without saving.
+msgctxt "seedphrase_leave_confirm_body"
+msgid "Are you sure? This is the ONLY time you'll see your seedphrase. Make sure you've saved it before going back."
+msgstr "Yakin? Ini SATU-SATUNYA kesempatan melihat seedphrase Anda. Pastikan sudah disimpan sebelum kembali."
 
 #. Login: error title when signing in with a seedphrase failed.
 msgctxt "seedphrase_login_failed"
@@ -4438,6 +4458,11 @@ msgstr "Pengecualian berlaku untuk seluruh klaster jaringan terkait, sehingga la
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
 msgstr "Untuk mulai menghasilkan, bergabunglah dengan jaringan"
+
+#. Confirmation button that keeps the user on the seedphrase screen after the warning.
+msgctxt "stay"
+msgid "Stay"
+msgstr "Tetap di sini"
 
 #. Used as a headline in the Initial Auth carousel.
 msgctxt "stay_completely_private_and_anonymous"

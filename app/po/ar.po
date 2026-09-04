@@ -2245,6 +2245,11 @@ msgctxt "get_urnetwork_free_for_life_by_participating"
 msgid "Get URnetwork free for life by participating"
 msgstr "احصل على URnetwork مجانًا مدى الحياة من خلال المشاركة"
 
+#. Confirmation button that leaves the seedphrase screen after the warning.
+msgctxt "go_back"
+msgid "Go Back"
+msgstr "رجوع"
+
 #. Login initial
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
@@ -2360,6 +2365,11 @@ msgstr "لا حاجة إلى بريد إلكتروني أو هاتف أو كلم
 msgctxt "instant_account_failed"
 msgid "Could not create the account. Please try again."
 msgstr "تعذّر إنشاء الحساب. يرجى المحاولة مجددًا."
+
+#. Instant account creation: explains that the account has no email or password and is secured by the seedphrase.
+msgctxt "instant_account_no_email_password"
+msgid "No email or password needed. Your account is secured by a seedphrase."
+msgstr "لا حاجة إلى بريد إلكتروني أو كلمة مرور. حسابك محمي بعبارة الاسترداد."
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -3308,7 +3318,7 @@ msgctxt "points_leaderboard_description"
 msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
 msgstr "النقاط منذ البداية. الكتلة هي فترة مكتملة واحدة؛ وتحسب السلسلة الكتل المتتالية ذات النقاط حتى آخر كتلة."
 
-#. Points leaderboard: shown when no network has opted in yet.
+#. Points leaderboard: shown when no network has points yet (every ranked network is listed, so the list is empty only before the first snapshot).
 msgctxt "points_leaderboard_empty"
 msgid "No one is on the points leaderboard yet."
 msgstr "لا أحد في لوحة صدارة النقاط بعد."
@@ -3915,10 +3925,20 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "عبارة الاسترداد"
 
+#. Toast shown after the seedphrase is copied to the clipboard.
+msgctxt "seedphrase_copied_to_clipboard"
+msgid "Seedphrase copied to clipboard"
+msgstr "تم نسخ عبارة الاسترداد إلى الحافظة"
+
 #. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
 msgctxt "seedphrase_invalid_word_count"
 msgid "Seedphrase must be 12 or 24 words"
 msgstr "يجب أن تتكون عبارة الاسترداد من 12 أو 24 كلمة"
+
+#. Instant account creation: body of the confirmation shown when the user tries to leave the seedphrase screen without saving.
+msgctxt "seedphrase_leave_confirm_body"
+msgid "Are you sure? This is the ONLY time you'll see your seedphrase. Make sure you've saved it before going back."
+msgstr "هل أنت متأكد؟ هذه هي المرة الوحيدة التي سترى فيها عبارة الاسترداد. تأكد من حفظها قبل الرجوع."
 
 #. Login: error title when signing in with a seedphrase failed.
 msgctxt "seedphrase_login_failed"
@@ -5253,6 +5273,11 @@ msgstr "تنطبق الاستثناءات على مجموعة الشبكة ال�
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
 msgstr "للبدء في الربح، انضم إلى الشبكة"
+
+#. Confirmation button that keeps the user on the seedphrase screen after the warning.
+msgctxt "stay"
+msgid "Stay"
+msgstr "البقاء"
 
 #. Used as a headline in the Initial Auth carousel.
 msgctxt "stay_completely_private_and_anonymous"

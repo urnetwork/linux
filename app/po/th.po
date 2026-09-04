@@ -2225,6 +2225,11 @@ msgctxt "get_urnetwork_free_for_life_by_participating"
 msgid "Get URnetwork free for life by participating"
 msgstr "รับ URnetwork ฟรีตลอดชีวิตโดยการเข้าร่วม"
 
+#. Confirmation button that leaves the seedphrase screen after the warning.
+msgctxt "go_back"
+msgid "Go Back"
+msgstr "ย้อนกลับ"
+
 #. Login initial
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
@@ -2335,6 +2340,11 @@ msgstr "ไม่ต้องใช้อีเมล โทรศัพท์ �
 msgctxt "instant_account_failed"
 msgid "Could not create the account. Please try again."
 msgstr "ไม่สามารถสร้างบัญชีได้ กรุณาลองอีกครั้ง"
+
+#. Instant account creation: explains that the account has no email or password and is secured by the seedphrase.
+msgctxt "instant_account_no_email_password"
+msgid "No email or password needed. Your account is secured by a seedphrase."
+msgstr "ไม่ต้องใช้อีเมลหรือรหัสผ่าน บัญชีของคุณได้รับการปกป้องด้วยซีดเฟรส"
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -3263,7 +3273,7 @@ msgctxt "points_leaderboard_description"
 msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
 msgstr "คะแนนสะสมทั้งหมด บล็อกคือหนึ่งอีพอคที่สรุปแล้ว ต่อเนื่องนับบล็อกที่มีคะแนนติดต่อกันจนถึงบล็อกล่าสุด"
 
-#. Points leaderboard: shown when no network has opted in yet.
+#. Points leaderboard: shown when no network has points yet (every ranked network is listed, so the list is empty only before the first snapshot).
 msgctxt "points_leaderboard_empty"
 msgid "No one is on the points leaderboard yet."
 msgstr "ยังไม่มีใครบนกระดานคะแนน"
@@ -3830,10 +3840,20 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "วลีกู้คืน"
 
+#. Toast shown after the seedphrase is copied to the clipboard.
+msgctxt "seedphrase_copied_to_clipboard"
+msgid "Seedphrase copied to clipboard"
+msgstr "คัดลอกซีดเฟรสไปยังคลิปบอร์ดแล้ว"
+
 #. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
 msgctxt "seedphrase_invalid_word_count"
 msgid "Seedphrase must be 12 or 24 words"
 msgstr "วลีกู้คืนต้องมี 12 หรือ 24 คำ"
+
+#. Instant account creation: body of the confirmation shown when the user tries to leave the seedphrase screen without saving.
+msgctxt "seedphrase_leave_confirm_body"
+msgid "Are you sure? This is the ONLY time you'll see your seedphrase. Make sure you've saved it before going back."
+msgstr "แน่ใจหรือไม่ นี่เป็นครั้งเดียวที่คุณจะเห็นซีดเฟรส โปรดบันทึกให้เรียบร้อยก่อนย้อนกลับ"
 
 #. Login: error title when signing in with a seedphrase failed.
 msgctxt "seedphrase_login_failed"
@@ -4438,6 +4458,11 @@ msgstr "การยกเว้นจะมีผลกับคลัสเต
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
 msgstr "เพื่อเริ่มสร้างรายได้ เข้าร่วมกับระบบเน็ตเวิร์ค"
+
+#. Confirmation button that keeps the user on the seedphrase screen after the warning.
+msgctxt "stay"
+msgid "Stay"
+msgstr "อยู่ต่อ"
 
 #. Used as a headline in the Initial Auth carousel.
 msgctxt "stay_completely_private_and_anonymous"

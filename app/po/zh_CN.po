@@ -2225,6 +2225,11 @@ msgctxt "get_urnetwork_free_for_life_by_participating"
 msgid "Get URnetwork free for life by participating"
 msgstr "通过参与，终身免费获得 URnetwork"
 
+#. Confirmation button that leaves the seedphrase screen after the warning.
+msgctxt "go_back"
+msgid "Go Back"
+msgstr "返回"
+
 #. Login initial
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
@@ -2335,6 +2340,11 @@ msgstr "无需电子邮件、电话或密码。你的账户由助记词保护。
 msgctxt "instant_account_failed"
 msgid "Could not create the account. Please try again."
 msgstr "无法创建账户。请重试。"
+
+#. Instant account creation: explains that the account has no email or password and is secured by the seedphrase.
+msgctxt "instant_account_no_email_password"
+msgid "No email or password needed. Your account is secured by a seedphrase."
+msgstr "无需邮箱或密码。您的账户由助记词保护。"
 
 #. Call to action
 msgctxt "insufficient_balance"
@@ -3263,7 +3273,7 @@ msgctxt "points_leaderboard_description"
 msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
 msgstr "历史累计积分。一个区块是一个已确认的周期；连续统计直到最新区块的连续得分区块数。"
 
-#. Points leaderboard: shown when no network has opted in yet.
+#. Points leaderboard: shown when no network has points yet (every ranked network is listed, so the list is empty only before the first snapshot).
 msgctxt "points_leaderboard_empty"
 msgid "No one is on the points leaderboard yet."
 msgstr "积分排行榜上还没有人。"
@@ -3845,10 +3855,20 @@ msgctxt "seedphrase"
 msgid "Seedphrase"
 msgstr "助记词"
 
+#. Toast shown after the seedphrase is copied to the clipboard.
+msgctxt "seedphrase_copied_to_clipboard"
+msgid "Seedphrase copied to clipboard"
+msgstr "助记词已复制到剪贴板"
+
 #. Seed sign-in sheet: error when the pasted seedphrase is not 12 or 24 words long.
 msgctxt "seedphrase_invalid_word_count"
 msgid "Seedphrase must be 12 or 24 words"
 msgstr "助记词必须是 12 或 24 个单词"
+
+#. Instant account creation: body of the confirmation shown when the user tries to leave the seedphrase screen without saving.
+msgctxt "seedphrase_leave_confirm_body"
+msgid "Are you sure? This is the ONLY time you'll see your seedphrase. Make sure you've saved it before going back."
+msgstr "确定吗？这是您唯一一次看到助记词的机会。返回前请务必保存。"
 
 #. Login: error title when signing in with a seedphrase failed.
 msgctxt "seedphrase_login_failed"
@@ -5178,6 +5198,11 @@ msgstr "排除会应用到整个关联网络集群，因此相关流量会被一
 msgctxt "start_earning_join"
 msgid "To start earning, join the network"
 msgstr "要开始赚取收入，请加入网络"
+
+#. Confirmation button that keeps the user on the seedphrase screen after the warning.
+msgctxt "stay"
+msgid "Stay"
+msgstr "留下"
 
 #. Used as a headline in the Initial Auth carousel.
 msgctxt "stay_completely_private_and_anonymous"
