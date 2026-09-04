@@ -8,6 +8,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 
 #include <gtkmm.h>
 
@@ -24,7 +25,13 @@ class UsageBar : public Gtk::Box {
   // the program's cap and bonus (server terms), for the referral bonus line
   void SetReferralTerms(int64_t maxReferrals, int64_t bonusGibPerDay);
 
+  // The referral row is a flat button: tapping "Total referrals" opens the one
+  // Referrals page (Account > Referrals), the same as the android/apple drawer
+  // row. Unset, the row is inert.
+  std::function<void()> on_referrals;
+
  private:
+  void UpdateReferralAccessibleName();
   void DrawBar(const Cairo::RefPtr<Cairo::Context>& cr, int width, int height);
 
   Gtk::DrawingArea bar_;
@@ -33,6 +40,7 @@ class UsageBar : public Gtk::Box {
   Gtk::Label* referralBonus_ = nullptr;
   Gtk::Separator* referralSeparator_ = nullptr;
   Gtk::Box* referralRow_ = nullptr;
+  Gtk::Button* referralButton_ = nullptr;  // wraps referralRow_
   int64_t maxReferrals_ = 20;
   int64_t bonusGibPerDay_ = 3;
   int64_t totalReferrals_ = 0;

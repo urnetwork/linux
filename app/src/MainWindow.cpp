@@ -1522,6 +1522,11 @@ void MainWindow::BuildHome() {
     // guest -> full account: the create page in upgrade-guest mode
     NavigateCreate(CreateNetworkPage::Mode::UpgradeGuest, "", /*fromHome=*/true);
   };
+  // "Total referrals" in the drawer's usage bar opens the same Referrals page
+  // Account's row opens (one referral screen everywhere)
+  drawer_->on_open_referrals = [this] {
+    if (shell_) shell_->Navigate("referrals");
+  };
   box->append(*drawer_);
 
   box->append(*Gtk::make_managed<Gtk::Separator>(Gtk::Orientation::HORIZONTAL));

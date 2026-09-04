@@ -79,6 +79,9 @@ class ConnectDrawer : public Gtk::Box {
 
   // Guest plan card: route into the guest -> full-account create page.
   std::function<void()> on_create_account;
+  // Usage bar "Total referrals" row: open the one Referrals page (Account >
+  // Referrals); the drawer has no referral view of its own.
+  std::function<void()> on_open_referrals;
 
  private:
   void BuildInsufficientBanner();

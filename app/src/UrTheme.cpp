@@ -309,6 +309,15 @@ button.ur-nav-item image { color: inherit; }
 .ur-snackbar-success { border-color: alpha(#87FB67, .4); }
 /* the referral gold toast (Ui.hpp kReferralGold) */
 .ur-snackbar-gold { border-color: alpha(#F5B93C, .6); }
+/* the usage bar's referral row: a flat button that opens the Referrals page,
+   drawn like the plain rows above it (no chrome, no padding) until hovered */
+button.ur-usage-referral-row {
+  background: none; background-image: none; border: none; box-shadow: none;
+  border-radius: 6px; padding: 0; min-height: 0;
+  transition: background-color 150ms ease;
+}
+button.ur-usage-referral-row:hover { background-color: #1C1C1C; }
+button.ur-usage-referral-row:active { background-color: #2A2A2A; }
 )";
 
 void AddFontFile(const std::string& dir, const char* file) {

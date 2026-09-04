@@ -479,7 +479,7 @@ void ConnectDrawer::BuildPlanCard() {
     if (on_create_account) on_create_account();
   });
   planRow->append(*createAccountBtn_);
-  getProBtn_ = Gtk::make_managed<Gtk::Button>(T_("become_supporter", "Get UR Pro"));
+  getProBtn_ = Gtk::make_managed<Gtk::Button>(T_("get_pro", "Get Pro"));
   getProBtn_->add_css_class("suggested-action");
   getProBtn_->set_valign(Gtk::Align::CENTER);
   getProBtn_->signal_clicked().connect([this] { OpenUpgrade(); });
@@ -488,6 +488,9 @@ void ConnectDrawer::BuildPlanCard() {
 
   usageBar_ = Gtk::make_managed<UsageBar>();
   usageBar_->set_margin_top(8);
+  usageBar_->on_referrals = [this] {
+    if (on_open_referrals) on_open_referrals();
+  };
   card->append(*usageBar_);
 
   auto* redeemBtn =
