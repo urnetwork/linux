@@ -234,7 +234,8 @@ class EarningsPage : public Gtk::Box {
   // Mirrors the controller into the page: rows (value-compared, so a no-op
   // event does not re-render the table), sort, loading, end, error, `me`.
   void ReadPointsBoard();
-  void RebuildPointsRows();
+  void RebuildPointsRows(size_t fromIndex = 0);
+  std::string OwnPointsName();
   void RenderPointsHeader();
   void RenderPointsFooter();
   void OnPointsSortChanged(const std::string& sort);
@@ -402,6 +403,7 @@ class EarningsPage : public Gtk::Box {
   Gtk::Label* pointsGroupMeta_ = nullptr;
   Gtk::Label* pointsEmojiLabel_ = nullptr;
   Gtk::Label* pointsNameLabel_ = nullptr;
+  Gtk::Label* pointsRankedLabel_ = nullptr;
   Gtk::Button* editEmojiButton_ = nullptr;
   PointsStatTile pointsTiles_[3];
   Gtk::Label* pointsLongestLabel_ = nullptr;
@@ -440,6 +442,8 @@ class EarningsPage : public Gtk::Box {
   std::vector<PointsRowUi> pointsRowsUi_;
   std::string pointsSort_ = urnet::PointsLeaderboardSortPoints;
   std::string pointsRenderedSort_;
+  std::string pointsRenderedOwnId_;  // the own id the rows were drawn with
+  size_t pointsRenderedCount_ = 0;   // rows drawn; the next page appends after them
   bool pointsLoading_ = false;
   bool pointsEnd_ = false;
   bool pointsHasLoaded_ = false;  // the first page landed (rows, an empty end, or an error)

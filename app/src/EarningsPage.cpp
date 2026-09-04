@@ -3250,7 +3250,7 @@ void EarningsPage::BuildPointsNetworkBlock() {
       pointsEmojiLabel_->set_attributes(attrs);
     }
     line->append(*pointsEmojiLabel_);
-    pointsNameLabel_ = Gtk::make_managed<Gtk::Label>("-");
+    pointsNameLabel_ = Gtk::make_managed<Gtk::Label>();
     pointsNameLabel_->add_css_class("ur-row-title");
     pointsNameLabel_->set_xalign(0);
     pointsNameLabel_->set_hexpand(true);
@@ -3263,7 +3263,16 @@ void EarningsPage::BuildPointsNetworkBlock() {
     editEmojiButton_->set_valign(Gtk::Align::CENTER);
     editEmojiButton_->signal_clicked().connect([this] { OnEditEmoji(); });
     line->append(*editEmojiButton_);
-    row.content->append(*line);
+    // the identity line, then the ranked count on its own line beneath it,
+    // left-aligned under the emoji
+    auto* identity = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
+    identity->append(*line);
+    pointsRankedLabel_ = Gtk::make_managed<Gtk::Label>();
+    pointsRankedLabel_->add_css_class("dim-label");
+    pointsRankedLabel_->set_xalign(0);
+    pointsRankedLabel_->set_visible(false);
+    identity->append(*pointsRankedLabel_);
+    row.content->append(*identity);
     pointsGroup_->append(*row.root);
   }
 
@@ -3433,7 +3442,16 @@ void EarningsPage::ReadPointsBoard() {
     g_warning("points board: reading the controller failed: %s", e.what());
     return;
   }
-  const bool rowsChanged = next != pointsRowsUi_ || pointsRenderedSort_ != pointsSort_;
+  // the common case is the next page landing below the rows already drawn:
+  // then only the new rows are appended; a sort change, a refresh, a restart
+  // or a newly known own id redraws the list from the top
+  const std::string ownIdNow = pointsMe_ ? pointsMe_->networkId : std::string();
+  const bool sameContext = pointsRenderedSort_ == pointsSort_ && pointsRenderedOwnId_ == ownIdNow;
+  const bool extends = sameContext && pointsRenderedCount_ == pointsRowsUi_.size() &&
+                       next.size() > pointsRowsUi_.size() &&
+                       std::equal(pointsRowsUi_.begin(), pointsRowsUi_.end(), next.begin());
+  const bool rowsChanged = next != pointsRowsUi_ || !sameContext;
+  const size_t renderFrom = extends ? pointsRowsUi_.size() : 0;
   if (next != pointsRowsUi_) pointsRowsUi_ = std::move(next);
   if (!pointsLoading_ && (!pointsRowsUi_.empty() || pointsEnd_ || !pointsError_.empty())) {
     pointsHasLoaded_ = true;
@@ -3447,7 +3465,7 @@ void EarningsPage::ReadPointsBoard() {
     pointsSortTabs_[sortIndex]->set_active(true);
   }
 
-  if (rowsChanged) RebuildPointsRows();
+  if (rowsChanged) RebuildPointsRows(renderFrom);
   RenderPointsHeader();
   RenderPointsFooter();
   if (pointsBoardShowing_) ApplyLedgerMeta();
@@ -3455,10 +3473,10 @@ void EarningsPage::ReadPointsBoard() {
   // a page that does not fill the pane can never be scrolled to its end, so
   // the next one is asked for once layout has run (the controller refuses a
   // second in-flight page and a page past the end)
-  if (!pointsLoading_ && !pointsEnd_ && !pointsRowsUi_.empty()) {
+  if (!pointsLoading_ && !pointsEnd_ && pointsError_.empty() && !pointsRowsUi_.empty()) {
     auto alive = alive_;
     Glib::signal_idle().connect_once([this, alive] {
-      if (!*alive || !pointsVc_ || pointsLoading_ || pointsEnd_) return;
+      if (!*alive || !pointsVc_ || pointsLoading_ || pointsEnd_ || !pointsError_.empty()) return;
       Gtk::ScrolledWindow* scroller = PaneScroller(paneB_.content);
       if (scroller == nullptr) return;
       auto adjustment = scroller->get_vadjustment();
@@ -3467,33 +3485,47 @@ void EarningsPage::ReadPointsBoard() {
   }
 }
 
-void EarningsPage::RebuildPointsRows() {
-  RemoveAllChildren(*pointsRows_);
+// One continuous list: `fromIndex` > 0 appends the rows from that index below
+// the ones already drawn (the next page); 0 redraws everything.
+void EarningsPage::RebuildPointsRows(size_t fromIndex) {
+  const std::string ownId = pointsMe_ ? pointsMe_->networkId : std::string();
+  const std::vector<int> weights{1, 5, 2, 1, 1};
+  if (fromIndex == 0 || fromIndex > pointsRowsUi_.size()) {
+    fromIndex = 0;
+    RemoveAllChildren(*pointsRows_);
+    // the same table builder the data board uses; rank and network read as
+    // text, the three figures read right
+    if (!pointsRowsUi_.empty()) {
+      pointsRows_->append(*kit::MakePaneTableHeader(
+          weights,
+          {T_("current_ranking", "Current Ranking"), T_("network", "Network"),
+           T_("points", "Points"), T_("blocks", "Blocks"), T_("streak", "Streak")},
+          2));
+    }
+  }
   pointsRenderedSort_ = pointsSort_;
+  pointsRenderedOwnId_ = ownId;
+  pointsRenderedCount_ = pointsRowsUi_.size();
   if (pointsRowsUi_.empty()) return;
 
-  // the same table builder the data board uses; rank and network read as
-  // text, the three figures read right
-  const std::vector<int> weights{1, 5, 2, 1, 1};
-  pointsRows_->append(*kit::MakePaneTableHeader(
-      weights,
-      {T_("current_ranking", "Current Ranking"), T_("network", "Network"),
-       T_("points", "Points"), T_("blocks", "Blocks"), T_("streak", "Streak")},
-      2));
   const bool byBlocks = pointsSort_ == urnet::PointsLeaderboardSortBlocks;
   const bool byStreak = pointsSort_ == urnet::PointsLeaderboardSortStreak;
   const size_t activeColumn = byBlocks ? 3 : (byStreak ? 4 : 2);
-  const std::string ownId = pointsMe_ ? pointsMe_->networkId : std::string();
   const Glib::ustring anonymous = T_("anonymous", "Anonymous");
+  // an anonymous row reads "Anonymous" to everyone but its owner, who sees
+  // their own name (the highlight keys on the network id, never the name)
+  const std::string ownName = OwnPointsName();
 
-  for (const auto& r : pointsRowsUi_) {
+  for (size_t i = fromIndex; i < pointsRowsUi_.size(); ++i) {
+    const auto& r = pointsRowsUi_[i];
     const bool isOwn = !ownId.empty() && r.networkId == ownId;
     auto row = kit::MakePaneTableRow(weights, kPointsRowHeight, 2);
     row.cells[0]->set_text(byBlocks ? r.rankBlocksText
                                     : (byStreak ? r.rankStreakText : r.rankPointsText));
     // the emoji tag shows either way; the name only when the network is not anonymous
     const bool anon = r.anonymous || r.displayName.empty();
-    Glib::ustring name = anon ? anonymous : Glib::ustring(r.displayName);
+    Glib::ustring name = anon ? (isOwn && !ownName.empty() ? Glib::ustring(ownName) : anonymous)
+                              : Glib::ustring(r.displayName);
     if (!r.emojiTag.empty()) name = Glib::ustring(r.emojiTag) + "  " + name;
     row.cells[1]->set_text(name);
     row.cells[2]->set_text(r.totalPointsText);
@@ -3517,20 +3549,30 @@ void EarningsPage::RebuildPointsRows() {
   }
 }
 
+// The network's own name for the points board: the me row's, or the jwt's
+// until me lands; empty only when signed out.
+std::string EarningsPage::OwnPointsName() {
+  if (pointsMe_ && !pointsMe_->displayName.empty()) return pointsMe_->displayName;
+  if (auto jwt = host_.ParseByJwt(); jwt && !jwt->NetworkName.empty()) return jwt->NetworkName;
+  return std::string();
+}
+
 void EarningsPage::RenderPointsHeader() {
   if (pointsNameLabel_ == nullptr) return;  // not built yet
   const bool hasMe = pointsMe_.has_value();
 
   pointsEmojiLabel_->set_text(emojiTag_);
   pointsEmojiLabel_->set_visible(!emojiTag_.empty());
-  pointsNameLabel_->set_text(hasMe && !pointsMe_->displayName.empty() ? pointsMe_->displayName
-                                                                      : std::string("-"));
+  // the caller always sees their own name: the me row's, or the jwt's until
+  // me lands
+  pointsNameLabel_->set_text(OwnPointsName());
   const Glib::ustring editName =
       emojiTag_.empty() ? T_("add_emoji", "Add emoji") : T_("edit_emoji", "Edit emoji");
   editEmojiButton_->set_tooltip_text(editName);
   kit::SetAccessibleLabel(*editEmojiButton_, editName);
+  kit::SetTextOrCollapse(*pointsGroupMeta_, Glib::ustring());
   kit::SetTextOrCollapse(
-      *pointsGroupMeta_,
+      *pointsRankedLabel_,
       pointsTotalRanked_ > 0
           ? Glib::ustring(Format(T_("ranked_networks_count", "{} ranked networks"),
                                  urnet::formatPoints(static_cast<double>(pointsTotalRanked_))))
@@ -3624,7 +3666,8 @@ void EarningsPage::OnPointsScrolled() {
   const int64_t hiddenRows =
       static_cast<int64_t>(std::max(0.0, remainingBelow - footer) / kPointsRowHeight);
   const int64_t lastVisible = rowCount - 1 - hiddenRows;
-  if (emoji::ShouldLoadMore(lastVisible, rowCount, pointsLoading_, pointsEnd_)) {
+  if (emoji::ShouldLoadMore(lastVisible, rowCount, pointsLoading_, pointsEnd_,
+                            !pointsError_.empty())) {
     pointsVc_->loadMore();
   }
 }
