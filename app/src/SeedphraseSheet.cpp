@@ -62,9 +62,26 @@ SeedphraseSheet::SeedphraseSheet(Gtk::Window& parent, const std::string& seedphr
   }
   box->append(*grid);
 
-  auto* copyBtn =
-      Gtk::make_managed<Gtk::Button>(T_("copy_to_clipboard", "Copy to Clipboard"));
-  copyBtn->signal_clicked().connect([this, copyBtn] {
+  // SECONDARY pill with a leading copy glyph (URButton secondary, the shape
+  // of the login stack's icon buttons): the confirm below is this sheet's one
+  // primary action, so copying must not read as a second call to action.
+  auto* copyBtn = Gtk::make_managed<Gtk::Button>();
+  copyBtn->add_css_class("ur-btn");
+  copyBtn->add_css_class("ur-btn-secondary");
+  auto* copyContent = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  copyContent->set_halign(Gtk::Align::CENTER);
+  auto* copyIcon = Gtk::make_managed<Gtk::Image>();
+  copyIcon->set_from_icon_name("edit-copy-symbolic");
+  copyContent->append(*copyIcon);
+  auto* copyLabel =
+      Gtk::make_managed<Gtk::Label>(T_("copy_to_clipboard", "Copy to Clipboard"));
+  copyContent->append(*copyLabel);
+  copyBtn->set_child(*copyContent);
+  // the content is an icon + text box, not a string: name it for a11y
+  gtk_accessible_update_property(GTK_ACCESSIBLE(copyBtn->gobj()),
+                                 GTK_ACCESSIBLE_PROPERTY_LABEL,
+                                 T_("copy_to_clipboard", "Copy to Clipboard"), -1);
+  copyBtn->signal_clicked().connect([this, copyLabel] {
     // Not a bare set_text: the copy carries the KDE password-manager hint so
     // clipboard managers that honor it (Klipper, several history extensions)
     // exclude the credential from their history — the closest Linux analogue
@@ -82,13 +99,15 @@ SeedphraseSheet::SeedphraseSheet(Gtk::Window& parent, const std::string& seedphr
     GdkContentProvider* combined = gdk_content_provider_new_union(providers, 2);
     gdk_clipboard_set_content(get_clipboard()->gobj(), combined);
     g_object_unref(combined);
-    copyBtn->set_label(T_("copied", "Copied!"));
+    copyLabel->set_text(T_("copied", "Copied!"));
   });
   box->append(*copyBtn);
 
   auto* confirmBtn = Gtk::make_managed<Gtk::Button>(
       T_("i_ve_saved_my_seedphrase", "I've Saved My Seedphrase"));
-  confirmBtn->add_css_class("suggested-action");
+  // the sheet's ONE primary (URButton primary, matching the secondary above)
+  confirmBtn->add_css_class("ur-btn");
+  confirmBtn->add_css_class("ur-btn-primary");
   confirmBtn->signal_clicked().connect([this] {
     confirmed_ = true;
     // zero the copy this sheet held for the clipboard button
