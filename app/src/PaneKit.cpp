@@ -556,6 +556,31 @@ Gtk::Widget* MakePaneTableHeader(const std::vector<int>& weights,
   return row;
 }
 
+PaneTableStack MakePaneTableStack(PaneTableRow& row, size_t index) {
+  PaneTableStack out;
+  auto* host = dynamic_cast<Gtk::Box*>(row.root);
+  if (host == nullptr || index >= row.cells.size()) return out;
+  auto* inner = RowHostInner(host);
+  Gtk::Label* cell = row.cells[index];
+  int minWidth = -1;
+  int minHeight = -1;
+  cell->get_size_request(minWidth, minHeight);
+  out.root = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
+  out.root->set_valign(Gtk::Align::CENTER);
+  out.root->set_hexpand(true);
+  // the same star weight the cell had, so the columns stay aligned
+  out.root->set_size_request(minWidth, -1);
+  out.top = MakeStyledLabel({}, "ur-row-title", 0.f);
+  out.top->set_visible(false);
+  out.bottom = MakeStyledLabel({}, "ur-row-title", 0.f);
+  out.root->append(*out.top);
+  out.root->append(*out.bottom);
+  inner->insert_child_after(*out.root, *cell);
+  inner->remove(*cell);
+  row.cells[index] = out.bottom;
+  return out;
+}
+
 PaneSearchRow MakePaneSearchRow(const Glib::ustring& placeholder) {
   PaneSearchRow out;
   auto* host = MakeRowHost(40);

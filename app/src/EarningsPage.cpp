@@ -3134,7 +3134,8 @@ void EarningsPage::ShowPreviewClaimDialog() {
 
 namespace {
 
-constexpr int kPointsRowHeight = 36;
+// two lines: the emoji tag over the network name
+constexpr int kPointsRowHeight = 52;
 
 EarningsPage::PointsRowUi ToPointsRowUi(const urnet::PointsLeaderboardRow& row) {
   EarningsPage::PointsRowUi out;
@@ -3520,13 +3521,17 @@ void EarningsPage::RebuildPointsRows(size_t fromIndex) {
     const auto& r = pointsRowsUi_[i];
     const bool isOwn = !ownId.empty() && r.networkId == ownId;
     auto row = kit::MakePaneTableRow(weights, kPointsRowHeight, 2);
+    // the tag sits on its own line above the name, so a long tag never
+    // squeezes the name to a stub on a narrow pane
+    auto identity = kit::MakePaneTableStack(row, 1);
     row.cells[0]->set_text(byBlocks ? r.rankBlocksText
                                     : (byStreak ? r.rankStreakText : r.rankPointsText));
     // the emoji tag shows either way; the name only when the network is not anonymous
     const bool anon = r.anonymous || r.displayName.empty();
     Glib::ustring name = anon ? (isOwn && !ownName.empty() ? Glib::ustring(ownName) : anonymous)
                               : Glib::ustring(r.displayName);
-    if (!r.emojiTag.empty()) name = Glib::ustring(r.emojiTag) + "  " + name;
+    identity.top->set_text(r.emojiTag);
+    identity.top->set_visible(!r.emojiTag.empty());
     row.cells[1]->set_text(name);
     row.cells[2]->set_text(r.totalPointsText);
     row.cells[3]->set_text(r.blocksText);
