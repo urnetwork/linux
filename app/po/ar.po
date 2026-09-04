@@ -3313,10 +3313,10 @@ msgctxt "points_leaderboard_empty"
 msgid "No one is on the points leaderboard yet."
 msgstr "لا أحد في لوحة صدارة النقاط بعد."
 
-#. Points leaderboard: shown under the own-stats card while the network has not opted in.
+#. Points leaderboard: shown under the own-stats card while the name switch is off. The network is listed either way, as Anonymous until the switch is on.
 msgctxt "points_leaderboard_private_hint"
-msgid "Only you can see this. Turn it on to appear on the leaderboard."
-msgstr "أنت وحدك من يرى هذا. فعّل الخيار للظهور في لوحة الصدارة."
+msgid "Your network appears as Anonymous until you turn this on."
+msgstr "تظهر شبكتك باسم «مجهول» حتى تفعّل هذا الخيار."
 
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
@@ -4050,10 +4050,10 @@ msgctxt "show_icon_when_connected"
 msgid "Show UR icon when connected"
 msgstr "عرض أيقونة UR عند الاتصال"
 
-#. Points leaderboard: the opt-in switch label. Only opted-in networks are listed.
+#. Points leaderboard: the switch that reveals this network's name on the list. Every ranked network is listed; off = shown as Anonymous.
 msgctxt "show_on_points_leaderboard"
-msgid "Show on the points leaderboard"
-msgstr "العرض في لوحة صدارة النقاط"
+msgid "Show my network name"
+msgstr "إظهار اسم شبكتي"
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show_provider_list"

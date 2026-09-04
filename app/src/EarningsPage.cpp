@@ -3300,11 +3300,11 @@ void EarningsPage::BuildPointsNetworkBlock() {
   // the opt-in switch
   {
     auto row = kit::MakePaneTwoLineRow(
-        T_("show_on_points_leaderboard", "Show on the points leaderboard"), {}, 44);
+        T_("show_on_points_leaderboard", "Show my network name"), {}, 44);
     pointsPublicToggle_ = Gtk::make_managed<Gtk::Switch>();
     pointsPublicToggle_->set_valign(Gtk::Align::CENTER);
     kit::SetAccessibleLabel(*pointsPublicToggle_,
-                            T_("show_on_points_leaderboard", "Show on the points leaderboard"));
+                            T_("show_on_points_leaderboard", "Show my network name"));
     pointsPublicToggle_->property_active().signal_changed().connect(
         sigc::mem_fun(*this, &EarningsPage::OnPointsPublicToggled));
     row.trailing->append(*pointsPublicToggle_);
@@ -3314,7 +3314,7 @@ void EarningsPage::BuildPointsNetworkBlock() {
     auto row = MakePaddedRow(8);
     row.content->append(*MakeWrappedNote(
         T_("points_leaderboard_private_hint",
-           "Only you can see this. Turn it on to appear on the leaderboard."),
+           "Your network appears as Anonymous until you turn this on."),
         "ur-row-note"));
     pointsPrivateHintRow_ = row.root;
     pointsGroup_->append(*row.root);

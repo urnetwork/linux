@@ -4492,10 +4492,10 @@ msgctxt "points_leaderboard_empty"
 msgid "No one is on the points leaderboard yet."
 msgstr "No one is on the points leaderboard yet."
 
-#. Points leaderboard: shown under the own-stats card while the network has not opted in.
+#. Points leaderboard: shown under the own-stats card while the name switch is off. The network is listed either way, as Anonymous until the switch is on.
 msgctxt "points_leaderboard_private_hint"
-msgid "Only you can see this. Turn it on to appear on the leaderboard."
-msgstr "Only you can see this. Turn it on to appear on the leaderboard."
+msgid "Your network appears as Anonymous until you turn this on."
+msgstr "Your network appears as Anonymous until you turn this on."
 
 #. Points count with unit for history rows.
 msgctxt "points_short"
@@ -5329,10 +5329,10 @@ msgctxt "show_kill_switch_exception"
 msgid "Show kill switch exception"
 msgstr "Show kill switch exception"
 
-#. Points leaderboard: the opt-in switch label. Only opted-in networks are listed.
+#. Points leaderboard: the switch that reveals this network's name on the list. Every ranked network is listed; off = shown as Anonymous.
 msgctxt "show_on_points_leaderboard"
-msgid "Show on the points leaderboard"
-msgstr "Show on the points leaderboard"
+msgid "Show my network name"
+msgstr "Show my network name"
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show_provider_list"
