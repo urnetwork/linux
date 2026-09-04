@@ -3250,7 +3250,7 @@ void EarningsPage::BuildPointsNetworkBlock() {
       attrs.insert(size);
       pointsEmojiLabel_->set_attributes(attrs);
     }
-    line->append(*pointsEmojiLabel_);
+    pointsEmojiLabel_->set_xalign(0);
     pointsNameLabel_ = Gtk::make_managed<Gtk::Label>();
     pointsNameLabel_->add_css_class("ur-row-title");
     pointsNameLabel_->set_xalign(0);
@@ -3264,10 +3264,11 @@ void EarningsPage::BuildPointsNetworkBlock() {
     editEmojiButton_->set_valign(Gtk::Align::CENTER);
     editEmojiButton_->signal_clicked().connect([this] { OnEditEmoji(); });
     line->append(*editEmojiButton_);
-    // the identity line, then the ranked count on its own line beneath it,
-    // left-aligned under the emoji
+    // the name line with the pencil, the emoji tag on its own line beneath it,
+    // then the ranked count, all left-aligned
     auto* identity = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
     identity->append(*line);
+    identity->append(*pointsEmojiLabel_);
     pointsRankedLabel_ = Gtk::make_managed<Gtk::Label>();
     pointsRankedLabel_->add_css_class("dim-label");
     pointsRankedLabel_->set_xalign(0);
@@ -3521,7 +3522,7 @@ void EarningsPage::RebuildPointsRows(size_t fromIndex) {
     const auto& r = pointsRowsUi_[i];
     const bool isOwn = !ownId.empty() && r.networkId == ownId;
     auto row = kit::MakePaneTableRow(weights, kPointsRowHeight, 2);
-    // the tag sits on its own line above the name, so a long tag never
+    // the name sits on its own line above the tag, so a long tag never
     // squeezes the name to a stub on a narrow pane
     auto identity = kit::MakePaneTableStack(row, 1);
     row.cells[0]->set_text(byBlocks ? r.rankBlocksText
@@ -3530,9 +3531,9 @@ void EarningsPage::RebuildPointsRows(size_t fromIndex) {
     const bool anon = r.anonymous || r.displayName.empty();
     Glib::ustring name = anon ? (isOwn && !ownName.empty() ? Glib::ustring(ownName) : anonymous)
                               : Glib::ustring(r.displayName);
-    identity.top->set_text(r.emojiTag);
-    identity.top->set_visible(!r.emojiTag.empty());
     row.cells[1]->set_text(name);
+    identity.bottom->set_text(r.emojiTag);
+    identity.bottom->set_visible(!r.emojiTag.empty());
     row.cells[2]->set_text(r.totalPointsText);
     row.cells[3]->set_text(r.blocksText);
     row.cells[4]->set_text(r.streakText);

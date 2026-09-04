@@ -571,13 +571,13 @@ PaneTableStack MakePaneTableStack(PaneTableRow& row, size_t index) {
   // the same star weight the cell had, so the columns stay aligned
   out.root->set_size_request(minWidth, -1);
   out.top = MakeStyledLabel({}, "ur-row-title", 0.f);
-  out.top->set_visible(false);
   out.bottom = MakeStyledLabel({}, "ur-row-title", 0.f);
+  out.bottom->set_visible(false);
   out.root->append(*out.top);
   out.root->append(*out.bottom);
   inner->insert_child_after(*out.root, *cell);
   inner->remove(*cell);
-  row.cells[index] = out.bottom;
+  row.cells[index] = out.top;
   return out;
 }
 
