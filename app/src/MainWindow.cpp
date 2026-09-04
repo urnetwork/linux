@@ -2019,6 +2019,11 @@ void MainWindow::OpenOnboardingIfPending() {
   if (!prefs::Get<bool>(kOnboardingPendingKey, false)) return;
   Glib::signal_timeout().connect_once([this] {
     if (!prefs::Get<bool>(kOnboardingPendingKey, false)) return;
+    // A repeated logged-in transition (the session reconnecting, a second auth
+    // event) must not restart a flow that is already on screen: Open() resets
+    // it to page 1. The persisted pending pref is the only gate; it is cleared
+    // when the flow hides for any reason (Get connected, Skip, Escape, close).
+    if (onboarding_ && onboarding_->get_visible()) return;
     if (!onboarding_) {
       onboarding_ = std::make_unique<OnboardingWindow>(*this, host_, balance_);
       onboarding_->on_finished = [] { prefs::Set(kOnboardingPendingKey, false); };
