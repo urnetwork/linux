@@ -337,14 +337,15 @@ void ConnectDrawer::BuildClientStatsCard() {
   transportBar_ = Gtk::make_managed<TransportBar>();
   transportBar_->on_activate = [this] { transportSheet_->Open(); };
   card->append(*transportBar_);
-  // the ip-version histogram, directly under the transport bar: the added
-  // providers as the canvas's dots under Both / v4 / v6. Decorative -- a tap
-  // on it is a tap on the card (the contract details), like the charts.
-  ipFamilyHistogram_ = Gtk::make_managed<IpFamilyHistogram>();
-  card->append(*ipFamilyHistogram_);
-  // the extender panel, directly under the histogram (EXTENDER.md K4): the
+  // the ip family status row, directly under the transport bar: the
+  // Dualstack / IPv4 / IPv6 columns with their connected and connecting
+  // counts. Decorative -- a tap on it is a tap on the card (the contract
+  // details), like the charts.
+  ipFamilyStatusRow_ = Gtk::make_managed<IpFamilyStatusRow>();
+  card->append(*ipFamilyStatusRow_);
+  // the extender panel, directly under the status row (EXTENDER.md K4): the
   // active extenders as hollow rings in their own colors, the N-of-M count and
-  // the gossip network's status dot. Decorative like the histogram -- K4 is
+  // the gossip network's status dot. Decorative like the status row -- K4 is
   // explicit that tapping does nothing and there is no details panel -- so a
   // tap on it is a tap on the card.
   extenderPanel_ = Gtk::make_managed<ExtenderPanel>();
@@ -790,7 +791,9 @@ void ConnectDrawer::RefreshExtenderPanel() {
 
 void ConnectDrawer::SetProviderGrid(const std::vector<urnet::ProviderGridPoint>& points,
                                     int64_t gridWidth, int64_t gridHeight) {
-  if (ipFamilyHistogram_) ipFamilyHistogram_->SetGrid(points, gridWidth, gridHeight);
+  (void)gridWidth;
+  (void)gridHeight;
+  if (ipFamilyStatusRow_) ipFamilyStatusRow_->SetGrid(points);
 }
 
 void ConnectDrawer::RefreshSplitRuleCount() {

@@ -62,6 +62,13 @@ window.background { background-color: #101010; color: #f8f8f8; }
 .ur-mono-12 { font-family: monospace; font-size: 12px; }
 .ur-mono-11 { font-family: monospace; font-size: 11px; }
 .ur-caption-11 { font-size: 11px; }
+/* the ip family status row: column labels in the pixel display face at the
+   app's smallest NeueBit size (.ur-onb-neuebit-small); the tier color comes
+   from .dim-label / .ur-label-faint on the label, and tweens like the apple
+   row's 1s tween */
+.ur-ipfamily-label { font-family: "PP NeueBit"; font-size: 16px; font-weight: bold;
+  transition: color 1000ms ease; }
+.ur-ipfamily-line { transition: color 1000ms ease; }
 .ur-caption-10 { font-size: 10px; }
 /* contract-details direction tints (send green / receive pink): arrow + rate */
 .ur-fg-green { color: #87fb67; }

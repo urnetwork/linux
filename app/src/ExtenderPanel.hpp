@@ -1,5 +1,5 @@
 // The extender panel (connect/EXTENDER.md K4): in the connect drawer's client
-// statistics card, directly under the ip-version histogram. One line:
+// statistics card, directly under the ip family status row. One line:
 //
 //   Extenders
 //   ◯ ◯   2 of 9              ● Connected   4 events/min
@@ -13,7 +13,7 @@
 //
 // DECORATIVE. K4 is explicit that tapping does nothing and there is no details
 // panel, so the whole component is inert and a tap on it is a tap on the card
-// underneath, exactly like the histogram above it. The rings are hidden from
+// underneath, exactly like the status row above it. The rings are hidden from
 // the accessibility tree and the panel names itself with its numbers, since a
 // row of identical circles says nothing to a screen reader.
 //

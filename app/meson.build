@@ -218,7 +218,7 @@ executable('urnetwork-gui',
     'src/TransportPresentation.cpp',
     'src/TransportBar.cpp',
     'src/TransportSheet.cpp',
-    'src/IpFamilyHistogram.cpp',
+    'src/IpFamilyStatusRow.cpp',
     'src/ExtenderPanel.cpp',
     'src/ExtenderSection.cpp',
     'src/ExtenderShareSheet.cpp',
@@ -498,8 +498,8 @@ install_data('assets/carousel/LoginCarousel1.jpg',
 # ---- unit tests -------------------------------------------------------------
 # The pure-logic modules (orthographic projection math, the TopoJSON decoder,
 # the provider row/label helpers, the location-override state machine, the
-# transport bar's boundary-tween geometry, the ip-version histogram's
-# grouping, the extender ring geometry, the extender panel's reading of
+# transport bar's boundary-tween geometry, the ip family status row's
+# counting and ranking, the extender ring geometry, the extender panel's reading of
 # ExtenderStatus, the provider extender row's reading of ExtenderProvideStatus
 # and the statistics sections' visibility, the compact count and count-rate
 # labels, the extender share/import decisions, the Solana payout wallet's card
@@ -526,7 +526,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/HealthTest.cpp',
     'tests/TapSequenceGateTest.cpp',
     'tests/TransportBarGeometryTest.cpp',
-    'tests/IpFamilyHistogramTest.cpp',
+    'tests/IpFamilyStatusTest.cpp',
     'tests/ExtenderRingGeometryTest.cpp',
     'tests/ExtenderStatusPresentationTest.cpp',
     'tests/ExtenderProvidePresentationTest.cpp',

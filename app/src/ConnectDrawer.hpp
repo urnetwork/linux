@@ -10,7 +10,8 @@
 //      which is not part of the profile),
 //   3. the three stats cards (Client statistics with the remote chart, the
 //      transport distribution bar (opening the transport settings editor), the
-//      ip-version histogram (the added providers as dots under Both / v4 / v6),
+//      ip family status row (Dualstack / IPv4 / IPv6 columns with their
+//      connected and connecting counts),
 //      the extender panel (active extender rings, the N-of-M count and the
 //      gossip network's status dot)
 //      and the blocked chart, Local statistics with the local chart +
@@ -41,7 +42,7 @@
 #include "ContractsSheet.hpp"
 #include "DnsSheet.hpp"
 #include "ExtenderPanel.hpp"
-#include "IpFamilyHistogram.hpp"
+#include "IpFamilyStatusRow.hpp"
 #include "LocationsSheet.hpp"
 #include "PostQuantumIdentity.hpp"
 #include "RedeemCodeSheet.hpp"
@@ -68,8 +69,9 @@ class ConnectDrawer : public Gtk::Box {
   // Full resync (device lifecycle changes, window re-shown).
   void RefreshAll();
   // The live provider grid (LiveStats::gridPoints), on the same push the hero
-  // canvas rides; feeds the ip-version histogram. An empty grid is a normal
-  // reading (no session) and renders as the three bare row labels.
+  // canvas rides; feeds the ip family status row. An empty grid is a normal
+  // reading (no session) and renders as three "disconnected" columns. The
+  // grid size is accepted for the push's shape and unused: the row counts.
   void SetProviderGrid(const std::vector<urnet::ProviderGridPoint>& points, int64_t gridWidth,
                        int64_t gridHeight);
   // The daemon's real DNS verdict (StatusReply::dns_applied / dns_detail),
@@ -149,8 +151,8 @@ class ConnectDrawer : public Gtk::Box {
   // stats cards
   TransferChart* remoteChart_ = nullptr;
   TransportBar* transportBar_ = nullptr;  // under the remote chart; opens the transport sheet
-  IpFamilyHistogram* ipFamilyHistogram_ = nullptr;  // under the transport bar
-  ExtenderPanel* extenderPanel_ = nullptr;          // under the histogram (EXTENDER.md K4)
+  IpFamilyStatusRow* ipFamilyStatusRow_ = nullptr;  // under the transport bar
+  ExtenderPanel* extenderPanel_ = nullptr;          // under the status row (EXTENDER.md K4)
   TransferChart* blockChart_ = nullptr;
   TransferChart* localChart_ = nullptr;
   Gtk::Label* splitRuleCount_ = nullptr;

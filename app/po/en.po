@@ -3791,7 +3791,7 @@ msgid_plural "{} IPs"
 msgstr[0] "{} IP"
 msgstr[1] "{} IPs"
 
-#. Title of the IP version histogram under the transport bar in the connect drawer: the connected providers grouped by whether they carry both IP versions, only IPv4, or only IPv6.
+#. IP versions: the tooltip of the address-family tag column in the provider locations sheet (windows, linux). It also titled the connect drawer's IP version histogram before that became the Dualstack / IPv4 / IPv6 status row.
 msgctxt "ip_families"
 msgid "IP versions"
 msgstr "IP versions"
@@ -3800,6 +3800,30 @@ msgstr "IP versions"
 msgctxt "ip_family_both"
 msgid "Both"
 msgstr "Both"
+
+#. Status line of one column of the IP version status row in the connect drawer: how many providers of that family (dualstack, IPv4 or IPv6) are connected. Shown under the family label only when the count is not zero. Lowercase.
+msgctxt "ip_family_connected_count"
+msgid "{} connected"
+msgid_plural "{} connected"
+msgstr[0] "{} connected"
+msgstr[1] "{} connected"
+
+#. Status line of one column of the IP version status row in the connect drawer: how many providers of that family (dualstack, IPv4 or IPv6) are still connecting. Shown under the connected line only when the count is not zero. Lowercase.
+msgctxt "ip_family_connecting_count"
+msgid "{} connecting"
+msgid_plural "{} connecting"
+msgstr[0] "{} connecting"
+msgstr[1] "{} connecting"
+
+#. Status line of one column of the IP version status row in the connect drawer, when no provider of that family (dualstack, IPv4 or IPv6) is connected or connecting. Lowercase, under the family label.
+msgctxt "ip_family_disconnected"
+msgid "disconnected"
+msgstr "disconnected"
+
+#. Column label of the IP version status row in the connect drawer, for providers that carry both IPv4 and IPv6. Set in the pixel display face beside the IPv4 and IPv6 labels, so keep it short.
+msgctxt "ip_family_dualstack"
+msgid "Dualstack"
+msgstr "Dualstack"
 
 #. Row label of the IP version histogram, and the provider row tag, for a provider that carries only IPv4.
 msgctxt "ip_family_v4"

@@ -1,5 +1,5 @@
 // The extender rings around a provider dot -- the pure geometry behind the
-// connect canvas's and the drawer histogram's dots (EXTENDER.md K2/K3).
+// connect canvas's dots (EXTENDER.md K2/K3).
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 

@@ -14,8 +14,8 @@
 namespace urnw {
 namespace {
 
-// The active-extender rings, at the histogram's dot size so the two rows under
-// the transport bar read as one stack.
+// The active-extender rings, at the connect canvas's default dot size so the
+// rows under the transport bar read as one stack.
 constexpr int kRingDiameter = 12;
 constexpr int kRingGap = 4;
 // An extender whose color the SDK did not fill in still rings, in this
@@ -25,7 +25,7 @@ constexpr Rgba kRingFallback{0xF8 / 255.0, 0xF8 / 255.0, 0xF8 / 255.0, 1.0};
 
 // The state's label, through the store. Written out per case rather than
 // looked up from the pure header's key id so the three literals stay greppable
-// here, the way the histogram's row labels are.
+// here, the way the status row's column labels are.
 const char* StateLabel(extender::GossipState state) {
   switch (state) {
     case extender::GossipState::Connected: return T_("connected", "Connected");
@@ -46,7 +46,7 @@ Rgba ColorForDot(extender::StatusDot dot) {
 
 // One HOLLOW ring: the canvas's ring stroke, at this row's size, in the
 // extender's own color. Hollow is the point -- a filled dot here would read as
-// a provider, which is what the histogram above draws.
+// a provider, which is what the connect canvas draws.
 Gtk::DrawingArea* MakeRing(const std::string& colorHex) {
   auto* ring = Gtk::make_managed<Gtk::DrawingArea>();
   ring->set_content_width(kRingDiameter);
@@ -74,8 +74,8 @@ ExtenderPanel::ExtenderPanel() : Gtk::Box(Gtk::Orientation::VERTICAL, 6) {
 }
 
 void ExtenderPanel::BuildUi() {
-  // the same title treatment the transport bar and the histogram wear, so the
-  // three stack as one block
+  // the same title treatment the transport bar wears, so the two stack as
+  // one block around the status row
   auto* title = Gtk::make_managed<Gtk::Label>(T_("extenders", "Extenders"));
   title->add_css_class("dim-label");
   title->add_css_class("ur-caption-11");

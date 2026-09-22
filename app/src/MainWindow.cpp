@@ -2369,7 +2369,7 @@ void MainWindow::ApplyStats(const LiveStats& stats) {
     return buf;
   };
   // the drawer surfaces the insufficient-balance banner (upgrade flow CTA)
-  // and the ip-version histogram (the same grid push the hero canvas rides)
+  // and the ip family status row (the same grid push the hero canvas rides)
   if (drawer_) {
     drawer_->SetInsufficientBalance(stats.insufficientBalance);
     drawer_->SetProviderGrid(stats.gridPoints, stats.gridWidth, stats.gridHeight);
