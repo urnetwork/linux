@@ -45,7 +45,8 @@ bool SameShare(const urnet::TransportShare& a, const urnet::TransportShare& b) {
          a.EgressPacketCount == b.EgressPacketCount &&
          a.IngressPacketCount == b.IngressPacketCount && a.Share == b.Share &&
          a.Boundary == b.Boundary && a.Percent == b.Percent && a.Used == b.Used &&
-         a.Enabled == b.Enabled;
+         a.Enabled == b.Enabled && a.H1PlusConnectionCount == b.H1PlusConnectionCount &&
+         a.H1WebSocketConnectionCount == b.H1WebSocketConnectionCount;
 }
 
 // Value equality of two distributions (the SDK structs carry no operator==):
@@ -383,7 +384,7 @@ void TransportBar::OnDrawBar(const Cairo::RefPtr<Cairo::Context>& cr, int width,
 void TransportBar::RebuildLegend(const std::vector<const urnet::TransportShare*>& used) {
   std::vector<std::string> types;
   types.reserve(used.size());
-  for (const auto* share : used) types.push_back(share->TransportType);
+  for (const auto* share : used) types.push_back(transport::DisplayName(share->TransportType, share->H1PlusConnectionCount > 0));
   if (types == legendTypes_) {
     // same membership: only the percents roll
     for (size_t i = 0; i < used.size() && i < legendPercents_.size(); ++i) {
@@ -400,7 +401,7 @@ void TransportBar::RebuildLegend(const std::vector<const urnet::TransportShare*>
   for (const auto* share : used) {
     auto* item = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 5);
     item->append(*transport::MakeDot(share->TransportType, kDotSize, /*hollow=*/false));
-    auto* name = Gtk::make_managed<Gtk::Label>(transport::DisplayName(share->TransportType));
+    auto* name = Gtk::make_managed<Gtk::Label>(transport::DisplayName(share->TransportType, share->H1PlusConnectionCount > 0));
     name->add_css_class("ur-caption-11");
     // bottom-align the labels within the chip: the mono percent face has
     // different metrics from the caption face, so centering would skew their
@@ -415,7 +416,7 @@ void TransportBar::RebuildLegend(const std::vector<const urnet::TransportShare*>
     item->append(*percent);
     legendPercents_.push_back(percent);
     legend_->Append(*item);
-    if (std::find(previous.begin(), previous.end(), share->TransportType) == previous.end()) {
+    if (std::find(previous.begin(), previous.end(), transport::DisplayName(share->TransportType, share->H1PlusConnectionCount > 0)) == previous.end()) {
       FadeIn(*item);
     }
   }
@@ -425,7 +426,7 @@ void TransportBar::RebuildLegend(const std::vector<const urnet::TransportShare*>
 void TransportBar::RebuildUnused(const std::vector<const urnet::TransportShare*>& unused) {
   std::vector<std::string> types;
   types.reserve(unused.size());
-  for (const auto* share : unused) types.push_back(share->TransportType);
+  for (const auto* share : unused) types.push_back(transport::DisplayName(share->TransportType, share->H1PlusConnectionCount > 0));
   if (types == unusedTypes_) return;
   const std::vector<std::string> previous = std::move(unusedTypes_);
   unusedTypes_ = types;
@@ -439,13 +440,13 @@ void TransportBar::RebuildUnused(const std::vector<const urnet::TransportShare*>
     for (const auto* share : unused) {
       auto* item = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 5);
       item->append(*transport::MakeDot(share->TransportType, kDotSize, /*hollow=*/true));
-      auto* name = Gtk::make_managed<Gtk::Label>(transport::DisplayName(share->TransportType));
+      auto* name = Gtk::make_managed<Gtk::Label>(transport::DisplayName(share->TransportType, share->H1PlusConnectionCount > 0));
       name->add_css_class("ur-caption-11");
       name->add_css_class("ur-label-faint");
       name->set_valign(Gtk::Align::END);
       item->append(*name);
       unused_->Append(*item);
-      if (std::find(previous.begin(), previous.end(), share->TransportType) == previous.end()) {
+      if (std::find(previous.begin(), previous.end(), transport::DisplayName(share->TransportType, share->H1PlusConnectionCount > 0)) == previous.end()) {
         FadeIn(*item);
       }
     }

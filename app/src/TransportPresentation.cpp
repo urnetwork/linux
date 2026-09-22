@@ -12,10 +12,10 @@
 
 namespace urnw::transport {
 
-std::string DisplayName(const std::string& transportType) {
+std::string DisplayName(const std::string& transportType, bool h1PlusActive) {
   // product names, not localized (the brief: whodis / whodis pump are names)
   if (transportType == urnet::TransportTypeH3) return "H3";
-  if (transportType == urnet::TransportTypeH1) return "H1";
+  if (transportType == urnet::TransportTypeH1) return h1PlusActive ? "H1+" : "H1";
   if (transportType == urnet::TransportTypeDns) return "whodis";
   if (transportType == urnet::TransportTypeDnsPump) return "whodis pump";
   if (transportType == urnet::TransportTypeP2p) return "P2P";

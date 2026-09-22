@@ -25,7 +25,7 @@ namespace urnw::transport {
 // SDK's unknown type: admitted but not yet attributed to a physical carrier)
 // is a plain word and is. An unrecognized type (a newer SDK vocabulary) shows
 // its raw id.
-std::string DisplayName(const std::string& transportType);
+std::string DisplayName(const std::string& transportType, bool h1PlusActive = false);
 
 // A one line description for the settings editor rows; empty for the
 // non-selectable types.
