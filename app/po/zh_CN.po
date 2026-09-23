@@ -69,6 +69,11 @@ msgctxt "add"
 msgid "Add"
 msgstr "添加"
 
+#. Split rules: the button (and its icon's accessibility label) that adds the typed host to the rule.
+msgctxt "add_a_rule"
+msgid "Add a rule"
+msgstr "添加规则"
+
 #. A title for the screen that lets the user add a new sign-in method.
 msgctxt "add_a_sign_in_method"
 msgid "Add a sign-in method"
@@ -1332,6 +1337,11 @@ msgstr "删除帐户"
 msgctxt "delete_account_2"
 msgid "Delete account"
 msgstr "删除账户"
+
+#. Delete account dialog: asks the user to type the network name back before the delete button enables. {network} is the account's network name.
+msgctxt "delete_account_type_network_name"
+msgid "Type {} to confirm."
+msgstr "输入 {} 以确认。"
 
 #. Developer page: report line when the SDK refused a requested action.
 msgctxt "dev_action_declined"
@@ -3087,6 +3097,11 @@ msgctxt "no"
 msgid "No"
 msgstr "否"
 
+#. App split rules: empty state when the search matches no installed app.
+msgctxt "no_apps_found"
+msgid "No apps found"
+msgstr "未找到应用"
+
 #. Used in Main/Account/TransferBalanceCodes/TransferBalanceCodesView.swift.
 msgctxt "no_balance_codes_found"
 msgid "No balance codes found"
@@ -4028,6 +4043,16 @@ msgstr "保存日志"
 msgctxt "save_logs_2"
 msgid "Save Logs"
 msgstr "保存日志"
+
+#. Split rules: note under the host input when the entry will be stored in a normalised form. {value} is that form, for example 10.0.0.0/8 for a typed 10.0.0.5/8.
+msgctxt "saved_as"
+msgid "Saved as {}"
+msgstr "已保存为 {}"
+
+#. App split rules: placeholder in the search field that filters the installed apps by name or package id.
+msgctxt "search_apps_placeholder"
+msgid "Search apps"
+msgstr "搜索应用"
 
 #. Locations List
 msgctxt "search_placeholder"
@@ -5568,6 +5593,41 @@ msgctxt "split_rule_description"
 msgid "Selected hosts are routed locally and bypass the tunnel."
 msgstr "选中的主机将走本地路由，绕过隧道。"
 
+#. Split rules: validation error for a host entry that is not a valid host name.
+msgctxt "split_rule_error_bad_name"
+msgid "Enter a host name like example.com."
+msgstr "输入主机名，例如 example.com。"
+
+#. Split rules: validation error for an entry that looks like an IP range but is not a valid CIDR.
+msgctxt "split_rule_error_bad_range"
+msgid "Enter an IP range like 10.0.0.0/8."
+msgstr "输入 IP 范围，例如 10.0.0.0/8。"
+
+#. Split rules: validation error for a wildcard entry with nothing after the asterisk.
+msgctxt "split_rule_error_bad_wildcard"
+msgid "A wildcard needs a name after it, like *.example.com."
+msgstr "通配符后面需要跟一个名称，例如 *.example.com。"
+
+#. Split rules: validation error when a broader entry already in the rule covers the typed one. {rule} is that broader entry, for example *.example.com or 10.0.0.0/8.
+msgctxt "split_rule_error_covered"
+msgid "Already covered by {} in this rule."
+msgstr "此规则中的 {} 已涵盖该项。"
+
+#. Split rules: validation error when the typed entry is already in the rule.
+msgctxt "split_rule_error_duplicate"
+msgid "Already in this rule."
+msgstr "此规则中已存在。"
+
+#. Split rules: validation error for a host name with non-ASCII characters; the rule wants the punycode form.
+msgctxt "split_rule_error_not_ascii"
+msgid "Use the ASCII form of the name."
+msgstr "请使用名称的 ASCII 形式。"
+
+#. Split rules: placeholder in the host input listing the accepted forms (a host name, a wildcard, a CIDR range).
+msgctxt "split_rule_host_placeholder"
+msgid "example.com, *.example.com, 10.0.0.0/8"
+msgstr "example.com, *.example.com, 10.0.0.0/8"
+
 #. transfer stats and split rules
 msgctxt "split_rules"
 msgid "Split rules"
@@ -5582,6 +5642,11 @@ msgstr "连接后，路由活动会显示在这里。"
 msgctxt "split_rules_hint"
 msgid "Tap traffic below to route it locally, bypassing the tunnel."
 msgstr "点击下方流量，将其改走本地路由，绕过隧道。"
+
+#. Split rules on android, which has a host input above the traffic list: how to add to the rule. The apple/linux screens without the input keep split_rules_hint.
+msgctxt "split_rules_host_hint"
+msgid "Add a host above, or tap traffic below to route it locally, bypassing the tunnel."
+msgstr "在上方添加主机，或点击下方流量，将其改走本地路由，绕过隧道。"
 
 #. transfer stats and split rules
 msgctxt "split_rules_info_note"
