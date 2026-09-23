@@ -51,6 +51,20 @@ void MakeCardTappable(Gtk::Box& card, std::function<void()> open) {
   card.add_controller(gesture);
 }
 
+// an informational widget inside a tappable card: a tap on it does nothing.
+// It claims the press, like the transport bar, so the card's click never sees
+// the release, and it drops the card's pointer cursor so it does not read as
+// tappable.
+void BlockCardTap(Gtk::Widget& widget) {
+  gtk_widget_set_cursor_from_name(widget.gobj(), "default");
+  auto gesture = Gtk::GestureClick::create();
+  Gtk::GestureClick* claiming = gesture.get();
+  gesture->signal_pressed().connect([claiming](int, double, double) {
+    claiming->set_state(Gtk::EventSequenceState::CLAIMED);
+  });
+  widget.add_controller(gesture);
+}
+
 }  // namespace
 
 ConnectDrawer::ConnectDrawer(SdkHost& host, Gtk::Window& parent,
@@ -339,16 +353,17 @@ void ConnectDrawer::BuildClientStatsCard() {
   card->append(*transportBar_);
   // the ip family status row, directly under the transport bar: the
   // Dualstack / IPv4 / IPv6 columns with their connected and connecting
-  // counts. Decorative -- a tap on it is a tap on the card (the contract
-  // details), like the charts.
+  // counts. Informational -- a tap on it does nothing, rather than open the
+  // card's contract details.
   ipFamilyStatusRow_ = Gtk::make_managed<IpFamilyStatusRow>();
+  BlockCardTap(*ipFamilyStatusRow_);
   card->append(*ipFamilyStatusRow_);
   // the extender panel, directly under the status row (EXTENDER.md K4): the
   // active extenders as hollow rings in their own colors, the N-of-M count and
-  // the gossip network's status dot. Decorative like the status row -- K4 is
-  // explicit that tapping does nothing and there is no details panel -- so a
-  // tap on it is a tap on the card.
+  // the gossip network's status dot. Informational like the status row -- K4
+  // is explicit that tapping does nothing and there is no details panel.
   extenderPanel_ = Gtk::make_managed<ExtenderPanel>();
+  BlockCardTap(*extenderPanel_);
   card->append(*extenderPanel_);
   blockChart_ = Gtk::make_managed<TransferChart>(T_("blocked", "Blocked"),
                                                  TransferChart::Route::Block, kUrCoral,
