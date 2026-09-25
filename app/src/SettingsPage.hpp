@@ -11,7 +11,11 @@
 //   Pane B "Device" — what this machine IS: the Device group (name, spec),
 //     Post Quantum Identity, then Advanced (the advanced-mode toggle and
 //     Save logs).
-//   Pane C "About" — what the app IS: the version rows and Stay in touch.
+//   Pane C "About" — what the app IS: the version rows, Licenses, and Stay
+//     in touch. Licenses is also reachable when About is folded away: a twin
+//     "About > Licenses" group at the foot of pane A shows exactly while pane
+//     C is hidden (the attributions some licenses require must never depend
+//     on the window being wide).
 //
 // Neither the account-subject sections (security / referrals / plan / danger)
 // nor Sign out live here: R4 moved them to the ACCOUNT destination's hosts.
@@ -61,6 +65,7 @@ class ProviderIdentitiesSheet;
 // Built for this destination, file-local to SettingsPage.cpp (spec §6.1/§6.2).
 class SettingsDeviceNameSheet;
 class SettingsBlockedLocationsSheet;
+class LicensesSheet;
 
 // §2.1 — the six terminal states of every async field on this destination and
 // its sheets. NoDevice is NOT a nicety: "signed in but the service is not up"
@@ -121,6 +126,8 @@ class SettingsPage : public Gtk::Box {
   void BuildAdvancedSection(Gtk::Box& host);
   void BuildVersionSection(Gtk::Box& host);
   void BuildStayInTouchSection(Gtk::Box& host);
+  // The "Licenses" row (built twice: in About, and in pane A's folded twin).
+  void AddLicensesRow(Gtk::Box& host);
 
   // ---- loads ---------------------------------------------------------------
   // No round trips: client id off the device, kill switch off LocalState.
@@ -144,6 +151,7 @@ class SettingsPage : public Gtk::Box {
   void ShowDeviceNameSheet();
   void ShowAppSplitRulesSheet();
   void ShowIdentitySheet();
+  void ShowLicensesSheet();
 
   // ---- helpers -------------------------------------------------------------
   void Snack(const Glib::ustring& message, bool error);
@@ -163,6 +171,8 @@ class SettingsPage : public Gtk::Box {
   // request, hexpand then splits the remainder evenly between them
   Glib::RefPtr<Gtk::SizeGroup> paneSizes_;
   int lastFold_ = -1;  // 3 / 2 / 1 panes; -1 = never applied
+  // pane A's "About > Licenses" twin: visible exactly while pane C is folded
+  Gtk::Box* licensesFoldedHost_ = nullptr;
 
   // ---- Pane A: General -----------------------------------------------------
   Gtk::Switch* productUpdates_ = nullptr;
@@ -201,6 +211,7 @@ class SettingsPage : public Gtk::Box {
   std::unique_ptr<SettingsBlockedLocationsSheet> blockedSheet_;
   std::unique_ptr<SplitRulesSheet> splitRulesSheet_;
   std::unique_ptr<ProviderIdentitiesSheet> identitiesSheet_;
+  std::unique_ptr<LicensesSheet> licensesSheet_;
   std::unique_ptr<Gtk::Window> confirmDialog_;  // the uninstall confirmation
 };
 

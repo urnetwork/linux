@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MPL-2.0
 #
 # Smoketest build for the linux app — regenerates the gettext catalogs from
-# the localization store (../localizations/keys) like the pipeline does, then
-# runs the same build the pipeline runs: build/all/build-linux.sh (cgo SDK .so
+# the localization store (../localizations/keys) like the pipeline does, checks
+# the SDK's license list (../sdk/license.yml) for drift, then runs the same build the pipeline runs: build/all/build-linux.sh (cgo SDK .so
 # cross-built natively via zig for both arches, then per arch two Docker
 # images: the daemon .deb + install tarball on ubuntu 22.04, and the GUI
 # AppImage on 24.04). See build/BUILD-PLATFORMS.md and linux/APPIMAGE.md.
@@ -33,6 +33,15 @@ echo "== sync localizations (store -> app/po/*.po)"
 (cd "$root/localizations" &&
     { [ -d node_modules ] || npm ci --no-audit --no-fund; } &&
     npm run gen:linux)
+
+# The Licenses screen (Settings > About > Licenses) shows the SDK's embedded
+# license.yml. Fail before the expensive build when that list no longer matches
+# the Go modules and vendored components the linux build ships — the fix is
+# `go run ./licenses` in the sdk repo. Runs here, on the host, because this is
+# where the sdk sibling exists; the build containers only ever receive the
+# prebuilt SDK zip. Offline: -check compares names/versions, never fetches text.
+echo "== license list drift check (sdk/license.yml, linux)"
+go -C "$root/sdk" run ./licenses -check linux
 
 echo "== pipeline linux build (zig cgo cross + daemon/gui containers)"
 SRC_HOME="$root" \

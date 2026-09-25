@@ -3975,6 +3975,31 @@ msgctxt "learn_more_protocol_page"
 msgid "Learn more at the protocol page"
 msgstr "Learn more at the protocol page"
 
+#. Settings row and screen title: the open source licenses and data attributions the app includes
+msgctxt "licenses"
+msgid "Licenses"
+msgstr "Licenses"
+
+#. Licenses screen: section header for the data sources (IP location, blocklists, maps)
+msgctxt "licenses_data_header"
+msgid "Data attributions"
+msgstr "Data attributions"
+
+#. Licenses screen: the paragraph above the list
+msgctxt "licenses_intro"
+msgid "URnetwork is built with the open source software and data below. Each entry shows its license and any notice it requires."
+msgstr "URnetwork is built with the open source software and data below. Each entry shows its license and any notice it requires."
+
+#. Licenses detail: link to the component's project home page
+msgctxt "licenses_project_page"
+msgid "Project page"
+msgstr "Project page"
+
+#. Licenses screen: section header for the open source libraries and fonts
+msgctxt "licenses_software_header"
+msgid "Open source software"
+msgstr "Open source software"
+
 #. A description of the add auth sheet.
 msgctxt "link_another_way_to_sign_in_to"
 msgid "Link another way to sign in to your account."
@@ -4732,6 +4757,11 @@ msgstr "Opening your wallet in the browser…"
 msgctxt "or"
 msgid "or"
 msgstr "or"
+
+#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+msgctxt "other"
+msgid "Other"
+msgstr "Other"
 
 #. The one USDC mention: the Solana subscription payment note.
 msgctxt "paid_in_usdc_on_solana"

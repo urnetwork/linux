@@ -2567,6 +2567,31 @@ msgctxt "learn_more_protocol_page"
 msgid "Learn more at the protocol page"
 msgstr "Meer informatie op de protocolpagina"
 
+#. Settings row and screen title: the open source licenses and data attributions the app includes
+msgctxt "licenses"
+msgid "Licenses"
+msgstr "Licenties"
+
+#. Licenses screen: section header for the data sources (IP location, blocklists, maps)
+msgctxt "licenses_data_header"
+msgid "Data attributions"
+msgstr "Gegevensbronnen"
+
+#. Licenses screen: the paragraph above the list
+msgctxt "licenses_intro"
+msgid "URnetwork is built with the open source software and data below. Each entry shows its license and any notice it requires."
+msgstr "URnetwork is gebouwd met de onderstaande opensourcesoftware en gegevens. Bij elk item staan de licentie en eventuele verplichte vermeldingen."
+
+#. Licenses detail: link to the component's project home page
+msgctxt "licenses_project_page"
+msgid "Project page"
+msgstr "Projectpagina"
+
+#. Licenses screen: section header for the open source libraries and fonts
+msgctxt "licenses_software_header"
+msgid "Open source software"
+msgstr "Opensourcesoftware"
+
 #. A description of the add auth sheet.
 msgctxt "link_another_way_to_sign_in_to"
 msgid "Link another way to sign in to your account."
@@ -3299,6 +3324,11 @@ msgstr "Wallet wordt in de browser geopend…"
 msgctxt "or"
 msgid "or"
 msgstr "of"
+
+#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+msgctxt "other"
+msgid "Other"
+msgstr "Andere"
 
 #. Call to action
 msgctxt "participate"

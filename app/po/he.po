@@ -2579,6 +2579,31 @@ msgctxt "learn_more_protocol_page"
 msgid "Learn more at the protocol page"
 msgstr "למידע נוסף בדף הפרוטוקול"
 
+#. Settings row and screen title: the open source licenses and data attributions the app includes
+msgctxt "licenses"
+msgid "Licenses"
+msgstr "רישיונות"
+
+#. Licenses screen: section header for the data sources (IP location, blocklists, maps)
+msgctxt "licenses_data_header"
+msgid "Data attributions"
+msgstr "ייחוס נתונים"
+
+#. Licenses screen: the paragraph above the list
+msgctxt "licenses_intro"
+msgid "URnetwork is built with the open source software and data below. Each entry shows its license and any notice it requires."
+msgstr "URnetwork בנוי בעזרת התוכנה בקוד פתוח והנתונים שלהלן. כל פריט מציג את הרישיון שלו וכל הודעה שהוא מחייב."
+
+#. Licenses detail: link to the component's project home page
+msgctxt "licenses_project_page"
+msgid "Project page"
+msgstr "דף הפרויקט"
+
+#. Licenses screen: section header for the open source libraries and fonts
+msgctxt "licenses_software_header"
+msgid "Open source software"
+msgstr "תוכנה בקוד פתוח"
+
 #. A description of the add auth sheet.
 msgctxt "link_another_way_to_sign_in_to"
 msgid "Link another way to sign in to your account."
@@ -3315,6 +3340,11 @@ msgstr "פותח את הארנק שלך בדפדפן…"
 msgctxt "or"
 msgid "or"
 msgstr "או"
+
+#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+msgctxt "other"
+msgid "Other"
+msgstr "אחר"
 
 #. Call to action
 msgctxt "participate"

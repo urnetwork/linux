@@ -2561,6 +2561,31 @@ msgctxt "learn_more_protocol_page"
 msgid "Learn more at the protocol page"
 msgstr "Tìm hiểu thêm tại trang giao thức"
 
+#. Settings row and screen title: the open source licenses and data attributions the app includes
+msgctxt "licenses"
+msgid "Licenses"
+msgstr "Giấy phép"
+
+#. Licenses screen: section header for the data sources (IP location, blocklists, maps)
+msgctxt "licenses_data_header"
+msgid "Data attributions"
+msgstr "Nguồn dữ liệu"
+
+#. Licenses screen: the paragraph above the list
+msgctxt "licenses_intro"
+msgid "URnetwork is built with the open source software and data below. Each entry shows its license and any notice it requires."
+msgstr "URnetwork được xây dựng bằng phần mềm nguồn mở và dữ liệu dưới đây. Mỗi mục hiển thị giấy phép và mọi thông báo bắt buộc."
+
+#. Licenses detail: link to the component's project home page
+msgctxt "licenses_project_page"
+msgid "Project page"
+msgstr "Trang dự án"
+
+#. Licenses screen: section header for the open source libraries and fonts
+msgctxt "licenses_software_header"
+msgid "Open source software"
+msgstr "Phần mềm nguồn mở"
+
 #. A description of the add auth sheet.
 msgctxt "link_another_way_to_sign_in_to"
 msgid "Link another way to sign in to your account."
@@ -3291,6 +3316,11 @@ msgstr "Đang mở ví của bạn trong trình duyệt…"
 msgctxt "or"
 msgid "or"
 msgstr "hoặc"
+
+#. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+msgctxt "other"
+msgid "Other"
+msgstr "Khác"
 
 #. Call to action
 msgctxt "participate"

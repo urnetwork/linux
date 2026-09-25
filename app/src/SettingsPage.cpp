@@ -16,6 +16,7 @@
 #include "AppPrefs.hpp"
 #include "I18n.hpp"
 #include "KillSwitchCopy.hpp"
+#include "LicensesSheet.hpp"
 #include "PaneKit.hpp"
 #include "PostQuantumIdentity.hpp"  // ProviderIdentitiesSheet (reused as-is)
 #include "SplitRulesSheet.hpp"      // reused as-is (the split-rule editor)
@@ -712,6 +713,13 @@ SettingsPage::SettingsPage(SdkHost& host)
   kit::SetAccessibleLabel(*paneA_.root, T_("general", "General"));
   BuildGeneralSection(*paneA_.content);
   BuildConnectionsSection(*paneA_.content);
+  // The Licenses twin for a folded About pane (see ApplyBreakpoint). Its own
+  // "About" group, so it never reads as a Connections row.
+  licensesFoldedHost_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+  licensesFoldedHost_->append(*kit::MakePaneGroupHeader(T_("about", "About")).root);
+  AddLicensesRow(*licensesFoldedHost_);
+  licensesFoldedHost_->set_visible(false);  // all three panes show until folded
+  paneA_.content->append(*licensesFoldedHost_);
   paneSizes_->add_widget(*paneA_.root);
   append(*paneA_.root);
 
@@ -735,6 +743,7 @@ SettingsPage::SettingsPage(SdkHost& host)
   paneC_.root->set_hexpand(true);
   kit::SetAccessibleLabel(*paneC_.root, T_("about", "About"));
   BuildVersionSection(*paneC_.content);
+  AddLicensesRow(*paneC_.content);  // closes the About group, above Stay in touch
   BuildStayInTouchSection(*paneC_.content);
   paneSizes_->add_widget(*paneC_.root);
   append(*paneC_.root);
@@ -941,6 +950,8 @@ void SettingsPage::ApplyBreakpoint(int widthDip) {
   ruleC_->set_visible(panes >= 3);
   paneB_.root->set_visible(panes >= 2);
   ruleB_->set_visible(panes >= 2);
+  // Licenses follows About: while pane C is folded its twin closes pane A.
+  licensesFoldedHost_->set_visible(panes < 3);
 }
 
 // ---- Pane A: General (§3.1) -------------------------------------------------
@@ -1179,6 +1190,15 @@ void SettingsPage::BuildVersionSection(Gtk::Box& host) {
   // correct answer, not a bug.
   auto* appValue = AddValueRow(host, T_("app_version", "App version"));
   ApplyFieldState(*appValue, SettingsFieldState::Loaded, UR_APP_VERSION);
+}
+
+// ---- Pane C: Licenses -------------------------------------------------------
+
+void SettingsPage::AddLicensesRow(Gtk::Box& host) {
+  // A local read of the SDK's embedded list: no session gate, no FieldState.
+  auto row = kit::MakePaneTwoLineRowButton(T_("licenses", "Licenses"), {}, kRowTall);
+  row.root->signal_clicked().connect([this] { ShowLicensesSheet(); });
+  host.append(*row.root);
 }
 
 // ---- Pane C: Stay in touch (§5.2) -------------------------------------------
@@ -1551,6 +1571,13 @@ void SettingsPage::ShowIdentitySheet() {
     identitiesSheet_ = std::make_unique<ProviderIdentitiesSheet>(*root, host_);
   }
   identitiesSheet_->Open();
+}
+
+void SettingsPage::ShowLicensesSheet() {
+  Gtk::Window* root = RootWindow();
+  if (root == nullptr) return;
+  if (!licensesSheet_) licensesSheet_ = std::make_unique<LicensesSheet>(*root);
+  licensesSheet_->Open();
 }
 
 // ---- snackbar ---------------------------------------------------------------
