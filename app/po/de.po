@@ -54,10 +54,20 @@ msgctxt "account_auth_verified"
 msgid "{} (verified)"
 msgstr "{} (verifiziert)"
 
+#. Shown when a purchase is refused before contacting the App Store because the networkId is missing or unparseable — the purchase could never be credited to anyone (Shared/ViewModels/AppStoreSubscriptionManager.swift). This used to be a silent no-op.
+msgctxt "account_isn_t_ready_for_purchases"
+msgid "Your account isn't ready for purchases. Please restart the app and try again."
+msgstr "Dein Konto ist noch nicht für Käufe bereit. Bitte starte die App neu und versuche es erneut."
+
 #. Sign-in error shown when the account exists but has not been verified yet.
 msgctxt "account_needs_verification"
 msgid "This account needs verification. Check your email."
 msgstr "Dieses Konto muss bestätigt werden. Überprüfe deine E-Mails."
+
+#. Accessibility label of the row of rings, one per extender carrying a live connection.
+msgctxt "active_extenders"
+msgid "Active extenders"
+msgstr "Aktive Extender"
 
 #. A heading for the list of current block actions.
 msgctxt "activity"
@@ -107,6 +117,11 @@ msgstr "Anmeldemethode hinzufügen"
 msgctxt "add_sign_in_method_2"
 msgid "Add Sign-In Method"
 msgstr "Anmeldemethode hinzufügen"
+
+#. State when the gas key has no TAO.
+msgctxt "add_tao_for_gas"
+msgid "Add TAO for gas"
+msgstr "TAO für Gas hinzufügen"
 
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
@@ -525,6 +540,11 @@ msgctxt "app_version"
 msgid "App version"
 msgstr "App-Version"
 
+#. A method of adding a sign-in method.
+msgctxt "apple"
+msgid "Apple"
+msgstr "Apple"
+
 #. Snackbar message displayed when an Apple sign-in method is added.
 msgctxt "apple_sign_in_method_added"
 msgid "Apple sign-in method added"
@@ -688,10 +708,25 @@ msgctxt "balance_code"
 msgid "Balance code"
 msgstr "Guthabencode"
 
+#. Redeem balance code: the server answered that this code was already redeemed. Distinct from invalid -- the user may have redeemed it on an earlier attempt that looked like a failure.
+msgctxt "balance_code_already_redeemed_message"
+msgid "This balance code has already been redeemed. If you redeemed it earlier, the data is already on your balance."
+msgstr "Dieser Guthabencode wurde bereits eingelöst. Wenn du ihn schon früher eingelöst hast, sind die Daten bereits in deinem Guthaben."
+
+#. Redeem balance code: the server answered and rejected the code as unknown/invalid. Distinct from a transport failure, which must never be reported as a bad code.
+msgctxt "balance_code_invalid_message"
+msgid "That balance code isn't valid. Check the code and try again."
+msgstr "Dieser Guthabencode ist ungültig. Überprüfe den Code und versuche es erneut."
+
 #. Confirmation shown after a balance code is redeemed.
 msgctxt "balance_code_redeemed"
 msgid "Balance code redeemed."
 msgstr "Guthabencode eingelöst."
+
+#. Redeem balance code: the request never got a server answer (network failure). Must NOT be worded as 'bad code' -- the redeem may have committed server-side, so tell the user to check their balance before retrying.
+msgctxt "balance_code_transport_error"
+msgid "We couldn't reach the server — check your connection. If you were charged, the code may already be applied; check your balance before trying again."
+msgstr "Wir konnten den Server nicht erreichen — überprüfe deine Verbindung. Falls dir etwas berechnet wurde, ist der Code möglicherweise schon angewendet; prüfe dein Guthaben, bevor du es erneut versuchst."
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "balance_code_where_to_buy"
@@ -702,6 +737,11 @@ msgstr "Noch keinen Code? Datencodes kannst du auf ur.io kaufen und dir per E-Ma
 msgctxt "balance_codes_link"
 msgid "Balance codes"
 msgstr "Guthabencodes"
+
+#. Linux redeem-code sheet: shown in place of the redeemed-codes history when getNetworkRedeemedBalanceCodes FAILS (transport error, no response, or a server-side error) — distinct from the empty state's "No balance codes found", which is only for a successful fetch with no codes.
+msgctxt "balance_codes_load_error"
+msgid "Couldn't load your balance codes. Check your connection and try again."
+msgstr "Deine Guthabencodes konnten nicht geladen werden. Überprüfe deine Verbindung und versuche es erneut."
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "balance_codes_title"
@@ -723,6 +763,11 @@ msgctxt "best_matches"
 msgid "Best matches"
 msgstr "Beste Treffer"
 
+#. Gold pill on the recommended (annual) plan card.
+msgctxt "best_value"
+msgid "Best value"
+msgstr "Bestes Angebot"
+
 #. Used in Main/Account/Wallet/WalletView.swift.
 msgctxt "bittensor"
 msgid "Bittensor"
@@ -732,6 +777,11 @@ msgstr "Bittensor"
 msgctxt "bittensor_sign_in"
 msgid "Sign in with Bittensor"
 msgstr "Mit Bittensor anmelden"
+
+#. Label of the connected wallet block.
+msgctxt "bittensor_wallet"
+msgid "Bittensor wallet"
+msgstr "Bittensor-Wallet"
 
 #. dns settings
 msgctxt "block_ads_and_trackers"
@@ -818,10 +868,20 @@ msgctxt "bypass_vpn"
 msgid "Bypass VPN"
 msgstr "VPN umgehen"
 
+#. Shown when the camera permission was denied on the scan screen.
+msgctxt "camera_permission_needed"
+msgid "Camera access is needed to scan a code."
+msgstr "Zum Scannen eines Codes wird Zugriff auf die Kamera benötigt."
+
 #. Call to action
 msgctxt "cancel"
 msgid "Cancel"
 msgstr "Brich ab"
+
+#. Error when the subnet RPC cannot be reached.
+msgctxt "chain_rpc_unreachable"
+msgid "The chain RPC is unreachable. Try again."
+msgstr "Der Chain-RPC ist nicht erreichbar. Versuche es erneut."
 
 #. Call to action
 msgctxt "change"
@@ -873,10 +933,40 @@ msgctxt "checking_solana_transactions"
 msgid "Checking for Solana Transactions"
 msgstr "Überprüfung von Solana-Transaktionen"
 
+#. Progress text while the address is validated.
+msgctxt "checking_wallet_address"
+msgid "Checking address…"
+msgstr "Adresse wird geprüft…"
+
+#. Upgrade sheet: the system browser could not be opened for the hosted checkout url. The app appends the url itself on the next line (selectable) so the user can copy it into a browser by hand — never advancing to the waiting page with no payment page open.
+msgctxt "checkout_browser_launch_failed"
+msgid "We couldn't open your browser. Copy this link into a browser to finish checkout:"
+msgstr "Wir konnten deinen Browser nicht öffnen. Kopiere diesen Link in einen Browser, um den Kauf abzuschließen:"
+
+#. Upgrade sheet waiting page: the embedded checkout webview crashed after the payment form had rendered, so a charge may already have gone through with only the redirect lost. Shown while the confirmation poll asks the server for the payment webhook; must never invite buying again.
+msgctxt "checkout_interrupted_confirming"
+msgid "The checkout view closed unexpectedly. If your payment went through, your plan updates here automatically — there's no need to buy again."
+msgstr "Die Kaufansicht wurde unerwartet geschlossen. Falls deine Zahlung durchgegangen ist, wird dein Plan hier automatisch aktualisiert — du musst nicht noch einmal kaufen."
+
 #. Shown after the app hands the user to the Stripe hosted checkout in the system browser. The app polls the server and flips the plan automatically when the payment webhook lands.
 msgctxt "checkout_opened_in_browser"
 msgid "Complete your purchase in the browser. Your plan updates here automatically once payment is confirmed."
 msgstr "Schließe den Kauf im Browser ab. Dein Plan wird hier automatisch aktualisiert, sobald die Zahlung bestätigt ist."
+
+#. Button on desktop: pick a file that contains a QR code image.
+msgctxt "choose_file"
+msgid "Choose file"
+msgstr "Datei auswählen"
+
+#. Button on desktop: pick an image file that contains a QR code.
+msgctxt "choose_image_file"
+msgid "Choose image file"
+msgstr "Bilddatei auswählen"
+
+#. Button: pick a photo that contains a QR code.
+msgctxt "choose_photo"
+msgid "Choose photo"
+msgstr "Foto auswählen"
 
 #. Provider list group title for cities
 msgctxt "cities"
@@ -888,6 +978,36 @@ msgctxt "claim"
 msgid "Claim"
 msgstr "Einlösen"
 
+#. Subtitle of the claim dialog.
+msgctxt "claim_across_epochs"
+msgid "Across {} finalized epochs"
+msgstr "Abgeschlossene Epochen: {}"
+
+#. Title of the claim dialog.
+msgctxt "claim_alpha_title"
+msgid "Claim SN25α"
+msgstr "SN25α einlösen"
+
+#. Claim button with the amount.
+msgctxt "claim_amount_button"
+msgid "Claim {}"
+msgstr "{} einlösen"
+
+#. Claim state: confirmed on chain.
+msgctxt "claim_confirmed"
+msgid "Claimed"
+msgstr "Eingelöst"
+
+#. Claim state: past the vault's expiry block.
+msgctxt "claim_expired"
+msgid "Expired"
+msgstr "Abgelaufen"
+
+#. Claim state: failed.
+msgctxt "claim_failed"
+msgid "Failed"
+msgstr "Fehlgeschlagen"
+
 #. Call to action
 msgctxt "claim_multiplier"
 msgid "Claim Multiplier"
@@ -897,6 +1017,46 @@ msgstr "Multiplikator beanspruchen"
 msgctxt "claim_network_name_hint"
 msgid "Claim a custom network name to replace your auto-generated one"
 msgstr "Sichere dir einen eigenen Netzwerknamen, der deinen automatisch generierten ersetzt"
+
+#. Per-epoch status while the claim transaction is being sent.
+msgctxt "claim_sending_linux"
+msgid "Sending…"
+msgstr "Wird gesendet…"
+
+#. Explainer under the claim button.
+msgctxt "claim_sends_from_device"
+msgid "Your device sends the claim to the vault contract. Gas is paid in TAO from your gas key. Alpha lands on your coldkey."
+msgstr "Dein Gerät sendet die Einlösung an den Vault-Vertrag. Das Gas wird in TAO von deinem Gas-Schlüssel bezahlt. Das Alpha landet auf deinem Coldkey."
+
+#. Claim state: transaction sent.
+msgctxt "claim_sent"
+msgid "Sent"
+msgstr "Gesendet"
+
+#. Destination line on the claim dialog: the coldkey the alpha lands on.
+msgctxt "claim_to_address_linux"
+msgid "To {}"
+msgstr "An {}"
+
+#. Shown when the device cannot send claims (no gas key on this host).
+msgctxt "claim_unavailable_linux"
+msgid "Claiming is not available on this device yet."
+msgstr "Einlösen ist auf diesem Gerät noch nicht verfügbar."
+
+#. Button on the Top 200 tile.
+msgctxt "claim_your_spot"
+msgid "Claim your spot"
+msgstr "Sichere dir deinen Platz"
+
+#. Error when an epoch can no longer be claimed.
+msgctxt "claims_for_epoch_expired"
+msgid "Claims for epoch {} have expired."
+msgstr "Die Einlösefrist für Epoche {} ist abgelaufen."
+
+#. Explainer in the claim dialog.
+msgctxt "claims_open_after_finalization"
+msgid "Claims open 48 hours after an epoch is finalized and stay open for the vault's expiry window."
+msgstr "Einlösungen sind 48 Stunden nach dem Abschluss einer Epoche möglich und bleiben für das Ablauffenster des Vaults offen."
 
 #. General UI string: a button that clears a field or setting.
 msgctxt "clear"
@@ -1008,6 +1168,11 @@ msgctxt "connect_and_open"
 msgid "Connect and open link"
 msgstr "Verbinden und Link öffnen"
 
+#. Button to connect a Bittensor coldkey.
+msgctxt "connect_bittensor_wallet"
+msgid "Connect Bittensor wallet"
+msgstr "Bittensor-Wallet verbinden"
+
 #. A label displayed above the options for connecting to a tunnel.
 msgctxt "connect_options"
 msgid "Connect options"
@@ -1017,6 +1182,16 @@ msgstr "Verbindungsoptionen"
 msgctxt "connect_seeker_wallet"
 msgid "Connect a wallet with the Saga Genesis or Seeker Pre-Order Token"
 msgstr "Verbinde eine Wallet mit dem Saga Genesis oder Seeker Vorbestellungs-Token"
+
+#. Overflow menu item next to “Connect Bittensor wallet” on the Earnings screen, and the title of the Solana connect sheet/card: connect a Solana USDC payout wallet (wallet app, or manual address entry). USDC payouts continue until the migration to Bittensor completes.
+msgctxt "connect_solana_wallet"
+msgid "Connect Solana wallet"
+msgstr "Solana-Wallet verbinden"
+
+#. Note at the top of the Solana connect sheet/card, above the wallet-app button and the manual-entry link.
+msgctxt "connect_solana_wallet_note"
+msgid "Connect a Solana wallet app, or enter a Solana USDC address manually."
+msgstr "Verbinde eine Solana-Wallet-App oder gib eine Solana-USDC-Adresse manuell ein."
 
 #. Call to action
 msgctxt "connect_to_location"
@@ -1032,6 +1207,11 @@ msgstr "URnetwork VPN verbinden"
 msgctxt "connect_wallet"
 msgid "Connect Wallet"
 msgstr "Wallet verbinden"
+
+#. Error when claiming without a wallet.
+msgctxt "connect_wallet_first"
+msgid "Connect a Bittensor wallet first."
+msgstr "Verbinde zuerst eine Bittensor-Wallet."
 
 #. Used in Main/Connect/ConnectButton/StatusIndicator/ConnectStatusIndicator.swift.
 msgctxt "connected"
@@ -1137,10 +1317,25 @@ msgctxt "copy_client_id"
 msgid "Copy client ID"
 msgstr "Client-ID kopieren"
 
+#. Button on the share screen: copy the text form of the code.
+msgctxt "copy_share_text"
+msgid "Copy share text"
+msgstr "Freigabetext kopieren"
+
 #. Button text to copy the seedphrase to the clipboard.
 msgctxt "copy_to_clipboard"
 msgid "Copy to Clipboard"
 msgstr "In die Zwischenablage kopieren"
+
+#. Shown in the upgrade sheet and intro funnel when the App Store product fetch failed, with a retry action — replaces the eternal spinner (Shared/Views/UpgradeSubscriptionSheet.swift, Shared/Views/Introduction/IntroductionView.swift).
+msgctxt "couldn_t_load_subscription_options"
+msgid "Couldn't load subscription options. Check your connection and retry."
+msgstr "Die Abo-Optionen konnten nicht geladen werden. Überprüfe deine Verbindung und versuche es erneut."
+
+#. Restore-purchases outcome: the App Store sync failed (e.g. the user cancelled the credentials prompt or the store was unreachable) and no entitlement was found locally (Shared/ViewModels/AppStoreSubscriptionManager.swift).
+msgctxt "couldn_t_restore_purchases"
+msgid "Couldn't restore purchases. Please try again."
+msgstr "Käufe konnten nicht wiederhergestellt werden. Bitte versuche es erneut."
 
 #. Snackbar shown when the external wallet app could not be opened. Used in Shared/Views/SolanaSignMessageSheet.swift and Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
 msgctxt "couldnt_open_wallet"
@@ -1317,6 +1512,11 @@ msgctxt "date_payout"
 msgid "{} Payout"
 msgstr "Auszahlung am {}"
 
+#. Onboarding data page: the daily free allowance, formatted from the server's balance (pro.yml free.data per data_period).
+msgctxt "default_daily_data"
+msgid "By default, you get {} every day."
+msgstr "Standardmäßig erhältst du jeden Tag {}."
+
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
 msgctxt "default_option"
 msgid "Default"
@@ -1357,15 +1557,125 @@ msgctxt "dev_actions_are_requests"
 msgid "Actions are requests: confirm them in the measurements and exit rows, which refresh underneath."
 msgstr "Actions are requests: confirm them in the measurements and exit rows, which refresh underneath."
 
+#. Developer tools screen (reliability surface): performance-aware affinity control label.
+msgctxt "dev_affinity_performance"
+msgid "Performance-aware affinity"
+msgstr "Leistungsbewusste Affinität"
+
+#. Developer tools screen: explanatory subtext under the performance-aware affinity control.
+msgctxt "dev_affinity_performance_detail"
+msgid "Weight new TLS races by each provider's peak acknowledged-byte rate relative to its advertised bandwidth. With hard affinity enabled, low measured donors yield to the race. Existing connections and explicit pins stay fixed"
+msgstr "Gewichtet neue TLS-Races nach der höchsten Rate bestätigter Bytes jedes Anbieters im Verhältnis zu seiner angegebenen Bandbreite. Bei aktivierter harter Affinität weichen Anbieter mit niedrigen Messwerten dem Race. Bestehende Verbindungen und explizite Pins bleiben unverändert"
+
+#. Developer tools screen (reliability surface): affinity sticky control label.
+msgctxt "dev_affinity_sticky"
+msgid "Sticky site affinity"
+msgstr "Feste Website-Affinität"
+
+#. Developer tools screen: explanatory subtext under the 'affinity sticky' control.
+msgctxt "dev_affinity_sticky_detail"
+msgid "A site's new connections stay on the exit its earlier ones already use, even past the flow cap, so a busy site keeps one egress IP. The cap still limits which exits collect new sites. Off restores the strict cap"
+msgstr "Neue Verbindungen einer Website bleiben auf dem Exit, den ihre früheren bereits nutzen, auch über das Flow-Limit hinaus, sodass eine stark genutzte Website eine Egress-IP behält. Das Limit bestimmt weiterhin, welche Exits neue Websites aufnehmen. Aus: stellt das strikte Limit wieder her"
+
 #. Developer page: label of the app version row.
 msgctxt "dev_app_version"
 msgid "App version"
 msgstr "App version"
 
+#. Developer tools screen (reliability surface): behaviour control label.
+msgctxt "dev_behaviour"
+msgid "Behaviour"
+msgstr "Verhalten"
+
+#. Developer tools screen (reliability surface): blackhole receive control label.
+msgctxt "dev_blackhole_receive"
+msgid "Keep quiet providers longer"
+msgstr "Stille Anbieter länger behalten"
+
+#. Developer tools screen: explanatory subtext under the 'blackhole receive' control.
+msgctxt "dev_blackhole_receive_detail"
+msgid "How long a provider still acknowledging traffic may return nothing before it is dropped. Off keeps them until they stop acknowledging"
+msgstr "Wie lange ein Anbieter, der Datenverkehr noch bestätigt, nichts zurückliefern darf, bevor er verworfen wird. Aus: behält ihn, bis er keine Bestätigungen mehr sendet"
+
+#. Developer tools screen (reliability surface): blast radius control label.
+msgctxt "dev_blast_radius"
+msgid "Blast radius"
+msgstr "Schadensradius"
+
+#. Developer tools screen: explanatory subtext under the 'blast radius' control.
+msgctxt "dev_blast_radius_detail"
+msgid "Connections lost per provider failure. Lower is better"
+msgstr "Verlorene Verbindungen pro Anbieterausfall. Niedriger ist besser"
+
+#. Developer tools screen: formatted value readout for 'blast radius'.
+msgctxt "dev_blast_radius_value"
+msgid "{} per failure"
+msgstr "{} pro Ausfall"
+
+#. Developer tools screen (reliability surface): busy probe control label.
+msgctxt "dev_busy_probe"
+msgid "Probe stalled exits before dropping"
+msgstr "Hängende Exits vor dem Verwerfen prüfen"
+
+#. Developer tools screen (reliability surface): busy probe budget control label.
+msgctxt "dev_busy_probe_budget"
+msgid "Busy probe wait"
+msgstr "Wartezeit der Busy-Prüfung"
+
+#. Developer tools screen: explanatory subtext under the 'busy probe budget' control.
+msgctxt "dev_busy_probe_budget_detail"
+msgid "How long the stall probe waits for an answer before convicting. Off derives half the stall bar"
+msgstr "Wie lange die Hänger-Prüfung auf eine Antwort wartet, bevor verurteilt wird. Aus: nutzt die halbe Hänger-Schwelle"
+
+#. Developer tools screen: explanatory subtext under the 'busy probe' control.
+msgctxt "dev_busy_probe_detail"
+msgid "When an exit stalls, ping it once before convicting. A congested but alive exit answers and keeps its flows; a dead one is still dropped. Off convicts on the stall bar"
+msgstr "Wenn ein Exit hängt, wird er vor dem Verurteilen einmal angepingt. Ein überlasteter, aber lebendiger Exit antwortet und behält seine Flows; ein toter wird trotzdem verworfen. Aus: verurteilt allein nach der Hänger-Schwelle"
+
+#. Developer tools screen (reliability surface): busy probes control label.
+msgctxt "dev_busy_probes"
+msgid "Busy probes"
+msgstr "Busy-Prüfungen"
+
+#. Developer tools screen: explanatory subtext under the 'busy probes' control.
+msgctxt "dev_busy_probes_detail"
+msgid "Liveness pings fired at stalled exits; acquitted ones answered and were kept, the removals the probe prevented"
+msgstr "Lebenszeichen-Pings an hängende Exits; freigesprochene haben geantwortet und wurden behalten, also Entfernungen, die die Prüfung verhindert hat"
+
+#. Developer tools screen: formatted value readout for 'busy probes'.
+msgctxt "dev_busy_probes_value"
+msgid "{0} sent / {1} acquitted"
+msgstr "{0} gesendet / {1} freigesprochen"
+
 #. Developer page: button that checks for a new release now.
 msgctxt "dev_check_updates"
 msgid "Check for updates"
 msgstr "Check for updates"
+
+#. Developer tools screen: action for choosing individual log files to export.
+msgctxt "dev_choose_logs"
+msgid "Choose logs…"
+msgstr "Logs auswählen…"
+
+#. Developer tools screen: action that deletes the diagnostics log files without touching local state, preferences or rules.
+msgctxt "dev_clear_logs"
+msgid "Clear logs"
+msgstr "Logs löschen"
+
+#. Developer tools screen: the clear-logs action's label while it runs.
+msgctxt "dev_clearing_logs"
+msgid "Clearing logs…"
+msgstr "Logs werden gelöscht…"
+
+#. Developer tools screen (reliability surface): cluster affinity control label.
+msgctxt "dev_cluster_affinity"
+msgid "Group IPs by site"
+msgstr "IPs nach Website gruppieren"
+
+#. Developer tools screen: explanatory subtext under the 'cluster affinity' control.
+msgctxt "dev_cluster_affinity_detail"
+msgid "Keeps a site on one exit when its hostname is not visible"
+msgstr "Hält eine Website auf einem Exit, wenn ihr Hostname nicht sichtbar ist"
 
 #. Developer page: table column header for the per-row action buttons.
 msgctxt "dev_col_actions"
@@ -1442,6 +1752,16 @@ msgctxt "dev_col_window"
 msgid "Window"
 msgstr "Window"
 
+#. Developer tools screen (reliability surface): comparative connect control label.
+msgctxt "dev_comparative_connect"
+msgid "Cut dead connects early"
+msgstr "Tote Verbindungsaufbauten früh abbrechen"
+
+#. Developer tools screen: explanatory subtext under the 'comparative connect' control.
+msgctxt "dev_comparative_connect_detail"
+msgid "Drop an exit that has established nothing sooner when two sibling exits are receiving. Off waits the full 30s connect bar"
+msgstr "Verwirft einen Exit, der nichts aufgebaut hat, früher, wenn zwei Geschwister-Exits empfangen. Aus: wartet die vollen 30 s der Verbindungsschwelle ab"
+
 #. Developer page: suffix after a count of affected flows.
 msgctxt "dev_count_affected"
 msgid "affected"
@@ -1467,15 +1787,207 @@ msgctxt "dev_developer"
 msgid "Developer"
 msgstr "Developer"
 
+#. Developer tools screen (reliability surface): dial failure rerace control label.
+msgctxt "dev_dial_failure_rerace"
+msgid "Retry refused connects elsewhere"
+msgstr "Abgelehnte Verbindungen woanders erneut versuchen"
+
+#. Developer tools screen: explanatory subtext under the 'dial failure rerace' control.
+msgctxt "dev_dial_failure_rerace_detail"
+msgid "When a provider can't reach a site, move the connection to another exit instead of letting it hang"
+msgstr "Wenn ein Anbieter eine Website nicht erreicht, wird die Verbindung auf einen anderen Exit verlegt, statt sie hängen zu lassen"
+
+#. Developer tools screen (reliability surface): dial failures control label.
+msgctxt "dev_dial_failures"
+msgid "Provider connect failures"
+msgstr "Verbindungsfehler bei Anbietern"
+
+#. Developer tools screen: explanatory subtext under the 'dial failures' control.
+msgctxt "dev_dial_failures_detail"
+msgid "Times a provider reported it could not open the upstream connection"
+msgstr "Wie oft ein Anbieter gemeldet hat, dass er die Upstream-Verbindung nicht öffnen konnte"
+
+#. Developer tools screen (reliability surface): drop exit control label.
+msgctxt "dev_drop_exit"
+msgid "Drop"
+msgstr "Verwerfen"
+
 #. Developer page: report line after an exit was dropped.
 msgctxt "dev_dropped_exit"
 msgid "Dropped exit"
 msgstr "Dropped exit"
 
+#. Developer tools screen (reliability surface): effective tier control label.
+msgctxt "dev_effective_tier"
+msgid "Live tier demotion"
+msgstr "Stufen-Herabstufung in Echtzeit"
+
+#. Developer tools screen: explanatory subtext under the 'effective tier' control.
+msgctxt "dev_effective_tier_detail"
+msgid "Failing dials and survived verdicts push a provider down the ranking within a second; promotion back needs clean minutes and a proven connect"
+msgstr "Fehlgeschlagene Verbindungsversuche und überstandene Urteile stufen einen Anbieter innerhalb einer Sekunde im Ranking herab; die Rückkehr nach oben braucht fehlerfreie Minuten und einen nachweislich erfolgreichen Verbindungsaufbau"
+
+#. Developer tools screen (reliability surface): evaluation pool control label.
+msgctxt "dev_evaluation_pool"
+msgid "Candidates evaluated per slot"
+msgstr "Bewertete Kandidaten pro Slot"
+
+#. Developer tools screen: explanatory subtext under the 'evaluation pool' control.
+msgctxt "dev_evaluation_pool_detail"
+msgid "How many providers a window expansion pings and ranks per slot it needs, keeping the best. 1 evaluates exactly what it needs"
+msgstr "Wie viele Anbieter eine Fenstererweiterung pro benötigtem Slot anpingt und bewertet, wobei die besten behalten werden. 1 bewertet genau so viele wie nötig"
+
+#. Developer tools screen (reliability surface): exit dial failures control label.
+msgctxt "dev_exit_dial_failures"
+msgid "{} failed dials"
+msgstr "Fehlgeschlagene Verbindungsversuche: {}"
+
+#. Developer tools screen (reliability surface): exit flows control label.
+msgctxt "dev_exit_flows"
+msgid "{} flows"
+msgstr "Flows: {}"
+
+#. Developer tools screen (reliability surface): exits control label.
+msgctxt "dev_exits"
+msgid "Exits"
+msgstr "Exits"
+
 #. Developer page: explanation of the drop, stall and shuffle actions.
 msgctxt "dev_exits_actions_detail"
 msgid "Drop, Stall and Shuffle degrade the live connection on purpose, immediately. Nothing here is queued or retried — an action that misses is reported, not replayed."
 msgstr "Drop, Stall and Shuffle degrade the live connection on purpose, immediately. Nothing here is queued or retried — an action that misses is reported, not replayed."
+
+#. Developer tools screen: action for exporting all diagnostic logs without redaction.
+msgctxt "dev_export_all_logs"
+msgid "Export all logs (raw)"
+msgstr "Alle Logs exportieren (roh)"
+
+#. Developer tools screen: error shown when diagnostic log export fails.
+msgctxt "dev_export_failed"
+msgid "Export failed: {}"
+msgstr "Export fehlgeschlagen: {}"
+
+#. Developer tools screen: explanation that a requested diagnostic item was omitted from an export.
+msgctxt "dev_export_not_included"
+msgid "Not included: {}"
+msgstr "Nicht enthalten: {}"
+
+#. Developer tools screen: action for exporting diagnostic logs with sensitive traffic details redacted.
+msgctxt "dev_export_redacted_logs"
+msgid "Export redacted logs"
+msgstr "Bereinigte Logs exportieren"
+
+#. Developer tools screen: action for exporting the selected diagnostic log files.
+msgctxt "dev_export_selected"
+msgid "Export selected"
+msgstr "Auswahl exportieren"
+
+#. Developer tools screen: action for sharing a diagnostic bundle.
+msgctxt "dev_export_share"
+msgid "Share diagnostic bundle"
+msgstr "Diagnosepaket teilen"
+
+#. Developer tools screen: summary of the number and total size of diagnostic log files exported.
+msgctxt "dev_export_summary"
+msgid "Exported {0} log file ({1})"
+msgid_plural "Exported {0} log files ({1})"
+msgstr[0] "{0} Logdatei exportiert ({1})"
+msgstr[1] "{0} Logdateien exportiert ({1})"
+
+#. Developer tools screen: explanation that a diagnostic export option is unavailable.
+msgctxt "dev_export_unavailable"
+msgid "Not available: {}"
+msgstr "Nicht verfügbar: {}"
+
+#. Developer tools screen: progress label shown while a diagnostic bundle is being exported.
+msgctxt "dev_exporting"
+msgid "Exporting…"
+msgstr "Wird exportiert…"
+
+#. Developer tools screen (reliability surface): flows opened control label.
+msgctxt "dev_flows_opened"
+msgid "Flows opened"
+msgstr "Geöffnete Flows"
+
+#. Developer tools screen: explanatory subtext under the 'flows opened' control.
+msgctxt "dev_flows_opened_detail"
+msgid "Total since reset, so runs of different lengths compare"
+msgstr "Summe seit dem Zurücksetzen, damit Läufe unterschiedlicher Länge vergleichbar sind"
+
+#. Developer tools screen (reliability surface): flows rebound control label.
+msgctxt "dev_flows_rebound"
+msgid "QUIC flows rebound"
+msgstr "Neu gebundene QUIC-Flows"
+
+#. Developer tools screen: explanatory subtext under the 'flows rebound' control.
+msgctxt "dev_flows_rebound_detail"
+msgid "Flows moved to a warm exit inside a removal; accepted means the server took the path change without a re-dial"
+msgstr "Flows, die während einer Entfernung auf einen warmen Exit verschoben wurden; akzeptiert heißt, der Server hat den Pfadwechsel ohne neuen Verbindungsaufbau übernommen"
+
+#. Developer tools screen: formatted value readout for 'flows rebound'.
+msgctxt "dev_flows_rebound_value"
+msgid "{0} ({1} accepted / {2} re-dialed)"
+msgstr "{0} ({1} akzeptiert / {2} neu verbunden)"
+
+#. Developer tools screen (reliability surface): flows reraced control label.
+msgctxt "dev_flows_reraced"
+msgid "Moved to another exit"
+msgstr "Auf anderen Exit verschoben"
+
+#. Developer tools screen: explanatory subtext under the 'flows reraced' control.
+msgctxt "dev_flows_reraced_detail"
+msgid "How many of those failures were quietly moved instead of hanging"
+msgstr "Wie viele dieser Ausfälle unbemerkt verschoben wurden, statt hängen zu bleiben"
+
+#. Developer tools screen (reliability surface): formation poll control label.
+msgctxt "dev_formation_poll"
+msgid "Fast first-exit poll"
+msgstr "Schnelle Abfrage des ersten Exits"
+
+#. Developer tools screen: explanatory subtext under the 'formation poll' control.
+msgctxt "dev_formation_poll_detail"
+msgid "How often a connecting flow re-checks an empty window, so the first request leaves right after the first exit lands. Off waits the 2s retry pace"
+msgstr "Wie oft ein Flow im Verbindungsaufbau ein leeres Fenster erneut prüft, damit die erste Anfrage direkt nach dem Eintreffen des ersten Exits losgeht. Aus: wartet den 2-s-Wiederholungstakt ab"
+
+#. Developer tools screen (reliability surface): hard fresh-flow affinity control label.
+msgctxt "dev_fresh_flow_affinity"
+msgid "Hard fresh-flow affinity"
+msgstr "Harte Affinität für neue Flows"
+
+#. Developer tools screen: explanatory subtext under the hard fresh-flow affinity control.
+msgctxt "dev_fresh_flow_affinity_detail"
+msgid "Assign each new connection to the exit its IP or domain already uses. Off is the default: every ordinary fresh connection reaches the provider race. Existing connections and explicit pins always stay fixed"
+msgstr "Weist jede neue Verbindung dem Exit zu, den ihre IP oder Domain bereits nutzt. Aus ist die Voreinstellung: Jede gewöhnliche neue Verbindung geht in das Anbieter-Race. Bestehende Verbindungen und explizite Pins bleiben immer unverändert"
+
+#. Developer tools screen (reliability surface): group follow control label.
+msgctxt "dev_group_follow"
+msgid "Follow benched exits"
+msgstr "Exits auf der Ersatzbank folgen"
+
+#. Developer tools screen: explanatory subtext under the 'group follow' control.
+msgctxt "dev_group_follow_detail"
+msgid "A quarantined exit keeps its own sites' new connections through the early bench, when the verdict is least proven, so a bench does not split the site's egress IP. New sites still avoid it. Off scatters them"
+msgstr "Ein Exit in Quarantäne behält in der frühen Ersatzbankphase, in der das Urteil am wenigsten gesichert ist, die neuen Verbindungen seiner eigenen Websites, damit die Ersatzbank die Egress-IP der Website nicht aufteilt. Neue Websites meiden ihn weiterhin. Aus: verteilt sie"
+
+#. Developer tools screen (reliability surface): group follow window control label.
+msgctxt "dev_group_follow_window"
+msgid "Follow window"
+msgstr "Folgefenster"
+
+#. Developer tools screen: explanatory subtext under the 'group follow window' control.
+msgctxt "dev_group_follow_window_detail"
+msgid "How long into a bench a site's new connections keep following their exit — early benches are usually false alarms; one that lasts is trending toward removal and stops collecting flows. Off scatters immediately"
+msgstr "Wie lange während einer Ersatzbankphase die neuen Verbindungen einer Website ihrem Exit weiter folgen — frühe Ersatzbankphasen sind meist Fehlalarme; eine, die anhält, läuft auf eine Entfernung hinaus und nimmt keine Flows mehr auf. Aus: verteilt sofort"
+
+#. Developer tools screen (reliability surface): heartbeat control label.
+msgctxt "dev_heartbeat"
+msgid "State heartbeat"
+msgstr "Status-Heartbeat"
+
+#. Developer tools screen: explanatory subtext under the 'heartbeat' control.
+msgctxt "dev_heartbeat_detail"
+msgid "How often one line summarizing live state is written to the log for later forensics. Off silences it; shorter spots a transition, longer keeps more buffer"
+msgstr "Wie oft eine Zeile mit einer Zusammenfassung des aktuellen Zustands für spätere Analysen ins Log geschrieben wird. Aus: schaltet sie stumm; kürzer erfasst Übergänge, länger behält mehr Puffer"
 
 #. Developer page: intro line under the title.
 msgctxt "dev_intro"
@@ -1522,10 +2034,115 @@ msgctxt "dev_ip_family_force6_detail"
 msgid "Control-plane connections use IPv6 only. Turn this off if the app cannot reach the server."
 msgstr "Control-plane connections use IPv6 only. Turn this off if the app cannot reach the server."
 
+#. Developer tools screen (reliability surface): load corroboration control label.
+msgctxt "dev_load_corroboration"
+msgid "Load corroboration"
+msgstr "Lastabhängige Bestätigung"
+
+#. Developer tools screen: explanatory subtext under the 'load corroboration' control.
+msgctxt "dev_load_corroboration_detail"
+msgid "Extra silent destinations required per this many flows before a busy exit can be benched on soft evidence: a 24-flow exit at 8 needs 3 silent sites, not 2. Off keeps the flat minimum"
+msgstr "Zusätzliche stille Ziele, die pro so vielen Flows nötig sind, bevor ein ausgelasteter Exit auf schwache Hinweise hin auf die Ersatzbank gesetzt werden kann: Ein Exit mit 24 Flows braucht bei 8 3 stille Websites statt 2. Aus: behält das feste Minimum"
+
+#. Developer tools screen: control label for diagnostic log detail.
+msgctxt "dev_log_verbosity"
+msgid "Log detail"
+msgstr "Log-Detailgrad"
+
+#. Developer tools screen: default diagnostic log detail level.
+msgctxt "dev_log_verbosity_default"
+msgid "Default"
+msgstr "Standard"
+
+#. Developer tools screen: explanation of the default diagnostic log detail level.
+msgctxt "dev_log_verbosity_default_detail"
+msgid "Connection errors and contract pings"
+msgstr "Verbindungsfehler und Vertrags-Pings"
+
+#. Developer tools screen: trace diagnostic log detail level.
+msgctxt "dev_log_verbosity_trace"
+msgid "Trace"
+msgstr "Trace"
+
+#. Developer tools screen: explanation of the trace diagnostic log detail level.
+msgctxt "dev_log_verbosity_trace_detail"
+msgid "Transport and window internals. Very large logs"
+msgstr "Interna von Transport und Fenster. Sehr große Logs"
+
+#. Developer tools screen: label used when the diagnostic log detail level cannot be read.
+msgctxt "dev_log_verbosity_unavailable"
+msgid "Unavailable"
+msgstr "Nicht verfügbar"
+
+#. Developer tools screen: explanation shown when the diagnostic log detail level cannot be read.
+msgctxt "dev_log_verbosity_unavailable_detail"
+msgid "There is no device to read the log level from yet. Sign in first"
+msgstr "Es gibt noch kein Gerät, von dem der Log-Level gelesen werden kann. Melde dich zuerst an"
+
+#. Developer tools screen: verbose diagnostic log detail level.
+msgctxt "dev_log_verbosity_verbose"
+msgid "Verbose"
+msgstr "Ausführlich"
+
+#. Developer tools screen: explanation of the verbose diagnostic log detail level.
+msgctxt "dev_log_verbosity_verbose_detail"
+msgid "Contract accounting and per-packet block decisions. Includes destination IP addresses"
+msgstr "Vertragsabrechnung und Blockierentscheidungen pro Paket. Enthält Ziel-IP-Adressen"
+
+#. Developer tools screen: privacy warning shown when detailed traffic logging is enabled.
+msgctxt "dev_log_verbosity_warning"
+msgid "At Verbose and above the logs contain the destination IP addresses and ports of the traffic you send. Use “Export redacted logs” to share them; the raw bundle should not leave this device."
+msgstr "Ab „Ausführlich“ enthalten die Logs die Ziel-IP-Adressen und Ports des Datenverkehrs, den du sendest. Verwende „Bereinigte Logs exportieren“, um sie zu teilen; das Rohpaket sollte dieses Gerät nicht verlassen."
+
+#. Developer tools screen: title for the detailed traffic logging privacy warning.
+msgctxt "dev_log_verbosity_warning_title"
+msgid "Logs are recording your real traffic"
+msgstr "Die Logs zeichnen deinen echten Datenverkehr auf"
+
+#. Developer tools screen (reliability surface): max flows per exit control label.
+msgctxt "dev_max_flows_per_exit"
+msgid "Max connections per exit"
+msgstr "Max. Verbindungen pro Exit"
+
+#. Developer tools screen: explanatory subtext under the 'max flows per exit' control.
+msgctxt "dev_max_flows_per_exit_detail"
+msgid "Losing an exit kills every connection on it. Lower spreads the damage; a site may then use more than one exit IP"
+msgstr "Fällt ein Exit weg, brechen alle Verbindungen darauf ab. Ein niedrigerer Wert verteilt den Schaden; eine Website nutzt dann womöglich mehr als eine Exit-IP"
+
+#. Developer tools screen (reliability surface): measure none control label.
+msgctxt "dev_measure_none"
+msgid "No provider failures yet. Stall an exit below to cause one."
+msgstr "Noch keine Anbieterausfälle. Lass unten einen Exit hängen, um einen auszulösen."
+
+#. Developer tools screen (reliability surface): measurements control label.
+msgctxt "dev_measurements"
+msgid "Measurements"
+msgstr "Messungen"
+
+#. Developer tools screen: explanatory subtext under the 'measurements' control.
+msgctxt "dev_measurements_detail"
+msgid "What a provider failure costs. Reset, run a test, read back."
+msgstr "Was ein Anbieterausfall kostet. Zurücksetzen, Test ausführen, Ergebnis ablesen."
+
 #. Developer page: button that migrates the live connection.
 msgctxt "dev_migrate"
 msgid "Migrate"
 msgstr "Migrate"
+
+#. Developer tools screen (reliability surface): migrate exit control label.
+msgctxt "dev_migrate_exit"
+msgid "Migrate"
+msgstr "Migrieren"
+
+#. Developer tools screen (reliability surface): min blackhole destinations control label.
+msgctxt "dev_min_blackhole_destinations"
+msgid "Corroborate silent exits"
+msgstr "Stille Exits gegenprüfen"
+
+#. Developer tools screen: explanatory subtext under the 'min blackhole destinations' control.
+msgctxt "dev_min_blackhole_destinations_detail"
+msgid "How many distinct destinations must be silent before an exit is convicted on no-receive, so one dead site cannot remove a working exit. Off lets a single destination convict"
+msgstr "Wie viele verschiedene Ziele still sein müssen, bevor ein Exit wegen fehlenden Empfangs verurteilt wird, damit eine einzelne tote Website keinen funktionierenden Exit entfernen kann. Aus: ein einzelnes Ziel reicht zur Verurteilung"
 
 #. Developer page: value of the flows that never came back, {done} of {total}.
 msgctxt "dev_never_came_back_value"
@@ -1541,6 +2158,11 @@ msgstr "No destinations yet."
 msgctxt "dev_no_device"
 msgid "No session. Sign in and connect to use these tools."
 msgstr "No session. Sign in and connect to use these tools."
+
+#. Developer tools screen (reliability surface): no exits control label.
+msgctxt "dev_no_exits"
+msgid "No exits. Connect first."
+msgstr "Keine Exits. Verbinde dich zuerst."
 
 #. Developer page: empty state of the probe results table.
 msgctxt "dev_no_probe_results"
@@ -1567,6 +2189,16 @@ msgctxt "dev_nothing_in_force"
 msgid "No reliability override is in force, so the settings sections are hidden rather than shown at zero. The measurements and exit readout below are live."
 msgstr "No reliability override is in force, so the settings sections are hidden rather than shown at zero. The measurements and exit readout below are live."
 
+#. Developer tools screen (reliability surface): open tools control label.
+msgctxt "dev_open_tools"
+msgid "Open developer tools"
+msgstr "Entwicklertools öffnen"
+
+#. Developer tools screen (reliability surface): probe all control label.
+msgctxt "dev_probe_all"
+msgid "Probe all exits now"
+msgstr "Alle Exits jetzt prüfen"
+
 #. Developer page: button that probes every exit now.
 msgctxt "dev_probe_all_exits_now"
 msgid "Probe all exits now"
@@ -1581,6 +2213,26 @@ msgstr "failed"
 msgctxt "dev_probe_ok"
 msgid "ok"
 msgstr "ok"
+
+#. Developer tools screen (reliability surface): probe providers control label.
+msgctxt "dev_probe_providers"
+msgid "Probe providers"
+msgstr "Anbieter prüfen"
+
+#. Developer tools screen: explanatory subtext under the 'probe providers' control.
+msgctxt "dev_probe_providers_detail"
+msgid "Qualify exits by dialing real sites through them. An answer proves the exit; silence never counts against it"
+msgstr "Qualifiziert Exits, indem echte Websites über sie angewählt werden. Eine Antwort bestätigt den Exit; Stille wird nie gegen ihn gewertet"
+
+#. Developer tools screen (reliability surface): probe sample hosts control label.
+msgctxt "dev_probe_sample_hosts"
+msgid "Probe hosts per pass"
+msgstr "Prüf-Hosts pro Durchlauf"
+
+#. Developer tools screen: explanatory subtext under the 'probe sample hosts' control.
+msgctxt "dev_probe_sample_hosts_detail"
+msgid "How many health sites one qualification pass dials through an exit. 0 probes the entire embedded list; a smaller number rotates through it in blocks"
+msgstr "Wie viele Health-Websites ein Qualifizierungsdurchlauf über einen Exit anwählt. 0 prüft die gesamte eingebettete Liste; eine kleinere Zahl arbeitet sie blockweise ab"
 
 #. Developer page: heading of the probe suite section.
 msgctxt "dev_probe_suite"
@@ -1627,30 +2279,220 @@ msgctxt "dev_probe_suite_stopped"
 msgid "Probe suite stopped"
 msgstr "Probe suite stopped"
 
+#. Developer tools screen (reliability surface): probe timeout control label.
+msgctxt "dev_probe_timeout"
+msgid "Probe wait"
+msgstr "Prüf-Wartezeit"
+
+#. Developer tools screen: explanatory subtext under the 'probe timeout' control.
+msgctxt "dev_probe_timeout_detail"
+msgid "How long a qualification probe waits for an answer. Off uses the built-in 4s. It only bounds waiting for proof, it never convicts"
+msgstr "Wie lange eine Qualifizierungsprüfung auf eine Antwort wartet. Aus: nutzt die eingebauten 4 s. Begrenzt nur das Warten auf einen Nachweis und verurteilt nie"
+
 #. Developer page: heading of the probed exits table.
 msgctxt "dev_probed_exits"
 msgid "Probed exits"
 msgstr "Probed exits"
+
+#. Developer tools screen (reliability surface): probes control label.
+msgctxt "dev_probes"
+msgid "Probes"
+msgstr "Prüfungen"
+
+#. Developer tools screen: explanatory subtext under the 'probes' control.
+msgctxt "dev_probes_detail"
+msgid "Qualification probes this session"
+msgstr "Qualifizierungsprüfungen in dieser Sitzung"
+
+#. Developer tools screen: formatted value readout for 'probes'.
+msgctxt "dev_probes_value"
+msgid "{0} sent / {1} answered"
+msgstr "{0} gesendet / {1} beantwortet"
 
 #. Developer page: value of the QUIC flows that rebound: {count} total, {accepted} accepted, {redialed} re-dialed.
 msgctxt "dev_quic_flows_rebound_value"
 msgid "{0} ({1} accepted / {2} re-dialed)"
 msgstr "{0} ({1} accepted / {2} re-dialed)"
 
+#. Developer tools screen (reliability surface): quic rebind control label.
+msgctxt "dev_quic_rebind"
+msgid "Rebind QUIC on exit loss"
+msgstr "QUIC bei Exit-Verlust neu binden"
+
+#. Developer tools screen: explanatory subtext under the 'quic rebind' control.
+msgctxt "dev_quic_rebind_detail"
+msgid "Re-pin established QUIC flows to a live exit inside the removal instead of tearing them down"
+msgstr "Bestehende QUIC-Flows während der Entfernung auf einen lebenden Exit umpinnen, statt sie abzubauen"
+
+#. Developer tools screen (reliability surface): recovery control label.
+msgctxt "dev_recovery"
+msgid "Recovery time"
+msgstr "Wiederherstellungszeit"
+
+#. Developer tools screen: explanatory subtext under the 'recovery' control.
+msgctxt "dev_recovery_detail"
+msgid "From an exit dying to that site answering again"
+msgstr "Vom Ausfall eines Exits, bis die Website wieder antwortet"
+
+#. Developer tools screen (reliability surface): recovery missed control label.
+msgctxt "dev_recovery_missed"
+msgid "Never came back"
+msgstr "Nie zurückgekehrt"
+
+#. Developer tools screen: explanatory subtext under the 'recovery missed' control.
+msgctxt "dev_recovery_missed_detail"
+msgid "Sites abandoned rather than recovered"
+msgstr "Websites, die aufgegeben statt wiederhergestellt wurden"
+
+#. Developer tools screen: formatted value readout for 'recovery missed'.
+msgctxt "dev_recovery_missed_value"
+msgid "{0} of {1}"
+msgstr "{0} von {1}"
+
 #. Developer page: value of the recovery time, {average} and {worst} are durations.
 msgctxt "dev_recovery_time_value"
 msgid "avg {0}, worst {1}"
 msgstr "avg {0}, worst {1}"
+
+#. Developer tools screen: formatted value readout for 'recovery'.
+msgctxt "dev_recovery_value"
+msgid "avg {0}, worst {1}"
+msgstr "Ø {0}, schlechtester {1}"
+
+#. Developer tools screen (reliability surface): refresh control label.
+msgctxt "dev_refresh"
+msgid "Refresh"
+msgstr "Aktualisieren"
+
+#. Developer tools screen (reliability surface): removal budget count control label.
+msgctxt "dev_removal_budget_count"
+msgid "Removal storm limit"
+msgstr "Limit für Entfernungsstürme"
+
+#. Developer tools screen: explanatory subtext under the 'removal budget count' control.
+msgctxt "dev_removal_budget_count_detail"
+msgid "How many verdict removals are allowed per window before the rest are deferred; a burst is more likely one local cause than many failures. Off removes without limit"
+msgstr "Wie viele Entfernungen durch Urteile pro Fenster erlaubt sind, bevor der Rest zurückgestellt wird; eine Häufung hat eher eine lokale Ursache als viele Ausfälle. Aus: entfernt ohne Limit"
+
+#. Developer tools screen (reliability surface): removal budget window control label.
+msgctxt "dev_removal_budget_window"
+msgid "Removal storm window"
+msgstr "Fenster für Entfernungsstürme"
+
+#. Developer tools screen: explanatory subtext under the 'removal budget window' control.
+msgctxt "dev_removal_budget_window_detail"
+msgid "The window the removal limit is counted over. Off (like a limit of 0) turns the breaker off"
+msgstr "Das Fenster, über das das Entfernungslimit gezählt wird. Aus (wie ein Limit von 0) schaltet den Schutzschalter ab"
+
+#. Developer tools screen (reliability surface): removals deferred control label.
+msgctxt "dev_removals_deferred"
+msgid "Removals deferred"
+msgstr "Zurückgestellte Entfernungen"
+
+#. Developer tools screen: explanatory subtext under the 'removals deferred' control.
+msgctxt "dev_removals_deferred_detail"
+msgid "Removals the storm breaker held back after a correlated burst"
+msgstr "Entfernungen, die der Sturm-Schutzschalter nach einer korrelierten Häufung zurückgehalten hat"
 
 #. Developer page: label before the requested value of an override.
 msgctxt "dev_requested"
 msgid "Requested:"
 msgstr "Requested:"
 
+#. Developer tools screen (reliability surface): reset defaults control label.
+msgctxt "dev_reset_defaults"
+msgid "Reset to shipped defaults"
+msgstr "Auf Werkseinstellungen zurücksetzen"
+
+#. Developer tools screen (reliability surface): reset measurements control label.
+msgctxt "dev_reset_measurements"
+msgid "Reset measurements"
+msgstr "Messungen zurücksetzen"
+
 #. Developer page: button that resets the reliability settings.
 msgctxt "dev_reset_to_shipped_defaults"
 msgid "Reset to shipped defaults"
 msgstr "Reset to shipped defaults"
+
+#. Developer tools screen (reliability surface): scheduler pause recovery control label.
+msgctxt "dev_scheduler_pause_recovery"
+msgid "Suspend recovery window"
+msgstr "Erholungsfenster nach Ruhezustand"
+
+#. Developer tools screen: explanatory subtext under the 'scheduler pause recovery' control.
+msgctxt "dev_scheduler_pause_recovery_detail"
+msgid "How long verdicts stay held after a detected suspend, giving transports time to re-register. Off uses the built-in 5s"
+msgstr "Wie lange Urteile nach einem erkannten Ruhezustand zurückgehalten werden, damit sich Transporte neu registrieren können. Aus: nutzt die eingebauten 5 s"
+
+#. Developer tools screen (reliability surface): scheduler pause tolerance control label.
+msgctxt "dev_scheduler_pause_tolerance"
+msgid "Suspend detector"
+msgstr "Ruhezustandserkennung"
+
+#. Developer tools screen: explanatory subtext under the 'scheduler pause tolerance' control.
+msgctxt "dev_scheduler_pause_tolerance_detail"
+msgid "How much timer overshoot reads as the phone being suspended rather than an exit stalling, so a resumed phone does not convict every exit at once. Off disables it"
+msgstr "Ab wie viel Timer-Überschreitung angenommen wird, dass das Telefon im Ruhezustand war und nicht ein Exit hängt, damit ein aufgewecktes Telefon nicht alle Exits auf einmal verurteilt. Aus: deaktiviert die Erkennung"
+
+#. Developer tools screen (reliability surface): scheduler pauses control label.
+msgctxt "dev_scheduler_pauses"
+msgid "Suspends caught"
+msgstr "Erkannte Ruhezustände"
+
+#. Developer tools screen: explanatory subtext under the 'scheduler pauses' control.
+msgctxt "dev_scheduler_pauses_detail"
+msgid "Host suspends the detector caught, each one a batch of verdicts held instead of executed on a just-resumed phone"
+msgstr "Vom Detektor erkannte Ruhezustände des Hosts; jeder davon ist ein Stapel Urteile, der auf einem gerade aufgewachten Telefon zurückgehalten statt vollstreckt wurde"
+
+#. Developer tools screen: section heading for the detection controls.
+msgctxt "dev_section_detection"
+msgid "Detection"
+msgstr "Erkennung"
+
+#. Developer tools screen: section heading for diagnostic log controls.
+msgctxt "dev_section_diagnostics"
+msgid "Diagnostics"
+msgstr "Diagnose"
+
+#. Developer tools screen: section heading for the observability controls.
+msgctxt "dev_section_observability"
+msgid "Observability"
+msgstr "Beobachtbarkeit"
+
+#. Developer tools screen: section heading for the placement controls.
+msgctxt "dev_section_placement"
+msgid "Placement"
+msgstr "Platzierung"
+
+#. Developer tools screen: section heading for the probing controls.
+msgctxt "dev_section_probing"
+msgid "Probing"
+msgstr "Prüfung"
+
+#. Developer tools screen: section heading for the recovery controls.
+msgctxt "dev_section_recovery"
+msgid "Recovery"
+msgstr "Wiederherstellung"
+
+#. Developer tools screen (reliability surface): send stall control label.
+msgctxt "dev_send_stall"
+msgid "Drop stalled exits fast"
+msgstr "Hängende Exits schnell verwerfen"
+
+#. Developer tools screen: explanatory subtext under the 'send stall' control.
+msgctxt "dev_send_stall_detail"
+msgid "How long an exit may stop delivering before it is dropped. Off waits 30s"
+msgstr "Wie lange ein Exit nichts ausliefern darf, bevor er verworfen wird. Aus: wartet 30 s"
+
+#. Developer tools screen (reliability surface): server name bridge control label.
+msgctxt "dev_server_name_bridge"
+msgid "Converge late-named flows"
+msgstr "Spät benannte Flows zusammenführen"
+
+#. Developer tools screen: explanatory subtext under the 'server name bridge' control.
+msgctxt "dev_server_name_bridge_detail"
+msgid "Moves later connections onto the exit the first one already uses"
+msgstr "Verschiebt spätere Verbindungen auf den Exit, den die erste bereits nutzt"
 
 #. Developer page: shown when the system service is not attached.
 msgctxt "dev_service_detached"
@@ -1692,10 +2534,45 @@ msgctxt "dev_session_log_restarted"
 msgid "The daemon restarted. This is a new log; the previous run's lines are gone."
 msgstr "The daemon restarted. This is a new log; the previous run's lines are gone."
 
+#. Developer tools screen (reliability surface): shuffle exits control label.
+msgctxt "dev_shuffle_exits"
+msgid "Shuffle all exits"
+msgstr "Alle Exits neu mischen"
+
+#. Developer tools screen (reliability surface): simulate network change control label.
+msgctxt "dev_simulate_network_change"
+msgid "Simulate network change"
+msgstr "Netzwerkwechsel simulieren"
+
+#. Developer tools screen (reliability surface): soft verdict control label.
+msgctxt "dev_soft_verdict"
+msgid "Demote before removing"
+msgstr "Vor dem Entfernen herabstufen"
+
+#. Developer tools screen: explanatory subtext under the 'soft verdict' control.
+msgctxt "dev_soft_verdict_detail"
+msgid "Ambiguous verdicts bench an exit instead of tearing down its flows; removal needs sustained evidence or an empty exit"
+msgstr "Mehrdeutige Urteile setzen einen Exit auf die Ersatzbank, statt seine Flows abzubauen; für eine Entfernung braucht es anhaltende Hinweise oder einen leeren Exit"
+
+#. Developer tools screen (reliability surface): stall exit control label.
+msgctxt "dev_stall_exit"
+msgid "Stall"
+msgstr "Hängen lassen"
+
 #. Developer page: report line after an exit was stalled.
 msgctxt "dev_stalled_exit"
 msgid "Stalled exit"
 msgstr "Stalled exit"
+
+#. Developer tools screen (reliability surface): standing reserve control label.
+msgctxt "dev_standing_reserve"
+msgid "Keep a spare exit warm"
+msgstr "Einen Ersatz-Exit bereithalten"
+
+#. Developer tools screen: explanatory subtext under the 'standing reserve' control.
+msgctxt "dev_standing_reserve_detail"
+msgid "Size each window one exit beyond its target so a replacement is already connected. Off waits until a loss to backfill"
+msgstr "Bemisst jedes Fenster einen Exit über seinem Ziel, damit bereits ein Ersatz verbunden ist. Aus: füllt erst nach einem Verlust nach"
 
 #. Developer page: exit state, benched.
 msgctxt "dev_state_benched"
@@ -1727,6 +2604,51 @@ msgctxt "dev_sync"
 msgid "Sync"
 msgstr "Sync"
 
+#. Developer tools screen (reliability surface): tcp collapse hold control label.
+msgctxt "dev_tcp_collapse_hold"
+msgid "Release stuck retransmits"
+msgstr "Hängende Neuübertragungen freigeben"
+
+#. Developer tools screen: explanatory subtext under the 'tcp collapse hold' control.
+msgctxt "dev_tcp_collapse_hold_detail"
+msgid "How long retransmits are held before one is released. Off waits 30s"
+msgstr "Wie lange Neuübertragungen zurückgehalten werden, bevor eine freigegeben wird. Aus: wartet 30 s"
+
+#. Developer tools screen (reliability surface): tcp idle timeout control label.
+msgctxt "dev_tcp_idle_timeout"
+msgid "Longer TCP idle timeout"
+msgstr "Längeres TCP-Leerlauf-Timeout"
+
+#. Developer tools screen: explanatory subtext under the 'tcp idle timeout' control.
+msgctxt "dev_tcp_idle_timeout_detail"
+msgid "How long a TCP connection may sit idle. Off uses the UDP bound"
+msgstr "Wie lange eine TCP-Verbindung untätig bleiben darf. Aus: nutzt die UDP-Grenze"
+
+#. Developer tools screen (reliability surface): timing control label.
+msgctxt "dev_timing"
+msgid "Timing"
+msgstr "Zeitsteuerung"
+
+#. Developer tools screen (reliability surface): udp idle timeout control label.
+msgctxt "dev_udp_idle_timeout"
+msgid "UDP idle timeout"
+msgstr "UDP-Leerlauf-Timeout"
+
+#. Developer tools screen: explanatory subtext under the 'udp idle timeout' control.
+msgctxt "dev_udp_idle_timeout_detail"
+msgid "How long a non-TCP flow may sit idle before it is reaped"
+msgstr "Wie lange ein Nicht-TCP-Flow untätig bleiben darf, bevor er abgeräumt wird"
+
+#. Developer tools screen (reliability surface): udp teardown control label.
+msgctxt "dev_udp_teardown"
+msgid "Signal UDP teardown"
+msgstr "UDP-Abbau signalisieren"
+
+#. Developer tools screen: explanatory subtext under the 'udp teardown' control.
+msgctxt "dev_udp_teardown_detail"
+msgid "Tells DNS and QUIC the path is gone instead of going silent"
+msgstr "Teilt DNS und QUIC mit, dass der Pfad weg ist, statt zu verstummen"
+
 #. Developer page: report line after a stall was cleared on an exit.
 msgctxt "dev_unstalled_exit"
 msgid "Cleared stall on exit"
@@ -1737,10 +2659,65 @@ msgctxt "dev_update_check_failed"
 msgid "The update check failed — see the app log."
 msgstr "The update check failed — see the app log."
 
+#. Developer tools screen (reliability surface): uplink gate control label.
+msgctxt "dev_uplink_gate"
+msgid "Uplink silence gate"
+msgstr "Uplink-Stille-Sperre"
+
+#. Developer tools screen: explanatory subtext under the 'uplink gate' control.
+msgctxt "dev_uplink_gate_detail"
+msgid "How long the whole tunnel may be silent before provider verdicts are held as inadmissible. 0 convicts as before"
+msgstr "Wie lange der gesamte Tunnel still sein darf, bevor Urteile über Anbieter als unzulässig zurückgehalten werden. 0 verurteilt wie bisher"
+
+#. Developer tools screen (reliability surface): verdicts held control label.
+msgctxt "dev_verdicts_held"
+msgid "Verdicts held"
+msgstr "Zurückgehaltene Urteile"
+
+#. Developer tools screen: explanatory subtext under the 'verdicts held' control.
+msgctxt "dev_verdicts_held_detail"
+msgid "Convictions withheld because the phone's own uplink, not the provider, was silent (uplink / transport)"
+msgstr "Verurteilungen, die zurückgehalten wurden, weil der eigene Uplink des Telefons und nicht der Anbieter still war (Uplink / Transport)"
+
+#. Developer tools screen: formatted value readout for 'verdicts held'.
+msgctxt "dev_verdicts_held_value"
+msgid "{0} / {1}"
+msgstr "{0} / {1}"
+
+#. Developer tools screen (reliability surface): worst loss control label.
+msgctxt "dev_worst_loss"
+msgid "Worst single failure"
+msgstr "Schlimmster Einzelausfall"
+
+#. Developer tools screen: explanatory subtext under the 'worst loss' control.
+msgctxt "dev_worst_loss_detail"
+msgid "The one the user actually feels"
+msgstr "Der, den Nutzer tatsächlich spüren"
+
+#. Developer tools screen: formatted value readout for 'worst loss'.
+msgctxt "dev_worst_loss_value"
+msgid "{} connections"
+msgstr "Verbindungen: {}"
+
 #. Developer page: value of the worst single failure, {count} connections.
 msgctxt "dev_worst_single_failure_value"
 msgid "{} connections"
 msgstr "{} connections"
+
+#. Developer tools screen: developer.
+msgctxt "developer"
+msgid "Developer"
+msgstr "Entwickler"
+
+#. Developer tools screen: developer description.
+msgctxt "developer_description"
+msgid "Tools for diagnosing connection freezes. These act on the live connection."
+msgstr "Werkzeuge zur Diagnose von Verbindungshängern. Diese wirken direkt auf die aktive Verbindung."
+
+#. Developer tools screen: developer disconnected.
+msgctxt "developer_disconnected"
+msgid "Connect to use these tools."
+msgstr "Verbinde dich, um diese Werkzeuge zu nutzen."
 
 #. device
 msgctxt "device"
@@ -1912,6 +2889,76 @@ msgctxt "earnings"
 msgid "Earnings"
 msgstr "Einnahmen"
 
+#. Placeholder of the manual Bittensor address field on the Earnings page.
+msgctxt "earnings_address_placeholder"
+msgid "Enter a Bittensor address"
+msgstr "Bittensor-Adresse eingeben"
+
+#. Button on the Earnings page that starts connecting a different Bittensor wallet.
+msgctxt "earnings_change_wallet"
+msgid "Change wallet"
+msgstr "Wallet wechseln"
+
+#. Progress text while a claim transaction is being sent.
+msgctxt "earnings_claim_sending"
+msgid "Sending…"
+msgstr "Wird gesendet…"
+
+#. Shown in place of the unclaimed figure when the app has no device session to read the chain with.
+msgctxt "earnings_claims_need_session"
+msgid "Claims load from the chain once the app has a session. Press Connect first."
+msgstr "Einlösungen werden von der Chain geladen, sobald die App eine Sitzung hat. Verbinde dich zuerst."
+
+#. Button that copies an address to the clipboard.
+msgctxt "earnings_copy_address"
+msgid "Copy address"
+msgstr "Adresse kopieren"
+
+#. Column header of the per-epoch history table: the date the epoch ended.
+msgctxt "earnings_date_column"
+msgid "Date"
+msgstr "Datum"
+
+#. Column header of the per-epoch history table.
+msgctxt "earnings_epoch_column"
+msgid "Epoch"
+msgstr "Epoche"
+
+#. Label of the gas key's TAO balance in the claim dialog.
+msgctxt "earnings_gas_balance"
+msgid "Gas balance"
+msgstr "Gas-Guthaben"
+
+#. Title of the Earnings destination's third pane: own rank, multipliers and reliability.
+msgctxt "earnings_network_pane_title"
+msgid "Your network"
+msgstr "Dein Netzwerk"
+
+#. Column header of the per-epoch history table: points earned in the epoch.
+msgctxt "earnings_points_column"
+msgid "Points"
+msgstr "Punkte"
+
+#. Column header of the per-epoch history table: the network's share of the block.
+msgctxt "earnings_share_column"
+msgid "Share"
+msgstr "Anteil"
+
+#. Column header of the per-epoch history table: the claim status of the epoch's alpha.
+msgctxt "earnings_status_column"
+msgid "Status"
+msgstr "Status"
+
+#. Link that opens a claim transaction in the block explorer.
+msgctxt "earnings_view_transaction"
+msgid "View transaction"
+msgstr "Transaktion anzeigen"
+
+#. Error when the wallet that signed the connect challenge is not the address the user entered.
+msgctxt "earnings_wallet_mismatch"
+msgid "The wallet that signed is not the address you entered."
+msgstr "Die Wallet, die signiert hat, entspricht nicht der eingegebenen Adresse."
+
 #. device
 msgctxt "edit_device_name"
 msgid "Edit device name"
@@ -2037,6 +3084,16 @@ msgctxt "emoji_tag_shuffle"
 msgid "Suggest another"
 msgstr "Anderen Vorschlag"
 
+#. Section header of the per-transport enable toggles shown when the transport mode is Auto.
+msgctxt "enabled_under_auto"
+msgid "Enabled under Auto"
+msgstr "Aktiviert unter „Automatisch“"
+
+#. Footer of the Auto transports section explaining the fixed preference order.
+msgctxt "enabled_under_auto_footer"
+msgid "Listed in preference order: H3 and H1 first, then whodis, then whodis pump. The order is fixed. At least one transport stays enabled."
+msgstr "In der Reihenfolge der Präferenz aufgeführt: zuerst H3 und H1, dann whodis, dann whodis pump. Die Reihenfolge ist fest. Mindestens ein Transport bleibt aktiviert."
+
 #. Call to action
 msgctxt "enjoying_urnetwork"
 msgid "Enjoying URnetwork?"
@@ -2066,6 +3123,11 @@ msgctxt "enter_a_solana_usdc_wallet_address"
 msgid "Enter a Solana USDC wallet address"
 msgstr "Gib eine Solana USDC-Wallet-Adresse ein"
 
+#. Fallback link to paste an ss58 address.
+msgctxt "enter_address_manually"
+msgid "Enter address manually"
+msgstr "Adresse manuell eingeben"
+
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "enter_balance_code"
 msgid "Enter balance code"
@@ -2085,6 +3147,41 @@ msgstr "Netzwerbe-Empfehlungscode eingeben"
 msgctxt "enter_urnetwork"
 msgid "Enter URnetwork"
 msgstr "URnetwork betreten"
+
+#. History table column: the epoch number.
+msgctxt "epoch_column_epoch_linux"
+msgid "Epoch"
+msgstr "Epoche"
+
+#. History table column: points earned.
+msgctxt "epoch_column_points_linux"
+msgid "Points"
+msgstr "Punkte"
+
+#. History table column: the network's share of the block.
+msgctxt "epoch_column_share_linux"
+msgid "Share of block"
+msgstr "Anteil am Block"
+
+#. History table column: the claim status of the epoch's alpha.
+msgctxt "epoch_column_status_linux"
+msgid "Status"
+msgstr "Status"
+
+#. Label of the per-epoch history list.
+msgctxt "epoch_history"
+msgid "History"
+msgstr "Verlauf"
+
+#. History row title.
+msgctxt "epoch_row_title"
+msgid "Epoch {}"
+msgstr "Epoche {}"
+
+#. History row: the network's share of the block.
+msgctxt "epoch_share_of_block"
+msgid "{} of block"
+msgstr "{} des Blocks"
 
 #. Error message displayed in a snackbar when there was an error changing the network name.
 msgctxt "error_changing_network_name"
@@ -2186,6 +3283,111 @@ msgctxt "export_logs"
 msgid "Export Logs"
 msgstr "Logs exportieren"
 
+#. Title of the Extender row under the provide mode row in settings, and of the read-only row where the provide mode row is repeated.
+msgctxt "extender"
+msgid "Extender"
+msgstr "Extender"
+
+#. Extender status when the last activation failed and no family is active. The argument is the error.
+msgctxt "extender_activation_failed"
+msgid "Activation failed: {}"
+msgstr "Aktivierung fehlgeschlagen: {}"
+
+#. Extender status when the operator refused the activation and no family is active. The argument is the operator's reason.
+msgctxt "extender_activation_refused"
+msgid "Activation refused: {}"
+msgstr "Aktivierung abgelehnt: {}"
+
+#. Extender status when at least one address family is activated. The argument is the family or families, from the IPv4, IPv6 and IPv4 and IPv6 labels.
+msgctxt "extender_active"
+msgid "Active · {}"
+msgstr "Aktiv · {}"
+
+#. Placeholder shown in an empty extender settings field, naming the default value that applies.
+msgctxt "extender_default_value"
+msgid "Default: {}"
+msgstr "Standard: {}"
+
+#. Label of the extender DNS name field. Empty means the network space default.
+msgctxt "extender_dns_name"
+msgid "Extender DNS name"
+msgstr "Extender-DNS-Name"
+
+#. Label of the manual extender list field: hostnames or IP addresses, one per line.
+msgctxt "extender_hosts"
+msgid "Extender hosts"
+msgstr "Extender-Hosts"
+
+#. Help text under the manual extender list field.
+msgctxt "extender_hosts_hint"
+msgid "One hostname or IP address per line. These are added to the discovered extenders."
+msgstr "Ein Hostname oder eine IP-Adresse pro Zeile. Diese werden zu den gefundenen Extendern hinzugefügt."
+
+#. Extender status when no carrier could bind. The argument is the carrier errors.
+msgctxt "extender_listen_failed"
+msgid "Could not listen: {}"
+msgstr "Lauschen nicht möglich: {}"
+
+#. Extender status when the setting is on but this device is not providing. Apple is not listed because its catalog is keyed by the English text, which widget_not_providing already carries.
+msgctxt "extender_not_providing"
+msgid "Not providing"
+msgstr "Keine Bereitstellung"
+
+#. Extender status when the operator revoked this device's extender key.
+msgctxt "extender_revoked"
+msgid "Revoked by the operator"
+msgstr "Vom Betreiber widerrufen"
+
+#. Secondary text under the Extender setting: what turning it on does, and the ports the extender listens on.
+msgctxt "extender_setting_description"
+msgid "While you are providing, this device also relays for people whose access to the network is blocked, on TCP and UDP 443 and UDP 4053."
+msgstr "Während du bereitstellst, leitet dieses Gerät auch Verkehr für Menschen weiter, deren Zugang zum Netzwerk blockiert ist, über TCP und UDP 443 sowie UDP 4053."
+
+#. Extender status while the role is starting and there is no outcome yet: the carriers are binding, or the first activation is in flight.
+msgctxt "extender_setting_up"
+msgid "Setting up"
+msgstr "Wird eingerichtet"
+
+#. Title of the extender settings form under account > Extenders.
+msgctxt "extender_settings"
+msgid "Extender settings"
+msgstr "Extender-Einstellungen"
+
+#. Note on iOS after saving extender settings: the packet tunnel extension reads them at its next start.
+msgctxt "extender_settings_next_connect"
+msgid "The tunnel uses new extender settings the next time it connects."
+msgstr "Der Tunnel verwendet die neuen Extender-Einstellungen bei der nächsten Verbindung."
+
+#. Confirmation after the extender settings are saved.
+msgctxt "extender_settings_saved"
+msgid "Extender settings saved"
+msgstr "Extender-Einstellungen gespeichert"
+
+#. Extender status when the setting is on and the device is providing, but the role could not start in this network space: no extender directory or no identity. The argument is the reason.
+msgctxt "extender_start_failed"
+msgid "Could not start: {}"
+msgstr "Start fehlgeschlagen: {}"
+
+#. Title of the section that shows statistics about the extender, directly above the provider statistics section.
+msgctxt "extender_statistics"
+msgid "Extender statistics"
+msgstr "Extender-Statistiken"
+
+#. Title of the extenders panel in the connect drawer and of the Extenders section under account.
+msgctxt "extenders"
+msgid "Extenders"
+msgstr "Extender"
+
+#. The extender panel count: extenders carrying a live connection now, of every usable extender the app knows.
+msgctxt "extenders_active_of_reserve"
+msgid "{0} of {1}"
+msgstr "{0} von {1}"
+
+#. Shown in the account Extenders section when there is no signed-in device to manage extenders with.
+msgctxt "extenders_no_session"
+msgid "Sign in and connect to manage extenders."
+msgstr "Melde dich an und verbinde dich, um Extender zu verwalten."
+
 #. Used in Shared/Intents/ConnectIntent.swift.
 msgctxt "failed_to_connect"
 msgid "Failed to connect"
@@ -2256,6 +3458,11 @@ msgctxt "friends_save_too"
 msgid "Your friends save too -- everyone wins."
 msgstr "Deine Freunde sparen ebenfalls – alle gewinnen."
 
+#. Label of the gas key row.
+msgctxt "gas_key"
+msgid "Gas key"
+msgstr "Gas-Schlüssel"
+
 #. Call to action
 msgctxt "general"
 msgid "General"
@@ -2298,6 +3505,11 @@ msgctxt "go_back"
 msgid "Go Back"
 msgstr "Zurück"
 
+#. A label for Google sign-in.
+msgctxt "google"
+msgid "Google"
+msgstr "Google"
+
 #. Login initial
 msgctxt "google_auth_btn_text"
 msgid "Log in with Google"
@@ -2307,6 +3519,28 @@ msgstr "Mit Google anmelden"
 msgctxt "google_sign_in_method_added"
 msgid "Google sign-in method added"
 msgstr "Google-Anmeldemethode hinzugefügt"
+
+#. Gossip network status: a dial or reconnect is in progress (yellow).
+msgctxt "gossip_connecting"
+msgid "Connecting"
+msgstr "Verbindung wird hergestellt"
+
+#. The count of extender records and revocations applied from the gossip network or the feed in the last minute.
+msgctxt "gossip_events_per_minute"
+msgid "{} event/min"
+msgid_plural "{} events/min"
+msgstr[0] "{} Ereignis/Min."
+msgstr[1] "{} Ereignisse/Min."
+
+#. Label of the gossip network status dot in the extender panel.
+msgctxt "gossip_network"
+msgid "Gossip network"
+msgstr "Gossip-Netzwerk"
+
+#. Label of the gossip URL field. Empty means the network space default.
+msgctxt "gossip_url"
+msgid "Gossip URL"
+msgstr "Gossip-URL"
 
 #. Used in Shared/Views/UpgradeSubscriptionSheet.swift.
 msgctxt "got_it"
@@ -2327,6 +3561,14 @@ msgstr "Probiere URnetwork aus, ohne ein Konto zu erstellen. Du kannst jederzeit
 msgctxt "guest_mode_failed"
 msgid "Guest mode failed"
 msgstr "Gastmodus fehlgeschlagen"
+
+msgctxt "hash_count"
+msgid "#{}"
+msgstr "#{}"
+
+msgctxt "hash_value"
+msgid "#{}"
+msgstr "#{}"
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "hide_provider_list"
@@ -2375,6 +3617,33 @@ msgctxt "ignore_battery_optimizations"
 msgid "Ignore battery optimizations"
 msgstr "Akku-Optimierungen ignorieren"
 
+#. Button and screen title: import extenders from a QR code, a photo, or pasted text.
+msgctxt "import_extenders"
+msgid "Import extenders"
+msgstr "Extender importieren"
+
+#. Confirmation before applying the extender settings from a share code. The argument is the operator host the settings point at.
+msgctxt "import_extenders_confirm_settings"
+msgid "Use the extender settings from this code? Extender lookups will use {}."
+msgstr "Die Extender-Einstellungen aus diesem Code verwenden? Extender werden dann über {} gesucht."
+
+#. Error when a share code belongs to another network. The argument is that network's host.
+msgctxt "import_extenders_foreign_host"
+msgid "This code is for {}, not this network. Use extender settings to switch networks."
+msgstr "Dieser Code ist für {}, nicht für dieses Netzwerk. Wechsle das Netzwerk in den Extender-Einstellungen."
+
+#. Confirmation after an import, with the number of extenders added.
+msgctxt "import_extenders_imported"
+msgid "Imported {} extender"
+msgid_plural "Imported {} extenders"
+msgstr[0] "{} Extender importiert"
+msgstr[1] "{} Extender importiert"
+
+#. Error when the scanned or pasted text is not an extender share code.
+msgctxt "import_extenders_invalid"
+msgid "This code is not an extender share."
+msgstr "Dieser Code ist keine Extender-Freigabe."
+
 #. Guest mode overlay
 msgctxt "in_guest_mode"
 msgid "You're in guest mode"
@@ -2390,6 +3659,11 @@ msgctxt "include_app_description"
 msgid "Only included apps use the tunnel."
 msgstr "Nur eingeschlossene Apps nutzen den Tunnel."
 
+#. Toggle on the share screen: also include the extender DNS name, gossip URL and root keys in the code.
+msgctxt "include_extender_settings"
+msgid "Include extender settings"
+msgstr "Extender-Einstellungen einbeziehen"
+
 #. App split rules: rule choice routing the app through the VPN.
 msgctxt "include_in_vpn"
 msgid "Include in VPN"
@@ -2399,6 +3673,11 @@ msgstr "In VPN einbeziehen"
 msgctxt "included"
 msgid "Included"
 msgstr "Eingeschlossen"
+
+#. Line under the annual plan card. The number of days is the free trial length.
+msgctxt "includes_free_trial_days"
+msgid "Includes {} day free trial"
+msgstr "Enthält eine {}-tägige kostenlose Testphase"
 
 #. Instant account: explains that no email, phone or password is needed.
 msgctxt "instant_account_explainer"
@@ -2435,6 +3714,66 @@ msgctxt "insufficient_funds"
 msgid "Insufficient funds"
 msgstr "Unzureichende Mittel"
 
+#. How to add the quick connect control on iOS (no add-control API).
+msgctxt "intro_control_manual_ios"
+msgid "Open Control Center, tap +, then Add a Control, and pick URnetwork."
+msgstr "Öffne das Kontrollzentrum, tippe auf +, dann auf „Steuerelement hinzufügen“ und wähle URnetwork."
+
+#. How to add the quick connect control on macOS.
+msgctxt "intro_control_manual_macos"
+msgid "Open Control Center, choose Edit Controls, and add URnetwork."
+msgstr "Öffne das Kontrollzentrum, wähle „Steuerelemente bearbeiten“ und füge URnetwork hinzu."
+
+#. Detail line of the last onboarding page.
+msgctxt "intro_quick_connect_details"
+msgid "Turn URnetwork on and off from Quick Settings, and keep an eye on it from your home screen."
+msgstr "Schalte URnetwork in den Schnelleinstellungen ein und aus und behalte es auf deinem Startbildschirm im Blick."
+
+#. Detail line of the last onboarding page on iOS/macOS (Control Center instead of Quick Settings).
+msgctxt "intro_quick_connect_details_apple"
+msgid "Turn URnetwork on and off from Control Center, and keep an eye on it from your Home Screen."
+msgstr "Schalte URnetwork im Kontrollzentrum ein und aus und behalte es auf deinem Home-Bildschirm im Blick."
+
+#. Title of the last onboarding page: the quick connect tile and the home screen widgets.
+msgctxt "intro_quick_connect_title"
+msgid "Connect in one tap"
+msgstr "Mit einem Tipp verbinden"
+
+#. Label shown on the last onboarding page once the quick connect tile is in Quick Settings.
+msgctxt "intro_quick_tile_added"
+msgid "Added to Quick Settings"
+msgstr "Zu den Schnelleinstellungen hinzugefügt"
+
+#. Manual steps for adding the quick connect tile on Android versions without the system add-tile request (before Android 13).
+msgctxt "intro_quick_tile_manual"
+msgid "Open Quick Settings, tap the pencil, and drag URnetwork into place."
+msgstr "Öffne die Schnelleinstellungen, tippe auf den Stift und ziehe URnetwork an die gewünschte Stelle."
+
+#. Tagline under 'Welcome to URnetwork' on the first onboarding page. Replaces 'URnetwork is the most local and most private network on the planet.'
+msgctxt "intro_verifiable_encryption"
+msgid "Encryption for everyday use."
+msgstr "Verschlüsselung für jeden Tag."
+
+#. Manual steps for adding widgets on launchers without the pin dialog.
+msgctxt "intro_widgets_manual"
+msgid "Long-press your home screen, choose Widgets, and pick URnetwork."
+msgstr "Drücke lange auf deinen Startbildschirm, wähle „Widgets“ und dann URnetwork."
+
+#. How to add a Home Screen widget on iOS (no pin-widget API).
+msgctxt "intro_widgets_manual_ios"
+msgid "Long-press the Home Screen, tap +, search URnetwork, and add a widget."
+msgstr "Drücke lange auf den Home-Bildschirm, tippe auf +, suche nach URnetwork und füge ein Widget hinzu."
+
+#. How to add a desktop widget on macOS.
+msgctxt "intro_widgets_manual_macos"
+msgid "Open the widget gallery from Notification Center, search URnetwork, and drag a widget to the desktop."
+msgstr "Öffne die Widget-Galerie über die Mitteilungszentrale, suche nach URnetwork und ziehe ein Widget auf den Schreibtisch."
+
+#. Hint under the widget previews on the last onboarding page: tapping a preview asks the launcher to add that widget.
+msgctxt "intro_widgets_tap_to_add"
+msgid "Tap a widget to add it to your home screen."
+msgstr "Tippe auf ein Widget, um es deinem Startbildschirm hinzuzufügen."
+
 #. Used in Shared/Views/RedeemBalanceCodeSheet/RedeemBalanceCodeSheet.swift.
 msgctxt "invalid_balance_code"
 msgid "Invalid balance code"
@@ -2450,6 +3789,16 @@ msgctxt "invalid_referral_code_please_try_again"
 msgid "Invalid referral code. Please try again."
 msgstr "Ungültiger Empfehlungscode. Bitte versuche es erneut."
 
+#. Validation error under the manual address field when the address is not a valid Solana address (parallel to invalid_ss58_address).
+msgctxt "invalid_solana_address"
+msgid "That is not a valid Solana address."
+msgstr "Das ist keine gültige Solana-Adresse."
+
+#. Validation error for a coldkey address.
+msgctxt "invalid_ss58_address"
+msgid "That is not a valid Bittensor address."
+msgstr "Das ist keine gültige Bittensor-Adresse."
+
 #. dns settings
 msgctxt "ip_address"
 msgid "IP address"
@@ -2462,10 +3811,59 @@ msgid_plural "{} IPs"
 msgstr[0] "{} IP"
 msgstr[1] "{} IPs"
 
+#. IP versions: the tooltip of the address-family tag column in the provider locations sheet (windows, linux). It also titled the connect drawer's IP version histogram before that became the Dualstack / IPv4 / IPv6 status row.
+msgctxt "ip_families"
+msgid "IP versions"
+msgstr "IP-Versionen"
+
+#. Row label of the IP version histogram, and the provider row tag, for a provider that carries both IPv4 and IPv6.
+msgctxt "ip_family_both"
+msgid "Both"
+msgstr "Beide"
+
+#. Status line of one column of the IP version status row in the connect drawer: how many providers of that family (dualstack, IPv4 or IPv6) are connected. Shown under the family label only when the count is not zero. Lowercase.
+msgctxt "ip_family_connected_count"
+msgid "{} connected"
+msgid_plural "{} connected"
+msgstr[0] "{} verbunden"
+msgstr[1] "{} verbunden"
+
+#. Status line of one column of the IP version status row in the connect drawer: how many providers of that family (dualstack, IPv4 or IPv6) are still connecting. Shown under the connected line only when the count is not zero. Lowercase.
+msgctxt "ip_family_connecting_count"
+msgid "{} connecting"
+msgid_plural "{} connecting"
+msgstr[0] "{} im Aufbau"
+msgstr[1] "{} im Aufbau"
+
+#. Status line of one column of the IP version status row in the connect drawer, when no provider of that family (dualstack, IPv4 or IPv6) is connected or connecting. Lowercase, under the family label.
+msgctxt "ip_family_disconnected"
+msgid "disconnected"
+msgstr "getrennt"
+
+#. Column label of the IP version status row in the connect drawer, for providers that carry both IPv4 and IPv6. Set in the pixel display face beside the IPv4 and IPv6 labels, so keep it short.
+msgctxt "ip_family_dualstack"
+msgid "Dualstack"
+msgstr "Dual-Stack"
+
+#. Row label of the IP version histogram, and the provider row tag, for a provider that carries only IPv4.
+msgctxt "ip_family_v4"
+msgid "v4"
+msgstr "v4"
+
+#. Row label of the IP version histogram, and the provider row tag, for a provider that carries only IPv6.
+msgctxt "ip_family_v6"
+msgid "v6"
+msgstr "v6"
+
 #. Label for a list of IPv4 addresses.
 msgctxt "ipv4"
 msgid "IPv4"
 msgstr "IPv4"
+
+#. Accessibility label for a provider that carries both IPv4 and IPv6 traffic.
+msgctxt "ipv4_and_ipv6"
+msgid "IPv4 and IPv6"
+msgstr "IPv4 und IPv6"
 
 #. Label for the IPv6 list of DNS servers.
 msgctxt "ipv6"
@@ -2516,6 +3914,16 @@ msgstr "Legende"
 msgctxt "kill_switch"
 msgid "Kill switch"
 msgstr "Kill switch"
+
+#. Title for the disclosure explaining traffic that intentionally bypasses the VPN kill switch.
+msgctxt "kill_switch_exception"
+msgid "Kill switch exception"
+msgstr "Ausnahme vom Kill switch"
+
+#. Explains the deliberate IPv6 and SMTP exceptions to the VPN kill switch and the encrypted SMTP behavior.
+msgctxt "kill_switch_exception_detail"
+msgid "While the VPN is connected, IPv6 is not routed through URnetwork and may use your local network, even when the kill switch is on. Outbound SMTP on TCP port 25 also bypasses the VPN. These exceptions may expose your local public IP to those destinations. SMTP on ports 465 and 587 stays in the VPN and must establish TLS."
+msgstr "Während das VPN verbunden ist, wird IPv6 nicht über URnetwork geleitet und kann dein lokales Netzwerk nutzen, selbst wenn der Kill switch aktiviert ist. Ausgehendes SMTP über TCP-Port 25 umgeht das VPN ebenfalls. Durch diese Ausnahmen kann deine lokale öffentliche IP für diese Ziele sichtbar werden. SMTP über die Ports 465 und 587 bleibt im VPN und muss TLS aufbauen."
 
 #. Button text for entering the one-time authentication code and entering the app
 msgctxt "launch"
@@ -2916,6 +4324,11 @@ msgctxt "multiplier"
 msgid "Multiplier"
 msgstr "Multiplikator"
 
+#. A progress bar that shows how many friends you've invited. The first argument is the number of friends you've invited. The second argument is the maximum number of friends you can invite.
+msgctxt "n_20"
+msgid "{}/20"
+msgstr "{}/20"
+
 #. A label that shows the daily data usage from referrals. The argument is the number of referrals.
 msgctxt "n_gib_day"
 msgid "+{} GiB/Day"
@@ -3145,6 +4558,11 @@ msgctxt "no_blocked_locations"
 msgid "No blocked locations"
 msgstr "Keine blockierten Standorte"
 
+#. Empty state of the unclaimed tile once a wallet is connected.
+msgctxt "no_claims_yet_linux"
+msgid "Nothing to claim yet. Alpha accrues from the next finalized epoch."
+msgstr "Noch nichts einzulösen. Alpha sammelt sich ab der nächsten abgeschlossenen Epoche an."
+
 #. A description of the benefits of creating an Instant Account.
 msgctxt "no_email_phone_or_password_needed_your"
 msgid "No email, phone, or password needed. Your account is secured by a seedphrase."
@@ -3174,6 +4592,16 @@ msgstr "Keine Protokolldatei gefunden"
 msgctxt "no_open_contracts"
 msgid "No open contracts"
 msgstr "Keine offenen Verträge"
+
+#. Empty state of the points history.
+msgctxt "no_points_yet"
+msgid "No epochs yet. Points appear after your first finalized epoch."
+msgstr "Noch keine Epochen. Punkte erscheinen nach deiner ersten abgeschlossenen Epoche."
+
+#. Restore-purchases outcome: the sync succeeded and there is genuinely nothing to restore (Shared/ViewModels/AppStoreSubscriptionManager.swift).
+msgctxt "no_previous_purchases_were_found"
+msgid "No previous purchases were found."
+msgstr "Es wurden keine früheren Käufe gefunden."
 
 #. Locations List
 msgctxt "no_providers_found"
@@ -3290,6 +4718,11 @@ msgctxt "on"
 msgid "On"
 msgstr "An"
 
+#. Accessibility description of the onboarding step bubbles: the current step and the total.
+msgctxt "onboarding_step_of"
+msgid "Step {0} of {1}"
+msgstr "Schritt {0} von {1}"
+
 #. Call to action
 msgctxt "one_gib_per_day"
 msgid "1 GiB/Day"
@@ -3330,6 +4763,11 @@ msgctxt "other"
 msgid "Other"
 msgstr "Andere"
 
+#. The one USDC mention: the Solana subscription payment note.
+msgctxt "paid_in_usdc_on_solana"
+msgid "Paid in USDC on Solana."
+msgstr "Bezahlt in USDC auf Solana."
+
 #. Call to action
 msgctxt "participate"
 msgid "Participate"
@@ -3365,6 +4803,11 @@ msgctxt "password_support_txt"
 msgid "Password must be at least 12 characters"
 msgstr "Das Passwort muss mindestens 12 Zeichen lang sein"
 
+#. Button and field label: paste the text form of a share code.
+msgctxt "paste_share_text"
+msgid "Paste share text"
+msgstr "Freigabetext einfügen"
+
 #. A placeholder text for the seedphrase field.
 msgctxt "paste_your_24_word_seedphrase_here"
 msgid "Paste your 24-word seedphrase here"
@@ -3380,10 +4823,35 @@ msgctxt "pay_with_stripe"
 msgid "Join with Stripe"
 msgstr "Mit Stripe beitreten"
 
+#. Shown when the post-payment confirmation poll exhausts its budget (2 minutes) without the server confirming the subscription. The payment evidence is real (store or payment sheet reported success), so say that plainly, and head off a second purchase.
+msgctxt "payment_confirmation_delayed"
+msgid "Confirmation is taking longer than expected. Your plan will update automatically once it's confirmed — there's no need to buy again."
+msgstr "Die Bestätigung dauert länger als erwartet. Dein Plan wird automatisch aktualisiert, sobald die Zahlung bestätigt ist — du musst nicht noch einmal kaufen."
+
+#. Body of the post-purchase overlay while the server has not yet confirmed the subscription. Replaces the optimistic 'You're premium.' claim until currentSubscription actually confirms.
+msgctxt "payment_confirmation_processing"
+msgid "We're confirming your payment now. Your plan will update automatically — you don't need to do anything."
+msgstr "Wir bestätigen gerade deine Zahlung. Dein Plan wird automatisch aktualisiert — du musst nichts tun."
+
+#. Shown in the payment-problem dialog when the Stripe payment sheet reports a failure. The sheet's own error detail is appended by the caller.
+msgctxt "payment_not_completed"
+msgid "Your payment could not be completed."
+msgstr "Deine Zahlung konnte nicht abgeschlossen werden."
+
 #. Billing errors. Every one is shown to the user WITH a remedy: a payment error they cannot see is a payment error they will hit again.
 msgctxt "payment_problem"
 msgid "Payment problem"
 msgstr "Zahlungsproblem"
+
+#. Title of the post-purchase screen while the server has not yet confirmed the entitlement (Shared/Views/PurchaseSuccessView.swift). StoreKit took the payment; the confirmation poll is still running — the copy must not claim premium yet.
+msgctxt "payment_received"
+msgid "Payment received."
+msgstr "Zahlung erhalten."
+
+#. Title for the post-purchase overlay and the confirmation-timeout dialog. Deliberately claims only what is known -- the payment was received -- not that the plan is active yet.
+msgctxt "payment_received_title"
+msgid "Payment received"
+msgstr "Zahlung erhalten"
 
 #. Snackbar shown after the payout wallet is changed. Used in Main/Account/Wallet/WalletView.swift.
 msgctxt "payout_wallet_updated"
@@ -3470,6 +4938,16 @@ msgctxt "plan_monthly_price"
 msgid "$5/month"
 msgstr "$5/month"
 
+#. Monthly plan card label: the store-formatted price per month.
+msgctxt "plan_price_per_month"
+msgid "{}/month"
+msgstr "{}/Monat"
+
+#. Yearly plan card label: the store-formatted price per year.
+msgctxt "plan_price_per_year"
+msgid "{}/year"
+msgstr "{}/Jahr"
+
 #. Plan picker: the saving badge on the yearly card; the number is the whole percent saved against twelve monthly payments.
 msgctxt "plan_save_percent"
 msgid "Save {}%"
@@ -3526,6 +5004,11 @@ msgctxt "points"
 msgid "Points"
 msgstr "Punkte"
 
+#. Headline label of the earnings screen.
+msgctxt "points_earned"
+msgid "Points earned"
+msgstr "Verdiente Punkte"
+
 #. Points leaderboard: the explanation under the list header.
 msgctxt "points_leaderboard_description"
 msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
@@ -3540,6 +5023,11 @@ msgstr "Noch niemand ist in der Punkte-Bestenliste."
 msgctxt "points_leaderboard_private_hint"
 msgid "Your network appears as Anonymous until you turn this on."
 msgstr "Dein Netzwerk erscheint als Anonym, bis du das einschaltest."
+
+#. Points count with unit for history rows.
+msgctxt "points_short"
+msgid "{} pts"
+msgstr "{} Pkt."
 
 #. Connect drawer: post quantum encryption toggle label.
 msgctxt "post_quantum_encryption"
@@ -3560,6 +5048,26 @@ msgstr "Post-Quanten-Anbieteridentität"
 msgctxt "post_quantum_identity_explanation"
 msgid "Your provider identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
 msgstr "Dein Anbieter-Identitätsschlüssel wird lokal auf diesem Gerät gespeichert. Wenn der Schlüssel eines Peers von seinem lokal gespeicherten Schlüssel abweicht, bedeutet das, dass dem Netzwerkbetreiber nicht vertraut werden kann."
+
+#. Title of the advanced private extender fields: one extender with a secret that replaces discovery.
+msgctxt "private_extender"
+msgid "Private extender"
+msgstr "Privater Extender"
+
+#. Help text under the private extender fields.
+msgctxt "private_extender_hint"
+msgid "A private extender replaces every discovered extender. Leave it empty to use discovery."
+msgstr "Ein privater Extender ersetzt alle gefundenen Extender. Lass das Feld leer, um die automatische Suche zu verwenden."
+
+#. Label of the private extender IP address field.
+msgctxt "private_extender_ip"
+msgid "IP address"
+msgstr "IP-Adresse"
+
+#. Label of the private extender secret field.
+msgctxt "private_extender_secret"
+msgid "Secret"
+msgstr "Geheimnis"
 
 #. Network name when privacy is enabled
 msgctxt "private_network"
@@ -3601,10 +5109,40 @@ msgctxt "provide"
 msgid "Provide"
 msgstr "Bereitstellen"
 
+#. First bullet on the onboarding Contribute bandwidth page.
+msgctxt "provide_intro_bullet_devices"
+msgid "Allow your devices to share internet with each other"
+msgstr "Lass deine Geräte ihr Internet untereinander teilen"
+
+#. Second bullet on the onboarding Contribute bandwidth page, with a heart.
+msgctxt "provide_intro_bullet_people"
+msgid "Share your internet with other people ❤️"
+msgstr "Teile dein Internet mit anderen Menschen ❤️"
+
+#. Lead line above the two bullets on the onboarding Contribute bandwidth page.
+msgctxt "provide_intro_lead"
+msgid "Your choice, completely optional:"
+msgstr "Deine Entscheidung, völlig optional:"
+
 #. Call to action
 msgctxt "provide_mode"
 msgid "Provide mode"
 msgstr "Bereitstellungsmodus"
+
+#. One-line explanation of the Always provide mode in the onboarding Contribute bandwidth picker.
+msgctxt "provide_mode_always_description"
+msgid "Provides to everyone whenever the app is running."
+msgstr "Stellt allen bereit, solange die App läuft."
+
+#. One-line explanation of the Auto provide mode in the onboarding Contribute bandwidth picker: public providing only while connected, same-network peers otherwise.
+msgctxt "provide_mode_auto_description"
+msgid "Provides to everyone while you're connected, otherwise only to your own devices."
+msgstr "Stellt allen bereit, während du verbunden bist, sonst nur deinen eigenen Geräten."
+
+#. One-line explanation of the Network provide mode in the onboarding Contribute bandwidth picker: the private provider for the network's own devices.
+msgctxt "provide_mode_network_description"
+msgid "Provides only to your own network's devices."
+msgstr "Stellt nur den Geräten deines eigenen Netzwerks bereit."
 
 #. Compact duration a provider has been connected, as hours and minutes (e.g. 3h 24m). {hours} is the whole hours, {minutes} the remaining minutes.
 msgctxt "provider_connected_duration_hours"
@@ -3667,6 +5205,11 @@ msgctxt "provider_statistics"
 msgid "Provider statistics"
 msgstr "Anbieter-Statistiken"
 
+#. Title of the transport settings editor for the provider transport policy.
+msgctxt "provider_transports"
+msgid "Provider transports"
+msgstr "Anbieter-Transporte"
+
 #. Used in Main/Account/Wallets/WalletsView.swift.
 msgctxt "providing"
 msgid "Providing"
@@ -3694,6 +5237,21 @@ msgctxt "purchase_confirmation_timeout"
 msgid "We couldn't confirm your purchase yet. If you completed checkout, your plan will update automatically in a few minutes — there's no need to buy again."
 msgstr "Wir konnten deinen Kauf noch nicht bestätigen. Wenn du den Bezahlvorgang abgeschlossen hast, wird dein Plan in wenigen Minuten automatisch aktualisiert — du musst nicht erneut kaufen."
 
+#. Error dialog body when the server's verify answer for a Play purchase is terminal `invalid` — the proof will never verify (unknown token, disallowed product, canceled before completing). The purchase is still acknowledged with Play so a real charge is not auto-refunded; this dialog is how the failure reaches the user instead of a silent nothing (android google/PlanViewModel.kt report path).
+msgctxt "purchase_could_not_be_verified"
+msgid "This purchase could not be verified with Google Play, so it can't be applied to your account. If you were charged and your plan doesn't update, please contact support."
+msgstr "Dieser Kauf konnte bei Google Play nicht verifiziert werden und kann deshalb nicht auf dein Konto angewendet werden. Falls dir etwas berechnet wurde und dein Plan nicht aktualisiert wird, wende dich bitte an den Support."
+
+#. Restore-purchases outcome: an entitlement for the current network was found; the confirmation poll now bridges the gap until the server credits it (Shared/ViewModels/AppStoreSubscriptionManager.swift).
+msgctxt "purchase_found_confirming_your_plan"
+msgid "Purchase found. Confirming your plan — it will update automatically."
+msgstr "Kauf gefunden. Dein Plan wird bestätigt — er wird automatisch aktualisiert."
+
+#. Error when a chosen photo or image file holds no QR code.
+msgctxt "qr_code_not_found"
+msgid "No QR code was found in the image."
+msgstr "Im Bild wurde kein QR-Code gefunden."
+
 #. Tray menu item that exits the app (tears the tunnel down).
 msgctxt "quit"
 msgid "Quit"
@@ -3708,6 +5266,11 @@ msgstr "URnetwork beenden"
 msgctxt "ranked_networks_count"
 msgid "{} ranked networks"
 msgstr "{} platzierte Netzwerke"
+
+#. Unit the extender chart labels its rates with, where the provider chart says pkt/s. The compact count is prepended by the app, as it is for pkt/s.
+msgctxt "reads_per_second"
+msgid "reads/s"
+msgstr "Lesevorgänge/s"
 
 #. Call to action
 msgctxt "ready_to_connect"
@@ -4008,6 +5571,11 @@ msgctxt "remove_wallet"
 msgid "Remove wallet"
 msgstr "Wallet entfernen"
 
+#. Body of the remove confirmation for the Solana payout wallet (the title is remove_wallet).
+msgctxt "remove_wallet_holds_payouts"
+msgid "USDC payouts are held until another wallet is connected."
+msgstr "USDC-Auszahlungen werden zurückgehalten, bis eine andere Wallet verbunden ist."
+
 #. Reset link sent
 msgctxt "resend_reset_link"
 msgid "Resend link"
@@ -4043,10 +5611,20 @@ msgctxt "resolvers"
 msgid "Resolvers"
 msgstr "Resolver"
 
+#. Button that resets the transport settings draft to the SDK default policy.
+msgctxt "restore_default_transports"
+msgid "Restore default transports"
+msgstr "Standard-Transporte wiederherstellen"
+
 #. dns settings
 msgctxt "restore_most_secure_settings"
 msgid "Restore to most secure settings"
 msgstr "Sicherste Einstellungen wiederherstellen"
+
+#. Action label that resyncs App Store purchases (AppStore.sync + entitlement scan). Shown in Settings and in the upgrade flow's failure states (Main/Account/Settings/SettingsForm-iOS.swift, SettingsForm-macOS.swift, Shared/Views/UpgradeSubscriptionSheet.swift, Shared/Views/PurchaseSuccessView.swift, Shared/Views/Introduction/IntroductionView.swift).
+msgctxt "restore_purchases"
+msgid "Restore purchases"
+msgstr "Käufe wiederherstellen"
 
 #. Retry action label
 msgctxt "retry"
@@ -4063,10 +5641,20 @@ msgctxt "review_urnetwork"
 msgid "Review URnetwork"
 msgstr "URnetwork bewerten"
 
+#. Right stop label of the onboarding route line the anonymized member travels along.
+msgctxt "route_internet"
+msgid "Internet"
+msgstr "Internet"
+
 #. Call to action
 msgctxt "route_local"
 msgid "Allow local traffic when disconnected"
-msgstr "Lokalen Datenverkehr erlauben, wenn getrenntnURnetwork"
+msgstr "Lokalen Datenverkehr erlauben, wenn getrennt"
+
+#. Left stop label of the onboarding route line the anonymized member travels along (you -> URnetwork -> internet).
+msgctxt "route_you"
+msgid "You"
+msgstr "Du"
 
 #. A heading for the pinned split rules.
 msgctxt "rules"
@@ -4077,6 +5665,11 @@ msgstr "Regeln"
 msgctxt "save"
 msgid "Save"
 msgstr "Speichern"
+
+#. Line under the yearly plan's price: the saving against paying monthly.
+msgctxt "save_33_percent"
+msgid "Save 33%"
+msgstr "33 % sparen"
 
 #. Call to action
 msgctxt "save_logs"
@@ -4092,6 +5685,11 @@ msgstr "Logs speichern"
 msgctxt "saved_as"
 msgid "Saved as {}"
 msgstr "Gespeichert als {}"
+
+#. Button: open the camera to scan a QR code.
+msgctxt "scan_qr_code"
+msgid "Scan QR code"
+msgstr "QR-Code scannen"
 
 #. App split rules: placeholder in the search field that filters the installed apps by name or package id.
 msgctxt "search_apps_placeholder"
@@ -4183,6 +5781,11 @@ msgctxt "seedphrase_word_count_warning"
 msgid "That's {} words — a seedphrase is 12 or 24 words"
 msgstr "Das sind {} Wörter — eine Seedphrase hat 12 oder 24 Wörter"
 
+#. Note on the Seeker verification action.
+msgctxt "seeker_points_only"
+msgid "The Seeker multiplier applies to points only."
+msgstr "Der Seeker-Multiplikator gilt nur für Punkte."
+
 #. Call to action
 msgctxt "seeker_token_verified"
 msgid "Seeker Token Verified!"
@@ -4233,6 +5836,11 @@ msgctxt "send_reset_link_2"
 msgid "Send reset link"
 msgstr "Reset-Link senden"
 
+#. Instruction to fund the gas key.
+msgctxt "send_tao_to_mirror"
+msgid "Send about {0} TAO to {1} to cover gas."
+msgstr "Sende etwa {0} TAO an {1}, um das Gas zu decken."
+
 #. Used in Main/Feedback/FeedbackView.swift.
 msgctxt "send_us_your_feedback_directly_or_join_our"
 msgid "Send us your feedback directly or [join our Discord](https://discord.com/invite/RUNZXMwPRK) for direct support."
@@ -4253,10 +5861,52 @@ msgctxt "settings"
 msgid "Settings"
 msgstr "Einstellungen"
 
+#. Settings row that asks the system to add the Quick Settings tile (Android 13+).
+msgctxt "settings_add_quick_tile"
+msgid "Add quick connect tile"
+msgstr "Schnellverbindungs-Kachel hinzufügen"
+
+#. Description under the add-tile settings row.
+msgctxt "settings_add_quick_tile_description"
+msgid "Connect and disconnect from the Quick Settings panel and the lock screen."
+msgstr "Verbinde und trenne dich über die Schnelleinstellungen und den Sperrbildschirm."
+
+#. Settings row that opens the widget picker to pin the app's widgets.
+msgctxt "settings_add_widgets"
+msgid "Add Home Screen widgets"
+msgstr "Startbildschirm-Widgets hinzufügen"
+
+#. Description under the add-widgets settings row.
+msgctxt "settings_add_widgets_description"
+msgid "Quick connect, transfer balance, providers on the globe and your top contracts."
+msgstr "Schnellverbindung, Datenguthaben, Anbieter auf dem Globus und deine wichtigsten Verträge."
+
 #. Call to action
 msgctxt "share"
 msgid "Share"
 msgstr "Teile"
+
+#. Button and screen title: share the known extenders as a QR code.
+msgctxt "share_extenders"
+msgid "Share extenders"
+msgstr "Extender teilen"
+
+#. How many extenders the share code carries.
+msgctxt "share_extenders_count"
+msgid "{} extender"
+msgid_plural "{} extenders"
+msgstr[0] "{} Extender"
+msgstr[1] "{} Extender"
+
+#. Help text on the share screen under the QR code.
+msgctxt "share_extenders_hint"
+msgid "Scan this code with another URnetwork app to share these extenders."
+msgstr "Scanne diesen Code mit einer anderen URnetwork-App, um diese Extender zu teilen."
+
+#. Shown on the share screen when the share payload exceeds what a QR code can hold; the text form is still offered.
+msgctxt "share_extenders_too_large"
+msgid "The share code is too large for a QR code. Copy the share text instead."
+msgstr "Der Freigabecode ist zu groß für einen QR-Code. Kopiere stattdessen den Freigabetext."
 
 #. Call to action
 msgctxt "share_logs"
@@ -4268,10 +5918,25 @@ msgctxt "share_logs_2"
 msgid "Share Logs"
 msgstr "Logs teilen"
 
+#. Confirmation after the share text of an extender code was copied to the clipboard.
+msgctxt "share_text_copied"
+msgid "Share text copied"
+msgstr "Freigabetext kopiert"
+
 #. Used in Shared/Views/AccountMenu.swift.
 msgctxt "share_urnetwork"
 msgid "Share URnetwork"
 msgstr "URnetwork teilen"
+
+#. Long label of the launcher shortcut that connects the VPN.
+msgctxt "shortcut_connect_long"
+msgid "Connect to URnetwork"
+msgstr "Mit URnetwork verbinden"
+
+#. Long label of the launcher shortcut that disconnects the VPN.
+msgctxt "shortcut_disconnect_long"
+msgid "Disconnect from URnetwork"
+msgstr "Von URnetwork trennen"
 
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "show"
@@ -4282,6 +5947,11 @@ msgstr "Anzeigen"
 msgctxt "show_icon_when_connected"
 msgid "Show UR icon when connected"
 msgstr "UR-Symbol bei Verbindung anzeigen"
+
+#. Accessibility label for the kill switch exception information button.
+msgctxt "show_kill_switch_exception"
+msgid "Show kill switch exception"
+msgstr "Ausnahme vom Kill switch anzeigen"
 
 #. Points leaderboard: the switch that reveals this network's name on the list. Every ranked network is listed; off = shown as Anonymous.
 msgctxt "show_on_points_leaderboard"
@@ -4326,6 +5996,11 @@ msgstr "Anmeldemethode erfolgreich hinzugefügt"
 msgctxt "sign_in_methods"
 msgid "Sign-In Methods"
 msgstr "Anmeldemethoden"
+
+#. Login stack: full-width Apple sign-in button on platforms that use the ur.io browser bridge
+msgctxt "sign_in_with_apple"
+msgid "Sign in with Apple"
+msgstr "Mit Apple anmelden"
 
 #. Button that signs in with a pasted auth code instead of a password.
 msgctxt "sign_in_with_code"
@@ -4431,6 +6106,11 @@ msgctxt "site_app_canceled_on"
 msgid "Canceled"
 msgstr "Storniert"
 
+#. App earnings/claim: the SDK reports chain_not_configured (release constants not published)
+msgctxt "site_app_chain_not_configured"
+msgid "Settlement on the subnet is not configured yet. Points keep accruing; check back after the next release."
+msgstr "Die Abrechnung im Subnetz ist noch nicht eingerichtet. Punkte sammeln sich weiter an; schau nach dem nächsten Release wieder vorbei."
+
 #. App connect screen: change location button
 msgctxt "site_app_change"
 msgid "Change"
@@ -4445,6 +6125,26 @@ msgstr "Meine IP prüfen"
 msgctxt "site_app_cities"
 msgid "Cities"
 msgstr "Städte"
+
+#. App claim: no injected EVM wallet
+msgctxt "site_app_claim_no_evm_wallet"
+msgid "No browser wallet was found. Install an EVM wallet extension such as MetaMask and connect the key that pays gas, or claim from the URnetwork app on your device."
+msgstr "Es wurde keine Browser-Wallet gefunden. Installiere eine EVM-Wallet-Erweiterung wie MetaMask und verbinde den Schlüssel, der das Gas bezahlt, oder löse über die URnetwork-App auf deinem Gerät ein."
+
+#. App claim: empty state
+msgctxt "site_app_claim_nothing"
+msgid "Nothing to claim yet."
+msgstr "Noch nichts einzulösen."
+
+#. App claim: epoch status when the claim window has not opened
+msgctxt "site_app_claim_opens_soon"
+msgid "Opens soon"
+msgstr "Öffnet bald"
+
+#. App claim: epoch status
+msgctxt "site_app_claimable"
+msgid "Claimable"
+msgstr "Einlösbar"
 
 #. Reliability: clients series
 msgctxt "site_app_clients"
@@ -4490,6 +6190,11 @@ msgstr "Verbindung wird hergestellt…"
 msgctxt "site_app_connections"
 msgid "Connections"
 msgstr "Verbindungen"
+
+#. App earnings: proceed after the new-wallet warning
+msgctxt "site_app_continue_anyway"
+msgid "Continue anyway"
+msgstr "Trotzdem fortfahren"
 
 #. App connect screen: contract details section title
 msgctxt "site_app_contracts"
@@ -4616,6 +6321,16 @@ msgctxt "site_app_dns_reset"
 msgid "Reset to recommended"
 msgstr "Auf Empfohlen zurücksetzen"
 
+#. App earnings: points breakdown row
+msgctxt "site_app_earn_multiplier"
+msgid "Multiplier"
+msgstr "Multiplikator"
+
+#. App earnings: points breakdown row
+msgctxt "site_app_earn_reliability"
+msgid "Reliability"
+msgstr "Zuverlässigkeit"
+
 #. App account: network earnings card
 msgctxt "site_app_earnings"
 msgid "Network earnings"
@@ -4630,6 +6345,11 @@ msgstr "E-Mail"
 msgctxt "site_app_enter_referral"
 msgid "Enter referral code"
 msgstr "Empfehlungscode eingeben"
+
+#. App claim: epoch status before finalization
+msgctxt "site_app_epoch_finalizing"
+msgid "Finalizing"
+msgstr "Wird abgeschlossen"
 
 #. App settings: extension unavailable note
 msgctxt "site_app_ext_needed"
@@ -4695,6 +6415,11 @@ msgstr "Noch keine Netzwerke in der Bestenliste."
 msgctxt "site_app_leaderboard_note"
 msgid "The leaderboard is the sum of the last 4 payments. It is updated each payment cycle."
 msgstr "Die Bestenliste ist die Summe der letzten 4 Zahlungen. Sie wird in jedem Zahlungszyklus aktualisiert."
+
+#. App earnings: the network's leaderboard rank, as in the epoch email
+msgctxt "site_app_leaderboard_rank"
+msgid "Leaderboard rank #{rank} of {total}"
+msgstr "Platz #{rank} von {total} in der Bestenliste"
 
 #. App: loading state
 msgctxt "site_app_loading"
@@ -4776,6 +6501,21 @@ msgctxt "site_app_no_traffic"
 msgid "No traffic yet"
 msgstr "Noch kein Datenverkehr"
 
+#. Onboarding: install-the-extension step body
+msgctxt "site_app_onboarding_ext_body"
+msgid "URnetwork routes this browser through its extension. Install it, and the Connect button here is ready to go."
+msgstr "URnetwork leitet diesen Browser über seine Erweiterung. Installiere sie, und der Button zum Verbinden hier ist sofort einsatzbereit."
+
+#. Onboarding: install-the-extension step, supported browsers note
+msgctxt "site_app_onboarding_ext_browsers"
+msgid "Available for Chrome, Edge, Brave and Firefox."
+msgstr "Verfügbar für Chrome, Edge, Brave und Firefox."
+
+#. Onboarding: install-the-extension step title
+msgctxt "site_app_onboarding_ext_title"
+msgid "Connect this browser"
+msgstr "Diesen Browser verbinden"
+
 #. App payout detail: paid time
 msgctxt "site_app_paid_on"
 msgid "Paid"
@@ -4800,6 +6540,11 @@ msgstr "Ausstehend"
 msgctxt "site_app_plan"
 msgid "Plan"
 msgstr "Plan"
+
+#. App earnings: history column header
+msgctxt "site_app_points_col"
+msgid "Points"
+msgstr "Punkte"
 
 #. App leaderboard: hidden network row label
 msgctxt "site_app_private_network"
@@ -4886,6 +6631,11 @@ msgctxt "site_app_save"
 msgid "Save"
 msgstr "Speichern"
 
+#. App earnings/claim: the loaded wasm SDK predates the subnet exports
+msgctxt "site_app_sdk_not_ready"
+msgid "Claim data is not available in this version of the web app. Reload and try again."
+msgstr "Einlösedaten sind in dieser Version der Web-App nicht verfügbar. Lade die Seite neu und versuche es erneut."
+
 #. App support: send button
 msgctxt "site_app_send"
 msgid "Send"
@@ -4905,6 +6655,11 @@ msgstr "Mein Netzwerk in der Bestenliste anzeigen"
 msgctxt "site_app_shuffle"
 msgid "Shuffle"
 msgstr "Mischen"
+
+#. App earnings: manual address entry button (the wallet still signs the challenge)
+msgctxt "site_app_sign_and_connect"
+msgid "Sign and connect"
+msgstr "Signieren und verbinden"
 
 #. App settings: stay in touch section
 msgctxt "site_app_stay_in_touch"
@@ -4926,6 +6681,101 @@ msgctxt "site_app_throughput"
 msgid "Transfer"
 msgstr "Übertragung"
 
+#. App top200: post a device's binding payload
+msgctxt "site_app_top200_add_signature"
+msgid "Add device"
+msgstr "Gerät hinzufügen"
+
+#. App top200: re-check every device with the hotkey signature
+msgctxt "site_app_top200_apply_hotkey_sig"
+msgid "Apply hotkey signature"
+msgstr "Hotkey-Signatur anwenden"
+
+#. App top200: unparseable paste
+msgctxt "site_app_top200_bad_signature"
+msgid "Paste the binding payload exactly as the app shows it."
+msgstr "Füge die Bindungs-Payload genau so ein, wie die App sie anzeigt."
+
+#. App top200: binding not complete
+msgctxt "site_app_top200_binding_incomplete"
+msgid "Calldata appears once the device signature and the hotkey signature both verify."
+msgstr "Die Calldata erscheint, sobald sowohl die Gerätesignatur als auch die Hotkey-Signatur verifiziert sind."
+
+#. App top200: calldata label
+msgctxt "site_app_top200_calldata"
+msgid "Binding calldata"
+msgstr "Bindungs-Calldata"
+
+#. App top200: device row label
+msgctxt "site_app_top200_device"
+msgid "Device"
+msgstr "Gerät"
+
+#. App top200: signature textarea label
+msgctxt "site_app_top200_device_signature"
+msgid "Device signature"
+msgstr "Gerätesignatur"
+
+#. App top200: binding digest label
+msgctxt "site_app_top200_digest"
+msgid "Digest"
+msgstr "Digest"
+
+#. App top200: hotkey input label
+msgctxt "site_app_top200_hotkey"
+msgid "Hotkey"
+msgstr "Hotkey"
+
+#. App top200: how to produce the hotkey signature
+msgctxt "site_app_top200_hotkey_sign_hint"
+msgid "Sign each binding digest with the hotkey using your own tooling (snclaim bind-head) and paste the signature here."
+msgstr "Signiere jeden Bindungs-Digest mit dem Hotkey über deine eigenen Tools (snclaim bind-head) und füge die Signatur hier ein."
+
+#. App top200: hotkey signature input
+msgctxt "site_app_top200_hotkey_signature"
+msgid "Hotkey signature (hex)"
+msgstr "Hotkey-Signatur (hex)"
+
+#. App top200: intro
+msgctxt "site_app_top200_intro"
+msgid "Head miners are the top {cutoff} networks by routable egress IP breadth. A head spot is paid natively by the subnet every tempo, straight to your coldkey."
+msgstr "Head-Miner sind die Top-{cutoff}-Netzwerke nach der Vielfalt routbarer Egress-IPs. Ein Head-Platz wird in jedem Tempo nativ vom Subnetz bezahlt, direkt an deinen Coldkey."
+
+#. App top200: status when not eligible
+msgctxt "site_app_top200_not_eligible"
+msgid "Not eligible yet. Your score is {score} and the eviction floor is {floor}."
+msgstr "Noch nicht berechtigt. Dein Score ist {score}, die Verdrängungsgrenze liegt bei {floor}."
+
+#. App top200: progress
+msgctxt "site_app_top200_signatures_added"
+msgid "{count} devices added"
+msgstr "Geräte hinzugefügt: {count}"
+
+#. App top200: step 2
+msgctxt "site_app_top200_step_bind"
+msgid "Each provider device signs its fleet binding from its app under Account › Top 200. Paste each device's binding payload here, one device at a time."
+msgstr "Jedes Anbietergerät signiert seine Flotten-Bindung in seiner App unter Konto › Top 200. Füge hier die Bindungs-Payload jedes Geräts ein, ein Gerät nach dem anderen."
+
+#. App top200: step 1
+msgctxt "site_app_top200_step_register"
+msgid "Register a hotkey on subnet {netuid} with btcli, then enter it below."
+msgstr "Registriere mit btcli einen Hotkey im Subnetz {netuid} und gib ihn dann unten ein."
+
+#. App top200: step 3
+msgctxt "site_app_top200_step_submit"
+msgid "Submit the binding from your own EVM wallet. URnetwork never sends transactions for you."
+msgstr "Reiche die Bindung über deine eigene EVM-Wallet ein. URnetwork sendet niemals Transaktionen für dich."
+
+#. App top200: send the binding tx from the injected wallet
+msgctxt "site_app_top200_submit"
+msgid "Submit binding"
+msgstr "Bindung einreichen"
+
+#. App top200: GET /sn/head unavailable
+msgctxt "site_app_top200_unavailable"
+msgid "Head spot status is not available right now."
+msgstr "Der Status des Head-Platzes ist gerade nicht verfügbar."
+
 #. App account: total referrals label
 msgctxt "site_app_total_referrals"
 msgid "Total referrals"
@@ -4946,10 +6796,25 @@ msgctxt "site_app_verified"
 msgid "Verified"
 msgstr "Verifiziert"
 
+#. App claim/top200: explorer link
+msgctxt "site_app_view_transaction"
+msgid "View transaction"
+msgstr "Transaktion anzeigen"
+
 #. App wallets: wallet label
 msgctxt "site_app_wallet"
 msgid "Wallet"
 msgstr "Wallet"
+
+#. App earnings: badge next to the connected Bittensor coldkey
+msgctxt "site_app_wallet_connected"
+msgid "Connected"
+msgstr "Verbunden"
+
+#. App earnings: the bridge signed with a different account than the typed address
+msgctxt "site_app_wallet_mismatch"
+msgid "Sign with the wallet that holds this address."
+msgstr "Signiere mit der Wallet, zu der diese Adresse gehört."
 
 #. Account panel: any-provider location option
 msgctxt "site_best_available"
@@ -5011,6 +6876,11 @@ msgctxt "site_connect_ready"
 msgid "Ready to connect"
 msgstr "Bereit zur Verbindung"
 
+#. Account panel: a copy button after it copied
+msgctxt "site_copied"
+msgid "Copied"
+msgstr "Kopiert"
+
 #. Instant account creation: button that copies the seedphrase to the clipboard.
 msgctxt "site_copy_seedphrase"
 msgid "Copy Seedphrase"
@@ -5020,6 +6890,11 @@ msgstr "Seedphrase kopieren"
 msgctxt "site_copy_url"
 msgid "Copy URL"
 msgstr "URL kopieren"
+
+#. Account panel: copy the WireGuard config text to the clipboard
+msgctxt "site_copy_wg_config"
+msgid "Copy config"
+msgstr "Konfiguration kopieren"
 
 #. Account panel: create another proxy
 msgctxt "site_create_another"
@@ -5121,6 +6996,11 @@ msgctxt "site_invalid_balance_code"
 msgid "Invalid balance code."
 msgstr "Ungültiger Guthabencode."
 
+#. Upgrade sheet: give-up state action to resume waiting for the payment
+msgctxt "site_keep_waiting"
+msgid "Keep waiting"
+msgstr "Weiter warten"
+
 #. Email landing page: the web fallback link.
 msgctxt "site_landing_continue_web"
 msgid "Continue on the web"
@@ -5180,6 +7060,11 @@ msgstr "Nach einem Standort suchen"
 msgctxt "site_locations"
 msgid "Locations"
 msgstr "Standorte"
+
+#. Login stack: hint above the auth code field when signing in with a code generated elsewhere.
+msgctxt "site_login_auth_code_hint"
+msgid "Paste an auth code generated from another device or the command line tools."
+msgstr "Füge einen Authentifizierungscode ein, der auf einem anderen Gerät oder mit den Befehlszeilentools erzeugt wurde."
 
 #. Login stack: hint above the seedphrase field when signing in with an instant account's seed.
 msgctxt "site_login_seed_hint"
@@ -5316,6 +7201,11 @@ msgctxt "site_operator_client_ui"
 msgid "Operator Client UI"
 msgstr "Operator-Client-UI"
 
+#. Upgrade sheet: escape from the waiting state back to the payment options
+msgctxt "site_pay_another_way"
+msgid "Pay another way"
+msgstr "Anders bezahlen"
+
 #. Embedded pay page: the immediate charge line (monthly). {price} amount.
 msgctxt "site_pay_sheet_charge_line"
 msgid "{} today, then monthly. Cancel anytime."
@@ -5350,6 +7240,16 @@ msgstr "Pro holen"
 msgctxt "site_pay_sheet_trial_line"
 msgid "Your card is saved today and charged {1} on {0}. Cancel anytime before then."
 msgstr "Deine Karte wird heute gespeichert und am {0} mit {1} belastet. Vorher jederzeit kündbar."
+
+#. Upgrade sheet: give-up state body — the payment may still be processing and will appear under Account
+msgctxt "site_payment_not_seen_body"
+msgid "We haven't seen your payment yet. If you completed it in your wallet, it may still be processing — your plan will update automatically under Account once it lands."
+msgstr "Wir haben deine Zahlung noch nicht gesehen. Wenn du sie in deiner Wallet abgeschlossen hast, wird sie möglicherweise noch verarbeitet — dein Plan wird unter „Konto“ automatisch aktualisiert, sobald sie eingeht."
+
+#. Upgrade sheet: give-up state title after the payment wait deadline
+msgctxt "site_payment_not_seen_title"
+msgid "Payment not confirmed yet"
+msgstr "Zahlung noch nicht bestätigt"
 
 #. Plan picker: the monthly card's sub-line.
 msgctxt "site_plan_billed_monthly"
@@ -5411,6 +7311,11 @@ msgctxt "site_proxy_type"
 msgid "Proxy type"
 msgstr "Proxy-Typ"
 
+#. Balance code redeem: timeout is ambiguous — the server may have committed the redeem after the client stopped waiting
+msgctxt "site_redeem_timeout"
+msgid "The request timed out. If you were charged, check your balance — the code may already be applied."
+msgstr "Die Anfrage hat das Zeitlimit überschritten. Falls dir etwas berechnet wurde, prüfe dein Guthaben — der Code ist möglicherweise bereits angewendet."
+
 #. Account panel: client info — roles label
 msgctxt "site_roles"
 msgid "Roles"
@@ -5445,6 +7350,16 @@ msgstr "Regelmäßige Produktneuigkeiten"
 msgctxt "site_socks_cred_note"
 msgid "Username is the token in the URL; password is empty."
 msgstr "Der Benutzername ist das Token in der URL; das Passwort ist leer."
+
+#. Upgrade sheet: waiting state hint — a solana: deep link with no wallet installed silently does nothing
+msgctxt "site_solana_no_wallet_hint"
+msgid "Nothing happened? You may need a Solana wallet installed — or pay another way."
+msgstr "Nichts passiert? Möglicherweise brauchst du eine installierte Solana-Wallet — oder bezahle anders."
+
+#. Subscription: body for a Pro account with no store subscription to cancel (e.g. Pro from a balance code or a grant)
+msgctxt "site_sub_active_body"
+msgid "Your Pro plan is active. There's no store subscription to manage on this account."
+msgstr "Dein Pro-Plan ist aktiv. Für dieses Konto gibt es kein Store-Abo zu verwalten."
 
 #. Subscription: date line when the store did not answer whether it auto-renews. {date} is a localized date.
 msgctxt "site_sub_active_until"
@@ -5536,6 +7451,16 @@ msgctxt "site_sub_manage_on_google"
 msgid "Manage in Google Play"
 msgstr "In Google Play verwalten"
 
+#. Subscription: warning shown when a network is billed by more than one store, because cancelling one does not cancel the others
+msgctxt "site_sub_multiple_note"
+msgid "You're being billed for more than one subscription. Each one has to be cancelled where it was purchased."
+msgstr "Dir werden mehrere Abos berechnet. Jedes muss dort gekündigt werden, wo es abgeschlossen wurde."
+
+#. Subscription: heading above the list, shown only when more than one store is billing the network
+msgctxt "site_sub_multiple_title"
+msgid "Your subscriptions"
+msgstr "Deine Abos"
+
 #. Subscription: unknown platform fallback
 msgctxt "site_sub_other_platform"
 msgid "another platform"
@@ -5586,20 +7511,50 @@ msgctxt "site_usdc_offer_term"
 msgid "{1} months plus {0} days of Pro"
 msgstr "{1} Monate plus {0} Tage Pro"
 
+#. Small muted button at the top of the post-login onboarding flow that leaves the whole flow.
+msgctxt "skip"
+msgid "Skip"
+msgstr "Überspringen"
+
 #. The subnet alpha token symbol.
 msgctxt "sn_alpha_symbol"
 msgid "SN25α"
 msgstr "SN25α"
+
+#. Claim status of an epoch whose alpha can be claimed now.
+msgctxt "sn_status_claimable"
+msgid "Claimable"
+msgstr "Einlösbar"
+
+#. Claim status of an epoch the vault has not finalized yet.
+msgctxt "sn_status_not_finalized"
+msgid "Not finalized"
+msgstr "Nicht abgeschlossen"
+
+#. Claim status of an epoch that is still open (not yet finalized on chain).
+msgctxt "sn_status_open"
+msgid "Open"
+msgstr "Offen"
 
 #. Blockchain name. A product name: never translated.
 msgctxt "solana"
 msgid "Solana"
 msgstr "Solana"
 
+#. Note under the Solana payment button on the plan picker: Solana is a one-time yearly payment, the free trial is Stripe only.
+msgctxt "solana_one_time_payment"
+msgid "Paying with USDC on Solana is a one-time yearly payment, with no free trial."
+msgstr "Die Zahlung mit USDC auf Solana ist eine einmalige Jahreszahlung ohne kostenlose Testphase."
+
 #. Call to action
 msgctxt "solana_sign_in"
 msgid "Sign in with Solana"
 msgstr "Mit Solana anmelden"
+
+#. Label of the connected Solana wallet block on the Earnings screen (parallel to bittensor_wallet).
+msgctxt "solana_wallet"
+msgid "Solana wallet"
+msgstr "Solana-Wallet"
 
 #. Used in Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
 msgctxt "solflare"
@@ -5703,6 +7658,11 @@ msgctxt "start_earning_join"
 msgid "To start earning, join the network"
 msgstr "Um mit dem Verdienen zu beginnen, trete dem Netzwerk bei"
 
+#. Primary button of the plan picker (onboarding and upgrade): starts the paid plan's free trial. Replaces 'Join the movement'.
+msgctxt "start_free_trial"
+msgid "Start free trial"
+msgstr "Kostenlose Testphase starten"
+
 #. Confirmation button that keeps the user on the seedphrase screen after the warning.
 msgctxt "stay"
 msgid "Stay"
@@ -5757,6 +7717,16 @@ msgstr "Serie"
 msgctxt "strong_anonymization"
 msgid "Strong Anonymization"
 msgstr "Starke Anonymisierung"
+
+#. Button on the plan picker for the monthly plan, which has no free trial.
+msgctxt "subscribe"
+msgid "Subscribe"
+msgstr "Abonnieren"
+
+#. The store purchase belongs to a different network than the one logged in — crediting must not go to the wrong account, so tell the user which way out exists. Apple: restore-purchases outcome (Shared/ViewModels/AppStoreSubscriptionManager.swift). Android: terminal `wrong_network` answer from the Play purchase report (google/PlanViewModel.kt); the purchase is still acknowledged so Play does not auto-refund it.
+msgctxt "subscription_purchased_under_different_account"
+msgid "Your subscription was purchased under a different account. Log in to that account to use it."
+msgstr "Dein Abo wurde mit einem anderen Konto gekauft. Melde dich bei diesem Konto an, um es zu nutzen."
 
 #. Snackbar shown when the earnings multiplier is claimed successfully. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "successfully_claimed_multiplier"
@@ -5822,6 +7792,11 @@ msgctxt "symbol_dash"
 msgid "-"
 msgstr "-"
 
+#. An ellipsis character used to indicate ongoing processing.
+msgctxt "symbol_ellipsis"
+msgid "..."
+msgstr "..."
+
 msgctxt "symbol_empty"
 msgid ""
 msgstr ""
@@ -5853,6 +7828,11 @@ msgstr "Gerätestandort mit dem Anbieter synchronisieren"
 msgctxt "system"
 msgid "System"
 msgstr "System"
+
+#. A TAO amount with its unit (the gas key balance).
+msgctxt "tao_amount_linux"
+msgid "{} TAO"
+msgstr "{} TAO"
 
 #. Connect
 msgctxt "tap_to_connect"
@@ -5894,6 +7874,11 @@ msgctxt "thanks_for_the_feedback"
 msgid "Thanks for the feedback!"
 msgstr "Danke für dein Feedback!"
 
+#. Shown inline in the upgrade flow when a StoreKit purchase attempt throws (Shared/ViewModels/AppStoreSubscriptionManager.swift). Every purchase failure is shown to the user — a payment error they cannot see is one they will hit again. User cancellation is not an error and never shows this.
+msgctxt "the_purchase_could_not_be_completed"
+msgid "The purchase could not be completed. Please try again."
+msgstr "Der Kauf konnte nicht abgeschlossen werden. Bitte versuche es erneut."
+
 #. Used in Authenticate/CreateNetwork/CreateNetworkViewModel.swift.
 msgctxt "there_was_an_error_checking_the_network_name"
 msgid "There was an error checking the network name"
@@ -5914,6 +7899,11 @@ msgctxt "this_is_the_only_time_you_ll"
 msgid "⚠️ This is the ONLY time you'll see this."
 msgstr "⚠️ Du siehst sie nur dieses eine Mal."
 
+#. Shown inline in the upgrade flow when the server's verify answer for a purchase's transaction JWS is terminal `invalid` — the proof will never verify. The transaction is still finished so StoreKit stops redelivering it; this message is how the failure reaches the user instead of a silent success (Shared/ViewModels/AppStoreSubscriptionManager.swift). Apple sibling of purchase_could_not_be_verified (android).
+msgctxt "this_purchase_couldn_t_be_verified"
+msgid "This purchase couldn't be verified with the App Store, so it can't be applied to your account. If you were charged and your plan doesn't update, please contact support."
+msgstr "Dieser Kauf konnte beim App Store nicht verifiziert werden und kann deshalb nicht auf dein Konto angewendet werden. Falls dir etwas berechnet wurde und dein Plan nicht aktualisiert wird, wende dich bitte an den Support."
+
 #. dns settings
 msgctxt "this_region"
 msgid "this region"
@@ -5932,6 +7922,36 @@ msgstr "Getrennt"
 msgctxt "title_login"
 msgid "Login"
 msgstr "Anmeldung"
+
+#. Badge text for the head mining spot.
+msgctxt "top200"
+msgid "Top 200"
+msgstr "Top 200"
+
+#. Detail under the bound status.
+msgctxt "top200_bound_detail"
+msgid "Emission is paid to your coldkey directly. Bindings renew per epoch."
+msgstr "Die Emission wird direkt an deinen Coldkey ausgezahlt. Bindungen werden pro Epoche erneuert."
+
+#. Status row once bound.
+msgctxt "top200_bound_status"
+msgid "UID {0} · rank #{1}"
+msgstr "UID {0} · Rang #{1}"
+
+#. Warning when the score nears the floor.
+msgctxt "top200_demotion_warning"
+msgid "Your score is close to the eviction floor. Add routable IPs to keep the spot."
+msgstr "Dein Score liegt nahe an der Verdrängungsgrenze. Füge routbare IPs hinzu, um den Platz zu behalten."
+
+#. Detail of the Top 200 tile when eligible.
+msgctxt "top200_detail"
+msgid "Your network's routable IP breadth ranks about #{0} of {1} head spots. Head miners earn SN25α natively, every tempo."
+msgstr "Die Vielfalt routbarer IPs deines Netzwerks liegt etwa auf Platz #{0} von {1} Head-Plätzen. Head-Miner verdienen SN25α nativ, in jedem Tempo."
+
+#. Headline of the Top 200 tile when eligible.
+msgctxt "top200_you_qualify"
+msgid "You qualify"
+msgstr "Du qualifizierst dich"
 
 #. Locations List
 msgctxt "top_matches"
@@ -5990,6 +8010,76 @@ msgctxt "transfer_submitted_details"
 msgid "Your transfer has been initiated and will complete once the transaction is processed on chain."
 msgstr "Deine Überweisung wurde eingeleitet und wird abgeschlossen, sobald die Transaktion in der Chain verarbeitet wurde."
 
+#. Section header of the transport mode selection (Auto or a single transport).
+msgctxt "transport"
+msgid "Transport"
+msgstr "Transport"
+
+#. Generic warning banner in the transport settings editor when the Auto policy is degraded for a constraint this app version does not recognize (the SDK may report new constraint kinds; "memory" has its own banner).
+msgctxt "transport_auto_degraded"
+msgid "Auto is degraded because system constraints prevent some enabled transports from running."
+msgstr "„Automatisch“ ist eingeschränkt, weil Systembeschränkungen verhindern, dass einige aktivierte Transporte laufen."
+
+#. Warning banner in the transport settings editor when the Auto policy is degraded because the platform memory budget cannot admit every enabled transport.
+msgctxt "transport_auto_degraded_memory"
+msgid "Auto is degraded because system memory limits prevent some enabled transports from running."
+msgstr "„Automatisch“ ist eingeschränkt, weil Speichergrenzen des Systems verhindern, dass einige aktivierte Transporte laufen."
+
+#. Subtitle of the Auto transport mode row.
+msgctxt "transport_auto_description"
+msgid "Recommended. Uses the enabled transports below."
+msgstr "Empfohlen. Verwendet die unten aktivierten Transporte."
+
+#. Footer of the client transport mode section.
+msgctxt "transport_client_footer"
+msgid "The transport this device uses to reach providers. Auto tries the enabled transports in preference order and keeps every healthy transport of the same tier connected in parallel."
+msgstr "Der Transport, über den dieses Gerät Anbieter erreicht. „Automatisch“ probiert die aktivierten Transporte in der Reihenfolge der Präferenz aus und hält alle funktionierenden Transporte derselben Stufe parallel verbunden."
+
+#. One line description of the whodis (DNS) transport in the transport settings editor.
+msgctxt "transport_dns_description"
+msgid "Disguised as DNS traffic. For networks that filter direct connections."
+msgstr "Als DNS-Verkehr getarnt. Für Netzwerke, die direkte Verbindungen filtern."
+
+#. One line description of the whodis pump (DNS pump) transport in the transport settings editor.
+msgctxt "transport_dnspump_description"
+msgid "Disguised as DNS traffic with a constant reply pump. Lowest bandwidth, highest availability."
+msgstr "Als DNS-Verkehr getarnt, mit konstantem Antwortstrom. Geringste Bandbreite, höchste Verfügbarkeit."
+
+#. One line description of the H1 transport in the transport settings editor.
+msgctxt "transport_h1_description"
+msgid "Direct over TLS. Works on most networks."
+msgstr "Direkt über TLS. Funktioniert in den meisten Netzwerken."
+
+#. One line description of the H3 transport in the transport settings editor.
+msgctxt "transport_h3_description"
+msgid "Direct over QUIC. Fastest where it is not filtered."
+msgstr "Direkt über QUIC. Am schnellsten, wo es nicht gefiltert wird."
+
+#. Footer of the provider transport mode section.
+msgctxt "transport_provider_footer"
+msgid "The transport this device uses while providing for others. Auto tries the enabled transports in preference order and keeps every healthy transport of the same tier connected in parallel."
+msgstr "Der Transport, den dieses Gerät nutzt, während es für andere bereitstellt. „Automatisch“ probiert die aktivierten Transporte in der Reihenfolge der Präferenz aus und hält alle funktionierenden Transporte derselben Stufe parallel verbunden."
+
+#. Transport bar label for traffic admitted for sending but not yet attributed to a physical transport.
+msgctxt "transport_queued"
+msgid "queued"
+msgstr "in Warteschlange"
+
+#. Accessibility label / tooltip on the warning icon next to a transport that is enabled under Auto but not currently eligible under a system constraint (for example the platform memory budget). A runtime warning, not a settings restriction: the toggle stays editable.
+msgctxt "transport_unavailable_system_constraints"
+msgid "Unavailable due to system constraints"
+msgstr "Aufgrund von Systembeschränkungen nicht verfügbar"
+
+#. Prefix of the transport bar footer listing the enabled transports that carried no traffic in the stats window.
+msgctxt "transport_unused"
+msgid "unused"
+msgstr "ungenutzt"
+
+#. Title of the transport distribution bar under the client statistics chart and of the transport settings editor.
+msgctxt "transports"
+msgid "Transports"
+msgstr "Transporte"
+
 #. Used in Shared/Views/Introduction/IntroductionView.swift.
 msgctxt "trusted_by_over_100_000_private_networks"
 msgid "Trusted by over 100,000 private networks"
@@ -6019,6 +8109,11 @@ msgstr "Verbindung konnte nicht gestartet werden"
 msgctxt "tunnel_stopped_unexpectedly"
 msgid "The connection stopped."
 msgstr "Die Verbindung wurde beendet."
+
+#. Label of the unclaimed alpha tile.
+msgctxt "unclaimed"
+msgid "Unclaimed"
+msgstr "Nicht eingelöst"
 
 #. A label displayed in the custom dns settings section.
 msgctxt "unencrypted_dns"
@@ -6150,14 +8245,29 @@ msgctxt "urnetwork_vpn_started"
 msgid "URnetwork VPN started"
 msgstr "URnetwork VPN gestartet"
 
+#. Second paragraph of the Solana connect sheet/card, and the body line under a connected Solana wallet.
+msgctxt "usdc_payouts_until_migration"
+msgid "USDC payouts continue to this wallet until the migration to Bittensor is complete."
+msgstr "USDC-Auszahlungen gehen weiterhin an diese Wallet, bis die Migration zu Bittensor abgeschlossen ist."
+
 #. Payment: the chain to send on. Shown wherever a USDC payment is requested, because USDC exists on many chains and a transfer sent on the wrong one is lost.
 msgctxt "usdc_solana_network_only"
 msgid "Send USDC on the Solana network only. USDC sent on any other network will not arrive."
 msgstr "Senden Sie USDC nur über das Solana-Netzwerk. USDC, die über ein anderes Netzwerk gesendet werden, kommen nicht an."
 
+#. The pending USDC payout total waiting to be sent to the Solana payout wallet; shown on the Solana wallet block and, while no Solana wallet is connected, next to the wallet actions. Mirrors the email headline.
+msgctxt "usdc_waiting"
+msgid "{} USDC waiting"
+msgstr "{} USDC ausstehend"
+
 msgctxt "usdc_wallet_address"
 msgid "USDC wallet address"
 msgstr "USDC-Wallet-Adresse"
+
+#. Toggle on the import screen: also apply the extender settings carried by the code.
+msgctxt "use_extender_settings"
+msgid "Use extender settings"
+msgstr "Extender-Einstellungen verwenden"
 
 #. Note under the location sync toggle explaining that the most stable (longest-connected) provider's location is used. Doubles as the resting status when no more specific status applies.
 msgctxt "use_most_stable_provider"
@@ -6204,6 +8314,10 @@ msgid "{}"
 msgstr "{}"
 
 msgctxt "value_int"
+msgid "{}"
+msgstr "{}"
+
+msgctxt "value_string"
 msgid "{}"
 msgstr "{}"
 
@@ -6256,6 +8370,11 @@ msgctxt "verify_input_label"
 msgid "Verification code"
 msgstr "Bestätigungscode"
 
+#. Standalone Seeker verification action (points multiplier only).
+msgctxt "verify_seeker"
+msgid "Verify Seeker"
+msgstr "Seeker verifizieren"
+
 #. Call to action
 msgctxt "verify_seeker_token_btn"
 msgid "Verify Seeker Pre-Order Token"
@@ -6296,20 +8415,50 @@ msgctxt "wallet"
 msgid "Wallet"
 msgstr "Wallet"
 
+#. Error when a wallet address is on the operator's ban list; the user cannot continue.
+msgctxt "wallet_blocked"
+msgid "This wallet can't be used with URnetwork."
+msgstr "Diese Wallet kann nicht mit URnetwork verwendet werden."
+
 #. Error shown when connecting an external wallet to the account fails.
 msgctxt "wallet_connect_failed"
 msgid "Failed to connect the wallet."
 msgstr "Wallet konnte nicht verbunden werden."
+
+#. Note under the manual address entry: the wallet only signs a proof of ownership.
+msgctxt "wallet_connect_signed_note_linux"
+msgid "Your wallet signs a message to prove it is yours. Nothing is sent on chain."
+msgstr "Deine Wallet signiert eine Nachricht, um zu beweisen, dass sie dir gehört. Es wird nichts an die Chain gesendet."
 
 #. Confirmation shown after an external wallet is connected to the account.
 msgctxt "wallet_connected"
 msgid "Wallet connected."
 msgstr "Wallet verbunden."
 
+#. Line under the connected coldkey.
+msgctxt "wallet_connected_to_protocol"
+msgid "Connected to the UR protocol. Claims land here. Alpha accrues from the next epoch after connecting."
+msgstr "Mit dem UR-Protokoll verbunden. Einlösungen landen hier. Alpha sammelt sich ab der nächsten Epoche nach dem Verbinden an."
+
+#. Warning when a wallet address has no activity on the Bittensor chain yet; the user may continue.
+msgctxt "wallet_looks_new_warning"
+msgid "This address has no activity on the Bittensor chain yet. It looks like a new wallet. Make sure it is yours before continuing."
+msgstr "Diese Adresse hat noch keine Aktivität auf der Bittensor-Chain. Es sieht nach einer neuen Wallet aus. Vergewissere dich, dass sie dir gehört, bevor du fortfährst."
+
 #. Shown on the create-network step after a wallet sign-in when the wallet isn't linked to any network yet. The user picks a network name and accepts the terms to create one; the wallet signature carries over.
 msgctxt "wallet_needs_network"
 msgid "This wallet isn't linked to a network yet. Pick a network name to create one."
 msgstr "Dieses Wallet ist noch mit keinem Netzwerk verknüpft. Wähle einen Netzwerknamen, um eines zu erstellen."
+
+#. Line on the wallet block before a wallet is connected.
+msgctxt "wallet_not_retroactive"
+msgid "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not settled retroactively."
+msgstr "Verbinde eine Wallet, um ab der nächsten Epoche SN25α zu verdienen. Frühere Epochen werden nicht rückwirkend abgerechnet."
+
+#. Accessibility label of the three-dot overflow button next to “Connect Bittensor wallet” and on the connected Bittensor wallet block.
+msgctxt "wallet_options"
+msgid "Wallet options"
+msgstr "Wallet-Optionen"
 
 #. Error shown when signing in with a wallet fails.
 msgctxt "wallet_sign_in_failed"
@@ -6320,6 +8469,16 @@ msgstr "Wallet-Anmeldung fehlgeschlagen"
 msgctxt "wallet_sign_in_method_added"
 msgid "Wallet sign-in method added"
 msgstr "Wallet-Anmeldemethode hinzugefügt"
+
+#. Error when the bridge signed with a different wallet than the address the user typed.
+msgctxt "wallet_signature_mismatch_linux"
+msgid "The wallet that signed is not the address you entered."
+msgstr "Die Wallet, die signiert hat, entspricht nicht der eingegebenen Adresse."
+
+#. Body of the post-purchase screen while the confirmation poll runs (Shared/Views/PurchaseSuccessView.swift). Processing-shaped, not premium-shaped: the server learns of the purchase by webhook and has not confirmed yet.
+msgctxt "we_re_confirming_your_purchase_with_the_app_store"
+msgid "We're confirming your purchase with the App Store. Your plan will update automatically."
+msgstr "Wir bestätigen deinen Kauf beim App Store. Dein Plan wird automatisch aktualisiert."
 
 #. Onboarding offer screen: the small uppercase eyebrow above the headline.
 msgctxt "welcome_offer_eyebrow"
@@ -6340,6 +8499,144 @@ msgstr "Wenn du dein Empfehlungsnetzwerk trennst, kannst du keine Punkte mehr vo
 msgctxt "when_you_refer_a_friend"
 msgid "When you refer a friend:"
 msgstr "Wenn du einen Freund empfiehlst:"
+
+#. Dashboard widget chart title: this device's own traffic.
+msgctxt "widget_client"
+msgid "Client"
+msgstr "Client"
+
+#. Dashboard widget footer before the tunnel has ever written data.
+msgctxt "widget_connect_once"
+msgid "Connect once to see your traffic here"
+msgstr "Verbinde dich einmal, um hier deinen Datenverkehr zu sehen"
+
+#. Contracts widget empty state while the tunnel is down.
+msgctxt "widget_connect_to_see_contracts"
+msgid "Connect to see your contracts"
+msgstr "Verbinde dich, um deine Verträge zu sehen"
+
+#. Accessibility label for one contract stack in the contracts widget. The arguments are the number of contracts and the bytes moved.
+msgctxt "widget_contract_stack_accessibility"
+msgid "{0} contract, {1}"
+msgid_plural "{0} contracts, {1}"
+msgstr[0] "{0} Vertrag, {1}"
+msgstr[1] "{0} Verträge, {1}"
+
+#. Description of the contracts widget in the widget gallery.
+msgctxt "widget_contracts_description"
+msgid "Your top client contracts, flowing as they come and go."
+msgstr "Deine wichtigsten Client-Verträge, im Fluss, wie sie kommen und gehen."
+
+#. Description of the quick connect control in the Control Center gallery.
+msgctxt "widget_control_description"
+msgid "Connect or disconnect the URnetwork VPN."
+msgstr "Das URnetwork-VPN verbinden oder trennen."
+
+#. Description of the dashboard widget in the widget gallery.
+msgctxt "widget_dashboard_description"
+msgid "Transfer balance, connected location and traffic, with quick connect."
+msgstr "Datenguthaben, verbundener Standort und Datenverkehr, mit Schnellverbindung."
+
+#. Description of the provider globe widget in the widget gallery.
+msgctxt "widget_globe_description"
+msgid "Your connected providers on the globe."
+msgstr "Deine verbundenen Anbieter auf dem Globus."
+
+#. Provider globe widget: providers not shown in the list. The argument is a count.
+msgctxt "widget_more_providers"
+msgid "+{} more"
+msgstr "+{} weitere"
+
+#. Contracts widget empty state while connected with no open client contracts.
+msgctxt "widget_no_contracts"
+msgid "No contracts"
+msgstr "Keine Verträge"
+
+#. Badge on the small provider globe widget when no providers are connected.
+msgctxt "widget_no_providers"
+msgid "No providers"
+msgstr "Keine Anbieter"
+
+#. Dashboard widget provider chart label when providing is off.
+msgctxt "widget_not_providing"
+msgid "Not providing"
+msgstr "Keine Bereitstellung"
+
+#. Quick connect control / widget value when the app has no tunnel configuration yet (fresh install or logged out).
+msgctxt "widget_not_signed_in"
+msgid "Not signed in"
+msgstr "Nicht angemeldet"
+
+#. Button on the Home Screen widget that opens the app when the tunnel is not configured yet.
+msgctxt "widget_open"
+msgid "Open"
+msgstr "Öffnen"
+
+#. Widget subtitle when the app has no tunnel configuration yet.
+msgctxt "widget_open_to_set_up"
+msgid "Open URnetwork to set up"
+msgstr "Öffne URnetwork zur Einrichtung"
+
+#. Chart label; the argument is a formatted byte rate such as '1.2 MB/s'.
+msgctxt "widget_peak_rate"
+msgid "{} peak"
+msgstr "Spitze {}"
+
+#. Contracts widget header: number of peers with open contracts.
+msgctxt "widget_peer_count"
+msgid "{} peer"
+msgid_plural "{} peers"
+msgstr[0] "{} Peer"
+msgstr[1] "{} Peers"
+
+#. Dashboard widget chart title: traffic relayed for others while providing.
+msgctxt "widget_provider"
+msgid "Provider"
+msgstr "Anbieter"
+
+#. Widget subtitle: number of connected providers.
+msgctxt "widget_provider_count"
+msgid "{} provider"
+msgid_plural "{} providers"
+msgstr[0] "{} Anbieter"
+msgstr[1] "{} Anbieter"
+
+#. Widget subtitle: number of connected providers while this device is also providing.
+msgctxt "widget_provider_count_providing"
+msgid "{} provider · providing"
+msgid_plural "{} providers · providing"
+msgstr[0] "{} Anbieter · stellt bereit"
+msgstr[1] "{} Anbieter · stellt bereit"
+
+#. Title above the provider traffic chart in the dashboard widget: the chart name with the current provide mode (Auto, Always, Network, Never).
+msgctxt "widget_provider_mode_title"
+msgid "Provider · {}"
+msgstr "Anbieter · {}"
+
+#. Shown in the dashboard widget in place of the provider traffic chart while providing is off.
+msgctxt "widget_provider_stats_when_enabled"
+msgid "Provider stats will appear when the provider is enabled."
+msgstr "Anbieterstatistiken erscheinen, sobald der Anbieter aktiviert ist."
+
+#. Toast after the system added the Quick Settings tile.
+msgctxt "widget_quick_tile_added"
+msgid "Quick connect tile added"
+msgstr "Schnellverbindungs-Kachel hinzugefügt"
+
+#. Title of the Set-Value intent behind the quick connect control and widget toggle (shown by the system in Shortcuts/debug UI).
+msgctxt "widget_toggle_intent_title"
+msgid "Toggle URnetwork VPN"
+msgstr "URnetwork-VPN umschalten"
+
+#. Dashboard widget footer; the argument is a localized relative time such as '3 min. ago'.
+msgctxt "widget_updated_ago"
+msgid "Updated {}"
+msgstr "Aktualisiert {}"
+
+#. Dashboard widget footer in the widget gallery preview.
+msgctxt "widget_updated_just_now"
+msgid "Updated just now"
+msgstr "Gerade aktualisiert"
 
 #. Account: the Widgets section (quick connect control and Home Screen widgets, with how to add them).
 msgctxt "widgets"
@@ -6391,6 +8688,11 @@ msgctxt "you_get_3_gib_day_for_life"
 msgid "You get 3 GiB/day for life"
 msgstr "Du bekommst 3 GiB/Tag – ein Leben lang"
 
+#. Detail line under the onboarding data page title.
+msgctxt "you_get_free_data_every_day"
+msgid "You get free data every day."
+msgstr "Du erhältst jeden Tag kostenlose Daten."
+
 msgctxt "you_have_1_other_device_online"
 msgid "You have 1 other device online"
 msgstr "Du hast 1 weiteres Gerät online"
@@ -6419,10 +8721,20 @@ msgctxt "you_re_premium"
 msgid "You're premium."
 msgstr "Du bist Premium."
 
+#. Title of the onboarding data page (was 'Boost your bandwidth').
+msgctxt "your_bandwidth"
+msgid "Your bandwidth"
+msgstr "Deine Bandbreite"
+
 #. Label for the empty text field.
 msgctxt "your_email"
 msgid "Your email"
 msgstr "Deine E-Mail"
+
+#. Placeholder text for the email field.
+msgctxt "your_email_com"
+msgid "your@email.com"
+msgstr "deine@email.com"
 
 #. Used in Shared/Views/Introduction/ParticipateReferView.swift.
 msgctxt "your_friend_gets_30_gib_month_for_life"
