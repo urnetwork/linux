@@ -56,10 +56,9 @@ struct Session {
 };
 
 // sdk ClientSessionError: the flags, never the server's words (§5).
-// `sessionRevoked` stands for a trustworthy session-revoked cause, the only
-// thing that may say "signed out from another device". The sdk's error carries
-// no such cause at 1e8f3b5f, so the page leaves it false and a refused
-// credential reads the generic sign-in line.
+// `sessionRevoked` is the sdk's trusted session-revoked cause, set with
+// signInRequired, and the only thing that may say "signed out from another
+// device"; any other refused credential reads the generic sign-in line.
 struct Error {
   bool retryable = false;
   bool signInRequired = false;

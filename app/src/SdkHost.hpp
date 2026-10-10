@@ -40,6 +40,7 @@
 #include "SignOut.hpp"
 #include "VerifySendNotice.hpp"
 #include "AddSignInFlow.hpp"
+#include "AuthLogout.hpp"
 #include "BittensorWalletFlow.hpp"
 #include "WalletBridgeRoute.hpp"
 #include "WalletConnect.hpp"
@@ -388,10 +389,13 @@ class SdkHost {
 
   using AuthStateHandler = std::function<void(bool loggedIn)>;
   // Fired when the sdk finds the stored auth is no longer valid on the server
-  // (e.g. the client was removed): the sdk has already cleared its local auth
-  // state. The handler runs on an sdk thread and must only marshal -- the ui
-  // marshals onto the main loop and calls Logout().
-  using AuthInvalidHandler = std::function<void()>;
+  // (e.g. the client was removed, or this session was signed out from another
+  // device): the sdk has already cleared its local auth state. The report
+  // carries the cause its listener read and the sign-in it was heard in
+  // (AuthLogout.hpp). The handler runs on an sdk thread and must only marshal
+  // -- the ui marshals onto the main loop and, when SignsOut(report), calls
+  // Logout().
+  using AuthInvalidHandler = std::function<void(auth_logout::Report report)>;
   using JwtRefreshedHandler = std::function<void()>;
   // The ONE connection feed. It replaced a string push whose five call sites
   // could only ever emit "DESTINATION_SET" or "DISCONNECTED" — a vocabulary
@@ -826,6 +830,11 @@ class SdkHost {
 
   void SetAuthStateHandler(AuthStateHandler h) { onAuth_ = std::move(h); }
   void SetAuthInvalidHandler(AuthInvalidHandler h) { onAuthInvalid_ = std::move(h); }
+  // Whether a report the auth-invalid handler was given still signs the app
+  // out: it was heard while signed in, and nothing has signed out or in since.
+  // Each listener that hears a rejection reports it (the Api's, and the bound
+  // DeviceRemote's), and only the first of them signs out. Main loop.
+  bool SignsOut(const auth_logout::Report& report) const { return authLogouts_.SignsOut(report); }
   void SetJwtRefreshedHandler(JwtRefreshedHandler h) { onJwtRefreshed_ = std::move(h); }
   // The connection feed. Fired on every event that can change any part of the
   // reading, and NEVER gated on window visibility by its consumer: the copies
@@ -1275,6 +1284,9 @@ class SdkHost {
   // the space reports this app's client info (NetworkSpaceConfig.hpp
   // ReportClientInfo), and its own sign-out reaches the auth-invalid handler.
   void AdoptSpaceApiLocked();
+  // A listener's sign-out, with the cause it read: to the auth-invalid
+  // handler, which marshals (an sdk thread).
+  void ReportAuthLogout(std::string cause);
   void RegisterNetworkClient(const std::string& byJwt, std::function<void(AuthResult)> done);
   // Shared routing for NetworkCreateResult (sign-up + wallet sign-up).
   // `bittensorWalletId` is the Bittensor wallet that signed ("" for none).
@@ -1520,6 +1532,10 @@ class SdkHost {
   // start read this first. Atomic: the sign-in's commit lands on the sdk's
   // thread.
   std::atomic<bool> signedOut_{false};
+  // The sign-in the sdk's sign-out reports are heard in and checked against
+  // (AuthLogout.hpp), moved with signedOut_ and at launch. Declared before
+  // every subscription whose listener reads it.
+  auth_logout::Tracker authLogouts_;
   // The daemon as a delivery sees it: the session ensured, the status read for
   // this uid, and stop_tunnel. Requires mutex_.
   signout::Daemon SignOutDaemonLocked();

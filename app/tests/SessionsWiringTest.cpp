@@ -220,3 +220,10 @@ UR_TEST(SessionsWiring_TheStatusLinesAreThePresentations) {
   UR_EXPECT_TRUE(Contains(FunctionBody(page, "void SessionsPage::PressSignOut("),
                           "if (!CanCallApi() || !binding_.Attached()) return;"));
 }
+
+// The sdk's trusted session-revoked cause is copied with the other flags.
+UR_TEST(SessionsWiring_TheRevokedCauseIsTheSdks) {
+  const std::string copy = FunctionBody(ReadCode("SessionsPage.cpp"), "sessions::Error ErrorOf(");
+  UR_EXPECT_TRUE(Contains(copy, "out.signInRequired = error.getSignInRequired();"));
+  UR_EXPECT_TRUE(Contains(copy, "out.sessionRevoked = error.getSessionRevoked();"));
+}

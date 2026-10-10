@@ -89,7 +89,8 @@ sessions::Error ErrorOf(const urnet::ClientSessionError& error) {
   out.retryable = error.getRetryable();
   out.signInRequired = error.getSignInRequired();
   out.unsupported = error.getUnsupported();
-  // no typed session-revoked cause in the sdk yet (SessionsPresentation.hpp)
+  // the sdk's trusted cause: this session was signed out from another device
+  out.sessionRevoked = error.getSessionRevoked();
   return out;
 }
 
