@@ -395,21 +395,33 @@ UR_TEST(Sessions_UnsupportedSaysSo) {
   UR_EXPECT_TEXT("Sessions aren't available yet.", s::BodyText(s::Body::Unsupported)->english);
 }
 
-// A refused credential reads the app's generic sign-in line; only a
-// trustworthy revoked cause, which the sdk does not report yet, may say the
-// session was signed out from another device.
-UR_TEST(Sessions_SignInRequiredIsGenericUnlessTheCauseIsKnown) {
+// A refused credential asks to sign in again, naming no cause (the screen's
+// own line, not the signed-out pages' "Please login to URnetwork"); only the
+// sdk's trusted session-revoked cause says the session was signed out from
+// another device.
+UR_TEST(Sessions_SignInRequiredAsksToSignInAgainUnlessTheCauseIsKnown) {
   s::Snapshot snapshot = TwoSessions();
   snapshot.error = s::Error{false, /*signInRequired=*/true, false, false};
   s::Screen screen = s::ScreenFor(snapshot, true);
   UR_EXPECT_TRUE(screen.body == s::Body::SignInRequired);
-  UR_EXPECT_TEXT("Please login to URnetwork", s::BodyText(screen.body)->english);
+  UR_EXPECT_TEXT("sessions_sign_in_required", s::BodyText(screen.body)->key);
+  UR_EXPECT_TEXT("Sign in again to manage sessions.", s::BodyText(screen.body)->english);
   UR_EXPECT_FALSE(screen.signOutOthers);
+  UR_EXPECT_FALSE(screen.lastUsedHelp);
+  // the same before anything loaded (a refused first load), and over a
+  // retryable flag
+  s::Snapshot first;
+  first.error = s::Error{/*retryable=*/true, /*signInRequired=*/true, false, false};
+  UR_EXPECT_TRUE(s::ScreenFor(first, true).body == s::Body::SignInRequired);
+  // the trusted cause
   snapshot.error->sessionRevoked = true;
   screen = s::ScreenFor(snapshot, true);
   UR_EXPECT_TRUE(screen.body == s::Body::SignedOutRemotely);
+  UR_EXPECT_TEXT("sessions_signed_out_remotely", s::BodyText(screen.body)->key);
   UR_EXPECT_TEXT("This session was signed out from another device.",
                  s::BodyText(screen.body)->english);
+  // signed out, the page keeps the signed-out pages' line
+  UR_EXPECT_TEXT("please_login_to_urnetwork", s::BodyText(s::Body::NoSession)->key);
 }
 
 UR_TEST(Sessions_SignOutAllOthersNeedsThisSessionAndAnother) {
@@ -429,6 +441,41 @@ UR_TEST(Sessions_SignOutAllOthersNeedsThisSessionAndAnother) {
   UR_EXPECT_TRUE(s::ScreenFor(snapshot, true).signOutOthersView == s::ActionView::Busy);
   snapshot.bulkAction = s::Action{"", false, false, s::Error{true, false, false, false}};
   UR_EXPECT_TRUE(s::ScreenFor(snapshot, true).signOutOthersView == s::ActionView::Failed);
+}
+
+// A failed Sign out all other sessions says so under the button, in its own
+// words (the row's line says "this session"), and leaves the button on: the
+// controller is asked again from it (SessionsBindingTest).
+UR_TEST(Sessions_AFailedSignOutOfTheOthersSaysSoUnderTheButton) {
+  s::Snapshot snapshot = TwoSessions();
+  snapshot.bulkAction = s::Action{"", false, false, s::Error{/*retryable=*/true, false, false, false}};
+  s::Screen screen = s::ScreenFor(snapshot, true);
+  UR_EXPECT_TRUE(screen.signOutOthers);
+  UR_EXPECT_TRUE(screen.signOutOthersView == s::ActionView::Failed);
+  std::optional<s::Text> line = s::ActionStatusText(screen.signOutOthersView, /*others=*/true);
+  UR_EXPECT_TRUE(line.has_value());
+  UR_EXPECT_TEXT("sessions_sign_out_others_failed", line->key);
+  UR_EXPECT_TEXT("Couldn't sign out the other sessions. Try again.", line->english);
+  // whatever refused it: a refused credential, an unsupported server
+  for (const s::Error& error : {s::Error{false, /*signInRequired=*/true, false, false},
+                                s::Error{false, false, /*unsupported=*/true, false},
+                                s::Error{false, false, false, false}}) {
+    snapshot.bulkAction->error = error;
+    screen = s::ScreenFor(snapshot, true);
+    UR_EXPECT_TRUE(screen.signOutOthersView == s::ActionView::Failed);
+    UR_EXPECT_TEXT("sessions_sign_out_others_failed",
+                   s::ActionStatusText(screen.signOutOthersView, true)->key);
+  }
+  // in flight again: "Signing out…" instead; settled: nothing
+  snapshot.bulkAction->loading = true;
+  screen = s::ScreenFor(snapshot, true);
+  UR_EXPECT_TEXT("Signing out…", s::ActionStatusText(screen.signOutOthersView, true)->english);
+  snapshot.bulkAction.reset();
+  UR_EXPECT_FALSE(s::ActionStatusText(s::ScreenFor(snapshot, true).signOutOthersView, true).has_value());
+  // a row's own failure keeps the row's words
+  UR_EXPECT_TEXT("sessions_action_failed", s::ActionStatusText(s::ActionView::Failed, false)->key);
+  UR_EXPECT_TEXT("Signing out…", s::ActionStatusText(s::ActionView::Busy, false)->english);
+  UR_EXPECT_FALSE(s::ActionStatusText(s::ActionView::Idle, false).has_value());
 }
 
 // ---- actions (§4) --------------------------------------------------------------------
@@ -586,6 +633,9 @@ UR_TEST(Sessions_EveryKeyAndEnglishIsTheCatalogs) {
   for (s::Body body : {s::Body::NoSession, s::Body::Progress, s::Body::Empty, s::Body::LoadFailed,
                        s::Body::Unsupported, s::Body::SignInRequired, s::Body::SignedOutRemotely}) {
     texts.push_back(*s::BodyText(body));
+  }
+  for (s::ActionView view : {s::ActionView::Busy, s::ActionView::Failed}) {
+    for (bool others : {false, true}) texts.push_back(*s::ActionStatusText(view, others));
   }
   const s::Snapshot snapshot = TwoSessions();
   for (const s::Confirmation& confirmation :

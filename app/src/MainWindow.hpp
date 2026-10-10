@@ -13,6 +13,7 @@
 
 #include <gtkmm.h>
 
+#include "AuthLogout.hpp"
 #include "AuthViews.hpp"
 #include "BittensorManualSheet.hpp"
 #include "BrowserSignInGate.hpp"
@@ -187,6 +188,10 @@ class MainWindow : public Gtk::ApplicationWindow {
   void DivertGuestToConversion(std::function<void()> checkout);
   void OnOnboardingGuestSignInRequired();
   void NavigateVerify(const std::string& userAuth);
+  // The sdk reported that the server rejected this app's sign-in
+  // (SdkHost::SetAuthInvalidHandler), marshaled here: the normal Logout(), once
+  // per rejection, and the sign-in page's notice its cause allows.
+  void OnAuthLogout(const auth_logout::Report& report);
   void ApplyAuthState(bool loggedIn);
   // ONE READING IN, EVERY WINDOW SURFACE OUT. There is no SetConnected(bool)
   // any more: a bool is what let this window's copy of "connected" age
@@ -239,6 +244,9 @@ class MainWindow : public Gtk::ApplicationWindow {
   Gtk::Label passwordUserAuth_;           // the discovered auth the password belongs to
   Gtk::Label passwordError_;
   Gtk::Label loginError_;
+  // "This session was signed out from another device.", owed to the sign-in
+  // page by the sign-out OnAuthLogout made, until ApplyAuthState shows it
+  auth_logout::SignInNotice signInNotice_;
 
   // ---- the branded initial step (windows LoginPanel parity) ----------------
   LoginCarousel* carousel_ = nullptr;

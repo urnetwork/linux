@@ -193,3 +193,37 @@ UR_TEST(SessionsWiring_TheUnknownCountryColourIsTheApps) {
   UR_EXPECT_TRUE(Contains(ReadCode("ProviderLocationsSheet.cpp"),
                           "constexpr Rgba kUnknownCountry{0x00 / 255.0, 0x99 / 255.0, 0xFF / 255.0, 1.0};"));
 }
+
+// The line under each sign-out's control is the presentation's: "Signing
+// out…", then the row's failure, or under Sign out all other sessions its own
+// ("Couldn't sign out the other sessions. Try again."); a failed control stays
+// on for another press, which asks the controller again.
+UR_TEST(SessionsWiring_TheStatusLinesAreThePresentations) {
+  const std::string page = ReadCode("SessionsPage.cpp");
+  const std::string others = FunctionBody(page, "void SessionsPage::RenderOthers(");
+  // (the reader blanks the /*others=*/ comments)
+  UR_EXPECT_TRUE(Contains(others, "sessions::ActionStatusText(screen.signOutOthersView, "));
+  UR_EXPECT_TRUE(Contains(others, "true);"));
+  UR_EXPECT_TRUE(Contains(others, "othersStatus_->set_visible(status.has_value());"));
+  UR_EXPECT_TRUE(Contains(others, "if (status) SetToned(*othersStatusText_, busy ? kUrTextMuted : kUrDanger, Lookup(*status));"));
+  UR_EXPECT_TRUE(Contains(others, "othersButton_->set_sensitive(!busy);"));
+  for (const char* text : {"kOthersFailedText", "kSigningOutText", "kActionFailedText",
+                           "something_went_wrong"}) {
+    UR_EXPECT_TRUE_MSG(text, !Contains(others, text));
+  }
+  const std::string row = FunctionBody(page, "void SessionsPage::UpdateRow(");
+  UR_EXPECT_TRUE(Contains(row, "sessions::ActionStatusText(view, "));
+  UR_EXPECT_TRUE(Contains(row, "row.status->set_visible(status.has_value());"));
+  UR_EXPECT_TRUE(Contains(row, "row.signOut->set_sensitive(!busy);"));
+  // the bulk press is refused only while it runs (SignOutFlow), never after a
+  // failure
+  UR_EXPECT_TRUE(Contains(FunctionBody(page, "void SessionsPage::PressSignOut("),
+                          "if (!CanCallApi() || !binding_.Attached()) return;"));
+}
+
+// The sdk's trusted session-revoked cause is copied with the other flags.
+UR_TEST(SessionsWiring_TheRevokedCauseIsTheSdks) {
+  const std::string copy = FunctionBody(ReadCode("SessionsPage.cpp"), "sessions::Error ErrorOf(");
+  UR_EXPECT_TRUE(Contains(copy, "out.signInRequired = error.getSignInRequired();"));
+  UR_EXPECT_TRUE(Contains(copy, "out.sessionRevoked = error.getSessionRevoked();"));
+}

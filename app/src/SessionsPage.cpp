@@ -89,7 +89,8 @@ sessions::Error ErrorOf(const urnet::ClientSessionError& error) {
   out.retryable = error.getRetryable();
   out.signInRequired = error.getSignInRequired();
   out.unsupported = error.getUnsupported();
-  // no typed session-revoked cause in the sdk yet (SessionsPresentation.hpp)
+  // the sdk's trusted cause: this session was signed out from another device
+  out.sessionRevoked = error.getSessionRevoked();
   return out;
 }
 
@@ -621,17 +622,15 @@ void SessionsPage::UpdateRow(RowWidgets& row, const sessions::Row& text,
 
   const bool busy = view == sessions::ActionView::Busy;
   row.signOut->set_sensitive(!busy);
-  row.status->set_visible(view != sessions::ActionView::Idle);
+  const std::optional<sessions::Text> status = sessions::ActionStatusText(view, /*others=*/false);
+  row.status->set_visible(status.has_value());
   row.spinner->set_visible(busy);
   if (busy) {
     row.spinner->start();
-    SetToned(*row.statusText, kUrTextMuted, Lookup(sessions::kSigningOutText));
   } else {
     row.spinner->stop();
-    if (view == sessions::ActionView::Failed) {
-      SetToned(*row.statusText, kUrDanger, Lookup(sessions::kActionFailedText));
-    }
   }
+  if (status) SetToned(*row.statusText, busy ? kUrTextMuted : kUrDanger, Lookup(*status));
   kit::SetBusy(*row.root, busy);
 }
 
@@ -640,18 +639,19 @@ void SessionsPage::RenderOthers(const sessions::Screen& screen) {
   othersRow_->set_visible(shown);
   if (!shown) return;
   const bool busy = screen.signOutOthersView == sessions::ActionView::Busy;
+  // a failure leaves the button on: another press asks the controller again
   othersButton_->set_sensitive(!busy);
-  othersStatus_->set_visible(screen.signOutOthersView != sessions::ActionView::Idle);
+  // under the button: "Signing out…", or why the other sessions are still in
+  const std::optional<sessions::Text> status =
+      sessions::ActionStatusText(screen.signOutOthersView, /*others=*/true);
+  othersStatus_->set_visible(status.has_value());
   othersSpinner_->set_visible(busy);
   if (busy) {
     othersSpinner_->start();
-    SetToned(*othersStatusText_, kUrTextMuted, Lookup(sessions::kSigningOutText));
   } else {
     othersSpinner_->stop();
-    if (screen.signOutOthersView == sessions::ActionView::Failed) {
-      SetToned(*othersStatusText_, kUrDanger, Lookup(sessions::kOthersFailedText));
-    }
   }
+  if (status) SetToned(*othersStatusText_, busy ? kUrTextMuted : kUrDanger, Lookup(*status));
   kit::SetBusy(*othersButton_, busy);
 }
 

@@ -56,10 +56,9 @@ struct Session {
 };
 
 // sdk ClientSessionError: the flags, never the server's words (§5).
-// `sessionRevoked` stands for a trustworthy session-revoked cause, the only
-// thing that may say "signed out from another device". The sdk's error carries
-// no such cause at 1e8f3b5f, so the page leaves it false and a refused
-// credential reads the generic sign-in line.
+// `sessionRevoked` is the sdk's trusted session-revoked cause, set with
+// signInRequired, and the only thing that may say "signed out from another
+// device"; any other refused credential reads the generic sign-in line.
 struct Error {
   bool retryable = false;
   bool signInRequired = false;
@@ -108,9 +107,9 @@ inline constexpr Text kCancelText{"cancel", "Cancel"};
 inline constexpr Text kSigningOutText{"sessions_signing_out", "Signing out…"};
 inline constexpr Text kActionFailedText{"sessions_action_failed",
                                         "Couldn't sign out this session. Try again."};
-// The bulk sign-out has no failure line of its own in the store, and the row's
-// says "this session": the app's generic line instead.
-inline constexpr Text kOthersFailedText{"something_went_wrong", "Something went wrong."};
+// The bulk sign-out's own failure: the row's line says "this session".
+inline constexpr Text kOthersFailedText{"sessions_sign_out_others_failed",
+                                        "Couldn't sign out the other sessions. Try again."};
 inline constexpr Text kRefreshText{"refresh", "Refresh"};
 inline constexpr Text kLoadingText{"loading", "Loading..."};
 inline constexpr Text kTryAgainText{"try_again", "Try again"};
@@ -324,6 +323,22 @@ inline ActionView ActionViewOf(const std::optional<Action>& action) {
   return action->error ? ActionView::Failed : ActionView::Idle;
 }
 
+// The line under a sign-out's control: "Signing out…" while it runs, then its
+// failure, under a row (`others` false) or under Sign out all other sessions;
+// nothing while idle. A failed control stays on: pressing it again asks the
+// controller again (SignOutFlow).
+inline std::optional<Text> ActionStatusText(ActionView view, bool others) {
+  switch (view) {
+    case ActionView::Idle:
+      return std::nullopt;
+    case ActionView::Busy:
+      return kSigningOutText;
+    case ActionView::Failed:
+      return others ? kOthersFailedText : kActionFailedText;
+  }
+  return std::nullopt;
+}
+
 // The sign-out of one session, if the controller has one for it.
 inline std::optional<Action> ActionFor(const Snapshot& snapshot, const std::string& sessionId) {
   for (const Action& action : snapshot.actions) {
@@ -341,7 +356,7 @@ enum class Body {
   Empty,              // loaded, and nothing to list
   LoadFailed,         // the first load failed: Try again
   Unsupported,        // the server has no sessions yet
-  SignInRequired,     // the credential was refused: the generic sign-in line
+  SignInRequired,     // the credential was refused: sign in again, no cause named
   SignedOutRemotely,  // ...with a trustworthy session-revoked cause
 };
 
@@ -399,8 +414,9 @@ inline Screen ScreenFor(const Snapshot& snapshot, bool signedIn) {
 inline std::optional<Text> BodyText(Body body) {
   switch (body) {
     case Body::NoSession:
-    case Body::SignInRequired:
       return Text{"please_login_to_urnetwork", "Please login to URnetwork"};
+    case Body::SignInRequired:
+      return Text{"sessions_sign_in_required", "Sign in again to manage sessions."};
     case Body::Progress:
       return kLoadingText;
     case Body::Rows:

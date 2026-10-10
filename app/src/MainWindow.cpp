@@ -338,10 +338,11 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   host_.SetAuthStateHandler([this](bool loggedIn) {
     PostToMain([this, loggedIn] { ApplyAuthState(loggedIn); });
   });
-  // The server rejected the stored auth (e.g. the client was removed): log out
-  // and return to the login panel. Logout() fires the auth-state handler.
-  host_.SetAuthInvalidHandler([this] {
-    PostToMain([this] { host_.Logout(); });
+  // The server rejected the stored auth (e.g. the client was removed, or this
+  // session was signed out from another device): log out and return to the
+  // login panel (OnAuthLogout). Logout() fires the auth-state handler.
+  host_.SetAuthInvalidHandler([this](auth_logout::Report report) {
+    PostToMain([this, report] { OnAuthLogout(report); });
   });
   host_.SetJwtRefreshedHandler([this] {
     PostToMain([this] { balance_.OnJwtRefreshed(); });
@@ -2332,6 +2333,23 @@ void MainWindow::OpenOnboardingIfPending() {
   }, 600);
 }
 
+// One rejection reaches here once per listener that heard it (the Api's, then
+// the bound DeviceRemote's): only the first signs out. A report that lands
+// after any sign-out, this app's own included, signs nothing out and says
+// nothing. The notice is owed before Logout(), whose ApplyAuthState(false)
+// shows it.
+void MainWindow::OnAuthLogout(const auth_logout::Report& report) {
+  if (!host_.SignsOut(report)) {
+    g_message("auth: a sign-out report for a sign-in already ended was dropped (cause \"%s\")",
+              report.cause.c_str());
+    return;
+  }
+  g_message("auth: the server rejected this sign-in (cause \"%s\"); signing out",
+            report.cause.c_str());
+  signInNotice_.Arm(report.cause);
+  host_.Logout();
+}
+
 void MainWindow::ApplyAuthState(bool loggedIn) {
   // Home's first entrance (windows homeRevealed_): the first time Home shows
   // in this window, a sign-in made in it crossfades the login flow into Home,
@@ -2349,6 +2367,8 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
   outOfBalance_.Reset();
   ForgetDaemonStatus();
   if (loggedIn) {
+    // a sign-in ends what the last sign-out owed the sign-in page
+    signInNotice_.Drop();
     ApplyConnectReading(host_.CurrentConnectReading());
     // (re)seed the balance/plan store from the (possibly new) jwt: login and
     // app start land here
@@ -2396,6 +2416,12 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
     password_.set_text("");
     passwordError_.set_text("");
     loginError_.set_text("");
+    // ...saying why, once, when the server confirmed another device signed
+    // this session out (OnAuthLogout); the line goes with the next gesture
+    if (signInNotice_.Take()) {
+      SetLoginNotice(
+          T_("sessions_signed_out_remotely", "This session was signed out from another device."));
+    }
   }
 }
 

@@ -721,6 +721,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/PlanPickerWiringTest.cpp',
     'tests/ClientInfoWiringTest.cpp',
     'tests/ApiSignOutWiringTest.cpp',
+    'tests/AuthLogoutTest.cpp',
     'tests/GlyphPathTest.cpp',
     'tests/AccountRowIconsTest.cpp',
     'tests/RelativeTimeSpanTest.cpp',
@@ -832,7 +833,8 @@ urnetwork_tests = executable('urnetwork-tests',
               # ConnectCanvasRimWiringTest reads the hero canvas's rim and orbits the same way.
               # PlanPickerWiringTest reads the plan cards and their css the same way.
               # ClientInfoWiringTest reads the GUI's and the daemon's Api adoption
-              # the same way, and ApiSignOutWiringTest the Api's sign-out.
+              # the same way, and ApiSignOutWiringTest the Api's and the device's
+              # sign-out reports and the sign-in page's notice.
               # AccountRowIconsTest reads the Account pane's rows, the kit's
               # leading icon and its css the same way.
               # RelativeTimeSpanTest reads RelativeTime's words the same way, and

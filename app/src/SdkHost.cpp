@@ -19,6 +19,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include <glib/gstdio.h>
@@ -314,6 +315,22 @@ logupload::PassedLogFiles OpenGuiLogFiles() {
   return files;
 }
 
+static_assert(std::string_view(auth_logout::kSessionRevoked) ==
+                  std::string_view(urnet::AuthLogoutCauseSessionRevoked),
+              "the sign-in page's notice reads the sdk's session-revoked cause");
+
+// Device::getAuthLogoutCause through a handle the caller does not own: a device
+// listener runs on an sdk thread, where device_ is not its to read, and the
+// DeviceRemote it was added on is not shared. A handle released meanwhile
+// answers "" (the sdk never reuses one).
+std::string DeviceAuthLogoutCause(uint64_t device) {
+  char* cause = urnet_device_get_auth_logout_cause(device);
+  if (cause == nullptr) return std::string();
+  std::string out(cause);
+  urnet_free_string(cause);
+  return out;
+}
+
 }  // namespace
 
 SdkHost::~SdkHost() {
@@ -420,11 +437,22 @@ void SdkHost::AdoptSpaceApiLocked() {
   // there is no device to report anything. Logout's own setByJwt("") does not
   // fire it. A new subscription goes with every new Api, so a rejection on a
   // replaced one cannot sign the next account out.
+  //
+  // The listener reads why (Api.getAuthLogoutCause, set before the listeners
+  // run) on the sdk thread it runs on, before anything is posted, through a
+  // handle of its own on this Api: api_ is mutex_'s.
   apiLogoutSub_.reset();
-  apiLogoutSub_.emplace(api_->addAuthLogoutListener([this] {
-    // an sdk thread: marshal only (MainWindow's handler posts Logout)
-    if (onAuthInvalid_) onAuthInvalid_();
+  auto api = std::make_shared<urnet::Api>(networkSpace_->getApi());
+  apiLogoutSub_.emplace(api_->addAuthLogoutListener([this, api] {
+    // an sdk thread: read, then marshal only (MainWindow's handler posts Logout)
+    ReportAuthLogout(api->getAuthLogoutCause());
   }));
+}
+
+void SdkHost::ReportAuthLogout(std::string cause) {
+  // the sign-in it was heard in goes with it: a second listener's report of
+  // the same rejection, or one that lands after a sign-out, signs nothing out
+  if (onAuthInvalid_) onAuthInvalid_(authLogouts_.Hear(std::move(cause)));
 }
 
 bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDir) {
@@ -463,6 +491,8 @@ bool SdkHost::Initialize(const std::string& storageDir, const std::string& logDi
     AdoptSpaceApiLocked();
     asyncLocalState_ = networkSpace_->getAsyncLocalState();
     localState_ = asyncLocalState_->getLocalState();
+    // a launch signed in (IsLoggedIn) is a sign-in the server can reject
+    if (!localState_->getByClientJwt().empty()) authLogouts_.SignedIn();
     // the SDK's client event queue over this network space: it persists,
     // batches and sends the product events (ClientEvents.hpp)
     events_ = std::make_unique<ClientEventQueue>(networkSpace_->handle(), UR_APP_VERSION,
@@ -834,6 +864,12 @@ bool SdkHost::ApplyNetworkServer(const std::string& hostName, const std::string&
       // the new space's stored credential is the answer, not a sign-out made
       // in another space
       signedOut_.store(!loggedIn);
+      // ...and a report from the replaced space signs nothing out
+      if (loggedIn) {
+        authLogouts_.SignedIn();
+      } else {
+        authLogouts_.SignedOut();
+      }
       ok = true;
     } catch (const std::exception& e) {
       std::fprintf(stderr, "[sdk] switch network space to '%s' failed: %s\n",
@@ -2237,6 +2273,7 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
         }
         // the stored credential is this sign-in's from here
         signedOut_.store(false);
+        authLogouts_.SignedIn();
         if (onAuth_) onAuth_(true);
         done({true, false, ""});
       });
@@ -2731,9 +2768,15 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
     // The jwt refresh (which runs immediately at device creation) tells us
     // when the stored client no longer exists on the server. Only marshal from
     // the callback: it runs on an sdk thread, and Logout() clears subs_ --
-    // which would destroy the sub whose callback is running.
-    subs_.push_back(device_->addAuthLogoutListener([this] {
-      if (onAuthInvalid_) onAuthInvalid_();
+    // which would destroy the sub whose callback is running. Its cause
+    // (Device.getAuthLogoutCause, set before the listeners run) is read there
+    // first, through the handle the listener was added on: device_ is mutex_'s.
+    // The device signs out because the Api it is bound to did, so the Api's
+    // listener has reported the same rejection already; ReportAuthLogout's
+    // sign-in makes that one sign-out.
+    const uint64_t deviceHandle = device_->handle();
+    subs_.push_back(device_->addAuthLogoutListener([this, deviceHandle] {
+      ReportAuthLogout(DeviceAuthLogoutCause(deviceHandle));
     }));
 
     // A jwt refresh re-derives Pro from the (now-updated) token — mac's
@@ -5188,6 +5231,9 @@ void SdkHost::Logout() {
   // Signed out from here: a posted reconcile, the health poll or a Connect that
   // runs after this starts nothing for the account that is leaving.
   signedOut_.store(true);
+  // ...and a sign-out the sdk reports for it from here signs nothing out again
+  // (AuthLogout.hpp)
+  authLogouts_.SignedOut();
   pendingWalletAuth_.reset();
   // so are sign-in flows left unfinished before this session (an sso identity
   // with no network, an instant account never confirmed): they belong to no
