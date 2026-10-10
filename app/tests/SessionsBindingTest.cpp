@@ -191,3 +191,52 @@ UR_TEST(SessionsBinding_EveryPostReadsTheLatestSnapshot) {
   const std::optional<s::Snapshot> read = binding.Read();
   UR_EXPECT_TRUE(read.has_value() && read->loaded && read->sessions.size() == 2);
 }
+
+// A failed Sign out all other sessions is tried again from the same button:
+// the press opens the confirmation again (SignOutFlow), and its Sign out asks
+// the controller again, which reuses its operation. The page renders the
+// controller's latest snapshot (the binding's Read), so the retry's progress
+// replaces the failure under the button.
+UR_TEST(SessionsBinding_AFailedSignOutOfTheOthersIsAskedAgain) {
+  s::Binding binding;
+  const Log log = NewLog();
+  auto controller = std::make_unique<FakeController>(log);
+  FakeController* fake = controller.get();
+  binding.Attach(std::move(controller), 1);
+  s::LastUse here;
+  here.deviceType = "linux";
+  s::Session self;
+  self.sessionId = "aaaaaaaa-0000-0000-0000-000000000001";
+  self.current = true;
+  self.lastUse = here;
+  s::Session other;
+  other.sessionId = "01a1f3c2-1111-2222-3333-444455556666";
+  fake->snapshot.loaded = true;
+  fake->snapshot.currentSessionId = self.sessionId;
+  fake->snapshot.sessions = {self, other};
+  fake->snapshot.bulkAction = s::Action{"", false, false, s::Error{true, false, false, false}};
+  log->clear();
+
+  const s::Words words{[](const s::Text& text) { return std::string(text.english); },
+                       [](const std::string& pattern, const std::vector<std::string>&) { return pattern; },
+                       [](int64_t) { return std::string("now"); },
+                       [](int64_t) { return std::string("D"); },
+                       [](int64_t) { return std::string("DT"); }};
+  const std::optional<s::Snapshot> failed = binding.Read();
+  UR_EXPECT_TRUE(failed.has_value());
+  UR_EXPECT_TRUE(s::ScreenFor(*failed, true).signOutOthersView == s::ActionView::Failed);
+  s::SignOutFlow flow;
+  const std::optional<s::Confirmation> confirmation = flow.Press(*failed, s::Target{true, ""}, words);
+  UR_EXPECT_TRUE(confirmation.has_value() && confirmation->target.others);
+  const std::optional<s::Target> target = flow.Confirm();
+  UR_EXPECT_TRUE(target.has_value());
+  if (target) binding.Revoke(*target);
+  UR_EXPECT_TRUE(LogIs(log, {"read", "revoke-others"}));
+
+  // the retry in flight: busy again, and no second confirmation meanwhile
+  fake->snapshot.bulkAction = s::Action{"", /*loading=*/true, false, s::Error{true, false, false, false}};
+  const std::optional<s::Snapshot> retrying = binding.Read();
+  UR_EXPECT_TRUE(retrying.has_value());
+  UR_EXPECT_TRUE(s::ScreenFor(*retrying, true).signOutOthersView == s::ActionView::Busy);
+  UR_EXPECT_FALSE(flow.Press(*retrying, s::Target{true, ""}, words).has_value());
+}

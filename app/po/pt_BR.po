@@ -7620,6 +7620,11 @@ msgctxt "sessions_refresh_failed"
 msgid "Couldn't refresh. Showing the last list."
 msgstr "Não foi possível atualizar. Mostrando a última lista."
 
+#. Sessions screen (Account > Sessions): the screen's state when the account's sign-in was rejected and the user must sign in again. Generic: it names no cause. sessions_signed_out_remotely is the line for when the app knows another device signed this session out.
+msgctxt "sessions_sign_in_required"
+msgid "Sign in again to manage sessions."
+msgstr "Entre novamente para gerenciar as sessões."
+
 #. Sessions screen (Account > Sessions): the screen-reader action on a row that signs its session out (the row's visible control is the sign_out key). {device} is the row's device label, e.g. "Android" or "Unknown device".
 msgctxt "sessions_sign_out_accessibility"
 msgid "Sign out {}"
@@ -7629,6 +7634,11 @@ msgstr "Sair da sessão em {}"
 msgctxt "sessions_sign_out_all_others"
 msgid "Sign out all other sessions"
 msgstr "Sair de todas as outras sessões"
+
+#. Sessions screen (Account > Sessions): shown under the Sign out all other sessions button when signing the other sessions out failed.
+msgctxt "sessions_sign_out_others_failed"
+msgid "Couldn't sign out the other sessions. Try again."
+msgstr "Não foi possível encerrar as outras sessões. Tente novamente."
 
 #. Sessions screen (Account > Sessions), row line 3: when the session was created, i.e. signed in. {date} is a localized date, e.g. "Oct 3". The sign-in method and the short ID follow: "Signed in Oct 3 · Google · ID 01a1f3c2".
 msgctxt "sessions_signed_in"
