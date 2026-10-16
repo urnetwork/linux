@@ -47,7 +47,7 @@ UR_TEST(ApiAuthorization_EveryStaleOrFailedDeviceTeardownRestoresIt) {
   const std::string host = ReadCode("SdkHost.cpp");
   for (const char* signature : {"TunnelStartResult SdkHost::StartTunnelLocked(",
                                 "TunnelStartResult SdkHost::BindRemoteDeviceLocked(",
-                                "void SdkHost::ConnectBestAvailable()",
+                                "void SdkHost::ConnectBestAvailableNow()",
                                 "void SdkHost::ReconcileProviderLocked(",
                                 "void SdkHost::OnRpcBindDeadline()"}) {
     const std::string body = Squeezed(FunctionBody(host, signature));
@@ -63,7 +63,7 @@ UR_TEST(ApiAuthorization_EveryStaleOrFailedDeviceTeardownRestoresIt) {
 // a network change or a fresh sign-in installs its own.
 UR_TEST(ApiAuthorization_SignOutQuitAndNetworkChangeDoNotRestoreIt) {
   const std::string host = ReadCode("SdkHost.cpp");
-  for (const char* signature : {"void SdkHost::Logout()", "void SdkHost::Shutdown()",
+  for (const char* signature : {"void SdkHost::LogoutNow()", "void SdkHost::Shutdown()",
                                 "bool SdkHost::ApplyNetworkServer(",
                                 "void SdkHost::RegisterNetworkClient("}) {
     UR_EXPECT_TRUE_MSG(

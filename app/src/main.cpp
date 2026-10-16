@@ -9,6 +9,7 @@
 // (InstanceHandover.hpp).
 #include <adwaita.h>
 #include <glib.h>
+#include <glib-unix.h>
 #include <giomm/file.h>
 #include <glibmm/miscutils.h>
 #include <gtkmm/application.h>
@@ -16,6 +17,8 @@
 #include <vector>
 
 #include <clocale>
+#include <csignal>
+#include <functional>
 #include <memory>
 #include <cstdlib>
 #include <string>
@@ -24,6 +27,7 @@
 #include "InstanceHandover.hpp"
 #include "LaunchAtStartup.hpp"
 #include "MainWindow.hpp"
+#include "QuitSequence.hpp"
 #include "RuntimePaths.hpp"
 #include "SdkHost.hpp"
 #include "SingleInstance.hpp"
@@ -126,6 +130,45 @@ int main(int argc, char** argv) {
 
   std::shared_ptr<urnw::MainWindow> window;
   std::shared_ptr<urnw::Tray> tray;
+  // How the app ends (QuitSequence.hpp): the queued connect commands run
+  // first, for at most kDrainMillis, then a Quit's teardown runs off the main
+  // loop, and the app ends when it is done or at kAnswerMillis, whichever is
+  // first. Nothing on the way blocks the main loop.
+  urnw::QuitSequence quit;
+  std::function<void(urnw::QuitSequence::Step)> applyQuitStep =
+      [&](urnw::QuitSequence::Step step) {
+        if (step.startTeardown) {
+          // teardown WITHOUT Logout(): Logout wipes the stored jwt, and for a
+          // guest network that jwt is the only credential — quitting from the
+          // tray was permanently destroying guest accounts (and any balance or
+          // subscription they had paid for). Shutdown tears down the tunnel +
+          // IoLoop cleanly and leaves auth alone.
+          host->ShutdownOffMainLoop([&] { applyQuitStep(quit.OnTeardownDone()); });
+        }
+        if (step.answer) {
+          app->release();
+          app->quit();
+        }
+      };
+  // `teardown`: a Quit; a session ending only lets the queued commands run.
+  const auto endApp = [&](bool teardown) {
+    if (!quit.Begin(teardown)) return;
+    // Launches are refused from here on: whatever arrives meanwhile is read,
+    // if at all, by an instance about to end. A launch that meets it waits
+    // for it to end, then starts.
+    urnw::instance::BeginExiting();
+    if (window) window->SaveGeometry();  // a quit with the window up never closed it
+    // nothing connects behind the ending; a disconnect still queued runs
+    host->RefuseConnects();
+    Glib::signal_timeout().connect_once([&] { applyQuitStep(quit.OnAnswerCap()); },
+                                        urnw::QuitSequence::kAnswerMillis);
+    Glib::signal_timeout().connect_once([&] { applyQuitStep(quit.OnDrainCap()); },
+                                        urnw::QuitSequence::kDrainMillis);
+    host->WhenCommandsDrained([&] { applyQuitStep(quit.OnDrained()); });
+  };
+  // A logout or a shutdown sends SIGTERM: it used to kill the app at once,
+  // with a disconnect the user had just tapped still queued.
+  std::function<void()> onSessionEnd = [&] { endApp(/*teardown=*/false); };
   bool startFailed = false;  // main's exit status says so (StartupFailure.hpp)
   // This process's own launch is the first activation; every later one is a
   // launch handed to this instance.
@@ -215,24 +258,20 @@ int main(int argc, char** argv) {
     app->add_action(urnw::MainWindow::kBalanceNoticeDisconnectAction, [&] {
       if (window) window->DisconnectFromBalanceNotice();
     });
-    tray->on_quit = [&] {
-      // Launches are refused from here on: the stop below holds the main
-      // loop, and whatever arrives meanwhile is read, if at all, by an
-      // instance about to end. A launch that meets it waits for it to end,
-      // then starts.
-      urnw::instance::BeginExiting();
-      window->SaveGeometry();  // a quit with the window up never closed it
-      // teardown WITHOUT Logout(): Logout wipes the stored jwt, and for a
-      // guest network that jwt is the only credential — quitting from the
-      // tray was permanently destroying guest accounts (and any balance or
-      // subscription they had paid for). Shutdown tears down the tunnel +
-      // IoLoop cleanly and leaves auth alone.
-      host->Shutdown();
-      app->release();
-      app->quit();
-    };
-    window->on_tray_state = [&](bool sessionUp, bool proven, const std::string& status) {
-      if (tray) tray->SetState(sessionUp, proven, status);
+    tray->on_quit = [&] { endApp(/*teardown=*/true); };
+    // the session ending, as an ending of its own (onSessionEnd)
+    for (const int signum : {SIGTERM, SIGINT, SIGHUP}) {
+      g_unix_signal_add(
+          signum,
+          +[](gpointer data) -> gboolean {
+            (*static_cast<std::function<void()>*>(data))();
+            return G_SOURCE_CONTINUE;
+          },
+          &onSessionEnd);
+    }
+    window->on_tray_state = [&](bool sessionUp, bool proven, const std::string& status,
+                                bool hasStatus) {
+      if (tray) tray->SetState(sessionUp, proven, status, hasStatus);
     };
     // The recovery items, for when the window holds no session
     // (failsafe_notice::TrayRecovery).

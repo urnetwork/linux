@@ -45,4 +45,20 @@ constexpr bool MustSurface(bool windowVisible, bool trayAvailable) {
   return !windowVisible && !trayAvailable;
 }
 
+// The menu's Connect/Disconnect item (apple e46555b7). With no status there is
+// no connection to end and none to start: signed out, a Connect started
+// nothing but a "not signed in" refusal, and a Disconnect had nothing to
+// stop. So the item is offered only with a status (signed in), and then its
+// word follows the session, as the window's action does.
+enum class ConnectItem {
+  None,
+  Connect,
+  Disconnect,
+};
+
+constexpr ConnectItem ConnectItemFor(bool hasStatus, bool sessionUp) {
+  if (!hasStatus) return ConnectItem::None;
+  return sessionUp ? ConnectItem::Disconnect : ConnectItem::Connect;
+}
+
 }  // namespace urnw::tray_policy

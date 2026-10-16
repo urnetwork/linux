@@ -76,9 +76,12 @@ bool InOrder(const std::string& text, const std::vector<std::string>& needles) {
 // the obligation, not a best-effort stop.
 UR_TEST(SignOutWiring_LogoutStopsAsQuitThroughTheObligation) {
   const std::string host = ReadSignOutSource("SdkHost.cpp");
-  const std::string logout = SignOutBody(host, "void SdkHost::Logout() {");
+  // signed out at once on the main loop, then the teardown on the queue
+  UR_EXPECT_TRUE(InOrder(SignOutBody(host, "void SdkHost::Logout() {"),
+                         {"if (signedOut_.exchange(true)) {", "RunCommand(", "LogoutNow();"}));
+  const std::string logout = SignOutBody(host, "void SdkHost::LogoutNow() {");
   UR_EXPECT_TRUE(!logout.empty());
-  UR_EXPECT_TRUE(InOrder(logout, {"std::scoped_lock lock(mutex_);", "signedOut_.store(true);",
+  UR_EXPECT_TRUE(InOrder(logout, {"std::scoped_lock lock(mutex_);",
                                   "asyncLocalState_->logout(", "TeardownDeviceLocked();",
                                   "signOut_.Begin(SignOutDaemonLocked());", "ForgetRpcSession();",
                                   "onAuth_(false);"}));
@@ -129,7 +132,7 @@ UR_TEST(SignOutWiring_TheDeliveryStopsOnlyThisUsersWork) {
 // local logout.
 UR_TEST(SignOutWiring_LogoutCancelsTheAccountsAddAndItsApiCredential) {
   const std::string host = ReadSignOutSource("SdkHost.cpp");
-  const std::string logout = SignOutBody(host, "void SdkHost::Logout() {");
+  const std::string logout = SignOutBody(host, "void SdkHost::LogoutNow() {");
   UR_EXPECT_TRUE(InOrder(logout, {"CancelPendingAddSignIn(\"superseded by signing out\");",
                                   "std::scoped_lock lock(mutex_);", "pendingWalletAuth_.reset();",
                                   "pendingSsoAuth_ = false;", "pendingSsoJwt_.clear();",

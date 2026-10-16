@@ -98,13 +98,20 @@ UR_TEST(ConnectionHealthWiring_EveryReadingCarriesTheHold) {
 // gate let it through.
 UR_TEST(ConnectionHealthWiring_EveryGestureStartsANewAttempt) {
   const std::string host = ReadHealthWiringSource("SdkHost.cpp");
+  // the gate on the caller's thread, then the queued command, whose body
+  // starts the new attempt before it takes the lock
   for (const char* signature : {"void SdkHost::ConnectBestAvailable() {",
                                 "void SdkHost::Connect(const std::optional"}) {
     UR_EXPECT_TRUE_MSG(signature, HealthWiringInOrder(HealthWiringBody(host, signature),
-                                                      {"connectGate_(", "NoteNewConnectAttempt();",
+                                                      {"connectGate_(", "RunCommand("}));
+  }
+  for (const char* signature : {"void SdkHost::ConnectBestAvailableNow() {",
+                                "void SdkHost::ConnectNow(const std::optional"}) {
+    UR_EXPECT_TRUE_MSG(signature, HealthWiringInOrder(HealthWiringBody(host, signature),
+                                                      {"NoteNewConnectAttempt();",
                                                        "std::scoped_lock lock(mutex_);"}));
   }
-  UR_EXPECT_TRUE(HealthWiringInOrder(HealthWiringBody(host, "void SdkHost::Disconnect() {"),
+  UR_EXPECT_TRUE(HealthWiringInOrder(HealthWiringBody(host, "void SdkHost::DisconnectNow() {"),
                                      {"NoteNewConnectAttempt();", "control_.StopTunnel();"}));
   UR_EXPECT_TRUE(HealthWiringHas(HealthWiringBody(host, "void SdkHost::NoteNewConnectAttempt() {"),
                                  "degradeHold_.NoteNewAttempt();"));
@@ -135,10 +142,11 @@ UR_TEST(ConnectionHealthWiring_TheTrayIconMeansProven) {
       reading,
       {"const health::Reading view = health::Render(signals);",
        "connected_ = view.action != health::Action::Connect;",
-       "health::TrayReading(view, signals, reading.statusObserved);",
+       "health::TrayReading(",
+       "view, signals, connect_tap::StatusObserved(reading.statusObserved, pendingTap_));",
        "const bool proven = health::Proven(tray);",
        "const std::string status = T_(tray.textKey, tray.textEnglish);",
-       "on_tray_state(connected_, proven, status);"}));
+       "on_tray_state(connected_, proven, status, signedIn_);"}));
   // observed means the presentation is open or the session latched a status
   const std::string host = ReadHealthWiringSource("SdkHost.cpp");
   const std::string facts = HealthWiringBody(host, "ConnectReading SdkHost::ReadConnectFacts() {");
@@ -149,7 +157,7 @@ UR_TEST(ConnectionHealthWiring_TheTrayIconMeansProven) {
   UR_EXPECT_TRUE(HealthWiringHas(ReadHealthWiringSource("SdkHost.hpp"),
                                  "statusObserved == o.statusObserved"));
   UR_EXPECT_TRUE(HealthWiringHas(ReadHealthWiringSource("main.cpp"),
-                                 "if (tray) tray->SetState(sessionUp, proven, status);"));
+                                 "if (tray) tray->SetState(sessionUp, proven, status, hasStatus);"));
   const std::string tray = ReadHealthWiringSource("Tray.cpp");
   UR_EXPECT_TRUE(HealthWiringHas(tray, "self->provenForIcon() ? \"urnetwork-tray-connected\""));
   UR_EXPECT_TRUE(HealthWiringHas(tray, "ConnectLabel(self->sessionUp())"));
@@ -157,7 +165,7 @@ UR_TEST(ConnectionHealthWiring_TheTrayIconMeansProven) {
   UR_EXPECT_TRUE(HealthWiringHas(tray, "self->statusForToolTip().c_str()"));
   UR_EXPECT_TRUE(HealthWiringInOrder(
       HealthWiringBody(tray, "void Tray::SetState(bool sessionUp, bool proven, "
-                             "const std::string& status) {"),
+                             "const std::string& status, bool hasStatus) {"),
       {"\"NewIcon\"", "\"NewToolTip\"", "EmitMenuLayoutUpdated();"}));
   UR_EXPECT_TRUE(HealthWiringHas(HealthWiringBody(tray, "void Tray::EmitMenuLayoutUpdated() {"),
                                  "\"LayoutUpdated\""));
@@ -191,6 +199,5 @@ UR_TEST(ConnectionHealthWiring_TheStallReasonAndRetry) {
       HealthWiringHas(window, "connectPage_->on_retry_connect = [this] { RetryConnect(); };"));
   UR_EXPECT_TRUE(HealthWiringInOrder(
       HealthWiringBody(window, "void MainWindow::RetryConnect() {"),
-      {"const auto target = host_.SelectedLocation();", "host_.Disconnect();",
-       "StartTunnelUi(\"retry\", target);"}));
+      {"host_.Disconnect();", "StartTunnelUi(\"retry\", SdkHost::ConnectTarget{});"}));
 }

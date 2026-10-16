@@ -56,13 +56,14 @@ class TransportSheet : public Gtk::Window {
   void SyncFromDraft();  // widgets <- draft (guarded)
   void RefreshDirty();
   std::optional<urnet::TransportSettings> DefaultSettings() const;
-  std::optional<urnet::TransportSettings> CurrentSettings() const;
   bool IsAuto() const;
 
   SdkHost& host_;
   Kind kind_;
   std::optional<urnet::TransportSettings> draft_;
   std::optional<urnet::TransportSettings> original_;
+  // A bound device's policy could not be read when the editor opened: Update stays off.
+  bool unknown_ = false;
   std::optional<urnet::TransportStatus> status_;
   urnet::StringList modes_;  // the selectable modes, SDK order
   bool updating_ = false;    // guards switch handlers during widget sync

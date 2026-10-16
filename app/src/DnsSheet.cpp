@@ -90,9 +90,15 @@ DnsSheet::DnsSheet(Gtk::Window& parent, SdkHost& host) : host_(host) {
 bool DnsSheet::Open() {
   auto settings = host_.GetDnsResolverSettings();
   if (!settings) return false;  // the card shows "DNS settings unavailable"
-  Normalize(*settings);
-  draft_ = *settings;
-  original_ = *settings;
+  Seed(*settings);
+  present();
+  return true;
+}
+
+void DnsSheet::Seed(urnet::DnsResolverSettings settings) {
+  Normalize(settings);
+  draft_ = settings;
+  original_ = settings;
 
   countryCode_.clear();
   countryName_.clear();
@@ -111,8 +117,6 @@ bool DnsSheet::Open() {
 
   BuildSuggestions();
   SyncFromDraft();
-  present();
-  return true;
 }
 
 void DnsSheet::BuildUi() {
@@ -204,8 +208,26 @@ void DnsSheet::BuildUi() {
   updateBtn_->add_css_class("suggested-action");
   updateBtn_->add_css_class("pill");
   updateBtn_->signal_clicked().connect([this] {
-    host_.SetDnsResolverSettings(draft_);
-    set_visible(false);
+    // Compare-and-set (apple's editor safety): the draft is written only
+    // while the resolver still reads what this editor was seeded from. Moved
+    // since (another surface, the daemon's sync), the form re-seeds from what
+    // it reads now instead of overwriting it; unknown now, the editor closes
+    // and the card says the settings are unavailable.
+    const urnet::DnsResolverSettings shown = original_;
+    std::optional<urnet::DnsResolverSettings> current;
+    const bool written = host_.SetDnsResolverSettingsIf(
+        [shown](const std::optional<urnet::DnsResolverSettings>& now) {
+          if (!now) return false;
+          urnet::DnsResolverSettings normalized = *now;
+          Normalize(normalized);
+          return SettingsEqual(normalized, shown);
+        },
+        draft_, &current);
+    if (written || !current) {
+      set_visible(false);
+      return;
+    }
+    Seed(*current);
   });
   actionBar->append(*updateBtn_);
   root->append(*actionBar);

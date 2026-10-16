@@ -186,7 +186,7 @@ UR_TEST(ProviderOnlyStatus_TheGuiPollsWhileTheEarningsDestinationShows) {
   UR_EXPECT_TRUE(Contains(ProviderOnlyBody(host, "SdkHost::~SdkHost()"),
                           "g_source_remove(providerStatsPollId_);"));
   // and a sign-out or a quit forgets the snapshot
-  UR_EXPECT_TRUE(Contains(ProviderOnlyBody(host, "void SdkHost::Logout()"),
+  UR_EXPECT_TRUE(Contains(ProviderOnlyBody(host, "void SdkHost::LogoutNow()"),
                           "DropDaemonProviderStatsLocked();"));
   UR_EXPECT_TRUE(Contains(ProviderOnlyBody(host, "void SdkHost::Shutdown()"),
                           "DropDaemonProviderStatsLocked();"));

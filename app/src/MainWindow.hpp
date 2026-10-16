@@ -37,6 +37,7 @@
 #include "ProviderLocationsSheet.hpp"
 #include "RedeemCodeSheet.hpp"
 #include "ReferralsPage.hpp"
+#include "ConnectTap.hpp"
 #include "SdkHost.hpp"
 #include "SeedphraseSheet.hpp"
 #include "SessionsPage.hpp"
@@ -84,7 +85,10 @@ class MainWindow : public Gtk::ApplicationWindow {
   Gtk::Window* PreviewSheet() const { return onboarding_ ? onboarding_.get() : nullptr; }
   // The tray: the session (its Connect/Disconnect item), whether a provider
   // is proven (its icon) and the state's words (its tooltip), on change.
-  std::function<void(bool sessionUp, bool proven, const std::string& status)> on_tray_state;
+  // `hasStatus`: signed in, so there is a connection status to act on; the
+  // tray offers no Connect/Disconnect without one (tray_policy::ConnectItemFor).
+  std::function<void(bool sessionUp, bool proven, const std::string& status, bool hasStatus)>
+      on_tray_state;
   // The tray's recovery items (failsafe_notice::TrayRecoveryFor), pushed from
   // the health poll when they change.
   std::function<void(failsafe_notice::TrayRecovery)> on_tray_recovery_change;
@@ -108,12 +112,27 @@ class MainWindow : public Gtk::ApplicationWindow {
   // no destination installs routes, DNS and the filter and then carries
   // nothing, while looking identical to a working one.
   // `reason` names the gesture in the journal (a static string).
-  TunnelStartResult StartTunnelUi(const char* reason,
-                                  const std::optional<urnet::ConnectLocation>& target);
-  // The same, to the location selected now (the Connect button, the tray,
-  // connect on launch, a sign-in). Read before the start, because a start that
-  // builds a new device answers SelectedLocation from that device.
-  TunnelStartResult StartTunnelUi(const char* reason);
+  //
+  // The start and the connect are queued (SdkHost::StartAndConnect), so this
+  // returns at once and the tap shows connecting meanwhile (connect_tap); the
+  // notice is shown once the start's outcome is back (ShowStartOutcome).
+  void StartTunnelUi(const char* reason, const std::optional<urnet::ConnectLocation>& target);
+  // The same, to the location selected when the start runs (the Connect
+  // button, the tray, connect on launch, a sign-in, Retry). Read on the worker
+  // before the start, because a start that builds a new device answers
+  // SelectedLocation from that device.
+  void StartTunnelUi(const char* reason);
+  void StartTunnelUi(const char* reason, const SdkHost::ConnectTarget& target);
+  // The start's notice, from what it came to: a distinct line per daemon
+  // failure, and none for a start that went through.
+  void ShowStartOutcome(const SdkHost::StartOutcome& outcome);
+  // A tap's own state, until the command queue settles (connect_tap.hpp):
+  // folded into the tray's and the page's readings.
+  void NoteTap(connect_tap::Pending pending);
+  // The queue settled: the tap's state ends and the device's reading, the
+  // feeds the GTK thread held back meanwhile, and the drawer events it
+  // deferred, all land.
+  void OnCommandsSettled(const ConnectReading& reading);
   void BuildAuthPages();  // create network / verify / password reset
   void OnGetStarted();  // authLogin discovery -> password / create / inline error
   void OnSignIn();
@@ -350,6 +369,14 @@ class MainWindow : public Gtk::ApplicationWindow {
   // "there is a session to disconnect from" (health::SessionUp). The tray's
   // label and the tray's action both read it, so they cannot disagree.
   ConnectReading reading_;
+  // A tap waiting on the command queue, or a start waiting on its balance.
+  connect_tap::Pending pendingTap_ = connect_tap::Pending::None;
+  // Drawer events that arrived while commands were outstanding: their reads
+  // would wait on the device's state lock, so they run once the queue settles.
+  bool drawerEventsOwed_ = false;
+  // Signed in (ApplyAuthState): the tray's connection has a status.
+  bool signedIn_ = false;
+  bool trayHasStatus_ = false;  // what the tray was last told
   // Has a reading ever been applied / pushed to the tray? Without these the
   // FIRST reading — which for an idle app equals the default-constructed one —
   // would be skipped as "unchanged" and no surface would ever be seeded.

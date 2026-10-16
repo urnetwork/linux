@@ -835,7 +835,7 @@ UR_TEST(ConsentWiring_SignOutReleasesTheSignatureSlot) {
     UR_FAIL("could not read SdkHost.cpp");
     return;
   }
-  const std::string logout = FunctionBody(host, "void SdkHost::Logout()");
+  const std::string logout = FunctionBody(host, "void SdkHost::LogoutNow()");
   for (const char* step :
        {"signDone = std::move(walletSignDone_);", "walletSignDone_ = nullptr;",
         "if (signDone) walletFlows_.Begin();", "session->cancel();",
@@ -843,7 +843,7 @@ UR_TEST(ConsentWiring_SignOutReleasesTheSignatureSlot) {
     UR_EXPECT_TRUE_MSG(step, Contains(logout, step));
   }
   // answered outside mutex_, before the sign-out takes it for the rest
-  UR_EXPECT_TRUE(Before(logout, "signDone(std::move(out));", "signedOut_.store(true);"));
+  UR_EXPECT_TRUE(Before(logout, "signDone(std::move(out));", "pendingWalletAuth_.reset();"));
   UR_EXPECT_TRUE(Before(logout, "walletSignDone_ = nullptr;", "signDone(std::move(out));"));
 }
 

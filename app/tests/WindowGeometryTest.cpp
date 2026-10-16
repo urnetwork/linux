@@ -173,6 +173,6 @@ UR_TEST(WindowGeometryWiring_TheWindowRestoresAndEveryWayOutSaves) {
       GeometrySpan(main, "window->signal_close_request().connect(", "return true;");
   UR_EXPECT_TRUE(GeometryInOrder(close, {"window->SaveGeometry();", "switch (",
                                          "window->set_visible(false);", "window->minimize();"}));
-  const std::string quit = GeometrySpan(main, "tray->on_quit = [&] {", "\n    };\n");
-  UR_EXPECT_TRUE(GeometryInOrder(quit, {"window->SaveGeometry();", "host->Shutdown();"}));
+  const std::string quit = GeometrySpan(main, "const auto endApp = [&](bool teardown) {", "\n  };\n");
+  UR_EXPECT_TRUE(GeometryInOrder(quit, {"window->SaveGeometry();", "host->WhenCommandsDrained("}));
 }

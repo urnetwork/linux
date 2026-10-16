@@ -8,6 +8,7 @@
 #include "FailsafeNotice.hpp"
 #include "I18n.hpp"
 #include "RuntimePaths.hpp"
+#include "TrayPolicy.hpp"
 
 // Where the tray art is installed (meson passes the configured package data
 // dir); the ladder in RuntimePaths.hpp prefixes $APPDIR inside an AppImage
@@ -104,6 +105,11 @@ std::string ConnectLabel(bool connected) {
   return connected ? T_("disconnect", "Disconnect") : T_("connect", "Connect");
 }
 
+// The connect item as the menu offers it now (tray_policy::ConnectItemFor).
+tray_policy::ConnectItem ConnectItemOf(const Tray& tray) {
+  return tray_policy::ConnectItemFor(tray.hasStatus(), tray.sessionUp());
+}
+
 GVariant* BuildItem(int id, const std::string& label, bool separator) {
   GVariantBuilder props;
   g_variant_builder_init(&props, G_VARIANT_TYPE("a{sv}"));
@@ -173,8 +179,11 @@ static void MenuMethod(GDBusConnection*, const gchar*, const gchar*, const gchar
   if (g_strcmp0(method, "GetLayout") == 0) {
     GVariantBuilder kids;
     g_variant_builder_init(&kids, G_VARIANT_TYPE("av"));
-    g_variant_builder_add(&kids, "v",
-                          BuildItem(kIdConnect, ConnectLabel(self->sessionUp()), false));
+    // no status, no connection to start or end: no item (apple e46555b7)
+    if (ConnectItemOf(*self) != tray_policy::ConnectItem::None) {
+      g_variant_builder_add(&kids, "v",
+                            BuildItem(kIdConnect, ConnectLabel(self->sessionUp()), false));
+    }
     // The recovery items, apart from the everyday ones so they read as
     // recovery, and only while each is the answer to something.
     if (self->offersForceTunnelOff() || self->offersLiftKillSwitch()) {
@@ -211,8 +220,11 @@ static void MenuMethod(GDBusConnection*, const gchar*, const gchar*, const gchar
     guint32 ts = 0;
     g_variant_get(params, "(i&svu)", &id, &eventId, &data, &ts);
     if (g_strcmp0(eventId, "clicked") == 0) {
-      if (id == kIdConnect && self->on_toggle_connect) self->on_toggle_connect();
-      else if (id == kIdShow && self->on_show) self->on_show();
+      // a click on a menu fetched before the item was withdrawn does nothing
+      if (id == kIdConnect && ConnectItemOf(*self) != tray_policy::ConnectItem::None &&
+          self->on_toggle_connect) {
+        self->on_toggle_connect();
+      } else if (id == kIdShow && self->on_show) self->on_show();
       else if (id == kIdQuit && self->on_quit) self->on_quit();
       // A click on a menu the host fetched before the item was withdrawn does
       // nothing: forcing the tunnel off must never reach a session the window
@@ -440,8 +452,9 @@ void Tray::NoteAvailability(bool wasAvailable) {
   if (on_availability_change) on_availability_change(available);
 }
 
-void Tray::SetState(bool sessionUp, bool proven, const std::string& status) {
+void Tray::SetState(bool sessionUp, bool proven, const std::string& status, bool hasStatus) {
   session_up_ = sessionUp;
+  has_status_ = hasStatus;
   proven_ = proven;
   status_ = status;
   if (!conn_) return;

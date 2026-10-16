@@ -1756,8 +1756,12 @@ void ConnectPage::ApplyConnectStatus() {
   //
   // Asked once, here, because DisconnectIntentLive SETTLES the intent as a
   // side effect and the label has to see the same answer the headline did.
-  const bool disconnecting = DisconnectIntentLive();
-  const health::Signals signals = reading_.ToSignals(disconnecting);
+  const bool intent = DisconnectIntentLive();
+  // A disconnect the command queue has not settled yet reads as one in
+  // flight too, and a connect as a session coming up (ConnectTap.hpp): the
+  // reading can be from before the tap until then.
+  const bool disconnecting = intent || tapPending_ == connect_tap::Pending::Disconnect;
+  const health::Signals signals = connect_tap::Fold(reading_.ToSignals(disconnecting), tapPending_);
   const health::Reading view = health::Render(signals);
   renderedState_ = view.state;
 
@@ -1843,8 +1847,8 @@ void ConnectPage::ApplyConnectStatus() {
   // "Disconnect" while the reading has not caught up — take the connect branch
   // and start a tunnel out of a disconnect. The intent expires on its own
   // (kDisconnectIntentUs), so this can never latch off.
-  connectBtn_->set_sensitive(!disconnecting);
-  hero_->set_sensitive(!disconnecting);
+  connectBtn_->set_sensitive(!intent);
+  hero_->set_sensitive(!intent);
   // the strip says what this row says, from this render
   if (on_status_rendered) on_status_rendered(text, dot);
 }
@@ -1877,6 +1881,20 @@ void ConnectPage::ApplyBalanceRecovery(const balance_notice::RecoveryLines& line
   balanceKindLabel_->set_visible(!kindText.empty());
   balanceRecoveryRow_->set_visible(lines.willReconnect);
   balanceRecoveryCancel_->set_visible(lines.cancel);
+}
+
+void ConnectPage::OnCommandsSettled() {
+  if (resyncOwed_) Resync();
+}
+
+void ConnectPage::SetTapPending(connect_tap::Pending pending) {
+  if (tapPending_ == pending) return;
+  tapPending_ = pending;
+  ApplyConnectStatus();
+  // the panes gate on the verdict this render produced
+  ApplySessionRows();
+  ApplySessionCardsVisibility();
+  ApplyLiveStatsGroup();
 }
 
 void ConnectPage::SetDaemonNotice(const Glib::ustring& notice) {
@@ -3397,6 +3415,8 @@ void ConnectPage::ApplyPeersList() {
 
 // one shared point list, each chart picks its route's sample
 void ConnectPage::PullThroughput() {
+  // the same locked reads as RefreshFeeds: not while commands are outstanding
+  if (host_.CommandsBusy()) return;
   auto points = std::make_shared<const urnet::ThroughputPointList>(
       host_.ThroughputPoints().value_or(urnet::ThroughputPointList()));
   const double window = static_cast<double>(host_.ThroughputWindowSeconds());
@@ -3412,6 +3432,11 @@ void ConnectPage::PullThroughput() {
 // to nullopt with no device, and every writer renders that as its own settled
 // reading — never a spinner, never a zero.
 void ConnectPage::RefreshFeeds(bool force) {
+  // With connect commands outstanding every read below would wait on the
+  // device's state lock, which the command holds through its rpc, and freeze
+  // the window: the queue's settle re-reads instead (MainWindow::
+  // OnCommandsSettled).
+  if (host_.CommandsBusy()) return;
   // NO STATE MAY PERSIST AFTER ITS PRODUCER STOPS PUBLISHING. The SDK simply
   // goes quiet on some teardowns — that silence is what let the old status
   // string latch on its last word for the rest of the session — so the
@@ -3594,6 +3619,14 @@ bool ConnectPage::ReadLocations(bool force) {
 
 void ConnectPage::Resync() {
   ++(*epoch_);  // anything in flight against the old reading is stale
+  // With connect commands outstanding (a re-show queues the controllers'
+  // open behind them) every read below would wait on the lock they hold:
+  // the reseed runs once the queue settles (OnCommandsSettled).
+  if (host_.CommandsBusy()) {
+    resyncOwed_ = true;
+    return;
+  }
+  resyncOwed_ = false;
   SyncProvideControlMode();
   RefreshAllPanes();
   BeginPlaceholders();

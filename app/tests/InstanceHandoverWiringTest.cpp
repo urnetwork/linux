@@ -141,14 +141,20 @@ UR_TEST(InstanceHandoverWiring_TheInstanceOpensOnlyOnceItsWindowAndTrayExist) {
                 "app->hold();", "urnw::instance::OpenLaunches(G_APPLICATION(app->gobj()), serve);"}));
 }
 
-// Quit refuses launches before the stop holds the main loop, and every end of
-// the main loop does too, before GtkApplication's own shutdown can run the
-// loop again (connected with after = false).
+// Quit refuses launches before it waits for the queued commands and tears
+// down (QuitSequence.hpp), and every end of the main loop does too, before
+// GtkApplication's own shutdown can run the loop again (connected with after =
+// false).
 UR_TEST(InstanceHandoverWiring_QuitAndEveryEndOfTheLoopBeginExitingFirst) {
   const std::string main = MainBody();
-  const std::string quit = HandoverBetween(main, "tray->on_quit = [&] {", "\n    };\n");
-  UR_EXPECT_TRUE(HandoverInOrder(quit, {"urnw::instance::BeginExiting();", "host->Shutdown();",
-                                        "app->release();", "app->quit();"}));
+  UR_EXPECT_TRUE(HandoverHas(main, "tray->on_quit = [&] { endApp("));
+  const std::string quit = HandoverBetween(main, "const auto endApp = [&](bool teardown) {", "\n  };\n");
+  UR_EXPECT_TRUE(HandoverInOrder(quit, {"if (!quit.Begin(teardown)) return;",
+                                        "urnw::instance::BeginExiting();",
+                                        "host->WhenCommandsDrained("}));
+  const std::string step = HandoverBetween(main, "std::function<void(urnw::QuitSequence::Step)> applyQuitStep =",
+                                           "\n      };\n");
+  UR_EXPECT_TRUE(HandoverInOrder(step, {"host->ShutdownOffMainLoop(", "app->release();", "app->quit();"}));
   UR_EXPECT_TRUE(HandoverHas(
       main, "app->signal_shutdown().connect([] { urnw::instance::BeginExiting(); }, false);"));
 }

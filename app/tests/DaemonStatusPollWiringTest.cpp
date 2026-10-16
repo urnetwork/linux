@@ -93,7 +93,7 @@ UR_TEST(DaemonStatusPollWiring_TheTickAsksAWorker) {
   UR_EXPECT_FALSE(PollHas(reply, "Control().Status("));
   // nor in the reconcile it runs while disconnected: the reply serves it, and
   // with no reply the tick ends there
-  UR_EXPECT_TRUE(PollInOrder(reply, {"if (!connected_) {", "if (status) {",
+  UR_EXPECT_TRUE(PollInOrder(reply, {"if (!connected_) {", "if (status && !host_.CommandsBusy()) {",
                                      "host_.ReconcileProvider(\"health poll\", *status);",
                                      "}\n    return;"}));
   UR_EXPECT_FALSE(PollHas(reply, "host_.ReconcileProvider(\"health poll\");"));

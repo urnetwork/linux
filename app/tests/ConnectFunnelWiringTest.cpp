@@ -68,6 +68,14 @@ bool FunnelHas(const std::string& text, const std::string& needle) {
   return text.find(needle) != std::string::npos;
 }
 
+size_t FunnelCount(const std::string& text, const std::string& needle) {
+  size_t count = 0;
+  for (size_t at = text.find(needle); at != std::string::npos; at = text.find(needle, at + 1)) {
+    ++count;
+  }
+  return count;
+}
+
 // Each needle occurs after the one before it.
 bool FunnelInOrder(const std::string& text, const std::vector<std::string>& needles) {
   size_t from = 0;
@@ -80,9 +88,7 @@ bool FunnelInOrder(const std::string& text, const std::vector<std::string>& need
 }
 
 const char* const kStartToTarget =
-    "TunnelStartResult MainWindow::StartTunnelUi(const char* reason,\n"
-    "                                            const std::optional<urnet::ConnectLocation>& "
-    "target) {";
+    "void MainWindow::StartTunnelUi(const char* reason, const SdkHost::ConnectTarget& target) {";
 
 }  // namespace
 
@@ -97,10 +103,11 @@ UR_TEST(ConnectFunnelWiring_TheButtonConnectsToTheSelection) {
   UR_EXPECT_TRUE(FunnelHas(connectHalf, "StartTunnelUi(\"connect press\");"));
   UR_EXPECT_FALSE(FunnelHas(connectHalf, "ConnectBestAvailable"));
   UR_EXPECT_FALSE(FunnelHas(connectHalf, "host_.Connect("));
-  // the selection is read before the start, and handed to it
+  // the press starts to the selection, which the queued start reads before
+  // the start (ConnectFunnelWiring_TheStartConnectsItsTarget)
   const std::string selected =
-      FunnelBody(window, "TunnelStartResult MainWindow::StartTunnelUi(const char* reason) {");
-  UR_EXPECT_TRUE(FunnelHas(selected, "return StartTunnelUi(reason, host_.SelectedLocation());"));
+      FunnelBody(window, "void MainWindow::StartTunnelUi(const char* reason) {");
+  UR_EXPECT_TRUE(FunnelHas(selected, "StartTunnelUi(reason, SdkHost::ConnectTarget{});"));
 }
 
 // After the start, the target or the best available, and no second read of
@@ -109,13 +116,20 @@ UR_TEST(ConnectFunnelWiring_TheStartConnectsItsTarget) {
   const std::string window = ReadFunnelSource("MainWindow.cpp");
   const std::string start = FunnelBody(window, kStartToTarget);
   UR_EXPECT_TRUE(!start.empty());
-  UR_EXPECT_TRUE(FunnelInOrder(start, {"host_.StartTunnel(",
-                                       "if (result == TunnelStartResult::Started) {",
-                                       "if (IsBestAvailableSelected(target)) {",
-                                       "host_.ConnectBestAvailable();", "} else {",
-                                       "host_.Connect(target);"}));
+  UR_EXPECT_TRUE(FunnelHas(start, "host_.StartAndConnect(reason, target,"));
   UR_EXPECT_FALSE(FunnelHas(start, "SelectedLocation("));
   UR_EXPECT_FALSE(FunnelHas(start, "connectDestination"));
+  // the queued start: the selection read once, before the start, then the
+  // target or the best available
+  const std::string queued =
+      FunnelBody(ReadFunnelSource("SdkHost.cpp"), "bool SdkHost::StartAndConnect(");
+  UR_EXPECT_TRUE(FunnelInOrder(queued, {"target.selection ? SelectedLocation() : target.location;",
+                                        "StartTunnel(reason);",
+                                        "if (outcome->result != TunnelStartResult::Started) return;",
+                                        "if (IsBestAvailableSelected(location)) {",
+                                        "ConnectBestAvailableNow();", "} else {",
+                                        "ConnectNow(location);"}));
+  UR_EXPECT_EQ(1, int(FunnelCount(queued, "SelectedLocation(")));
 }
 
 // Every location row clicks through SdkHost::ConnectFromRow, never straight
@@ -156,7 +170,7 @@ UR_TEST(ConnectFunnelWiring_ARowClickStartsThroughTheWindow) {
 // disconnect, and on quit before the device's view controllers close.
 UR_TEST(ConnectFunnelWiring_DisconnectStopsTheTunnelFirst) {
   const std::string host = ReadFunnelSource("SdkHost.cpp");
-  const std::string disconnect = FunnelBody(host, "void SdkHost::Disconnect() {");
+  const std::string disconnect = FunnelBody(host, "void SdkHost::DisconnectNow() {");
   UR_EXPECT_TRUE(FunnelInOrder(disconnect, {"control_.StopTunnel();", "connectVc_->disconnect();",
                                             "controller.disconnect();",
                                             "PublishConnectReading();"}));
@@ -190,8 +204,8 @@ UR_TEST(ConnectFunnelWiring_EveryStartNamesItsReason) {
   }
   // the window's one start passes its gesture's reason on
   const std::string window = ReadFunnelSource("MainWindow.cpp");
-  UR_EXPECT_TRUE(FunnelHas(FunnelBody(window, kStartToTarget), "host_.StartTunnel(reason);"));
-  UR_EXPECT_EQ(window.find("host_.StartTunnel("), window.rfind("host_.StartTunnel("));
+  UR_EXPECT_TRUE(FunnelHas(FunnelBody(window, kStartToTarget), "host_.StartAndConnect(reason,"));
+  UR_EXPECT_EQ(window.find("host_.StartAndConnect("), window.rfind("host_.StartAndConnect("));
   const std::string start =
       FunnelBody(ReadFunnelSource("SdkHost.cpp"),
                  "TunnelStartResult SdkHost::StartTunnelLocked(const char* reason) {");

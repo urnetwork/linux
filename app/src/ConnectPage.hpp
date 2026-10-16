@@ -49,6 +49,7 @@
 #include "QuickAction.hpp"
 #include "SdkHost.hpp"
 #include "SplitRulesSheet.hpp"
+#include "ConnectTap.hpp"
 #include "TapSequenceGate.hpp"
 #include "TransferChart.hpp"
 #include "TransportBar.hpp"
@@ -73,6 +74,12 @@ class ConnectPage : public Gtk::Box {
   // row came to describe a session none of the three was looking at. See
   // Health.hpp for what those three actually meant.
   void ApplyConnectReading(const ConnectReading& reading);
+  // A tap waiting on the command queue, or a start waiting on its balance
+  // (MainWindow::NoteTap): the status reads it (connect_tap::Fold) until the
+  // queue settles, over any reading from before the tap.
+  void SetTapPending(connect_tap::Pending pending);
+  // The command queue settled: a reseed held back while it was busy runs now.
+  void OnCommandsSettled();
   // The daemon-session line under the status row ("" = healthy).
   // TODO(wiring): MainWindow owns the SCM/daemon probe and still renders it in
   // the LEGACY column's daemonStatusLabel_; it must relay every change here
@@ -128,7 +135,11 @@ class ConnectPage : public Gtk::Box {
   // Is a Disconnect the user asked for still in flight? Read by MainWindow so
   // an EXPECTED teardown is not reported to the user as the daemon dropping
   // the session on its own.
-  bool DisconnectPending() const { return disconnectRequestedAtUs_ != 0; }
+  // A disconnect the user asked for is in flight: the page's own press, or
+  // one (the tray's, the balance notice's) still on the command queue.
+  bool DisconnectPending() const {
+    return disconnectRequestedAtUs_ != 0 || tapPending_ == connect_tap::Pending::Disconnect;
+  }
 
   // THE PRESS CARRIES ITS OWN ACTION. `disconnect` is the action that wrote the
   // label the user actually clicked, captured at press time — not something the
@@ -468,6 +479,8 @@ class ConnectPage : public Gtk::Box {
   // providers". It is the one input to health::Render that does not come from
   // the SDK — and it is bounded (DisconnectIntentLive), so it cannot latch.
   gint64 disconnectRequestedAtUs_ = 0;
+  connect_tap::Pending tapPending_ = connect_tap::Pending::None;
+  bool resyncOwed_ = false;  // a Resync that met outstanding commands
   LiveStats stats_;
   Glib::ustring daemonNotice_;
   bool failsafeArmed_ = false;

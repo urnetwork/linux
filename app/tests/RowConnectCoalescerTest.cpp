@@ -212,7 +212,7 @@ UR_TEST(RowConnectCoalescer_TheHostCoalescesEveryRowClick) {
   const std::string run = CoalescerBody(host, "void SdkHost::RunRowConnect(");
   UR_EXPECT_TRUE(run.find("rowConnect_(location);") != std::string::npos);
   UR_EXPECT_TRUE(CoalescerInOrder(CoalescerBody(host, "void SdkHost::Disconnect() {"),
-                                  {"CancelRowConnect(\"disconnect\");", "control_.StopTunnel();"}));
+                                  {"CancelRowConnect(\"disconnect\");", "DisconnectNow();"}));
   UR_EXPECT_TRUE(CoalescerBody(host, "void SdkHost::Logout() {").find("CancelRowConnect(") !=
                  std::string::npos);
   UR_EXPECT_TRUE(CoalescerInOrder(CoalescerBody(host, "SdkHost::~SdkHost() {"),

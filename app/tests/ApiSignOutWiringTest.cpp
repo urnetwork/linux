@@ -93,7 +93,7 @@ UR_TEST(ApiSignOut_TheSubscriptionClosesFirst) {
 // sign out again.
 UR_TEST(ApiSignOut_TheTrackerFollowsEverySignInAndSignOut) {
   const std::string host = ReadCode("SdkHost.cpp");
-  UR_EXPECT_TRUE(Before(FunctionBody(host, "void SdkHost::Logout() {"), "signedOut_.store(true);",
+  UR_EXPECT_TRUE(Before(FunctionBody(host, "void SdkHost::Logout() {"), "signedOut_.exchange(true)",
                         "authLogouts_.SignedOut();"));
   const std::string registered = FunctionBody(host, "void SdkHost::RegisterNetworkClient(");
   UR_EXPECT_TRUE(Before(registered, "signedOut_.store(false);", "authLogouts_.SignedIn();"));
@@ -110,7 +110,10 @@ UR_TEST(ApiSignOut_TheTrackerFollowsEverySignInAndSignOut) {
     const std::string after = host.substr(next, 200);
     UR_EXPECT_TRUE_MSG(host.substr(at, next - at), Contains(after, "authLogouts_.Signed"));
   }
-  UR_EXPECT_EQ(3u, CountOf(host, "signedOut_.store("));
+  UR_EXPECT_EQ(2u, CountOf(host, "signedOut_.store("));
+  // the sign-out's own mark is an exchange (a second sign-out is refused),
+  // and its tracker follows in the same call (checked above)
+  UR_EXPECT_EQ(1u, CountOf(host, "signedOut_.exchange("));
 }
 
 // The handler marshals the report to the main loop; there the first report of

@@ -176,8 +176,8 @@ UR_TEST(StatusStripPresentation_TheWindowFeedsTheFields) {
       StripFieldsBody(window, "void MainWindow::ToggleConnect(bool disconnect) {"),
       {"host_.Disconnect();", "ForgetDaemonStatus();"}));
   UR_EXPECT_TRUE(StripFieldsInOrder(
-      StripFieldsBody(window, "TunnelStartResult MainWindow::StartTunnelUi(const char* reason,\n"),
-      {"ForgetDaemonStatus();", "host_.StartTunnel(reason);"}));
+      StripFieldsBody(window, "void MainWindow::StartTunnelUi(const char* reason, const SdkHost::ConnectTarget& target) {"),
+      {"ForgetDaemonStatus();", "host_.StartAndConnect(reason,"}));
   UR_EXPECT_TRUE(StripFieldsHas(
       StripFieldsBody(window, "void MainWindow::ApplyAuthState(bool loggedIn) {"),
       "ForgetDaemonStatus();"));

@@ -230,6 +230,8 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     if (windowVisible_ == presentationActive) return;
     windowVisible_ = presentationActive;
     host_.SetPresentationActive(windowVisible_);
+    // The pages' re-show reads run once the queued open has settled.
+    if (windowVisible_) drawerEventsOwed_ = true;
     balance_.SetWindowVisible(windowVisible_);
     UpdateCarouselRunning();
     if (connectPage_) connectPage_->SetPresentationActive(windowVisible_);
@@ -238,10 +240,9 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     if (sessionsPage_) sessionsPage_->SetPresentationActive(windowVisible_);
     if (developerPage_) developerPage_->SetPresenting(windowVisible_);
     if (windowVisible_) {
-      // RE-READ, never replay: SetPresentationActive(true) above has just
-      // reopened the connect controller, so the reading the window was last
-      // pushed describes a moment when there was no controller to ask.
-      ApplyConnectReading(host_.CurrentConnectReading());
+      // The reading is RE-READ, never replayed, but not here: the queued
+      // SetPresentationActive(true) above hands on the reading its own
+      // controller gives once it has opened, off the GTK thread.
       ApplyStats(lastStats_);
     }
   };
@@ -365,6 +366,10 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   host_.SetConnectReadingHandler([this](ConnectReading reading) {
     PostToMain([this, reading] { ApplyConnectReading(reading); });
   });
+  // The command queue settled: a tap's held state ends with the device's own
+  // reading, taken on the worker after the last command (already on the main
+  // loop).
+  host_.SetCommandsSettledHandler([this](ConnectReading reading) { OnCommandsSettled(reading); });
   // Live stats (provider count / throughput / provide). Same visibility gate:
   // cache always, but only touch widgets while the window is shown.
   host_.SetStatsHandler([this](const LiveStats& stats) {
@@ -377,6 +382,13 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   // Same visibility gate: dropped while hidden, resynced on show.
   host_.SetDrawerEventHandler([this](DrawerEvent event) {
     PostToMain([this, event] {
+      // While commands are outstanding the re-reads below would wait on the
+      // device's state lock, which the command holds through its rpc: they
+      // run once the queue settles (OnCommandsSettled).
+      if (host_.CommandsBusy()) {
+        drawerEventsOwed_ = true;
+        return;
+      }
       // Panes B/C of Home read this feed. Without it they would only ever
       // refresh on a stats push: block actions, block stats, overrides,
       // contracts, DNS settings, blocker, routeLocal and location changes
@@ -536,98 +548,34 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
 // through TunnelStartResult::Failed with an authorization verdict on the
 // control client (DaemonAuthOutcome). It is rendered from its own copy table
 // below and never through the DaemonUnreachable arm.
-TunnelStartResult MainWindow::StartTunnelUi(const char* reason) {
-  return StartTunnelUi(reason, host_.SelectedLocation());
+void MainWindow::StartTunnelUi(const char* reason) {
+  StartTunnelUi(reason, SdkHost::ConnectTarget{});
 }
 
-TunnelStartResult MainWindow::StartTunnelUi(const char* reason,
-                                            const std::optional<urnet::ConnectLocation>& target) {
+void MainWindow::StartTunnelUi(const char* reason,
+                               const std::optional<urnet::ConnectLocation>& target) {
+  SdkHost::ConnectTarget to;
+  to.selection = false;
+  to.location = target;
+  StartTunnelUi(reason, to);
+}
+
+void MainWindow::StartTunnelUi(const char* reason, const SdkHost::ConnectTarget& target) {
   // Out of balance, a new connection is not started at all: no tunnel, no
   // routes, the upgrade path instead. Every caller (the Connect press, connect
   // on launch, the post-sign-in connect) passes through here, and a stale
   // balance read repeats the whole start, connect included, once it lands.
   if (ConnectBlockedByBalance([this, reason, target] { StartTunnelUi(reason, target); })) {
-    return TunnelStartResult::Failed;
+    return;
   }
-  // Snapshot the reply counter BEFORE the attempt. LastAuthOutcome() describes
-  // the last reply this client processed, and StartTunnel() has failure paths
-  // that never send anything (not signed in; unusable device-rpc key material).
-  // Without this guard a polkit denial from an earlier Connect would be
-  // rendered under an unrelated failure — a confidently wrong sentence, which
-  // is worse than the generic one. Only a verdict this attempt produced counts.
-  const uint64_t replySerialBefore = host_.Control().ReplySerial();
   // what the daemon said about the last session does not describe this one
   ForgetDaemonStatus();
-  const TunnelStartResult result = host_.StartTunnel(reason);
-  const DaemonAuthOutcome authOutcome = host_.Control().ReplySerial() != replySerialBefore
-                                            ? host_.Control().LastAuthOutcome()
-                                            : DaemonAuthOutcome::None;
-  // The notice goes to ConnectPage::SetDaemonNotice, the surface the user
-  // sees: a daemon failure must never look like a silent no-op of the press.
-  Glib::ustring notice;
-  switch (result) {
-    case TunnelStartResult::Started:
-      break;  // an empty notice clears it
-    case TunnelStartResult::DaemonUnreachable:
-      // "Unreachable" is three different problems with three different fixes.
-      // Collapsing them into "not running" actively misleads: against a
-      // group-gated daemon the service IS running and the user simply is not
-      // in the urnetwork group, and telling them to start a running service
-      // sends them nowhere. Every arm here is a transport failure — the daemon
-      // was never reached — which is what separates them from the
-      // authorization refusals under Failed.
-      {
-        const auto reason = host_.Control().LastUnreachableReason();
-        const auto copy = CopyForDaemonUnreachableReason(reason);
-        notice = T_(copy.key, copy.english);
-        if (reason == DaemonUnreachableReason::Other) {
-          // LastTunnelError() is EnsureSession's own out-param, which already
-          // carries strerror for this case.
-          const std::string detail = host_.LastTunnelError();
-          if (!detail.empty()) notice += " (" + detail + ")";
-        }
-      }
-      break;
-    case TunnelStartResult::DaemonTooOld:
-      notice = T_("daemon_too_old",
-                  "The URnetwork system service is out of date. Update it to connect.");
-      break;
-    case TunnelStartResult::AppTooOld:
-      notice = T_("app_too_old_for_daemon",
-                  "This app is older than the installed URnetwork system service. Update "
-                  "the app to connect.");
-      break;
-    case TunnelStartResult::SdkMismatch:
-      notice = T_("daemon_sdk_mismatch",
-                  "The app and the URnetwork system service are different builds. Update "
-                  "both to the same version.");
-      break;
-    case TunnelStartResult::Failed: {
-      const std::string error = host_.LastTunnelError();
-      // AUTHORIZATION FIRST. A refusal arrives here — the daemon was reached,
-      // hello succeeded, and it answered a verb with a code — so without this
-      // branch a polkit denial would render as the daemon's raw diagnostic, and
-      // a daemon that omitted one would render as "Could not start the
-      // connection", which says nothing about the only thing the user can act
-      // on. TunnelStartResult has no enumerator for these (SdkHost.hpp is
-      // outside this change), so the verdict is read from the control client
-      // instead; see the serial guard at the top of this function.
-      if (IsAuthRefusal(authOutcome)) {
-        notice = DaemonAuthRefusalCopy(authOutcome, error);
-        break;
-      }
-      notice = error.empty() ? Glib::ustring(T_("tunnel_start_failed",
-                                                "Could not start the connection"))
-                             : Glib::ustring(error);
-      break;
-    }
-  }
-  // Empty means "say nothing", and for DaemonAuthOutcome::Dismissed that is the
-  // required behaviour, not an accident: no banner AND no g_warning for a user
-  // who closed the password dialog themselves.
-  if (!notice.empty()) g_warning("connect: %s", notice.c_str());
-  if (connectPage_) connectPage_->SetDaemonNotice(notice);
-
+  // The start and its connect are ONE queued command
+  // (SdkHost::StartAndConnect), off the GTK thread: a start_tunnel waits on
+  // the control socket, and each device write holds the device's state lock
+  // through its rpc. The tap shows connecting at once, held until the queue
+  // settles, and the notice is shown when the start's outcome is back.
+  //
   // A TUNNEL WITHOUT A DESTINATION CARRIES NOTHING, AND LOOKS EXACTLY LIKE ONE
   // THAT DOES. This is the "Connect doesn't actually forward real traffic" bug,
   // measured on the owner's machine: urnet0 up, 31 capture routes installed,
@@ -648,16 +596,81 @@ TunnelStartResult MainWindow::StartTunnelUi(const char* reason,
   // not be silently moved to "best available", which the Connect button did
   // while the provider row above it named their choice. Only no choice, or a
   // choice of best available, asks the SDK to pick.
-  if (result == TunnelStartResult::Started) {
-    if (IsBestAvailableSelected(target)) {
-      g_message("connect: no destination selected, choosing the best available");
-      host_.ConnectBestAvailable();
-    } else {
-      g_message("connect: routing to the selected provider");
-      host_.Connect(target);
+  NoteTap(connect_tap::Pending::Connect);
+  if (!host_.StartAndConnect(reason, target,
+                             [this](SdkHost::StartOutcome outcome) { ShowStartOutcome(outcome); })) {
+    // a sign-out runs: nothing connects the account that is leaving
+    g_message("connect: not started, a sign-out is running");
+    NoteTap(connect_tap::Pending::None);
+  }
+}
+
+void MainWindow::ShowStartOutcome(const SdkHost::StartOutcome& outcome) {
+  // The notice goes to ConnectPage::SetDaemonNotice, the surface the user
+  // sees: a daemon failure must never look like a silent no-op of the press.
+  Glib::ustring notice;
+  switch (outcome.result) {
+    case TunnelStartResult::Started:
+      break;  // an empty notice clears it
+    case TunnelStartResult::DaemonUnreachable:
+      // "Unreachable" is three different problems with three different fixes.
+      // Collapsing them into "not running" actively misleads: against a
+      // group-gated daemon the service IS running and the user simply is not
+      // in the urnetwork group, and telling them to start a running service
+      // sends them nowhere. Every arm here is a transport failure — the daemon
+      // was never reached — which is what separates them from the
+      // authorization refusals under Failed.
+      {
+        const auto reason = outcome.unreachableReason;
+        const auto copy = CopyForDaemonUnreachableReason(reason);
+        notice = T_(copy.key, copy.english);
+        if (reason == DaemonUnreachableReason::Other) {
+          // LastTunnelError() is EnsureSession's own out-param, which already
+          // carries strerror for this case.
+          const std::string detail = outcome.lastError;
+          if (!detail.empty()) notice += " (" + detail + ")";
+        }
+      }
+      break;
+    case TunnelStartResult::DaemonTooOld:
+      notice = T_("daemon_too_old",
+                  "The URnetwork system service is out of date. Update it to connect.");
+      break;
+    case TunnelStartResult::AppTooOld:
+      notice = T_("app_too_old_for_daemon",
+                  "This app is older than the installed URnetwork system service. Update "
+                  "the app to connect.");
+      break;
+    case TunnelStartResult::SdkMismatch:
+      notice = T_("daemon_sdk_mismatch",
+                  "The app and the URnetwork system service are different builds. Update "
+                  "both to the same version.");
+      break;
+    case TunnelStartResult::Failed: {
+      const std::string error = outcome.lastError;
+      // AUTHORIZATION FIRST. A refusal arrives here — the daemon was reached,
+      // hello succeeded, and it answered a verb with a code — so without this
+      // branch a polkit denial would render as the daemon's raw diagnostic, and
+      // a daemon that omitted one would render as "Could not start the
+      // connection", which says nothing about the only thing the user can act
+      // on. TunnelStartResult has no enumerator for these (SdkHost.hpp is
+      // outside this change), so the verdict is read from the control client
+      // instead; see the serial guard in SdkHost::StartAndConnect.
+      if (IsAuthRefusal(outcome.authOutcome)) {
+        notice = DaemonAuthRefusalCopy(outcome.authOutcome, error);
+        break;
+      }
+      notice = error.empty() ? Glib::ustring(T_("tunnel_start_failed",
+                                                "Could not start the connection"))
+                             : Glib::ustring(error);
+      break;
     }
   }
-  return result;
+  // Empty means "say nothing", and for DaemonAuthOutcome::Dismissed that is the
+  // required behaviour, not an accident: no banner AND no g_warning for a user
+  // who closed the password dialog themselves.
+  if (!notice.empty()) g_warning("connect: %s", notice.c_str());
+  if (connectPage_) connectPage_->SetDaemonNotice(notice);
 }
 
 // ---- window chrome ----------------------------------------------------------
@@ -1040,8 +1053,10 @@ void MainWindow::ApplyDaemonHealth(const std::optional<ctl::StatusReply>& status
     // A countdown belongs to a live tunnel, and there is none.
     if (connectPage_) connectPage_->SetFailsafeArmed(false);
     // A daemon that did not answer the worker is asked again next tick: a
-    // read here would hold the window for as long as the worker's took.
-    if (status) {
+    // read here would hold the window for as long as the worker's took. So is
+    // one that answered while connect commands are outstanding: the calls
+    // below take the lock a queued command holds through its rpc.
+    if (status && !host_.CommandsBusy()) {
       // The network country the daemon reads (P052), for this process's own
       // dials: from the sign-in screen on, signed in or not.
       host_.FollowDaemonNetworkCountry(*status);
@@ -1075,15 +1090,23 @@ void MainWindow::ApplyDaemonHealth(const std::optional<ctl::StatusReply>& status
   if (!status) return;  // unreachable is StartTunnelUi's business
   // The window holds the session, so its own Disconnect is the recovery.
   PushTrayRecovery(failsafe_notice::TrayRecoveryFor(/*windowConnected=*/true, *status));
-  host_.FollowDaemonNetworkCountry(*status);
-  host_.FollowDaemonExtenderReset(*status);
-  host_.FollowDaemonLogUpload(*status);
+  if (!host_.CommandsBusy()) {
+    host_.FollowDaemonNetworkCountry(*status);
+    host_.FollowDaemonExtenderReset(*status);
+    host_.FollowDaemonLogUpload(*status);
+  }
   // The dead-tunnel failsafe's countdown on the live tunnel, warned about
   // before the daemon turns it off, never after.
   if (connectPage_) {
     connectPage_->SetFailsafeArmed(
         failsafe_notice::ShowsArmedWarning(status->failsafe_armed, status->tunnel_state));
   }
+  // While connect commands are outstanding the window shows the tap's own
+  // state, and a Stopped read now is the queued disconnect's own stop or a
+  // start not done yet, not a teardown to explain; the reading below would
+  // also wait on the lock the command holds. The next tick after the queue
+  // settles reads the daemon again.
+  if (host_.CommandsBusy()) return;
   if (status->tunnel_state != ctl::TunnelState::Error &&
       status->tunnel_state != ctl::TunnelState::Stopped) {
     return;
@@ -2365,6 +2388,11 @@ void MainWindow::OnAuthLogout(const auth_logout::Report& report) {
 }
 
 void MainWindow::ApplyAuthState(bool loggedIn) {
+  // the tray offers its Connect/Disconnect only with a status to act on
+  if (signedIn_ != loggedIn) {
+    signedIn_ = loggedIn;
+    readingApplied_ = false;
+  }
   // Home's first entrance (windows homeRevealed_): the first time Home shows
   // in this window, a sign-in made in it crossfades the login flow into Home,
   // as the shell crossfades its destinations. Every other swap is instant: a
@@ -2383,7 +2411,8 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
   if (loggedIn) {
     // a sign-in ends what the last sign-out owed the sign-in page
     signInNotice_.Drop();
-    ApplyConnectReading(host_.CurrentConnectReading());
+    // (with commands outstanding their settle brings the reading)
+    if (!host_.CommandsBusy()) ApplyConnectReading(host_.CurrentConnectReading());
     // (re)seed the balance/plan store from the (possibly new) jwt: login and
     // app start land here
     balance_.SetWindowVisible(windowVisible_);
@@ -2398,7 +2427,9 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
     OpenOnboardingIfPending();
   } else {
     // A signed-out window has no session at all: the DEFAULT reading, not a
-    // bool poked into a copy of the last one.
+    // bool poked into a copy of the last one. The leaving account's pending
+    // tap goes with it (apple 63a7fe53).
+    NoteTap(connect_tap::Pending::None);
     ApplyConnectReading(ConnectReading{});
     // a connect waiting on a balance read belonged to that session, and so
     // does one waiting on the balance itself
@@ -2450,6 +2481,9 @@ void MainWindow::ToggleConnect() {
   // two disagree for the whole connecting window: the menu said "Connect"
   // while pressing it disconnected. The page still gets its richer behaviour;
   // it passes its own intent explicitly through ToggleConnect(bool).
+  // Signed out there is no status, and the tray offers no item; a click on a
+  // menu fetched before it was withdrawn does nothing.
+  if (!signedIn_) return;
   ToggleConnect(connected_);
 }
 
@@ -2474,13 +2508,12 @@ void MainWindow::ToggleConnect(bool disconnect) {
     // connect waiting on the balance is not run by itself after it.
     CancelBalanceCheck();
     ClearBalanceRecovery();
+    // The disconnect is queued behind any command still running, and shows at
+    // once: the page, the tray and the status strip read "Disconnecting…"
+    // until the queue settles, and the device's reading then takes over.
+    NoteTap(connect_tap::Pending::Disconnect);
     host_.Disconnect();
     ForgetDaemonStatus();
-    // Re-read every window surface once, now. The page is already showing
-    // "Disconnecting…" from its own intent; this keeps the tray, the legacy
-    // headline and the status strip from holding "Connected" until whatever the
-    // SDK sends next — which, on a teardown, may be nothing at all.
-    ApplyConnectReading(host_.CurrentConnectReading());
     return;
   }
   // A connect press retires any disconnect the user is no longer waiting on, so
@@ -2509,11 +2542,13 @@ void MainWindow::ToggleConnect(bool disconnect) {
 // recovers a window the SDK has given up on. The selection is read before the
 // disconnect, which clears the device's.
 void MainWindow::RetryConnect() {
-  const auto target = host_.SelectedLocation();
   g_message("connect: retry pressed");
+  // Queued in order: the disconnect, then the start, which reads the
+  // selection when it runs. The connect view controller keeps its selection
+  // across the disconnect (SdkHost::SelectedLocation), so it is the same one.
   host_.Disconnect();
   ForgetDaemonStatus();
-  StartTunnelUi("retry", target);
+  StartTunnelUi("retry", SdkHost::ConnectTarget{});
 }
 
 // THE DAEMON'S OWN VERDICT, WRITTEN INTO THE READING. The status poll has just
@@ -2548,7 +2583,9 @@ void MainWindow::ApplyConnectReading(const ConnectReading& reading) {
   readingApplied_ = true;
   const bool wasConnected = connected_;
   reading_ = reading;
-  const health::Signals signals = reading.ToSignals(/*disconnectRequested=*/false);
+  // a tap waiting on the command queue shows its own state (ConnectTap.hpp)
+  const health::Signals signals =
+      connect_tap::Fold(reading.ToSignals(/*disconnectRequested=*/false), pendingTap_);
   const health::Reading view = health::Render(signals);
   // "There is a session to disconnect from." Exactly what SdkHost::Connected()
   // used to be asked for, now asked once: the tray's label, the tray's action
@@ -2567,15 +2604,48 @@ void MainWindow::ApplyConnectReading(const ConnectReading& reading) {
   // (a session still building, held or degraded is not), and its tooltip
   // names the state, all from this one reading. A session the window has not
   // seen a status for keeps its own claim (health::TrayReading).
-  const health::Reading tray = health::TrayReading(view, signals, reading.statusObserved);
+  const health::Reading tray = health::TrayReading(
+      view, signals, connect_tap::StatusObserved(reading.statusObserved, pendingTap_));
   const bool proven = health::Proven(tray);
   const std::string status = T_(tray.textKey, tray.textEnglish);
   if (on_tray_state && (connected_ != wasConnected || proven != trayProven_ ||
-                        status != trayStatus_ || !trayStatePushed_)) {
+                        status != trayStatus_ || signedIn_ != trayHasStatus_ ||
+                        !trayStatePushed_)) {
     trayStatePushed_ = true;
     trayProven_ = proven;
     trayStatus_ = status;
-    on_tray_state(connected_, proven, status);
+    trayHasStatus_ = signedIn_;
+    on_tray_state(connected_, proven, status, signedIn_);
+  }
+}
+
+void MainWindow::NoteTap(connect_tap::Pending pending) {
+  if (pendingTap_ == pending) return;
+  pendingTap_ = pending;
+  if (connectPage_) connectPage_->SetTapPending(pending);
+  // re-render every surface from the reading the window holds, with the tap
+  readingApplied_ = false;
+  ApplyConnectReading(reading_);
+}
+
+void MainWindow::OnCommandsSettled(const ConnectReading& reading) {
+  // a start still waiting on its balance keeps showing connecting
+  if (!balanceCheckPending_) NoteTap(connect_tap::Pending::None);
+  readingApplied_ = false;
+  ApplyConnectReading(reading);
+  // the reads the GTK thread held back while commands were outstanding
+  if (connectPage_) connectPage_->OnCommandsSettled();
+  if (drawerEventsOwed_) {
+    drawerEventsOwed_ = false;
+    if (windowVisible_ && connectPage_) connectPage_->OnHostEvent(DrawerEvent::DeviceLifecycle);
+    if (windowVisible_ && earningsPage_) earningsPage_->OnHostEvent(DrawerEvent::DeviceLifecycle);
+    if (windowVisible_ && locationsSheet_ && locationsSheet_->is_visible()) {
+      locationsSheet_->Refresh();
+    }
+    if (windowVisible_ && providerLocationsSheet_ && providerLocationsSheet_->get_visible()) {
+      providerLocationsSheet_->Refresh();
+    }
+    SyncLocationOverrideTarget();
   }
 }
 
@@ -2702,9 +2772,11 @@ bool MainWindow::ConnectBlockedByBalance(std::function<void()> retry) {
       ClearBalanceRecovery();
       return false;
     case balance_notice::StartConnectStep::FetchBalance:
-      // nothing starts until the balance is read again (or the read gives up)
+      // nothing starts until the balance is read again (or the read gives up),
+      // and the tap shows connecting meanwhile, so the next press ends the wait
       g_message("connect: reading the balance before starting");
       CheckBalanceThen(std::move(retry));
+      NoteTap(connect_tap::Pending::Connect);
       return true;
     case balance_notice::StartConnectStep::Upgrade:
       break;
@@ -2712,6 +2784,11 @@ bool MainWindow::ConnectBlockedByBalance(std::function<void()> retry) {
   // nothing is started; the press opens the way to add balance instead, in
   // front of the user even when it came from the tray with the window hidden
   g_message("connect: not started, the account is out of balance; opening the upgrade path");
+  // a start that waited on its balance goes back to the reading first, so the
+  // upgrade path never opens over "Connecting"
+  if (pendingTap_ == connect_tap::Pending::Connect && !host_.CommandsBusy()) {
+    NoteTap(connect_tap::Pending::None);
+  }
   // the refused press waits on the balance and runs again by itself once it is back
   balanceRecovery_.StartRefused(retry, BalanceClockMillis());
   ApplyBalanceRecoveryLines();
@@ -2754,6 +2831,10 @@ void MainWindow::CancelBalanceCheck() {
   balanceCheckTimeout_.disconnect();
   pendingConnect_ = nullptr;
   balanceCheckFailedAtMillis_ = -1;
+  // the start that waited on it shows connecting no more
+  if (pendingTap_ == connect_tap::Pending::Connect && !host_.CommandsBusy()) {
+    NoteTap(connect_tap::Pending::None);
+  }
 }
 
 void MainWindow::ClearBalanceRecovery() {

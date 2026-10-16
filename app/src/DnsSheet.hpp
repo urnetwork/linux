@@ -68,6 +68,8 @@ class DnsSheet : public Gtk::Window {
   SdkHost& host_;
   urnet::DnsResolverSettings draft_;
   urnet::DnsResolverSettings original_;
+  // Seeds the form from `settings` (Open, and an Update that found them moved).
+  void Seed(urnet::DnsResolverSettings settings);
   std::optional<urnet::DnsResolverSettings> recommendation_;
   std::optional<urnet::DnsResolverSettings> defaults_;
   std::string countryCode_;  // lowercased connected country code

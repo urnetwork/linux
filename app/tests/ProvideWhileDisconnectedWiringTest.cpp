@@ -137,12 +137,12 @@ UR_TEST(ProvideWiring_TheControlServerGatesAndOwnsTheProvider) {
 // does it while disconnected (a launch without auto-connect, a service restart).
 UR_TEST(ProvideWiring_TheGuiReconcilesAfterDisconnectAndModeChanges) {
   const std::string host = ReadProvideSource("SdkHost.cpp");
-  const std::string disconnect = FunctionBody(host, "void SdkHost::Disconnect()");
+  const std::string disconnect = FunctionBody(host, "void SdkHost::DisconnectNow()");
   UR_EXPECT_TRUE(Before(disconnect, "control_.StopTunnel();",
                         "ReconcileProvider(\"disconnect\", /*userInitiated=*/true)"));
   UR_EXPECT_TRUE(Has(FunctionBody(host, "void SdkHost::SetProvideControlMode("),
                      "ReconcileProviderLocked(\"provide mode changed\""));
-  UR_EXPECT_TRUE(Has(FunctionBody(host, "void SdkHost::SetProviderTransportSettings("),
+  UR_EXPECT_TRUE(Has(FunctionBody(host, "void SdkHost::SetProviderTransportSettingsLocked("),
                      "/*settingsChanged=*/true"));
   const std::string poll =
       FunctionBody(ReadProvideSource("MainWindow.cpp"),
@@ -214,7 +214,7 @@ UR_TEST(ProvideWiring_TheStatsCountTheProviderClientsWithoutADevice) {
   UR_EXPECT_TRUE(Has(note, "const int64_t clientCount = running ? status.provider_client_count : -1;"));
   UR_EXPECT_TRUE(Before(note, "daemonProviderClientCount_.exchange(clientCount) != clientCount",
                         "if (changed) PublishStats();"));
-  for (const char* signature : {"void SdkHost::Shutdown()", "void SdkHost::Logout()"}) {
+  for (const char* signature : {"void SdkHost::Shutdown()", "void SdkHost::LogoutNow()"}) {
     UR_EXPECT_TRUE_MSG(signature, Has(FunctionBody(host, signature),
                                       "daemonProviderClientCount_.store(-1);"));
   }

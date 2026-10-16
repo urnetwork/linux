@@ -295,17 +295,17 @@ UR_TEST(connectEntryPointsAskTheStartConnectGate) {
   // StartTunnelUi asks the gate before it starts anything (connect on launch
   // and every post-sign-in connect pass through it too), and a stale balance
   // read repeats the whole start, connect included
-  const std::string start = Body(window,
-                                 "TunnelStartResult MainWindow::StartTunnelUi(const char* reason,\n"
-                                 "                                            "
-                                 "const std::optional<urnet::ConnectLocation>& target) {");
+  const std::string start = Body(window, "void MainWindow::StartTunnelUi(const char* reason, const SdkHost::ConnectTarget& target) {");
   const size_t gateAt = start.find(
       "if (ConnectBlockedByBalance([this, reason, target] { StartTunnelUi(reason, target); })) {");
   UR_EXPECT_TRUE(gateAt != std::string::npos);
-  const size_t startAt = start.find("host_.StartTunnel(reason)");
-  UR_EXPECT_TRUE(gateAt < startAt);
-  const size_t connectAt = start.find("host_.ConnectBestAvailable()");
-  UR_EXPECT_TRUE(connectAt != std::string::npos && startAt < connectAt);
+  const size_t startAt = start.find("host_.StartAndConnect(reason, target,");
+  UR_EXPECT_TRUE(startAt != std::string::npos && gateAt < startAt);
+  // the start and its connect are one queued command, past the gate
+  const std::string queued = Body(host, "bool SdkHost::StartAndConnect(");
+  const size_t queuedStartAt = queued.find("StartTunnel(reason)");
+  const size_t connectAt = queued.find("ConnectBestAvailableNow();");
+  UR_EXPECT_TRUE(connectAt != std::string::npos && queuedStartAt < connectAt);
   // the location picks connect through the host, which asks the same gate
   // before it touches the device
   UR_EXPECT_TRUE(Has(window, "return ConnectBlockedByBalance(std::move(retry)); });"));

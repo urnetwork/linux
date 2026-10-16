@@ -35,6 +35,7 @@
 #include <urnetwork_sdk.hpp>
 
 #include "ClientEvents.hpp"
+#include "ConnectCommandQueue.hpp"
 #include "ControlClient.hpp"
 #include "ExtenderReset.hpp"
 #include "LogUpload.hpp"
@@ -392,6 +393,7 @@ inline KillSwitchDisplay ClassifyKillSwitch(const KillSwitchStatus& s) {
 
 class SdkHost {
  public:
+  SdkHost();
   ~SdkHost();
 
   using AuthStateHandler = std::function<void(bool loggedIn)>;
@@ -721,6 +723,11 @@ class SdkHost {
   // only credential, so quit-as-logout permanently destroys the account and
   // any balance it purchased.
   void Shutdown();
+  // Shutdown on a thread of its own, then `done` on the main loop: it takes
+  // mutex_ and closes the device, which wait for a connect command still held
+  // in its rpc, and the main loop must not (QuitSequence.hpp). Once only; a
+  // second call runs nothing. Joined in ~SdkHost. Main loop.
+  void ShutdownOffMainLoop(std::function<void()> done);
 
   // Daemon session: connect → hello (protocol enforced both ways) →
   // start_tunnel → bind the DeviceRemote to the daemon's device RPC. The
@@ -731,8 +738,59 @@ class SdkHost {
   std::string LastTunnelError();
   // The device rpc's host:port this session dialed, "" with none.
   std::string RpcHostPort();
+  // ---- the connect commands (ConnectCommandQueue.hpp) -----------------------
+  // A connect, a disconnect and the start in front of a connect run on the
+  // command queue's worker, in the order they were made, never on the GTK
+  // thread: on a DeviceRemote a setter holds the device's state lock through
+  // its rpc, for up to the 60 s rpc timeout, and a start_tunnel waits on the
+  // control socket. The calls below return at once; the window shows the
+  // tap's own state meanwhile (MainWindow, connect_tap::Fold).
+  //
+  // Where a start connects: the location the user chose (SelectedLocation),
+  // read on the worker when the command runs and before the start, or the
+  // location given (nullopt there is the best available).
+  struct ConnectTarget {
+    bool selection = true;
+    std::optional<urnet::ConnectLocation> location;
+  };
+  // What a queued start came to, read on the worker right after it, so each
+  // field describes that start: the result, the authorization verdict its own
+  // replies produced (None when it sent nothing), why the daemon could not be
+  // reached, and LastTunnelError.
+  struct StartOutcome {
+    TunnelStartResult result = TunnelStartResult::Failed;
+    DaemonAuthOutcome authOutcome = DaemonAuthOutcome::None;
+    DaemonUnreachableReason unreachableReason = DaemonUnreachableReason::None;
+    std::string lastError;
+  };
+  // The start path of every connect tap (MainWindow::StartTunnelUi): StartTunnel,
+  // then ConnectBestAvailable or Connect to the target, as one queued connect.
+  // `done` runs on the main loop with the start's outcome. False, with nothing
+  // queued, while a sign-out runs. Main loop.
+  bool StartAndConnect(const char* reason, const ConnectTarget& target,
+                       std::function<void(StartOutcome)> done);
+  // A command is queued or running, or its result has not applied yet. While
+  // one is, the GTK thread makes no device read (each would wait on the
+  // device's state lock the command holds) and the window holds the tap's
+  // state. Main loop.
+  bool CommandsBusy() const { return commands_.Busy(); }
+  // Runs on the main loop each time the queue settles, with the reading the
+  // worker took after the last command: the device's own word once the tap's
+  // held state ends. A reading from before a sign-out is never handed on (the
+  // default reading is). Main loop.
+  void SetCommandsSettledHandler(std::function<void(ConnectReading)> handler) {
+    onCommandsSettled_ = std::move(handler);
+  }
+  // `then` runs on the main loop once every command queued so far has run (a
+  // quit waits on it, bounded, for a disconnect the user tapped). Main loop.
+  void WhenCommandsDrained(std::function<void()> then) { commands_.WhenDrained(std::move(then)); }
+  // The app is ending (QuitSequence.hpp): from here no connect is admitted and
+  // the queued ones are skipped, while disconnects still run, so nothing
+  // starts a tunnel behind the quit's teardown or a session's end. Main loop.
+  void RefuseConnects() { commands_.BeginSignOut(); }
+
   // Both connect calls ask the connect gate first (SetConnectGate) and do
-  // nothing when it blocks.
+  // nothing when it blocks; the connect itself is queued.
   void ConnectBestAvailable();
   // Connect to a chosen provider location (country/region/city/device/peer). The
   // chooser passes an SDK-supplied ConnectLocation as-is, or one built from a peer
@@ -763,9 +821,14 @@ class SdkHost {
   // location. Without one a row click only connects.
   using RowConnect = std::function<void(const std::optional<urnet::ConnectLocation>& location)>;
   void SetRowConnect(RowConnect run) { rowConnect_ = std::move(run); }
+  // Queued, like a connect: the daemon's stop_tunnel, the controller's
+  // disconnect, a fresh reading, then the provider reconcile, on the worker.
   void Disconnect();
   // Own presentation-only SDK view controllers only while the GTK window is
   // visible. The DeviceLocal, tunnel and packet loop remain alive in the tray.
+  // Queued behind the commands (apple 852baf62): opening and closing the
+  // controllers and their subs take the device's state lock, which a held
+  // command keeps. The open publishes a fresh reading once it is done.
   void SetPresentationActive(bool active);
 
   // Provide/earn: control mode "never"|"always"|"network"|"auto"|"manual".
@@ -942,6 +1005,23 @@ class SdkHost {
   void RefreshKillSwitchStatus(KillSwitchDone done = {});
   std::optional<urnet::DnsResolverSettings> GetDnsResolverSettings();
   void SetDnsResolverSettings(const urnet::DnsResolverSettings& settings);
+  // Compare-and-set, for the editors (apple's editor safety): the write goes
+  // ahead only while `stillShown` holds for the settings as they read now,
+  // checked and written under one hold of mutex_. Otherwise nothing is
+  // written, false comes back, and `current` gets the settings as they read,
+  // for the editor to re-seed from: an editor drafted from settings that have
+  // changed since it opened (another surface, the daemon's sync, a read that
+  // failed when it opened) never overwrites them. `stillShown` runs under
+  // mutex_ and must not call back into SdkHost. Main loop.
+  bool SetDnsResolverSettingsIf(
+      const std::function<bool(const std::optional<urnet::DnsResolverSettings>&)>& stillShown,
+      const urnet::DnsResolverSettings& settings,
+      std::optional<urnet::DnsResolverSettings>* current);
+  // The same for the client (`provider` false) or the provider transport policy.
+  bool SetTransportSettingsIf(
+      bool provider,
+      const std::function<bool(const std::optional<urnet::TransportSettings>&)>& stillShown,
+      const urnet::TransportSettings& settings, std::optional<urnet::TransportSettings>* current);
   // Transport policy (client: the carrier this device uses to reach providers;
   // provider: the carrier it uses while providing for others). Reads come from
   // the device when present (the daemon's truth over the rpc, the pending /
@@ -1328,8 +1408,16 @@ class SdkHost {
   // on it. False from here means "ask StartTunnel", and StartTunnel does the
   // authoritative check (a `status` round trip) before it rebuilds anything.
   bool hasDevice() {
-    return device_.has_value() && deviceControlGeneration_ == control_.SessionGeneration();
+    return deviceBound_.load() && deviceControlGeneration_ == control_.SessionGeneration();
   }
+  // A device the GTK thread may use through device() now: bound, and no
+  // connect command outstanding. The commands run on the queue's worker, and
+  // a sign-out's teardown, a start's stale drop and the bind deadline close
+  // and release device_ there; commands are only queued from the main loop,
+  // so with none outstanding device_ cannot change under a main-loop call.
+  // Main loop.
+  bool DeviceSteady() { return !CommandsBusy() && hasDevice(); }
+  // Only behind DeviceSteady() on the main loop (see there).
   urnet::DeviceRemote& device() { return *device_; }
   // The daemon control channel, shared with the location-override writer
   // (DaemonGeoClueWriter) — one socket, one hello, one version check.
@@ -1521,6 +1609,43 @@ class SdkHost {
   // life of the process (each new DeviceRemote reopens the same window).
   bool HoldDeviceRpcDefaultPortLocked(std::string* error);
   void ReleaseDeviceRpcDefaultPort();
+
+  // The editors' settings, read and written with mutex_ held (the public
+  // accessors and the compare-and-set writes share them).
+  std::optional<urnet::DnsResolverSettings> GetDnsResolverSettingsLocked();
+  void SetDnsResolverSettingsLocked(const urnet::DnsResolverSettings& settings);
+  std::optional<urnet::TransportSettings> GetTransportSettingsLocked();
+  void SetTransportSettingsLocked(const urnet::TransportSettings& settings);
+  std::optional<urnet::TransportSettings> GetProviderTransportSettingsLocked();
+  void SetProviderTransportSettingsLocked(const urnet::TransportSettings& settings);
+
+  // A command for the queue: `work` on the worker, then the reading it takes
+  // there (see SetCommandsSettledHandler), then `apply` on the main loop.
+  // False, with nothing queued, for a connect while a sign-out runs. Main loop.
+  bool RunCommand(ConnectCommandQueue::Kind kind, std::function<void()> work,
+                  std::function<void()> apply = nullptr);
+  // The commands' bodies, on the queue's worker. Each takes mutex_ itself.
+  void ConnectBestAvailableNow();
+  void ConnectNow(const std::optional<urnet::ConnectLocation>& location);
+  void DisconnectNow();
+  // Removes the rpc bind watchdog's source unless it fired. Requires mutex_.
+  void RemoveRpcBindWatchLocked();
+  // The id of the watchdog source that fired last (it removed itself).
+  std::atomic<unsigned int> rpcBindFiredId_{0};
+  // Logout's device, daemon and credential teardown, on the worker.
+  void LogoutNow();
+  // The worker. Stopped first in ~SdkHost: the work it runs holds `this`.
+  ConnectCommandQueue commands_;
+  // ShutdownOffMainLoop's thread, joined in ~SdkHost before the queue stops.
+  std::thread shutdownWorker_;
+  std::function<void(ConnectReading)> onCommandsSettled_;
+  // The reading the last command's worker took, and the sign-in it was taken
+  // in. Main loop.
+  ConnectReading lastCommandReading_;
+  uint64_t lastCommandReadingEpoch_ = 0;
+  // Advanced by each sign-out (Logout), so a reading taken before one is
+  // never handed on as the next account's.
+  std::atomic<uint64_t> signInEpoch_{0};
 
   std::mutex mutex_;
   std::string initializeError_;  // InitializeError(); the main thread's alone
@@ -1762,6 +1887,9 @@ class SdkHost {
   // restarted — so the DeviceLocal this device_ talks to is gone. Atomic
   // because hasDevice() reads it without mutex_.
   std::atomic<uint64_t> deviceControlGeneration_{0};
+  // device_ is engaged: set with it, under mutex_, and read without the lock
+  // by hasDevice() on the main loop while the worker may be setting it.
+  std::atomic<bool> deviceBound_{false};
   // The reservation described by HoldDeviceRpcDefaultPortLocked: a bound,
   // NEVER-listening socket on 127.0.0.1:<ctl::kDeviceRpcPort>. -1 = not held.
   int deviceRpcDefaultPortFd_ = -1;

@@ -333,7 +333,25 @@ std::string DeviceAuthLogoutCause(uint64_t device) {
 
 }  // namespace
 
+SdkHost::SdkHost()
+    : commands_([](ConnectCommandQueue::Apply apply) { PostToMain(std::move(apply)); }) {
+  // The queue settled: the tap's held state hands back to the device's word,
+  // read on the worker after the last command. A reading from before a
+  // sign-out describes the account that left, so the default one goes instead.
+  commands_.SetSettledHandler([this] {
+    if (!onCommandsSettled_) return;
+    onCommandsSettled_(lastCommandReadingEpoch_ == signInEpoch_.load() ? lastCommandReading_
+                                                                       : ConnectReading{});
+  });
+}
+
 SdkHost::~SdkHost() {
+  // A quit's teardown first: it holds `this` and takes mutex_, which a
+  // command may still hold. Unbounded, the trade the joins below make too.
+  if (shutdownWorker_.joinable()) shutdownWorker_.join();
+  // Then the connect commands' worker: its work holds `this` and takes
+  // mutex_. Queued commands are dropped, and the one running finishes.
+  commands_.Stop();
   // Leg 3 of the kill switch runs here and holds `this`. Stop it before any
   // member dies; it never takes mutex_ while the joiner holds it, so the join
   // cannot deadlock.
@@ -2766,8 +2784,10 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
           "present its certificate (" +
           holdError + ")");
     }
+    deviceBound_.store(false);
     device_ = urnet::newDeviceRemoteWithDefaults(*networkSpace_, clientJwt,
                                                  session.instance_id);
+    deviceBound_.store(true);
     // setRpcServer BEFORE any listener registration or getter (windows
     // SdkHost.cpp:2027-2029), and exactly once per DeviceRemote instance — the
     // binding gives no re-entrancy contract for a second call and no way to
@@ -2800,13 +2820,17 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
     // reconnects.
     subs_.push_back(device_->addRemoteChangeListener([this, rpcGeneration](bool connected) {
       if (!connected) return;
+      // On the command queue, behind the connect that follows a start: it
+      // takes mutex_, which that connect holds through its rpc, and the save
+      // talks to the Secret Service (the main loop waits on neither).
       PostToMain([this, rpcGeneration] {
-        std::scoped_lock lock(mutex_);
-        if (rpcGeneration != rpcSessionGeneration_.load()) return;  // a newer session owns it
-        if (rpcBindWatchId_ == 0) return;
-        g_source_remove(rpcBindWatchId_);
-        rpcBindWatchId_ = 0;
-        RememberSyncedSessionLocked();
+        RunCommand(ConnectCommandQueue::Kind::Device, [this, rpcGeneration] {
+          std::scoped_lock lock(mutex_);
+          if (rpcGeneration != rpcSessionGeneration_.load()) return;  // a newer session owns it
+          if (rpcBindWatchId_ == 0) return;
+          RemoveRpcBindWatchLocked();
+          RememberSyncedSessionLocked();
+        });
       });
     }));
 
@@ -3114,6 +3138,14 @@ ConnectReading SdkHost::ReadConnectReading() {
             std::scoped_lock lock(self->degradeMutex_);
             self->degradeReevalId_ = 0;
           }
+          // on the main loop: not while connect commands hold the locks this
+          // read takes. Their settle reads the hold again, and with the
+          // armed time cleared that read arms the re-evaluation anew.
+          if (self->CommandsBusy()) {
+            std::scoped_lock lock(self->degradeMutex_);
+            self->degradeReevalAtMillis_ = 0;
+            return G_SOURCE_REMOVE;
+          }
           if (self->onReading_) self->onReading_(self->CurrentConnectReading());
           return G_SOURCE_REMOVE;
         },
@@ -3406,17 +3438,32 @@ void SdkHost::ClosePresentationLocked() {
 }
 
 void SdkHost::SetPresentationActive(bool active) {
-  std::scoped_lock lock(mutex_);
-  if (presentationActive_ == active) return;
-  presentationActive_ = active;
-  if (!active) {
-    ClosePresentationLocked();
-    return;
-  }
-  if (!device_) return;
-  SubscribeStats();
-  SubscribeDrawer();
-  EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+  // Behind the commands, on the worker (apple 852baf62): closing the
+  // controllers and their subs, and opening them with their listeners, take
+  // the device's state lock, which a command keeps through its rpc. A show
+  // then hands on the reading its own controller gives (re-read, never
+  // replayed: the window's last reading is from before the controller opened).
+  RunCommand(
+      ConnectCommandQueue::Kind::Device,
+      [this, active] {
+        std::scoped_lock lock(mutex_);
+        if (presentationActive_ == active) return;
+        presentationActive_ = active;
+        if (!active) {
+          ClosePresentationLocked();
+          return;
+        }
+        if (!device_) return;
+        SubscribeStats();
+        SubscribeDrawer();
+        EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
+      },
+      [this, active] {
+        // a show from before a sign-out reads the account that left
+        if (active && onReading_ && lastCommandReadingEpoch_ == signInEpoch_.load()) {
+          onReading_(lastCommandReading_);
+        }
+      });
 }
 
 // ---- this device's provider status (support part P008) ----------------------
@@ -3893,6 +3940,10 @@ void SdkHost::RunKillSwitchRequest(KillSwitchRequest request) {
 
 std::optional<urnet::DnsResolverSettings> SdkHost::GetDnsResolverSettings() {
   std::scoped_lock lock(mutex_);
+  return GetDnsResolverSettingsLocked();
+}
+
+std::optional<urnet::DnsResolverSettings> SdkHost::GetDnsResolverSettingsLocked() {
   if (device_) return device_->getDnsResolverSettings();
   if (localState_) return localState_->getDnsResolverSettings();
   return std::nullopt;
@@ -3900,11 +3951,50 @@ std::optional<urnet::DnsResolverSettings> SdkHost::GetDnsResolverSettings() {
 
 void SdkHost::SetDnsResolverSettings(const urnet::DnsResolverSettings& settings) {
   std::scoped_lock lock(mutex_);
+  SetDnsResolverSettingsLocked(settings);
+}
+
+void SdkHost::SetDnsResolverSettingsLocked(const urnet::DnsResolverSettings& settings) {
   if (device_) {
     device_->setDnsResolverSettings(settings);  // applies to the live mux + persists
     return;
   }
   if (localState_) localState_->setDnsResolverSettings(settings);
+}
+
+bool SdkHost::SetDnsResolverSettingsIf(
+    const std::function<bool(const std::optional<urnet::DnsResolverSettings>&)>& stillShown,
+    const urnet::DnsResolverSettings& settings,
+    std::optional<urnet::DnsResolverSettings>* current) {
+  std::scoped_lock lock(mutex_);
+  std::optional<urnet::DnsResolverSettings> now = GetDnsResolverSettingsLocked();
+  if (!stillShown(now)) {
+    if (current) *current = std::move(now);
+    return false;
+  }
+  SetDnsResolverSettingsLocked(settings);
+  if (current) *current = settings;
+  return true;
+}
+
+bool SdkHost::SetTransportSettingsIf(
+    bool provider,
+    const std::function<bool(const std::optional<urnet::TransportSettings>&)>& stillShown,
+    const urnet::TransportSettings& settings, std::optional<urnet::TransportSettings>* current) {
+  std::scoped_lock lock(mutex_);
+  std::optional<urnet::TransportSettings> now =
+      provider ? GetProviderTransportSettingsLocked() : GetTransportSettingsLocked();
+  if (!stillShown(now)) {
+    if (current) *current = std::move(now);
+    return false;
+  }
+  if (provider) {
+    SetProviderTransportSettingsLocked(settings);
+  } else {
+    SetTransportSettingsLocked(settings);
+  }
+  if (current) *current = settings;
+  return true;
 }
 
 std::optional<urnet::ThroughputPointList> SdkHost::ThroughputPoints() {
@@ -3966,6 +4056,10 @@ bool SdkHost::DeviceHasProviderStats() {
 
 std::optional<urnet::TransportSettings> SdkHost::GetTransportSettings() {
   std::scoped_lock lock(mutex_);
+  return GetTransportSettingsLocked();
+}
+
+std::optional<urnet::TransportSettings> SdkHost::GetTransportSettingsLocked() {
   if (device_) {
     if (auto settings = device_->getTransportSettings(); settings) return settings;
   }
@@ -3975,6 +4069,10 @@ std::optional<urnet::TransportSettings> SdkHost::GetTransportSettings() {
 
 void SdkHost::SetTransportSettings(const urnet::TransportSettings& settings) {
   std::scoped_lock lock(mutex_);
+  SetTransportSettingsLocked(settings);
+}
+
+void SdkHost::SetTransportSettingsLocked(const urnet::TransportSettings& settings) {
   // apply live over the device rpc (the daemon persists it in its own local
   // state) AND mirror into the GUI local state: with the tunnel down the
   // mirror is the only copy, and StartTunnel seeds the device from it
@@ -3990,6 +4088,10 @@ void SdkHost::SetTransportSettings(const urnet::TransportSettings& settings) {
 
 std::optional<urnet::TransportSettings> SdkHost::GetProviderTransportSettings() {
   std::scoped_lock lock(mutex_);
+  return GetProviderTransportSettingsLocked();
+}
+
+std::optional<urnet::TransportSettings> SdkHost::GetProviderTransportSettingsLocked() {
   if (device_) {
     if (auto settings = device_->getProviderTransportSettings(); settings) return settings;
   }
@@ -3999,6 +4101,10 @@ std::optional<urnet::TransportSettings> SdkHost::GetProviderTransportSettings() 
 
 void SdkHost::SetProviderTransportSettings(const urnet::TransportSettings& settings) {
   std::scoped_lock lock(mutex_);
+  SetProviderTransportSettingsLocked(settings);
+}
+
+void SdkHost::SetProviderTransportSettingsLocked(const urnet::TransportSettings& settings) {
   if (device_) device_->setProviderTransportSettings(settings);
   if (localState_) {
     try {
@@ -4787,9 +4893,70 @@ bool SdkHost::RequestSignSnFleetBinding(
       });
 }
 
+// ---- the connect commands ----------------------------------------------------
+// Each runs on the command queue's worker (ConnectCommandQueue.hpp), in the
+// order it was made. The work takes mutex_ itself, and the listeners a write
+// tells inline (the connect view controller's status, a DeviceRemote's
+// location) run there too, so their publishes make their device reads on the
+// worker. Once the work returns the worker reads the connection once more:
+// the reading the window gets when the queue settles.
+bool SdkHost::RunCommand(ConnectCommandQueue::Kind kind, std::function<void()> work,
+                         std::function<void()> apply) {
+  const uint64_t epoch = signInEpoch_.load();
+  return commands_.Enqueue(kind, [this, epoch, work = std::move(work),
+                                  apply = std::move(apply)]() -> ConnectCommandQueue::Apply {
+    if (work) work();
+    ConnectReading reading;
+    {
+      std::scoped_lock lock(mutex_);
+      reading = ReadConnectReading();
+    }
+    return [this, epoch, reading, apply] {
+      lastCommandReading_ = reading;
+      lastCommandReadingEpoch_ = epoch;
+      if (apply) apply();
+    };
+  });
+}
+
+bool SdkHost::StartAndConnect(const char* reason, const ConnectTarget& target,
+                              std::function<void(StartOutcome)> done) {
+  auto outcome = std::make_shared<StartOutcome>();
+  return RunCommand(
+      ConnectCommandQueue::Kind::Connect,
+      [this, reason, target, outcome] {
+        // the selection is read before the start, which may build a new device
+        const std::optional<urnet::ConnectLocation> location =
+            target.selection ? SelectedLocation() : target.location;
+        // only a verdict this start's own replies produced counts
+        const uint64_t replySerialBefore = control_.ReplySerial();
+        outcome->result = StartTunnel(reason);
+        outcome->authOutcome = control_.ReplySerial() != replySerialBefore
+                                   ? control_.LastAuthOutcome()
+                                   : DaemonAuthOutcome::None;
+        outcome->unreachableReason = control_.LastUnreachableReason();
+        outcome->lastError = LastTunnelError();
+        if (outcome->result != TunnelStartResult::Started) return;
+        if (IsBestAvailableSelected(location)) {
+          g_message("connect: no destination selected, choosing the best available");
+          ConnectBestAvailableNow();
+        } else {
+          g_message("connect: routing to the selected provider");
+          ConnectNow(location);
+        }
+      },
+      [outcome, done] {
+        if (done) done(*outcome);
+      });
+}
+
 void SdkHost::ConnectBestAvailable() {
   // a location pick or a press while out of balance starts nothing
   if (connectGate_ && connectGate_([this] { ConnectBestAvailable(); })) return;
+  RunCommand(ConnectCommandQueue::Kind::Connect, [this] { ConnectBestAvailableNow(); });
+}
+
+void SdkHost::ConnectBestAvailableNow() {
   // a deliberate connect: proof the last destination earned does not carry over
   NoteNewConnectAttempt();
   std::scoped_lock lock(mutex_);
@@ -4867,6 +5034,10 @@ void SdkHost::ConnectBestAvailable() {
 
 void SdkHost::Connect(const std::optional<urnet::ConnectLocation>& location) {
   if (connectGate_ && connectGate_([this, location] { Connect(location); })) return;
+  RunCommand(ConnectCommandQueue::Kind::Connect, [this, location] { ConnectNow(location); });
+}
+
+void SdkHost::ConnectNow(const std::optional<urnet::ConnectLocation>& location) {
   NoteNewConnectAttempt();
   std::scoped_lock lock(mutex_);
   if (connectVc_) {
@@ -4883,7 +5054,11 @@ void SdkHost::ConnectFromRow(const std::optional<urnet::ConnectLocation>& locati
   // SDK's selection is this row. A selection left over from before a
   // Disconnect is no session, and a failed one is driven nowhere, so either
   // row connects.
-  const bool driving = health::DrivesSelection(CurrentConnectReading().ToSignals(false)) &&
+  // Not read while connect commands are outstanding: both reads take the
+  // locks a queued command holds through its rpc. The click is then no
+  // repeat of a session still coming up, and settles like any other.
+  const bool driving = !CommandsBusy() &&
+                       health::DrivesSelection(CurrentConnectReading().ToSignals(false)) &&
                        IsTargetSelected(SelectedLocation(), location);
   if (rowConnectTimerId_ != 0) {
     g_source_remove(rowConnectTimerId_);
@@ -4940,38 +5115,46 @@ void SdkHost::RunRowConnect(const std::optional<urnet::ConnectLocation>& locatio
 
 void SdkHost::Disconnect() {
   CancelRowConnect("disconnect");
+  RunCommand(ConnectCommandQueue::Kind::Disconnect, [this] { DisconnectNow(); });
+}
+
+void SdkHost::DisconnectNow() {
   NoteNewConnectAttempt();
-  std::scoped_lock lock(mutex_);
-  // Bring the daemon's tunnel down. Ending the provider session does not
-  // touch the tun device or the 31 capture routes — those are the daemon's,
-  // and they are removed only by an explicit stop_tunnel. Without this the
-  // user presses Disconnect and every packet keeps being routed into a tunnel
-  // with nothing on the other end: the machine loses its internet and the UI
-  // says "Disconnected". Best effort, exactly as Logout/Shutdown do it.
-  //
-  // First, as Windows does it: the routes, DNS and the filter come back before
-  // the SDK is asked anything, so a slow device rpc cannot hold the machine's
-  // network. The disconnect below then finds the daemon's device gone, and the
-  // DeviceRemote applies it locally (selection and connect state).
-  control_.StopTunnel();
-  if (connectVc_) {
-    connectVc_->disconnect();
-  } else if (device_) {
-    auto controller = device_->openConnectViewController();
-    controller.disconnect();
-    device_->closeConnectViewController(controller);
-  }
-  // Say so NOW rather than waiting for the connect-location listener: on a
-  // teardown the SDK can simply stop publishing, and a reading nobody
-  // refreshes is exactly how the row used to latch on its last word.
-  PublishConnectReading();
+  [this] {
+    std::scoped_lock lock(mutex_);
+    // Bring the daemon's tunnel down. Ending the provider session does not
+    // touch the tun device or the 31 capture routes — those are the daemon's,
+    // and they are removed only by an explicit stop_tunnel. Without this the
+    // user presses Disconnect and every packet keeps being routed into a tunnel
+    // with nothing on the other end: the machine loses its internet and the UI
+    // says "Disconnected". Best effort, exactly as Logout/Shutdown do it.
+    //
+    // First, as Windows does it: the routes, DNS and the filter come back
+    // before the SDK is asked anything, so a slow device rpc cannot hold the
+    // machine's network. The disconnect below then finds the daemon's device
+    // gone, and the DeviceRemote applies it locally (selection and connect
+    // state).
+    control_.StopTunnel();
+    if (connectVc_) {
+      connectVc_->disconnect();
+    } else if (device_) {
+      auto controller = device_->openConnectViewController();
+      controller.disconnect();
+      device_->closeConnectViewController(controller);
+    }
+    // Say so NOW rather than waiting for the connect-location listener: on a
+    // teardown the SDK can simply stop publishing, and a reading nobody
+    // refreshes is exactly how the row used to latch on its last word.
+    PublishConnectReading();
+  }();
   // And keep providing. stop_tunnel ended the daemon's DeviceLocal along with
   // the tunnel, which is how a Linux "Always" provider used to stop earning
   // the moment it disconnected. When the provide mode still provides while
   // disconnected, the provider-only device takes over — no tun, no routes, no
-  // DNS (ProvideLifecycle.hpp). Posted, so the window settles on Disconnected
-  // before the daemon builds it.
-  PostToMain([this] { ReconcileProvider("disconnect", /*userInitiated=*/true); });
+  // DNS (ProvideLifecycle.hpp). After the reading above is posted, so the
+  // window settles on Disconnected before the daemon builds it, and on the
+  // worker, so the main loop never waits on the daemon for it.
+  ReconcileProvider("disconnect", /*userInitiated=*/true);
 }
 
 void SdkHost::SetProvideControlMode(const std::string& mode) {
@@ -5298,26 +5481,34 @@ void SdkHost::NoteDaemonProviderLocked(const ctl::StatusReply& status) {
 // connect time, nothing throws, and every screen simply stays empty forever.
 // This is the detector for that, and only that.
 
-void SdkHost::ArmRpcBindWatchdogLocked() {
-  if (rpcBindWatchId_ != 0) {
+// The watchdog's source, removed unless it has fired already: a fired one
+// removed itself, and its id may name another source by now.
+void SdkHost::RemoveRpcBindWatchLocked() {
+  if (rpcBindWatchId_ != 0 && rpcBindWatchId_ != rpcBindFiredId_.load()) {
     g_source_remove(rpcBindWatchId_);
-    rpcBindWatchId_ = 0;
   }
+  rpcBindWatchId_ = 0;
+}
+
+void SdkHost::ArmRpcBindWatchdogLocked() {
+  RemoveRpcBindWatchLocked();
   rpcBindWatchGeneration_ = rpcSessionGeneration_.load();
   rpcBindWatchId_ = g_timeout_add_seconds(
       kRpcBindDeadlineSeconds,
       [](gpointer data) -> gboolean {
-        static_cast<SdkHost*>(data)->OnRpcBindDeadline();
+        auto* self = static_cast<SdkHost*>(data);
+        // The deadline's reads, teardown, stop_tunnel and keyring forget run on
+        // the command queue, behind the commands: on the main loop they waited
+        // on mutex_ and the device's lock that a queued connect holds.
+        self->rpcBindFiredId_.store(g_source_get_id(g_main_current_source()));
+        self->RunCommand(ConnectCommandQueue::Kind::Device, [self] { self->OnRpcBindDeadline(); });
         return G_SOURCE_REMOVE;
       },
       this);
 }
 
 void SdkHost::CancelRpcBindWatchdogLocked() {
-  if (rpcBindWatchId_ != 0) {
-    g_source_remove(rpcBindWatchId_);
-    rpcBindWatchId_ = 0;
-  }
+  RemoveRpcBindWatchLocked();
   // Anything already queued against this session — the timeout that has
   // already fired and is waiting on mutex_, the remote-change marshal — is
   // stale from here on and must not act on the NEXT session.
@@ -5330,7 +5521,7 @@ void SdkHost::OnRpcBindDeadline() {
     std::scoped_lock lock(mutex_);
     // A newer session owns rpcBindWatchId_ now; leave its watchdog alone.
     if (rpcBindWatchGeneration_ != rpcSessionGeneration_.load()) return;
-    rpcBindWatchId_ = 0;  // this source is removing itself
+    rpcBindWatchId_ = 0;  // this source removed itself when it fired
     if (!device_) return;
     if (ReadGuarded<bool>(
             "device getRemoteConnected", [&] { return device_->getRemoteConnected(); },
@@ -5355,8 +5546,8 @@ void SdkHost::OnRpcBindDeadline() {
     TeardownDeviceLocked();
     RestoreApiAuthorizationLocked();
   }
-  // Blocking, on the main loop, bounded by the control client's receive
-  // timeout — the same trade StartTunnel's failure path already makes.
+  // Blocking, on the command queue's worker, bounded by the control client's
+  // receive timeout — the same trade StartTunnel's failure path makes.
   control_.StopTunnel();
   // The material is bound to nothing now; remembering it could only produce a
   // reattach that mismatches again. TeardownDeviceLocked above has already
@@ -5383,6 +5574,7 @@ void SdkHost::TeardownDeviceLocked() {
   // leaking them on every logout. The daemon's DeviceLocal, tun and IoLoop
   // are NOT touched here — stopping the tunnel is an explicit stop_tunnel on
   // the control channel, decided by the caller.
+  deviceBound_.store(false);
   if (device_) { device_->close(); device_.reset(); }
   provideHasNetworkKey_.store(false);
 }
@@ -5414,8 +5606,54 @@ void SdkHost::Shutdown() {
   DropDaemonProviderStatsLocked();
 }
 
-// See the contract in the header.
+void SdkHost::ShutdownOffMainLoop(std::function<void()> done) {
+  if (shutdownWorker_.joinable()) return;
+  shutdownWorker_ = std::thread([this, done = std::move(done)] {
+    // an escaping exception on a worker thread is std::terminate
+    try {
+      Shutdown();
+    } catch (const std::exception& e) {
+      g_warning("sdkhost: the quit's teardown threw: %s", e.what());
+    } catch (...) {
+      g_warning("sdkhost: the quit's teardown threw");
+    }
+    if (done) PostToMain(done);
+  });
+}
+
+// See the contract in the header. On the main loop it ends the session for
+// the app at once: a second sign-out is refused, the row click still settling
+// is dropped, no connect is admitted (apple 5c174fda), and the app reads
+// signed out. The rest closes the device, asks the daemon and logs the local
+// credentials out (LogoutNow), so it runs on the command queue behind the
+// commands already queued: the leaving account's disconnects reach the daemon
+// first, and the main loop never waits on the device's lock or the daemon
+// (apple 9e5468cb; APPLE_FIXES.md, the device close at sign-out).
 void SdkHost::Logout() {
+  // A sign-out already under way, or done, is this one: nothing is torn down
+  // twice, and a second one never reaches the account signed in next.
+  if (signedOut_.exchange(true)) {
+    g_message("sdkhost: sign-out: already signed out; nothing more to do");
+    return;
+  }
+  // a row click still settling belongs to the leaving account (main loop)
+  CancelRowConnect("sign-out");
+  // From here no connect is admitted, and the leaving account's queued
+  // connects are skipped while its disconnects still run; a reading taken
+  // before this is never handed on as the next account's. The fence ends
+  // with the device, when LogoutNow has run: the next sign-in's commands
+  // carry the new generation and are never blocked by it.
+  commands_.BeginSignOut();
+  signInEpoch_.fetch_add(1);
+  // ...and a sign-out the sdk reports for it from here signs nothing out
+  // again (AuthLogout.hpp)
+  authLogouts_.SignedOut();
+  RunCommand(
+      ConnectCommandQueue::Kind::Disconnect, [this] { LogoutNow(); },
+      [this] { commands_.EndSignOut(); });
+}
+
+void SdkHost::LogoutNow() {
   // A sign-in method being added belongs to the account that is leaving: its
   // return, if it still comes, must not add it to the next account signed in.
   // Answered "superseded by ..." (bridge::IsSuperseded), so its sheet settles
@@ -5441,15 +5679,10 @@ void SdkHost::Logout() {
     out.error = "superseded by signing out";
     signDone(std::move(out));
   }
-  // and so is a row click still settling
-  CancelRowConnect("sign-out");
+  // (the row click, the fence and signedOut_, which keeps a posted
+  // reconcile, the health poll or a Connect from starting anything for the
+  // account that is leaving, were done on the main loop, in Logout)
   std::scoped_lock lock(mutex_);
-  // Signed out from here: a posted reconcile, the health poll or a Connect that
-  // runs after this starts nothing for the account that is leaving.
-  signedOut_.store(true);
-  // ...and a sign-out the sdk reports for it from here signs nothing out again
-  // (AuthLogout.hpp)
-  authLogouts_.SignedOut();
   pendingWalletAuth_.reset();
   // so are sign-in flows left unfinished before this session (an sso identity
   // with no network, an instant account never confirmed): they belong to no

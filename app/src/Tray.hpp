@@ -29,7 +29,10 @@ class Tray {
   // follows the session (`sessionUp`, so the label and a press agree), the
   // connected icon means a provider is proven to carry it, and the tooltip
   // names the state in the status row's words.
-  void SetState(bool sessionUp, bool proven, const std::string& status);
+  // `hasStatus` is false while there is no connection status at all (signed
+  // out): the menu then offers neither Connect nor Disconnect
+  // (tray_policy::ConnectItemFor).
+  void SetState(bool sessionUp, bool proven, const std::string& status, bool hasStatus);
   // Which recovery items the menu offers (failsafe_notice::TrayRecovery).
   void SetRecovery(bool forceTunnelOff, bool liftKillSwitch);
   // A StatusNotifierWatcher has taken the icon and says a host is registered
@@ -46,6 +49,7 @@ class Tray {
 
   // Read by the D-Bus vtable callbacks (free functions in the .cpp).
   bool sessionUp() const { return session_up_; }
+  bool hasStatus() const { return has_status_; }
   bool provenForIcon() const { return proven_; }
   const std::string& statusForToolTip() const { return status_; }
   guint menuRevision() const { return menu_revision_; }
@@ -91,6 +95,7 @@ class Tray {
   guint menu_revision_ = 1;
   std::string service_name_;  // org.kde.StatusNotifierItem-<pid>-1
   bool session_up_ = false;
+  bool has_status_ = false;
   bool proven_ = false;
   std::string status_;
   bool force_tunnel_off_ = false;

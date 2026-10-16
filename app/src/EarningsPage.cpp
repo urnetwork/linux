@@ -729,7 +729,7 @@ std::string ExplorerTxUrl(SdkHost& host, const std::string& txHash) {
   if (txHash.empty()) return {};
   std::string pattern;
   std::optional<urnet::SnChainSettings> settings;
-  if (host.hasDevice()) settings = host.device().getSnChainSettings();
+  if (host.DeviceSteady()) settings = host.device().getSnChainSettings();
   if (!settings) settings = urnet::defaultSnChainSettings();
   if (settings) pattern = settings->explorer_tx_url;
   const size_t at = pattern.find("%s");
@@ -848,7 +848,7 @@ using ClaimsDone = std::function<void(std::optional<std::vector<SnClaimRow>> cla
                                       int64_t totalClaimableRao, std::string err,
                                       std::optional<snpayout::EpochSchedule> schedule)>;
 void FetchClaims(SdkHost& host, ClaimsDone done) {
-  if (!host.hasDevice()) {
+  if (!host.DeviceSteady()) {
     done(std::nullopt, 0, kNoDevice, std::nullopt);
     return;
   }
@@ -906,7 +906,7 @@ void FetchClaims(SdkHost& host, ClaimsDone done) {
 
 using GasDone = std::function<void(std::optional<SnGasInfo> gas, std::string err)>;
 void FetchGas(SdkHost& host, GasDone done) {
-  if (!host.hasDevice()) {
+  if (!host.DeviceSteady()) {
     done(std::nullopt, kNoDevice);
     return;
   }
@@ -955,7 +955,7 @@ void CheckWallet(SdkHost& host, const std::string& address, CheckDone done) {
 using SetWalletDone = std::function<void(bool ok, std::string err)>;
 void SetWallet(SdkHost& host, const std::string& address, const std::string& clientId,
                const std::string& signature, const std::string& message, SetWalletDone done) {
-  if (host.hasDevice() && !clientId.empty()) {
+  if (host.DeviceSteady() && !clientId.empty()) {
     host.device().connectSnWallet(
         address, signature, message,
         [done](std::optional<urnet::SnConnectWalletResult> result,
@@ -999,7 +999,7 @@ struct ClaimEvents {
 // signs with the gas key and sends it to the vault; the events arrive as the
 // receipts do.
 void Claim(SdkHost& host, const std::vector<int64_t>& epochs, ClaimEvents events) {
-  if (!host.hasDevice()) {
+  if (!host.DeviceSteady()) {
     for (const int64_t epoch : epochs) {
       if (events.failed) events.failed(epoch, kNoDevice);
     }
@@ -1023,7 +1023,7 @@ void Claim(SdkHost& host, const std::vector<int64_t>& epochs, ClaimEvents events
 using LedgerDone = std::function<void(std::optional<std::vector<snledger::Account>> accounts,
                                       bool claimConfigured, std::string err)>;
 void FetchLedger(SdkHost& host, LedgerDone done) {
-  if (!host.hasDevice()) {
+  if (!host.DeviceSteady()) {
     done(std::nullopt, false, kNoDevice);
     return;
   }
@@ -1064,7 +1064,7 @@ void FetchLedger(SdkHost& host, LedgerDone done) {
 // claimable it verified against the v2 vault, one transaction each, signed with
 // the gas key, and reports each as the receipts arrive, then Done.
 void LedgerClaim(SdkHost& host, urnet::SnLedgerClaimCallback callback) {
-  if (!host.hasDevice()) {
+  if (!host.DeviceSteady()) {
     if (callback.done) callback.done();
     return;
   }
@@ -5449,6 +5449,10 @@ void EarningsPage::EnsurePointsBoard() {
     SettlePointsBoardPreview();
     return;
   }
+  // While connect commands are outstanding the device can be closed on the
+  // worker, and IsLoggedIn waits on the lock they hold: the board stays as it
+  // is, and the queue's settle replays the device's lifecycle here.
+  if (host_.CommandsBusy()) return;
   // the controller lives on the device: no session or no device, no board
   if (!host_.IsLoggedIn() || !host_.hasDevice()) {
     ClosePointsBoard(/*deviceAlive=*/false);
@@ -5497,7 +5501,7 @@ void EarningsPage::ReleasePointsBoard(bool deviceAlive) {
   if (pointsVc_) {
     // the controller must be closed on the device that opened it; a device
     // that is gone took its controllers with it
-    if (deviceAlive && host_.hasDevice() && host_.device().handle() == pointsVcDevice_) {
+    if (deviceAlive && host_.DeviceSteady() && host_.device().handle() == pointsVcDevice_) {
       host_.device().closePointsLeaderboardViewController(*pointsVc_);
     }
     pointsVc_.reset();
@@ -6548,7 +6552,11 @@ void EarningsPage::SetPresentationActive(bool active) {
     return;
   }
   // every drawer event was dropped while hidden, and with no device the host
-  // announces nothing on re-show
+  // announces nothing on re-show. With connect commands outstanding (the
+  // re-show queues the controllers' open behind them) the reads would wait on
+  // the lock they hold, and the window replays this once the queue settles
+  // (MainWindow::OnCommandsSettled).
+  if (host_.CommandsBusy()) return;
   OnHostEvent(DrawerEvent::DeviceLifecycle);
 }
 

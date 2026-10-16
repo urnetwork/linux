@@ -50,18 +50,14 @@ std::optional<urnet::TransportSettings> TransportSheet::DefaultSettings() const 
                                : urnet::defaultProviderTransportSettings();
 }
 
-std::optional<urnet::TransportSettings> TransportSheet::CurrentSettings() const {
-  // the device's policy (the daemon's truth over the rpc, or the pending /
-  // last known one offline), else the GUI's persisted mirror, else the SDK
-  // default -- the editor always has something to draft from
-  auto settings = kind_ == Kind::Client ? host_.GetTransportSettings()
-                                        : host_.GetProviderTransportSettings();
-  if (!settings) settings = DefaultSettings();
-  return settings;
-}
-
 void TransportSheet::Open() {
-  original_ = CurrentSettings();
+  // A bound device whose policy cannot be read is unknown, not the default:
+  // the form drafts from the default, but Update stays off (apple's editor
+  // safety), or it would queue the default over the daemon's real policy.
+  const auto read = kind_ == Kind::Client ? host_.GetTransportSettings()
+                                          : host_.GetProviderTransportSettings();
+  unknown_ = !read && host_.hasDevice();
+  original_ = read ? read : DefaultSettings();
   draft_ = original_;
   status_ = kind_ == Kind::Client ? host_.GetTransportStatus()
                                   : host_.GetProviderTransportStatus();
@@ -195,17 +191,31 @@ void TransportSheet::BuildUi() {
   updateBtn_->add_css_class("pill");
   updateBtn_->set_sensitive(false);  // Open() syncs the draft and re-decides
   updateBtn_->signal_clicked().connect([this] {
-    if (draft_) {
-      // applies over the device rpc (the daemon persists it) and mirrors into
-      // the GUI local state; the applied policy comes back through the change
-      // listener
-      if (kind_ == Kind::Client) {
-        host_.SetTransportSettings(*draft_);
-      } else {
-        host_.SetProviderTransportSettings(*draft_);
-      }
+    if (!draft_ || unknown_) {
+      set_visible(false);
+      return;
     }
-    set_visible(false);
+    // Applies over the device rpc (the daemon persists it) and mirrors into
+    // the GUI local state; the applied policy comes back through the change
+    // listener. Compare-and-set: only while the policy still reads what this
+    // editor was seeded from (the default standing for none), and otherwise
+    // the form re-seeds from what it reads now.
+    const std::optional<urnet::TransportSettings> shown = original_;
+    const std::optional<urnet::TransportSettings> fallback = DefaultSettings();
+    std::optional<urnet::TransportSettings> current;
+    const bool written = host_.SetTransportSettingsIf(
+        kind_ == Kind::Provider,
+        [shown, fallback](const std::optional<urnet::TransportSettings>& now) {
+          return urnet::transportSettingsEqual(now ? now : fallback, shown);
+        },
+        *draft_, &current);
+    if (written) {
+      set_visible(false);
+      return;
+    }
+    original_ = current ? current : fallback;
+    draft_ = original_;
+    SyncFromDraft();
   });
   actionBar->append(*updateBtn_);
   root->append(*actionBar);
@@ -316,7 +326,7 @@ void TransportSheet::SyncFromDraft() {
 void TransportSheet::RefreshDirty() {
   // Update applies the draft only when it differs from the loaded policy
   // (the sdk's normalized comparison)
-  updateBtn_->set_sensitive(!urnet::transportSettingsEqual(draft_, original_));
+  updateBtn_->set_sensitive(!unknown_ && !urnet::transportSettingsEqual(draft_, original_));
 }
 
 }  // namespace urnw

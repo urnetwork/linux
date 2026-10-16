@@ -217,3 +217,38 @@ UR_TEST(TrayPolicyWiring_OnlyTheFirstHideToTheTraySaysSo) {
   // the window was just hidden: gtkmm has removed it from its application
   UR_EXPECT_FALSE(TrayPolicyHas(notice, "get_application()"));
 }
+
+// With no status (signed out) the menu offers neither Connect nor Disconnect
+// (apple e46555b7); with one, the word follows the session.
+UR_TEST(TrayPolicy_NoConnectItemWithoutAStatus) {
+  using urnw::tray_policy::ConnectItem;
+  using urnw::tray_policy::ConnectItemFor;
+  UR_EXPECT_TRUE(ConnectItemFor(/*hasStatus=*/false, /*sessionUp=*/false) == ConnectItem::None);
+  UR_EXPECT_TRUE(ConnectItemFor(/*hasStatus=*/false, /*sessionUp=*/true) == ConnectItem::None);
+  UR_EXPECT_TRUE(ConnectItemFor(/*hasStatus=*/true, /*sessionUp=*/false) == ConnectItem::Connect);
+  UR_EXPECT_TRUE(ConnectItemFor(/*hasStatus=*/true, /*sessionUp=*/true) == ConnectItem::Disconnect);
+}
+
+// The menu builds the item, and takes its click, only while it is offered;
+// the window tells the tray whether there is a status (signed in), and its
+// own toggle does nothing without one. Before, the item was always there, and
+// signed out its Connect ran a start that could only be refused.
+UR_TEST(TrayPolicyWiring_TheConnectItemNeedsAStatus) {
+  const std::string tray = ReadTrayPolicySource("Tray.cpp");
+  const std::string layout = TrayPolicySpan(tray, "if (g_strcmp0(method, \"GetLayout\") == 0) {",
+                                            "BuildItem(kIdShow,");
+  UR_EXPECT_TRUE(TrayPolicyInOrder(layout, {"if (ConnectItemOf(*self) != tray_policy::ConnectItem::None) {",
+                                            "BuildItem(kIdConnect,"}));
+  UR_EXPECT_TRUE(TrayPolicyHas(tray, "if (id == kIdConnect && ConnectItemOf(*self) != tray_policy::ConnectItem::None &&"));
+  UR_EXPECT_TRUE(TrayPolicyInOrder(
+      TrayPolicyBody(tray, "void Tray::SetState(bool sessionUp, bool proven, const std::string& status, bool hasStatus) {"),
+      {"has_status_ = hasStatus;"}));
+  const std::string app = ReadTrayPolicySource("main.cpp");
+  UR_EXPECT_TRUE(TrayPolicyHas(app, "tray->SetState(sessionUp, proven, status, hasStatus);"));
+  const std::string window = ReadTrayPolicySource("MainWindow.cpp");
+  UR_EXPECT_TRUE(TrayPolicyHas(window, "on_tray_state(connected_, proven, status, signedIn_);"));
+  UR_EXPECT_TRUE(TrayPolicyInOrder(TrayPolicyBody(window, "void MainWindow::ApplyAuthState(bool loggedIn) {"),
+                                   {"signedIn_ = loggedIn;", "readingApplied_ = false;"}));
+  UR_EXPECT_TRUE(TrayPolicyInOrder(TrayPolicyBody(window, "void MainWindow::ToggleConnect() {"),
+                                   {"if (!signedIn_) return;", "ToggleConnect(connected_);"}));
+}
