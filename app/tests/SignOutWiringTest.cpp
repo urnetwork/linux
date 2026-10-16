@@ -259,7 +259,7 @@ UR_TEST(SignOutWiring_TheSignOutEndsWithASignInAndOutlivesTheApp) {
   UR_EXPECT_TRUE(InOrder(server, {"loggedIn = !localState_->getByClientJwt().empty();",
                                   "signedOut_.store(!loggedIn);"}));
   UR_EXPECT_TRUE(SignOutHas(SignOutBody(host, "bool SdkHost::IsLoggedIn() {"),
-                            "return !signedOut_.load() && localState_ &&"));
+                            "return !signedOut_.load() && hasClientJwt_.load();"));
   const std::string initialize = SignOutBody(host, "bool SdkHost::Initialize(");
   UR_EXPECT_TRUE(InOrder(initialize, {"std::scoped_lock lock(mutex_);", "signOut_.Load();"}));
   const std::string marker = SignOutBody(host, "signout::Marker SdkHost::SignOutMarker() {");

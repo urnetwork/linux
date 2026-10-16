@@ -274,3 +274,42 @@ UR_TEST(connectCommandQueueRefusesWorkOnceStopped) {
   UR_EXPECT_TRUE(drained);
   UR_EXPECT_FALSE(queue.Busy());
 }
+
+// The tap settles on the last Connect or Disconnect command's result, while
+// Device work queued behind it keeps the queue busy (the GTK thread's reads
+// still wait for that).
+UR_TEST(connectCommandQueueSettlesTheTapBeforeTheDeviceWorkBehindIt) {
+  FakeMainLoop main;
+  ConnectCommandQueue queue(main.Poster());
+  int tapSettled = 0;
+  int settled = 0;
+  bool busyAtTapSettle = false;
+  queue.SetTapSettledHandler([&] {
+    ++tapSettled;
+    busyAtTapSettle = queue.Busy();
+  });
+  queue.SetSettledHandler([&] { ++settled; });
+  Gate gate;
+  queue.Enqueue(ConnectCommandQueue::Kind::Disconnect, [] { return ConnectCommandQueue::Apply(); });
+  // the reconcile behind it, held inside its work
+  queue.Enqueue(ConnectCommandQueue::Kind::Device, [&] {
+    gate.NoteEntered();
+    gate.Wait();
+    return ConnectCommandQueue::Apply();
+  });
+  UR_EXPECT_TRUE(queue.TapBusy());
+  UR_EXPECT_TRUE(main.WaitPosted(1));
+  UR_EXPECT_TRUE(gate.WaitEntered());
+  main.RunPosted();
+  // the disconnect applied: the tap is over, the queue is not
+  UR_EXPECT_EQ(1, tapSettled);
+  UR_EXPECT_TRUE(busyAtTapSettle);
+  UR_EXPECT_FALSE(queue.TapBusy());
+  UR_EXPECT_EQ(0, settled);
+  gate.Open();
+  UR_EXPECT_TRUE(main.WaitPosted(2));
+  main.RunPosted();
+  UR_EXPECT_EQ(1, settled);
+  // device work alone never settles a tap
+  UR_EXPECT_EQ(1, tapSettled);
+}

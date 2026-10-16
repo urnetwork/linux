@@ -1346,9 +1346,13 @@ DeveloperPage::Snapshot DeveloperPage::ReadSnapshot() {
   snap.logError = std::move(fetched.error);
   snap.logCode = std::move(fetched.code);
 
-  if (!host_.hasDevice()) return snap;  // no session: haveDevice false, all cards fold
+  // Under SdkHost's lock (LockedDevice): the device's teardown runs on the
+  // command queue's worker now, and must not close it under these reads.
+  std::unique_lock<std::mutex> deviceLock;
+  urnet::DeviceRemote* const lockedDevice = host_.LockedDevice(deviceLock);
+  if (!lockedDevice) return snap;  // no session: haveDevice false, all cards fold
   snap.haveDevice = true;
-  urnet::DeviceRemote& device = host_.device();
+  urnet::DeviceRemote& device = *lockedDevice;
   snap.remoteConnected =
       ReadGuarded<bool>("getRemoteConnected", [&] { return device.getRemoteConnected(); },
                         false);
@@ -1992,8 +1996,10 @@ void DeveloperPage::RunAction(Action action, const Glib::ustring& described,
   const uint64_t seen = *epoch_;
   bridge_.Submit([this, alive, epoch, seen, action, described, exitClientId] {
     ActionOutcome outcome;
-    if (host_.hasDevice()) {
-      urnet::DeviceRemote& device = host_.device();
+    // the lock ends with this block, before ReadSnapshot takes it again
+    if (std::unique_lock<std::mutex> deviceLock;
+        urnet::DeviceRemote* const lockedDevice = host_.LockedDevice(deviceLock)) {
+      urnet::DeviceRemote& device = *lockedDevice;
       try {
         switch (action) {
           case Action::ResetMetrics:
@@ -2075,8 +2081,10 @@ void DeveloperPage::RunFaultAction(Fault fault, const std::string& clientId) {
   bridge_.Submit([this, alive, epoch, seen, fault, clientId, shortId] {
     bool issued = false;
     bool ok = false;
-    if (host_.hasDevice()) {
-      urnet::DeviceRemote& device = host_.device();
+    // the lock ends with this block, before ReadSnapshot takes it again
+    if (std::unique_lock<std::mutex> deviceLock;
+        urnet::DeviceRemote* const lockedDevice = host_.LockedDevice(deviceLock)) {
+      urnet::DeviceRemote& device = *lockedDevice;
       try {
         // ONE call, no client-side retry, nothing queued into sync state: a
         // drop replayed after an RPC reconnect hits a different, healthy exit
@@ -2140,9 +2148,11 @@ void DeveloperPage::RunShuffleExits() {
   const uint64_t seen = *epoch_;
   bridge_.Submit([this, alive, epoch, seen] {
     bool issued = false;
-    if (host_.hasDevice()) {
+    // the lock ends with this block, before ReadSnapshot takes it again
+    if (std::unique_lock<std::mutex> deviceLock;
+        urnet::DeviceRemote* const lockedDevice = host_.LockedDevice(deviceLock)) {
       try {
-        host_.device().shuffleExits();
+        lockedDevice->shuffleExits();
         issued = true;
       } catch (const std::exception& e) {
         g_warning("developer: shuffleExits threw: %s", e.what());
@@ -2173,8 +2183,10 @@ void DeveloperPage::RunProbeSuite(bool start) {
   bridge_.Submit([this, alive, epoch, seen, start] {
     bool issued = false;
     bool started = false;
-    if (host_.hasDevice()) {
-      urnet::DeviceRemote& device = host_.device();
+    // the lock ends with this block, before ReadSnapshot takes it again
+    if (std::unique_lock<std::mutex> deviceLock;
+        urnet::DeviceRemote* const lockedDevice = host_.LockedDevice(deviceLock)) {
+      urnet::DeviceRemote& device = *lockedDevice;
       try {
         if (start) {
           // NEVER a default-constructed ProbeSuiteConfig — that is a suite with
@@ -2221,10 +2233,12 @@ void DeveloperPage::EditSettings(std::function<void(urnet::ReliabilitySettings&)
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
   bridge_.Submit([this, alive, epoch, seen, mutate] {
-    const bool haveDevice = host_.hasDevice();
+    std::unique_lock<std::mutex> deviceLock;
+    urnet::DeviceRemote* const lockedDevice = host_.LockedDevice(deviceLock);
+    const bool haveDevice = lockedDevice != nullptr;
     bool applied = false;
     if (haveDevice) {
-      urnet::DeviceRemote& device = host_.device();
+      urnet::DeviceRemote& device = *lockedDevice;
       try {
         // Read-modify-write of the WHOLE struct from a FRESH read: an edit
         // never writes from the snapshot on screen (one poll interval stale —
@@ -2245,6 +2259,8 @@ void DeveloperPage::EditSettings(std::function<void(urnet::ReliabilitySettings&)
         g_warning("developer: settings edit threw");
       }
     }
+    // the lock ends here, before ReadSnapshot takes it again
+    if (deviceLock.owns_lock()) deviceLock.unlock();
     // Re-read what the device APPLIED, not what was asked.
     const Snapshot snap = ReadSnapshot();
     PostToMain([this, alive, epoch, seen, snap, haveDevice, applied] {

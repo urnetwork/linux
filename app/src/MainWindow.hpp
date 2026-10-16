@@ -129,9 +129,11 @@ class MainWindow : public Gtk::ApplicationWindow {
   // A tap's own state, until the command queue settles (connect_tap.hpp):
   // folded into the tray's and the page's readings.
   void NoteTap(connect_tap::Pending pending);
-  // The queue settled: the tap's state ends and the device's reading, the
-  // feeds the GTK thread held back meanwhile, and the drawer events it
-  // deferred, all land.
+  // The last connect or disconnect command applied: the tap's state ends and
+  // the device's reading lands, whatever device work is still queued.
+  void OnTapSettled(const ConnectReading& reading);
+  // The queue settled: the latest reading, the feeds the GTK thread held back
+  // meanwhile, and the drawer events it deferred, all land.
   void OnCommandsSettled(const ConnectReading& reading);
   void BuildAuthPages();  // create network / verify / password reset
   void OnGetStarted();  // authLogin discovery -> password / create / inline error

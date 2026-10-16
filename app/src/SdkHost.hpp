@@ -20,6 +20,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
+#include <any>
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -30,6 +31,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include <urnetwork_sdk.hpp>
@@ -771,13 +773,20 @@ class SdkHost {
                        std::function<void(StartOutcome)> done);
   // A command is queued or running, or its result has not applied yet. While
   // one is, the GTK thread makes no device read (each would wait on the
-  // device's state lock the command holds) and the window holds the tap's
-  // state. Main loop.
+  // device's state lock the command holds). Main loop.
   bool CommandsBusy() const { return commands_.Busy(); }
+  // Runs on the main loop each time the last connect or disconnect command
+  // has applied, with the reading the worker took after it: the device's own
+  // word, which ends the tap's held state, whatever device work (a provider
+  // reconcile, the presentation's controllers) is still queued behind it. A
+  // reading from before a sign-out is never handed on (the default reading
+  // is). Main loop.
+  void SetTapSettledHandler(std::function<void(ConnectReading)> handler) {
+    onTapSettled_ = std::move(handler);
+  }
   // Runs on the main loop each time the queue settles, with the reading the
-  // worker took after the last command: the device's own word once the tap's
-  // held state ends. A reading from before a sign-out is never handed on (the
-  // default reading is). Main loop.
+  // worker took after the last command (the same guard): the reads the GTK
+  // thread held back may run now. Main loop.
   void SetCommandsSettledHandler(std::function<void(ConnectReading)> handler) {
     onCommandsSettled_ = std::move(handler);
   }
@@ -917,6 +926,17 @@ class SdkHost {
   // Each listener that hears a rejection reports it (the Api's, and the bound
   // DeviceRemote's), and only the first of them signs out. Main loop.
   bool SignsOut(const auth_logout::Report& report) const { return authLogouts_.SignsOut(report); }
+  // The sign-in an action that ends in a sign-out was made in, read as it
+  // starts (the account deletion's request): its answer signs out only that
+  // sign-in (LogoutIfStill), never one made since (android signOutApplies).
+  // Main loop.
+  auth_logout::Report SignInNow(std::string cause) const {
+    return authLogouts_.Hear(std::move(cause));
+  }
+  // Logout, only while `signIn` is still the sign-in signed in. A server
+  // sign-out and a newer sign-in can land between a deletion's request and its
+  // answer; then nothing is done and false comes back. Main loop.
+  bool LogoutIfStill(const auth_logout::Report& signIn);
   void SetJwtRefreshedHandler(JwtRefreshedHandler h) { onJwtRefreshed_ = std::move(h); }
   // The connection feed. Fired on every event that can change any part of the
   // reading, and NEVER gated on window visibility by its consumer: the copies
@@ -1419,6 +1439,13 @@ class SdkHost {
   bool DeviceSteady() { return !CommandsBusy() && hasDevice(); }
   // Only behind DeviceSteady() on the main loop (see there).
   urnet::DeviceRemote& device() { return *device_; }
+  // The bound device for a worker thread (the Developer page's bridge), with
+  // `lock` holding mutex_ for as long as the caller keeps it: no teardown on
+  // the command queue's worker closes or releases the device meanwhile, and a
+  // main-loop read answers its kept value instead of waiting (ReadOnMain).
+  // nullptr, with the lock released, when no device is bound. Off the main
+  // loop only; nothing under the lock may call back into SdkHost.
+  urnet::DeviceRemote* LockedDevice(std::unique_lock<std::mutex>& lock);
   // The daemon control channel, shared with the location-override writer
   // (DaemonGeoClueWriter) — one socket, one hello, one version check.
   ControlClient& Control() { return control_; }
@@ -1619,6 +1646,26 @@ class SdkHost {
   std::optional<urnet::TransportSettings> GetProviderTransportSettingsLocked();
   void SetProviderTransportSettingsLocked(const urnet::TransportSettings& settings);
 
+  // ---- main-loop reads (MainRead.hpp) ----
+  // A read made on the main loop answers without waiting on mutex_ while a
+  // command may hold it across its rpc (main_read::SourceFor), with the last
+  // value it gave under `key`; off the main loop it reads under mutex_ as
+  // before. Every public getter that takes mutex_ goes through it.
+  template <typename T>
+  T ReadOnMain(const char* key, const std::function<T()>& readLocked);
+  // Keeps `value` as the main loop's answer for `key` until the next read
+  // under mutex_: an edit written or queued from the main loop, so a read
+  // before it applies says what it writes. Main loop.
+  template <typename T>
+  void KeepOnMain(const char* key, T value);
+  // The thread running the GTK main loop (the default context's owner).
+  static bool OnMainLoop();
+  // The values the main loop's reads last gave, by key. Main loop only.
+  std::unordered_map<std::string, std::any> mainReads_;
+  // The stored client jwt is non-empty: what IsLoggedIn reads besides
+  // signedOut_, without mutex_ (set where the jwt is stored or switched).
+  std::atomic<bool> hasClientJwt_{false};
+
   // A command for the queue: `work` on the worker, then the reading it takes
   // there (see SetCommandsSettledHandler), then `apply` on the main loop.
   // False, with nothing queued, for a connect while a sign-out runs. Main loop.
@@ -1639,6 +1686,7 @@ class SdkHost {
   // ShutdownOffMainLoop's thread, joined in ~SdkHost before the queue stops.
   std::thread shutdownWorker_;
   std::function<void(ConnectReading)> onCommandsSettled_;
+  std::function<void(ConnectReading)> onTapSettled_;
   // The reading the last command's worker took, and the sign-in it was taken
   // in. Main loop.
   ConnectReading lastCommandReading_;

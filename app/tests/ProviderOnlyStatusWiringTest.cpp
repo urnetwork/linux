@@ -245,10 +245,10 @@ UR_TEST(ProviderOnlyStatus_ASavedSpaceValueReachesTheProvider) {
   const std::string host = ReadProviderOnlySource("SdkHost.cpp");
   const std::string doh = ProviderOnlyBody(host, "std::optional<std::string> SdkHost::SetControlDohUrls(");
   UR_EXPECT_TRUE(Precedes(doh, "networkSpace_->setControlDohUrls(",
-                          "if (answer && answer->empty()) ReconcileProviderAfterSpaceChange("));
+                          "if (answer && answer->empty()) {\n      ReconcileProviderAfterSpaceChange("));
   const std::string vless = ProviderOnlyBody(host, "std::optional<std::string> SdkHost::SetVlessSettings(");
   UR_EXPECT_TRUE(Precedes(vless, "networkSpace_->setVlessSettings(settings)",
-                          "if (answer && answer->empty()) ReconcileProviderAfterSpaceChange("));
+                          "if (answer && answer->empty()) {\n      ReconcileProviderAfterSpaceChange("));
   const std::string extender = ProviderOnlyBody(host, "bool SdkHost::SetPrivateExtender(");
   UR_EXPECT_TRUE(Precedes(extender, "spaceManager_->updateNetworkSpaceValues(stored->key, values);",
                           "ReconcileProviderAfterSpaceChange("));

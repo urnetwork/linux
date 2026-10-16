@@ -153,7 +153,7 @@ UR_TEST(connectTapIsShownBeforeTheCommandIsQueued) {
   // until the queue settles, with the reading the worker took after the last command
   UR_EXPECT_TRUE(wiring::Contains(window, "host_.SetCommandsSettledHandler("));
   UR_EXPECT_TRUE(wiring::Contains(
-      wiring::FunctionBody(window, "void MainWindow::OnCommandsSettled(const ConnectReading& reading) {"),
+      wiring::FunctionBody(window, "void MainWindow::OnTapSettled(const ConnectReading& reading) {"),
       "NoteTap(connect_tap::Pending::None);"));
 }
 
@@ -300,4 +300,25 @@ UR_TEST(connectCommandsKeepTheRawDeviceOffTheGtkThreadWhileBusy) {
                          wiring::Contains(before, "if (host_.CommandsBusy()) return;");
     UR_EXPECT_TRUE_MSG(earnings.substr(at, 60), guarded);
   }
+}
+
+// "Disconnecting…" ends when the disconnect itself has applied (apple
+// 8a8d0658: held until the last queued command returns), not after the
+// provider reconcile behind it, which builds the daemon's provider-only device
+// and can take a while. The reconcile is device work of its own, queued once
+// the disconnect applied, and the window's tap ends on the tap settle.
+UR_TEST(connectTapEndsWhenTheDisconnectApplied) {
+  const std::string host = wiring::ReadCode("SdkHost.cpp");
+  UR_EXPECT_FALSE(wiring::Contains(wiring::FunctionBody(host, "void SdkHost::DisconnectNow() {"),
+                                   "ReconcileProvider("));
+  const std::string disconnect = wiring::FunctionBody(host, "void SdkHost::Disconnect() {");
+  UR_EXPECT_TRUE(wiring::Before(disconnect, "ConnectCommandQueue::Kind::Disconnect", "DisconnectNow();"));
+  UR_EXPECT_TRUE(wiring::Before(disconnect, "DisconnectNow();", "ConnectCommandQueue::Kind::Device"));
+  UR_EXPECT_TRUE(wiring::Before(disconnect, "ConnectCommandQueue::Kind::Device", "ReconcileProvider("));
+  UR_EXPECT_TRUE(wiring::Contains(host, "commands_.SetTapSettledHandler("));
+  const std::string window = wiring::ReadCode("MainWindow.cpp");
+  UR_EXPECT_TRUE(wiring::Contains(window, "host_.SetTapSettledHandler([this](ConnectReading reading) { OnTapSettled(reading); });"));
+  UR_EXPECT_FALSE(wiring::Contains(
+      wiring::FunctionBody(window, "void MainWindow::OnCommandsSettled(const ConnectReading& reading) {"),
+      "NoteTap("));
 }

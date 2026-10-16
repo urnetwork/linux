@@ -15,7 +15,10 @@
 // order, so results apply in the order the commands were made. A command is
 // outstanding from Enqueue until its result applied; Busy says whether one
 // is, and the settled handler runs on the main loop when the last one has
-// applied, which is when a tap's held state hands back to the device's.
+// applied. A tap's held state hands back to the device's sooner: when the
+// last Connect or Disconnect command has applied (the tap-settled handler),
+// whatever Device work is still queued behind it (apple 8a8d0658: the tap is
+// held until the last queued command returns).
 //
 // The sign-out fence: every command is stamped with the sign-in generation it
 // was made in. BeginSignOut advances it, so a connect still queued for the
@@ -70,6 +73,14 @@ class ConnectCommandQueue {
   bool Busy() const { return main_->outstanding > 0; }
   // Runs on the main loop each time the last outstanding result has applied.
   void SetSettledHandler(std::function<void()> settled) { main_->settled = std::move(settled); }
+  // Runs on the main loop each time the last outstanding Connect or
+  // Disconnect command's result has applied, before the settled handler when
+  // both fall on the same result.
+  void SetTapSettledHandler(std::function<void()> settled) {
+    main_->tapSettled = std::move(settled);
+  }
+  // A Connect or Disconnect command is enqueued whose result has not applied.
+  bool TapBusy() const { return main_->tapOutstanding > 0; }
 
   // A sign-out starts: the leaving account's queued connects are skipped, and
   // none is admitted until EndSignOut.
@@ -96,7 +107,9 @@ class ConnectCommandQueue {
   // late never reaches into a destroyed queue.
   struct MainState {
     int64_t outstanding = 0;
+    int64_t tapOutstanding = 0;  // the Connect and Disconnect commands among them
     std::function<void()> settled;
+    std::function<void()> tapSettled;
   };
 
   void run();

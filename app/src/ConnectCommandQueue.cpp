@@ -27,6 +27,7 @@ bool ConnectCommandQueue::Enqueue(Kind kind, Work work) {
     items_.push_back(std::move(item));
   }
   ++main_->outstanding;
+  if (kind != Kind::Device) ++main_->tapOutstanding;
   wake_.notify_one();
   return true;
 }
@@ -78,10 +79,12 @@ void ConnectCommandQueue::run() {
         std::fprintf(stderr, "[connect] a queued command threw\n");
       }
     }
-    // Every command applies, a skipped one too, so the count settles.
+    // Every command applies, a skipped one too, so the counts settle.
     std::shared_ptr<MainState> main = main_;
-    post_([main, apply = std::move(apply)] {
+    const bool tap = item.kind != Kind::Device;
+    post_([main, tap, apply = std::move(apply)] {
       if (apply) apply();
+      if (tap && --main->tapOutstanding == 0 && main->tapSettled) main->tapSettled();
       if (--main->outstanding == 0 && main->settled) main->settled();
     });
   }

@@ -1396,8 +1396,10 @@ class AccountDeleteSheet : public Gtk::Window {
 
   ~AccountDeleteSheet() override { ++*epoch_; }
 
-  // The page signs out: the session is meaningless once the network is gone.
-  std::function<void()> on_deleted;
+  // The page signs out the sign-in the deletion was made in (`signIn`, read as
+  // the request went out): the session is meaningless once the network is
+  // gone, and a sign-in made since belongs to another network.
+  std::function<void(const auth_logout::Report& signIn)> on_deleted;
 
   void Open() {
     ++*epoch_;
@@ -1497,10 +1499,13 @@ class AccountDeleteSheet : public Gtk::Window {
       error_->set_visible(true);
       Gate();
     });
+    // The sign-in being deleted, read now: by the answer a server sign-out
+    // and another sign-in may have landed, and only this one is signed out.
+    const auth_logout::Report signIn = host_.SignInNow("account deleted");
     host_.api().networkDelete(
-        [this, epoch, seen, flow](std::optional<urnet::NetworkDeleteResult> result,
-                                  std::optional<std::string> err) {
-          PostToMain([this, epoch, seen, flow, result = std::move(result),
+        [this, epoch, seen, flow, signIn](std::optional<urnet::NetworkDeleteResult> result,
+                                          std::optional<std::string> err) {
+          PostToMain([this, epoch, seen, flow, signIn, result = std::move(result),
                       err = std::move(err)] {
             if (*epoch != seen) return;
             if (!deleteFlow_.Settle(flow, "network delete")) return;
@@ -1526,7 +1531,7 @@ class AccountDeleteSheet : public Gtk::Window {
               return;
             }
             set_visible(false);
-            if (on_deleted) on_deleted();
+            if (on_deleted) on_deleted(signIn);
           });
         });
   }
@@ -3103,9 +3108,10 @@ void AccountPage::ShowDeleteAccountSheet() {
   if (!deleteSheet_) {
     deleteSheet_ = std::make_unique<AccountDeleteSheet>(
         *root, host_, [this] { return CanCallApi(); });
-    deleteSheet_->on_deleted = [this] {
-      // the session is meaningless once the network is gone
-      host_.Logout();
+    deleteSheet_->on_deleted = [this](const auth_logout::Report& signIn) {
+      // the session is meaningless once the network is gone, and only the
+      // deleted network's sign-in is signed out (android signOutApplies)
+      host_.LogoutIfStill(signIn);
     };
     WireSheet(*deleteSheet_);
   }

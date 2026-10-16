@@ -370,6 +370,8 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   // reading, taken on the worker after the last command (already on the main
   // loop).
   host_.SetCommandsSettledHandler([this](ConnectReading reading) { OnCommandsSettled(reading); });
+  // ...and the tap's held state ends sooner, once its own command applied.
+  host_.SetTapSettledHandler([this](ConnectReading reading) { OnTapSettled(reading); });
   // Live stats (provider count / throughput / provide). Same visibility gate:
   // cache always, but only touch widgets while the window is shown.
   host_.SetStatsHandler([this](const LiveStats& stats) {
@@ -2628,9 +2630,14 @@ void MainWindow::NoteTap(connect_tap::Pending pending) {
   ApplyConnectReading(reading_);
 }
 
-void MainWindow::OnCommandsSettled(const ConnectReading& reading) {
+void MainWindow::OnTapSettled(const ConnectReading& reading) {
   // a start still waiting on its balance keeps showing connecting
   if (!balanceCheckPending_) NoteTap(connect_tap::Pending::None);
+  readingApplied_ = false;
+  ApplyConnectReading(reading);
+}
+
+void MainWindow::OnCommandsSettled(const ConnectReading& reading) {
   readingApplied_ = false;
   ApplyConnectReading(reading);
   // the reads the GTK thread held back while commands were outstanding

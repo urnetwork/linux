@@ -102,7 +102,7 @@ UR_TEST(ApiSignOut_TheTrackerFollowsEverySignInAndSignOut) {
   UR_EXPECT_TRUE(Before(server, "signedOut_.store(!loggedIn);", "if (loggedIn) {\n        authLogouts_.SignedIn();\n      } else {\n        authLogouts_.SignedOut();"));
   const std::string initialize = FunctionBody(host, "bool SdkHost::Initialize(");
   UR_EXPECT_TRUE(Before(initialize, "localState_ = asyncLocalState_->getLocalState();",
-                        "if (!localState_->getByClientJwt().empty()) authLogouts_.SignedIn();"));
+                        "if (hasClientJwt_.load()) authLogouts_.SignedIn();"));
   // ...and nowhere else moves signedOut_ without it
   for (size_t at = host.find("signedOut_.store("); at != std::string::npos;
        at = host.find("signedOut_.store(", at + 1)) {
