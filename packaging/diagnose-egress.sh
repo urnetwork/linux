@@ -348,8 +348,9 @@ note "     the daemon's cgroup, so neither the cgroup-BPF marker nor the nftable
 note "     cgroup rule applies to it. It tells you what the ROUTING POLICY does to an"
 note "     unmarked socket -- which is exactly the situation the daemon's own sockets"
 note "     were in before the marker existed. What a socket created INSIDE the daemon's"
-note "     cgroup gets is step 3 (its live sockets) and \`urnetworkd --selftest-egress\`"
-note "     (the mechanism itself). No script can ask it from out here."
+note "     cgroup gets is step 3 (its live sockets) and"
+note "     \`sudo ${DAEMON:-<builddir>/urnetworkd} --selftest-egress\` (the mechanism itself)."
+note "     No script can ask it from out here."
 
 # --------------------------------------------------------------------------
 head2 "8. what the journal said last time, and how long the window really was"

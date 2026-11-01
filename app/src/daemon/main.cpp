@@ -50,6 +50,7 @@
 #include "daemon/HostMemory.hpp"
 #include "daemon/InstanceGuard.hpp"
 #include "daemon/NetworkCountryWatcher.hpp"
+#include "daemon/SelfPath.hpp"
 #include "daemon/SupportDiagnostics.hpp"
 #include "daemon/TunnelHost.hpp"
 #include "TunnelPolicy.hpp"
@@ -113,28 +114,12 @@ void NotifySystemdReady() {
   ::close(fd);
 }
 
-// Where this binary is installed (the unit's ExecStart). Printed in the
-// recovery lines, so what the user is told to run is a path that exists on
-// their machine; a dev run from a build tree prints its own argv[0] instead.
-constexpr const char* kInstalledPath = "/usr/lib/urnetwork/urnetworkd";
-
-// /proc/self/exe FIRST, because "what you are told to run must exist where it
-// says". The tarball installer relocates the daemon on an immutable host
-// (/usr/local/lib/urnetwork/urnetworkd on Bazzite, ExecStart rewritten to
-// match), so kInstalledPath is a guess and argv[0] is whatever the caller
-// typed. The kernel link is the only one of the three that is always the truth.
-std::string SelfPath(const char* argv0) {
-  char buf[PATH_MAX];
-  const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-  if (n > 0) {
-    buf[n] = '\0';
-    // A deleted-and-replaced binary reads back as "<path> (deleted)"; that is
-    // not a runnable path, so fall through to the weaker answers.
-    if (std::strstr(buf, " (deleted)") == nullptr) return buf;
-  }
-  if (argv0 != nullptr && argv0[0] == '/') return argv0;
-  return kInstalledPath;
-}
+// Where this binary is, for every command this file prints: the recovery
+// lines, --help, --diagnose, --revert and the self-test name it by its path,
+// because no package puts urnetworkd on $PATH. One resolver for the daemon,
+// shared with the tunnel's own messages (daemon/SelfPath.hpp); a dev run from
+// a build tree prints its own path too.
+using urnw::SelfPath;
 
 // THE WAY BACK ONTO THE NETWORK, and the only thing on this machine that
 // prints it. The kill switch is an nftables table, and nftables is not tied to
@@ -1121,9 +1106,12 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (arg == "--help" || arg == "-h") {
+      // The binary by its path, like every command this daemon prints: it is
+      // on no one's $PATH.
+      const std::string self = SelfPath(argv[0]);
       std::printf(
-          "usage: urnetworkd [--foreground] [--diagnose] [--selftest-egress]\n"
-          "                  [--revert [--force]] [--version]\n"
+          "usage: %s [--foreground] [--diagnose] [--selftest-egress]\n"
+          "       %*s [--revert [--force]] [--version]\n"
           "URnetwork privileged daemon: control socket at %s,\n"
           "device RPC on 127.0.0.1:%d while the tunnel is up.\n"
           "  --diagnose             print the host preflight (ip/nft/resolvectl, cgroup, tun),\n"
@@ -1144,6 +1132,7 @@ int main(int argc, char** argv) {
           "                         died stays armed (used by the unit's ExecStopPost). Leaves\n"
           "                         the machine alone while another urnetworkd is running\n"
           "  --foreground           do not send the systemd readiness notification\n",
+          self.c_str(), static_cast<int>(self.size()), "",
           urnw::ControlServer::SocketPath().c_str(), urnw::ctl::kDeviceRpcPort);
       PrintRecovery(argv[0]);
       return 0;
