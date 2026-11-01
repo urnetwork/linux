@@ -159,9 +159,15 @@ The GUI does not run a tunnel itself. To try a dev build, install a released
 daemon package (or run `packaging/tarball/install.sh`), then start the GUI
 with the vendored SDK on the library path:
 `LD_LIBRARY_PATH=third_party/urnetwork-sdk/$(dpkg --print-architecture) ./build/urnetwork-gui`. The GUI reports when the daemon is unreachable or out
-of date. For host checks, run `sudo urnetworkd --diagnose` and
-`sudo urnetworkd --selftest-egress`. `sudo urnetworkd --revert` lifts the
-firewall and routes if a machine is left blocked.
+of date. The daemon is not on `$PATH`: every package installs it at
+`/usr/lib/urnetwork/urnetworkd` (the install tarball uses
+`/usr/local/lib/urnetwork/urnetworkd` on an immutable `/usr`). For host checks,
+run `/usr/lib/urnetwork/urnetworkd --diagnose` (no root needed; it includes
+the IPv4 and IPv6 policy rules, routes and address counts the daemon's own
+sockets meet) and `sudo /usr/lib/urnetwork/urnetworkd --selftest-egress`.
+`sudo /usr/lib/urnetwork/urnetworkd --revert` lifts the firewall and routes if
+a machine is left blocked. The daemon's own messages name the path it runs
+from.
 
 ## Release artifacts
 

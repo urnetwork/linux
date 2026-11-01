@@ -660,6 +660,22 @@ constexpr WitnessTreatment WitnessTreatmentVerdict(bool bound, std::string_view 
   return marked ? WitnessTreatment::Escaped : WitnessTreatment::Unmarked;
 }
 
+// THE R4 REFUSAL'S TEXT, for every leg of the witness: what failed, and the
+// command that reports the host state behind it. `self` is the running
+// binary's own path (daemon/SelfPath.hpp). No package puts urnetworkd on
+// $PATH, so the bare `urnetworkd --diagnose` this used to name was "command
+// not found" for the person reading it, in the app as in the journal.
+inline std::string EgressRefusalMessage(const std::string& reason, const std::string& self) {
+  return "this daemon cannot prove its own traffic stays out of its own tunnel, so the "
+         "tunnel is not being run: " +
+         reason + ". `" + self +
+         " --diagnose` needs no root and reports the host preflight and the policy rules, "
+         "routes and addresses this daemon's own sockets meet, IPv4 and IPv6; "
+         "packaging/diagnose-egress.sh in the source tree goes deeper. The last time this "
+         "went unproven the daemon looped 3.38 Tb of its own traffic through its own tunnel "
+         "before a human noticed.";
+}
+
 // ---- the direct-file DNS tier: re-applying over a rewrite ------------------
 //
 // Tier 3 owns /etc/resolv.conf and keeps what was there before in a backup for

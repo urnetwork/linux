@@ -28,6 +28,8 @@
 #include <sstream>
 #include <utility>
 
+#include "daemon/SelfPath.hpp"
+
 namespace urnw {
 namespace {
 
@@ -506,8 +508,8 @@ std::string TunPermissionDeniedDetail(const char* verb) {
   if (::access("/sys/fs/selinux/enforce", F_OK) == 0) {
     out +=
         ". SELinux is present on this host: confirm with `sudo journalctl -t audit | "
-        "grep 'denied.*tun'`, and label the daemon with `sudo chcon -t unconfined_exec_t "
-        "<path to urnetworkd>` (the installer does this automatically)";
+        "grep 'denied.*tun'`, and label the daemon with `sudo chcon -t unconfined_exec_t " +
+        SelfPath() + "` (the installer does this automatically)";
   } else {
     out += " (check AppArmor or any other LSM on this host)";
   }
@@ -1589,7 +1591,8 @@ bool WriteTakeoverState(const DnsTakeoverState& st, std::string* error) {
   std::string text =
       "# urnetworkd DNS takeover state. While this file exists, urnetworkd has\n"
       "# changed how this machine resolves names and has NOT put it back yet.\n"
-      "# `sudo urnetworkd --revert` restores it. Do not edit by hand.\n";
+      "# `sudo " +
+      SelfPath() + " --revert` restores it. Do not edit by hand.\n";
   text += "version=1\n";
   text += "backend=" + st.backend + "\n";
   text += "kind=" + st.kind + "\n";
@@ -1808,7 +1811,7 @@ std::string NetFilter::RecoveryHelpText() {
   if (const std::vector<std::string> dns = ManualResolvConfRestoreCommands(); !dns.empty()) {
     s += "\n\nURnetwork is also currently managing this machine's DNS (";
     s += kResolvConfStatePath;
-    s += " exists).\n`sudo urnetworkd --revert` puts it back. By hand, as root:\n";
+    s += " exists).\n`sudo " + SelfPath() + " --revert` puts it back. By hand, as root:\n";
     for (const auto& command : dns) {
       s += "       ";
       s += command;
@@ -3060,16 +3063,10 @@ bool Tunnel::VerifyEgressWitness(const char* when, bool requireOffTunnelRoute,
       // POINTS AT SOMETHING THAT IS ACTUALLY ON THE MACHINE. This used to send
       // the reader to `packaging/diagnose-egress.sh`, a relative path inside a
       // source tree that nothing installs — an instruction that cannot be
-      // followed by the only person who ever sees it. `urnetworkd` is installed
-      // by definition, since it is what printed this.
-      err->message =
-          "this daemon cannot prove its own traffic stays out of its own tunnel, so the "
-          "tunnel is not being run: " +
-          message +
-          ". `urnetworkd --diagnose` needs no root and reports the host preflight; "
-          "packaging/diagnose-egress.sh in the source tree goes deeper. The last time this "
-          "went unproven the daemon looped 3.38 Tb of its own traffic through its own tunnel "
-          "before a human noticed.";
+      // followed by the only person who ever sees it. The binary that printed
+      // this is installed by definition, BY ITS PATH: no package puts
+      // urnetworkd on $PATH, so the command names where it runs from.
+      err->message = EgressRefusalMessage(message, SelfPath());
     }
     std::fprintf(stderr, "%s FAILED: %s\n", tag.c_str(), message.c_str());
     return false;
@@ -3476,7 +3473,7 @@ std::string BuildResolvConf(const std::string& iface, const std::vector<std::str
   s += "# (it may have been a symlink; that is recorded too).\n";
   s += "#\n";
   s += "# If the tunnel is gone and this file is still here, the daemon was killed. Run\n";
-  s += "#     sudo urnetworkd --revert\n";
+  s += "#     sudo " + SelfPath() + " --revert\n";
   s += "# to put the original back.\n";
   s += "#\n";
   s += "# ONLY the tunnel's own resolvers are listed, and there is deliberately no\n";
@@ -3991,7 +3988,8 @@ bool Tunnel::ApplyDnsViaDirectFile(const DnsHostProbe& probe, std::string* reaso
   report_.dns_detail = "DNS is on the tunnel through " + std::string(kResolvConfPath) + " (" +
                        restored +
                        ", and is put back on disconnect, on the next daemon start, and by "
-                       "`urnetworkd --revert`)";
+                       "`sudo " +
+                       SelfPath() + " --revert`)";
   return true;
 }
 
@@ -4210,9 +4208,9 @@ void Tunnel::RevertDns() {
       if (!detail.empty()) std::fprintf(stderr, "[dns] %s\n", detail.c_str());
     } else {
       std::fprintf(stderr,
-                   "[dns] WARNING: %s. `sudo urnetworkd --revert` retries this, and the next "
+                   "[dns] WARNING: %s. `sudo %s --revert` retries this, and the next "
                    "daemon start does it automatically.\n",
-                   detail.c_str());
+                   detail.c_str(), SelfPath().c_str());
     }
   }
 }

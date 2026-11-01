@@ -149,7 +149,7 @@ old leaking behaviour, kept only as an escape hatch. It does not fake a pass:
   tunnel"*, that is this — **report it, with `journalctl -u urnetworkd`**. The shipped
   `95-urnetwork.conf` marks only `urnet0` unmanaged; it does **not** stop NetworkManager
   owning `resolv.conf`.
-* **`sudo urnetworkd --revert` while the daemon runs** is refused: it would restore
+* **`sudo /usr/lib/urnetwork/urnetworkd --revert` while the daemon runs** is refused: it would restore
   `/etc/resolv.conf` underneath the live session. `--force` overrides that; don't use it as a
   "cleanup" mid-test.
 
@@ -244,7 +244,7 @@ Read the failure in this order:
 | The unit restarts in a loop | There is **no start rate limit** (`StartLimitIntervalSec=0`, deliberate — a `failed` unit with a live kill-switch table has no control socket and no way back). | Stop it, then run the recovery sequence above. |
 
 The recovery text is also reachable offline from the machine itself:
-`urnetworkd --help`, `urnetworkd --diagnose`, and `systemctl cat urnetworkd`.
+`/usr/lib/urnetwork/urnetworkd --help`, `/usr/lib/urnetwork/urnetworkd --diagnose`, and `systemctl cat urnetworkd`.
 
 ---
 
@@ -917,7 +917,7 @@ sudo journalctl -u urnetworkd -b --no-pager | grep -E '\[tun\] up|\[filter\] con
 version must match **exactly** (from §5's `--version`):
 
 ```bash
-SDK=<paste the sdk version from `urnetworkd --version`>
+SDK=<paste the sdk version from `/usr/lib/urnetwork/urnetworkd --version`>
 printf '{"verb":"hello","id":1,"protocol_version":1,"sdk_version":"%s"}\n{"verb":"status","id":2}\n' "$SDK" \
   | sudo socat - UNIX-CONNECT:/run/urnetwork/control.sock
 ```

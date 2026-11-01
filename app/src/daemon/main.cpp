@@ -46,10 +46,12 @@
 #include "Tunnel.hpp"
 #include "daemon/ControlServer.hpp"
 #include "daemon/DaemonLog.hpp"
+#include "daemon/DiagnoseReport.hpp"
 #include "daemon/GlogFlusher.hpp"
 #include "daemon/HostMemory.hpp"
 #include "daemon/InstanceGuard.hpp"
 #include "daemon/NetworkCountryWatcher.hpp"
+#include "daemon/SelfPath.hpp"
 #include "daemon/SupportDiagnostics.hpp"
 #include "daemon/TunnelHost.hpp"
 #include "TunnelPolicy.hpp"
@@ -113,28 +115,12 @@ void NotifySystemdReady() {
   ::close(fd);
 }
 
-// Where this binary is installed (the unit's ExecStart). Printed in the
-// recovery lines, so what the user is told to run is a path that exists on
-// their machine; a dev run from a build tree prints its own argv[0] instead.
-constexpr const char* kInstalledPath = "/usr/lib/urnetwork/urnetworkd";
-
-// /proc/self/exe FIRST, because "what you are told to run must exist where it
-// says". The tarball installer relocates the daemon on an immutable host
-// (/usr/local/lib/urnetwork/urnetworkd on Bazzite, ExecStart rewritten to
-// match), so kInstalledPath is a guess and argv[0] is whatever the caller
-// typed. The kernel link is the only one of the three that is always the truth.
-std::string SelfPath(const char* argv0) {
-  char buf[PATH_MAX];
-  const ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-  if (n > 0) {
-    buf[n] = '\0';
-    // A deleted-and-replaced binary reads back as "<path> (deleted)"; that is
-    // not a runnable path, so fall through to the weaker answers.
-    if (std::strstr(buf, " (deleted)") == nullptr) return buf;
-  }
-  if (argv0 != nullptr && argv0[0] == '/') return argv0;
-  return kInstalledPath;
-}
+// Where this binary is, for every command this file prints: the recovery
+// lines, --help, --diagnose, --revert and the self-test name it by its path,
+// because no package puts urnetworkd on $PATH. One resolver for the daemon,
+// shared with the tunnel's own messages (daemon/SelfPath.hpp); a dev run from
+// a build tree prints its own path too.
+using urnw::SelfPath;
 
 // THE WAY BACK ONTO THE NETWORK, and the only thing on this machine that
 // prints it. The kill switch is an nftables table, and nftables is not tied to
@@ -1010,7 +996,23 @@ int main(int argc, char** argv) {
       std::printf("kill switch:    %s (marker %s)\n",
                   armed ? "ARMED — this machine is deliberately blocked" : "not armed",
                   urnw::NetFilter::ArmedMarkerPath());
+      // The preflight writes to stderr: what stdout holds goes out first, so
+      // `--diagnose 2>&1 | tee` keeps the order a terminal shows.
+      std::fflush(stdout);
       const int missing = ReportPreflight();
+      // THE ROUTING POLICY this daemon's own sockets meet, IPv4 and IPv6: the
+      // state an egress refusal is decided by, read with `ip ... show` alone
+      // (daemon/DiagnoseReport.hpp).
+      {
+        std::string ipv6Detail;
+        const bool hostIpv6 = urnw::HostIpv6Available(&ipv6Detail);
+        std::printf("%s", urnw::diagnose::RoutingReport(
+                              urnw::FindTool("ip"), hostIpv6, ipv6Detail, SelfPath(argv[0]),
+                              [](const std::vector<std::string>& command) {
+                                return urnw::RunCommand(command);
+                              })
+                              .c_str());
+      }
       // The preflight can only say the cgroup EXISTS. Whether a program
       // attached to it actually marks sockets on this kernel is a different
       // question, it is the one this daemon's self-exclusion rests on, and
@@ -1121,14 +1123,19 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (arg == "--help" || arg == "-h") {
+      // The binary by its path, like every command this daemon prints: it is
+      // on no one's $PATH.
+      const std::string self = SelfPath(argv[0]);
       std::printf(
-          "usage: urnetworkd [--foreground] [--diagnose] [--selftest-egress]\n"
-          "                  [--revert [--force]] [--version]\n"
+          "usage: %s [--foreground] [--diagnose] [--selftest-egress]\n"
+          "       %*s [--revert [--force]] [--version]\n"
           "URnetwork privileged daemon: control socket at %s,\n"
           "device RPC on 127.0.0.1:%d while the tunnel is up.\n"
           "  --diagnose             print the host preflight (ip/nft/resolvectl, cgroup, tun),\n"
-          "                         the authorization mode, the kill-switch state and the\n"
-          "                         recovery steps, then exit\n"
+          "                         the authorization mode, the kill-switch state, the policy\n"
+          "                         rules, routes and addresses the daemon's own sockets meet\n"
+          "                         (IPv4 and IPv6) and the recovery steps, then exit. Reads\n"
+          "                         only; needs no root\n"
           "  --selftest-egress      prove, on this kernel, that the cgroup-BPF socket marker\n"
           "                         that keeps the daemon's own traffic out of its own tunnel\n"
           "                         actually marks sockets at creation. Starts no tunnel and\n"
@@ -1144,6 +1151,7 @@ int main(int argc, char** argv) {
           "                         died stays armed (used by the unit's ExecStopPost). Leaves\n"
           "                         the machine alone while another urnetworkd is running\n"
           "  --foreground           do not send the systemd readiness notification\n",
+          self.c_str(), static_cast<int>(self.size()), "",
           urnw::ControlServer::SocketPath().c_str(), urnw::ctl::kDeviceRpcPort);
       PrintRecovery(argv[0]);
       return 0;
