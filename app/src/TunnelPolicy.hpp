@@ -669,7 +669,8 @@ inline std::string EgressRefusalMessage(const std::string& reason, const std::st
   return "this daemon cannot prove its own traffic stays out of its own tunnel, so the "
          "tunnel is not being run: " +
          reason + ". `" + self +
-         " --diagnose` needs no root and reports the host preflight; "
+         " --diagnose` needs no root and reports the host preflight and the policy rules, "
+         "routes and addresses this daemon's own sockets meet, IPv4 and IPv6; "
          "packaging/diagnose-egress.sh in the source tree goes deeper. The last time this "
          "went unproven the daemon looped 3.38 Tb of its own traffic through its own tunnel "
          "before a human noticed.";

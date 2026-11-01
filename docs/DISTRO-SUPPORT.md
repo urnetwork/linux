@@ -454,7 +454,8 @@ measured-vs-inferred honesty attached.
 install tarball, as below) is the highest-value portability probe we own. It
 loads and attaches the real BPF program, proves the mark on real sockets of four kinds,
 and **starts no tunnel, sends no packet, and touches no firewall, route or DNS**
-**[M-src]**. Combined with `--diagnose` (preflight + kill-switch state + recovery
+**[M-src]**. Combined with `--diagnose` (preflight + kill-switch state + the IPv4 and
+IPv6 policy rules, routes and address counts the daemon's own sockets meet + recovery
 text), two commands characterise a new distro **before** any risk is taken.
 
 **There is now a harness for exactly this.** `packaging/distro-smoke.sh` appeared in

@@ -162,8 +162,9 @@ with the vendored SDK on the library path:
 of date. The daemon is not on `$PATH`: every package installs it at
 `/usr/lib/urnetwork/urnetworkd` (the install tarball uses
 `/usr/local/lib/urnetwork/urnetworkd` on an immutable `/usr`). For host checks,
-run `/usr/lib/urnetwork/urnetworkd --diagnose` (no root needed) and
-`sudo /usr/lib/urnetwork/urnetworkd --selftest-egress`.
+run `/usr/lib/urnetwork/urnetworkd --diagnose` (no root needed; it includes
+the IPv4 and IPv6 policy rules, routes and address counts the daemon's own
+sockets meet) and `sudo /usr/lib/urnetwork/urnetworkd --selftest-egress`.
 `sudo /usr/lib/urnetwork/urnetworkd --revert` lifts the firewall and routes if
 a machine is left blocked. The daemon's own messages name the path it runs
 from.

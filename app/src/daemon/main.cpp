@@ -46,6 +46,7 @@
 #include "Tunnel.hpp"
 #include "daemon/ControlServer.hpp"
 #include "daemon/DaemonLog.hpp"
+#include "daemon/DiagnoseReport.hpp"
 #include "daemon/GlogFlusher.hpp"
 #include "daemon/HostMemory.hpp"
 #include "daemon/InstanceGuard.hpp"
@@ -995,7 +996,23 @@ int main(int argc, char** argv) {
       std::printf("kill switch:    %s (marker %s)\n",
                   armed ? "ARMED — this machine is deliberately blocked" : "not armed",
                   urnw::NetFilter::ArmedMarkerPath());
+      // The preflight writes to stderr: what stdout holds goes out first, so
+      // `--diagnose 2>&1 | tee` keeps the order a terminal shows.
+      std::fflush(stdout);
       const int missing = ReportPreflight();
+      // THE ROUTING POLICY this daemon's own sockets meet, IPv4 and IPv6: the
+      // state an egress refusal is decided by, read with `ip ... show` alone
+      // (daemon/DiagnoseReport.hpp).
+      {
+        std::string ipv6Detail;
+        const bool hostIpv6 = urnw::HostIpv6Available(&ipv6Detail);
+        std::printf("%s", urnw::diagnose::RoutingReport(
+                              urnw::FindTool("ip"), hostIpv6, ipv6Detail, SelfPath(argv[0]),
+                              [](const std::vector<std::string>& command) {
+                                return urnw::RunCommand(command);
+                              })
+                              .c_str());
+      }
       // The preflight can only say the cgroup EXISTS. Whether a program
       // attached to it actually marks sockets on this kernel is a different
       // question, it is the one this daemon's self-exclusion rests on, and
@@ -1115,8 +1132,10 @@ int main(int argc, char** argv) {
           "URnetwork privileged daemon: control socket at %s,\n"
           "device RPC on 127.0.0.1:%d while the tunnel is up.\n"
           "  --diagnose             print the host preflight (ip/nft/resolvectl, cgroup, tun),\n"
-          "                         the authorization mode, the kill-switch state and the\n"
-          "                         recovery steps, then exit\n"
+          "                         the authorization mode, the kill-switch state, the policy\n"
+          "                         rules, routes and addresses the daemon's own sockets meet\n"
+          "                         (IPv4 and IPv6) and the recovery steps, then exit. Reads\n"
+          "                         only; needs no root\n"
           "  --selftest-egress      prove, on this kernel, that the cgroup-BPF socket marker\n"
           "                         that keeps the daemon's own traffic out of its own tunnel\n"
           "                         actually marks sockets at creation. Starts no tunnel and\n"

@@ -1,12 +1,14 @@
-// Every command urnetworkd prints names the binary by its path.
+// Every command urnetworkd prints names the binary by its path, and --diagnose
+// shows the routing policy an egress refusal is decided by.
 //
 // No package puts urnetworkd on $PATH: the deb, rpm and Arch packages install
 // it at /usr/lib/urnetwork/urnetworkd, and the install tarball moves it to
 // /usr/local/lib/urnetwork/urnetworkd on an immutable host. The egress
 // refusal told people to run `urnetworkd --diagnose`, which is "command not
-// found" as printed. The daemon's sources need glib, the SDK and Linux
-// headers, so they are read as source here; the path and the refusal's text
-// are tested in DaemonSelfPathTest.cpp.
+// found" as printed, and --diagnose then had nothing to say about the IPv6
+// rules and routes the refusal was about. The daemon's sources need glib, the
+// SDK and Linux headers, so they are read as source here; the report itself is
+// tested in DaemonDiagnoseTest.cpp.
 //
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
@@ -202,4 +204,26 @@ UR_TEST(DaemonCommands_OneResolverForTheDaemonsPath) {
                           "kInstalledDaemonPath = \"/usr/lib/urnetwork/urnetworkd\";"));
   UR_EXPECT_TRUE(Contains(ReadRaw("../packaging/urnetworkd.service"),
                           "\nExecStart=/usr/lib/urnetwork/urnetworkd\n"));
+}
+
+// THE GAP: --diagnose shows the policy rules, routes and addresses of both
+// families, read with RunCommand, after the preflight and before the recovery
+// lines, and --help says so.
+UR_TEST(DaemonCommands_DiagnoseShowsTheRoutingPolicy) {
+  const std::string main = ReadCode("daemon/main.cpp");
+  const std::string diagnose = FunctionBody(main, "if (arg == \"--diagnose\") {");
+  UR_EXPECT_TRUE_MSG("the --diagnose branch is read", !diagnose.empty());
+  for (const char* needle :
+       {"const bool hostIpv6 = urnw::HostIpv6Available(&ipv6Detail);",
+        "urnw::diagnose::RoutingReport(", "urnw::FindTool(\"ip\"), hostIpv6, ipv6Detail, "
+                                          "SelfPath(argv[0]),",
+        "return urnw::RunCommand(command);"}) {
+    UR_EXPECT_TRUE_MSG(needle, Contains(diagnose, needle));
+  }
+  UR_EXPECT_TRUE(Before(diagnose, "const int missing = ReportPreflight();",
+                        "urnw::diagnose::RoutingReport("));
+  UR_EXPECT_TRUE(Before(diagnose, "urnw::diagnose::RoutingReport(", "PrintRecovery(argv[0]);"));
+  UR_EXPECT_TRUE(Contains(main, "#include \"daemon/DiagnoseReport.hpp\""));
+  const std::string help = FunctionBody(main, "if (arg == \"--help\" || arg == \"-h\") {");
+  UR_EXPECT_TRUE(Contains(help, "rules, routes and addresses the daemon's own sockets meet"));
 }

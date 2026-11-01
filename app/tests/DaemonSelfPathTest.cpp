@@ -62,6 +62,7 @@ UR_TEST(DaemonEgressRefusal_NamesDiagnoseByTheRunningBinary) {
                                0) == 0);
   UR_EXPECT_TRUE_MSG(message, Has(message, "`/usr/local/lib/urnetwork/urnetworkd --diagnose`"));
   UR_EXPECT_FALSE(Has(message, "`urnetworkd --diagnose`"));
+  UR_EXPECT_TRUE(Has(message, "IPv4 and IPv6"));
   UR_EXPECT_TRUE(Has(urnw::EgressRefusalMessage(reason, urnw::kInstalledDaemonPath),
                      "`/usr/lib/urnetwork/urnetworkd --diagnose` needs no root"));
 }
