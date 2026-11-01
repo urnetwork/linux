@@ -1207,7 +1207,10 @@ class ClaimAlphaSheet : public Gtk::Window {
   void ShowError(const Glib::ustring& message);
 
  private:
-  enum class Phase { Open, Claimable, Sending, Sent, Confirmed, Failed, Expired, Claimed };
+  // NoPayout: the SDK's not-finalized, an epoch the vault finalized with nothing to claim
+  enum class Phase {
+    Open, Claimable, Sending, Sent, Confirmed, Failed, Expired, Claimed, NoPayout
+  };
   struct Row {
     SnClaimRow claim;
     Phase phase = Phase::Open;
@@ -1252,7 +1255,6 @@ ClaimAlphaSheet::ClaimAlphaSheet(Gtk::Window& parent, std::string coldkey,
   add_css_class("ur-sheet");
 
   for (auto& claim : claims) {
-    if (claim.status == "not-finalized") continue;  // nothing to show for it yet
     Row row;
     row.claim = claim;
     row.phase = PhaseForStatus(claim.status);
@@ -1336,9 +1338,18 @@ ClaimAlphaSheet::ClaimAlphaSheet(Gtk::Window& parent, std::string coldkey,
 ClaimAlphaSheet::~ClaimAlphaSheet() { copiedReset_.disconnect(); }
 
 ClaimAlphaSheet::Phase ClaimAlphaSheet::PhaseForStatus(const std::string& status) {
-  if (status == "claimable") return Phase::Claimable;
-  if (status == "claimed") return Phase::Claimed;
-  if (status == "expired") return Phase::Expired;
+  switch (snpayout::ClaimStatusWordFor(status)) {
+    case snpayout::ClaimStatusWord::Unclaimed:
+      return Phase::Claimable;
+    case snpayout::ClaimStatusWord::Claimed:
+      return Phase::Claimed;
+    case snpayout::ClaimStatusWord::Expired:
+      return Phase::Expired;
+    case snpayout::ClaimStatusWord::NoPayoutPublished:
+      return Phase::NoPayout;
+    case snpayout::ClaimStatusWord::Pending:
+      break;
+  }
   return Phase::Open;
 }
 
@@ -1410,8 +1421,13 @@ void ClaimAlphaSheet::RebuildRows() {
     const char* chipClass = nullptr;
     switch (row.phase) {
       case Phase::Open:
+        chipText = T_("pending_data_key", "Pending");
+        break;
       case Phase::Claimable:
         chipText = T_("unclaimed", "Unclaimed");
+        break;
+      case Phase::NoPayout:
+        chipText = T_("sn_status_not_finalized", "No payout published");
         break;
       case Phase::Sending:
         chipText = T_("claim_sending_linux", "Sending…");
@@ -1443,7 +1459,7 @@ void ClaimAlphaSheet::RebuildRows() {
                           Glib::Markup::escape_text(FormatAlphaRao(ClaimableRao())) + "</span>");
   const size_t count = ClaimableEpochs().size();
   totalCaption_->set_text(
-      Format(T_("claim_across_epochs", "Across {} finalized epochs"), static_cast<int64_t>(count)));
+      Format(T_("claim_across_epochs", "Claimable epochs: {}"), static_cast<int64_t>(count)));
 }
 
 void ClaimAlphaSheet::RebuildGas() {
@@ -3515,22 +3531,33 @@ void EarningsPage::RebuildHistory() {
             break;
           }
         }
-        if (claim == nullptr || claim->status == "not-finalized") {
-          // before the wallet was attached (or not settled yet): points only
+        if (claim == nullptr) {
+          // no claim row from the SDK (before the wallet was attached, or out of its
+          // window): points only
           cells.cells[3]->set_text("-");
           cells.cells[3]->add_css_class("ur-label-faint");
           cells.cells[4]->set_text("");
         } else {
           cells.cells[3]->set_text(FormatAlphaRao(claim->amountRao));
           Glib::ustring status;
-          if (claim->status == "claimed") {
-            status = T_("claim_confirmed", "Claimed");
-            cells.cells[4]->remove_css_class("dim-label");
-            cells.cells[4]->add_css_class("ur-value-on");
-          } else if (claim->status == "expired") {
-            status = T_("claim_expired", "Expired");
-          } else {
-            status = T_("unclaimed", "Unclaimed");
+          switch (snpayout::ClaimStatusWordFor(claim->status)) {
+            case snpayout::ClaimStatusWord::Claimed:
+              status = T_("claim_confirmed", "Claimed");
+              cells.cells[4]->remove_css_class("dim-label");
+              cells.cells[4]->add_css_class("ur-value-on");
+              break;
+            case snpayout::ClaimStatusWord::Expired:
+              status = T_("claim_expired", "Expired");
+              break;
+            case snpayout::ClaimStatusWord::Unclaimed:
+              status = T_("unclaimed", "Unclaimed");
+              break;
+            case snpayout::ClaimStatusWord::Pending:
+              status = T_("pending_data_key", "Pending");
+              break;
+            case snpayout::ClaimStatusWord::NoPayoutPublished:
+              status = T_("sn_status_not_finalized", "No payout published");
+              break;
           }
           cells.cells[4]->set_text(status);
           name += Glib::ustring(", ") + FormatAlphaRao(claim->amountRao) + ", " + status;

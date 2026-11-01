@@ -113,4 +113,27 @@ inline std::string FormatScheduleTime(int64_t millis, int32_t utcOffsetMinutes) 
   return buf;
 }
 
+// The word an epoch's v1 claim status (the SDK's SnEpochClaim.Status) reads as
+// in the Earnings history and the claim sheet. "not-finalized" is, despite its
+// name, an epoch the vault finalized with nothing for this coldkey to claim (no
+// payout root was published for it, which is final, or its payout list holds no
+// share for this coldkey), so it reads No payout published, never as unsettled.
+// "open" (the vault has not finalized it) and a status this build does not know
+// read Pending, which promises nothing; neither is claimable.
+enum class ClaimStatusWord {
+  Unclaimed,          // unclaimed: claimable now
+  Claimed,            // claim_confirmed
+  Expired,            // claim_expired
+  Pending,            // pending_data_key
+  NoPayoutPublished,  // sn_status_not_finalized
+};
+
+inline ClaimStatusWord ClaimStatusWordFor(const std::string& status) {
+  if (status == "claimable") return ClaimStatusWord::Unclaimed;
+  if (status == "claimed") return ClaimStatusWord::Claimed;
+  if (status == "expired") return ClaimStatusWord::Expired;
+  if (status == "not-finalized") return ClaimStatusWord::NoPayoutPublished;
+  return ClaimStatusWord::Pending;
+}
+
 }  // namespace urnw::snpayout

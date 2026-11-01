@@ -1196,6 +1196,7 @@ sn_ledger_title
 sn_ledger_unavailable
 sn_payout_schedule
 sn_payout_schedule_times
+sn_status_not_finalized
 solana
 solana_sign_in
 solana_wallet
