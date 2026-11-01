@@ -802,15 +802,19 @@ async-with-default is mandatory because the callback runs on the SDK packet path
 
 ### 5.9 JWT device token manager (history every client needs)
 
-`sdk:device_token_manager.go` schedules `byJwt` refresh at the token's **half-life** derived
-from `iat`/`exp`, with `const minRefreshTimeout = 5 * time.Minute` as the floor and
-`noExpirationRefreshTimeout = 7 * 24 * time.Hour` for tokens without a usable `exp`. The floor
-exists because server commit `2f1e4a3` cut JWT expiry 30d→24h while the sdk had a hardcoded
-14-day refresh lead → an instant refresh hot loop (measured **593 refreshes/session, median
-6.4 ms apart**; server 429s), fixed in sdk `0fd8123`. Fixed with it: a closure-scoped
-`ctx.Done()` return let a *closed* device refresh forever, and `SetByJwt` keyed identity off
-the JWT *string* (always changes on refresh) — now `sameJwtIdentity` on claims. Every refresh
-also rotated the persisted `.instance_id`, which permanently broke RPC reattach — hence the
+`sdk:device_token_manager.go` schedules `byJwt` refresh at a point drawn uniformly between
+**40% and 50%** of the token's lifetime from `iat`/`exp`, so never later than its half-life;
+each refresh draws again, so clients that refreshed together do not stay in lockstep (owner
+decision 2026-11-01). `apiTokenRefreshSettings` holds the window, the floor
+(`MinRefreshTimeout = 5 * time.Minute`: no scheduled refresh sooner than 5 minutes after the
+previous attempt), `NoExpirationRefreshTimeout = 7 * 24 * time.Hour` for tokens without a
+usable `exp`, and the unchanged failure retry (uniform over [0, 15 min)). The floor exists
+because server commit `2f1e4a3` cut JWT expiry 30d→24h while the sdk had a hardcoded 14-day
+refresh lead → an instant refresh hot loop (measured **593 refreshes/session, median 6.4 ms
+apart**; server 429s), fixed in sdk `0fd8123`. Fixed with it: a closure-scoped `ctx.Done()`
+return let a *closed* device refresh forever, and `SetByJwt` keyed identity off the JWT
+*string* (always changes on refresh) — now `sameJwtIdentity` on claims. Every refresh also
+rotated the persisted `.instance_id`, which permanently broke RPC reattach — hence the
 born-with-id persistence rule (§4.6). Any interval derived from a server-controlled value needs
 a floor.
 
