@@ -1443,10 +1443,10 @@ msgctxt "claim"
 msgid "Claim"
 msgstr "Vyzvědněte"
 
-#. Subtitle of the claim dialog.
+#. Under the unclaimed SN25α total, on the Unclaimed tile and in the claim dialog: how many epochs that total comes from. It counts the claimable epochs only (finalized epochs that are claimed, expired or have no payout are not in it), so it never says finalized. The count follows its label, so the line reads with any number without a plural key.
 msgctxt "claim_across_epochs"
-msgid "Across {} finalized epochs"
-msgstr "Dokončené epochy: {}"
+msgid "Claimable epochs: {}"
+msgstr "Epochy k vyzvednutí: {}"
 
 #. Title of the claim dialog.
 msgctxt "claim_alpha_title"
@@ -9224,10 +9224,10 @@ msgctxt "sn_status_claimable"
 msgid "Claimable"
 msgstr "K vyzvednutí"
 
-#. Claim status of an epoch the vault has not finalized yet.
+#. Claim status of an epoch the SDK reports as not-finalized. Despite that name the vault has finalized the epoch: with no payout root (the root was missed, so no payout list was published for it and nothing can ever be claimed for it), or with a payout list that has no share for this wallet. Never 'Finalizing' or 'Not finalized', and no 'yet': nothing more is published for that epoch.
 msgctxt "sn_status_not_finalized"
-msgid "Not finalized"
-msgstr "Nedokončeno"
+msgid "No payout published"
+msgstr "Žádná zveřejněná výplata"
 
 #. Claim status of an epoch that is still open (not yet finalized on chain).
 msgctxt "sn_status_open"
