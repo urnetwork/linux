@@ -1107,6 +1107,11 @@ msgctxt "bittensor_error_challenge_expired"
 msgid "This request expired. Start again to get a new message to sign."
 msgstr "此请求已过期。请重新开始以获取新的待签名消息。"
 
+#. ur.io Bittensor wallet error (Earnings wallet card and payout consent, sign-in, add sign-in): the browser extension has not allowed the site to use an account yet, so nothing was signed. The user rejected or closed the extension's connect window, has no Polkadot/Bittensor account in the extension, removed the site's accounts in the extension's connected sites, or a connect request is still open in it. Talisman says "Site <url> has not been authorised for Talisman yet"; polkadot{.js} and SubWallet say "The source <url> has not been enabled yet" or "is not allowed to interact with this extension". The argument is the wallet product name (Talisman). "Connected Sites" is the extension's settings page that lists the sites allowed to use its accounts: use the extension's own name for it (Talisman: de Verbundene Seiten, es Sitios Conectados, ru Подключенные сайты, zh 连接网站; Talisman has no Arabic, so ar keeps the English name).
+msgctxt "bittensor_error_extension_not_authorized"
+msgid "{} hasn't allowed ur.io to use your Bittensor account yet. Approve the connection request in the wallet, or allow ur.io under Connected Sites in its settings, then try again."
+msgstr "{} 尚未允许 ur.io 使用您的 Bittensor 账户。请在钱包中批准连接请求，或在其设置的“连接网站”中允许 ur.io，然后重试。"
+
 #. Error: the wallet's browser extension is not installed in this browser (on ur.io, or in the apps when a ur.io wallet bridge page returns extension_not_found). The argument is the wallet product name (Talisman on the Bittensor page, Phantom or Solflare on the Solana page).
 msgctxt "bittensor_error_extension_not_found"
 msgid "The {} extension was not found in this browser. Install it, then try again."
@@ -1136,6 +1141,11 @@ msgstr "此签名不是来自您输入的地址。请在 {} 中使用该地址�
 msgctxt "bittensor_error_user_rejected"
 msgid "The request was declined in your wallet. Start again and approve it to continue."
 msgstr "该请求已在您的钱包中被拒绝。请重新开始并批准该请求以继续。"
+
+#. ur.io Bittensor wallet error (Earnings wallet card and payout consent, sign-in, add sign-in): the wallet (the Talisman extension, or a WalletConnect wallet) failed in a way the page has no specific message for, so nothing was signed. The wallet's own English text is only logged. The argument is the wallet product name (Talisman or WalletConnect).
+msgctxt "bittensor_error_wallet_failed"
+msgid "Your {} wallet couldn't finish the request. Check the wallet, then try again."
+msgstr "您的 {} 钱包未能完成该请求。请检查钱包，然后重试。"
 
 #. Bittensor wallet error in the apps, when the ur.io bridge page returns walletconnect_expired: the WalletConnect pairing or the signature request ran out of time before the wallet answered. WalletConnect is a product name.
 msgctxt "bittensor_error_walletconnect_expired"
