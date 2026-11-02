@@ -3039,6 +3039,23 @@ bool BindWitnessSocket(int family, bool clearMark, SocketBinding* out, std::stri
   return true;
 }
 
+// What ReadCapturedV6 needs from the kernel about the witness's own destination
+// under the egress mark. Read-only, and only for a marked v6 socket found on the
+// tunnel's own address, so nothing forks for this on a host with IPv6 of its own.
+Ipv6HostReads ReadIpv6HostForWitness() {
+  Ipv6HostReads reads;
+  const std::string ip = FindTool("ip");
+  if (ip.empty()) return reads;
+  const CommandResult route =
+      RunCommand({ip, "-6", "route", "get", kEgressProbeAddressV6, "mark", MarkHex(kEgressMark)});
+  reads.route_ok = route.ok();
+  reads.route = route.output;
+  const CommandResult addresses = RunCommand({ip, "-o", "-6", "addr", "show", "scope", "global"});
+  reads.addresses_ok = addresses.ok();
+  reads.addresses = addresses.output;
+  return reads;
+}
+
 }  // namespace
 
 std::string ProbeEgressSource(int family) {
@@ -3166,11 +3183,8 @@ bool Tunnel::VerifyEgressWitness(const char* when, bool requireOffTunnelRoute,
       // tun (the amplification loop) or leaves the NIC sourced from the tunnel's
       // address (a socket that can never be answered), the daemon is broken.
       return fail(kCodeEgressUnprotected,
-                  "a socket this daemon just opened was bound to the tunnel's own address (" +
-                      daemon.source +
-                      "), so it resolved the capture table before anything could steer it "
-                      "away. The mark is not reaching this process's sockets at creation time, "
-                      "and no mark applied after connect() can undo it");
+                  CapturedV4RefusalReason(daemon.mark_known && daemon.mark == kEgressMark,
+                                          daemon.source));
     case WitnessTreatment::Unmarked: {
       // CONTRADICTORY EVIDENCE IS A FAILURE, NOT A PASS, AND THIS IS WHERE THE
       // OLD "belt only" GREEN LIVED. The previous cut passed here with a warning
@@ -3207,7 +3221,10 @@ bool Tunnel::VerifyEgressWitness(const char* when, bool requireOffTunnelRoute,
   // ENETUNREACH — the kernel saying "not through the tun, and nowhere else
   // either", which is exactly the escape this leg exists to prove, PROVIDED the
   // socket carries the mark. It once passed without asking; it asks now, as v4
-  // always has for a socket that escaped.
+  // always has for a socket that escaped. The same host WITH a default route and
+  // still no global address gives the marked socket the tun's own ULA as its
+  // source instead of an error: bound to the tunnel's address, routed off it, a
+  // reading only this family has (TunnelPolicy.hpp, ReadCapturedV6).
   std::string v6Detail = "v6 half not installed";
   if (ipv6Captured_) {
     if (localAddr6_.empty()) {
@@ -3246,14 +3263,27 @@ bool Tunnel::VerifyEgressWitness(const char* when, bool requireOffTunnelRoute,
                    "the tunnel (" +
                    std::strerror(daemon6.connect_errno) + "), so it cannot enter it";
         break;
-      case WitnessTreatment::Captured:
-        return fail(kCodeEgressUnprotected,
-                    "a v6 socket this daemon just opened was bound to the tunnel's own "
-                    "address (" +
-                        daemon6.source +
-                        "), so it resolved the capture table before anything could steer it "
-                        "away. The mark is not reaching this process's IPv6 sockets at "
-                        "creation time");
+      case WitnessTreatment::Captured: {
+        // Not yet a verdict for a marked socket: on a host with no IPv6 of its
+        // own one lands here with a route nowhere near the tunnel. ReadCapturedV6
+        // (TunnelPolicy.hpp) decides, and everything it cannot explain refuses.
+        const CapturedV6Reading captured =
+            ReadCapturedV6(daemon6.mark_known && daemon6.mark == kEgressMark, daemon6.source,
+                           name_, ReadIpv6HostForWitness());
+        if (captured.verdict != CapturedV6::NoIpv6Egress) {
+          return fail(kCodeEgressUnprotected,
+                      CapturedV6RefusalReason(captured, daemon6.source, name_));
+        }
+        // Not offTunnelRoute: this family has nowhere to go, so it can carry no
+        // session, and with no v4 route either the bring-up gate below says so.
+        v6Detail = "v6: control socket bound " + control6.source +
+                   " = the tunnel; the daemon socket carries the mark and its route leaves by " +
+                   captured.route_device +
+                   ", and no interface off the tunnel has a usable global IPv6 address, so it "
+                   "took the tunnel's address as its source: IPv6 has no way off this host to "
+                   "protect, and that socket cannot enter the tunnel";
+        break;
+      }
       case WitnessTreatment::Unmarked: {
         char buf[320];
         std::snprintf(buf, sizeof(buf),

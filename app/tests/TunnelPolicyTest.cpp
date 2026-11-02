@@ -1300,7 +1300,9 @@ UR_TEST(theNetworkSwitchPathReadsItsTimingsFromSettings) {
   UR_EXPECT_TRUE(Contains(hostHeader, "deadTunnelWatch_{settings_.dead_tunnel};"));
   UR_EXPECT_TRUE(Contains(hostHeader, "networkQualityTracker_{settings_.network_path};"));
   UR_EXPECT_TRUE(Contains(hostHeader, "suspendDetector_{settings_.suspend};"));
-  // Built first, so every member that takes a timing is built from it.
+  // Built first, so every member that takes a timing is built from it: every one
+  // of them, which DeadTunnelWiring_EveryMemberBuiltFromTheSettingsIsBuiltAfterThem
+  // checks, because this used to compare it with one member that was after it.
   UR_EXPECT_TRUE(hostHeader.find("const HostSettings settings_;") <
                  hostHeader.find("std::string storageRoot_;"));
 
@@ -1309,7 +1311,9 @@ UR_TEST(theNetworkSwitchPathReadsItsTimingsFromSettings) {
   UR_EXPECT_TRUE(
       Contains(witness, "if (++egressWitnessTicks_ < settings_.egress_witness_interval_ticks)"));
   UR_EXPECT_TRUE(
-      Contains(witness, "if (egressWitnessFailures_ < settings_.egress_witness_failures_to_stop)"));
+      Contains(witness, "StepEgressRecheck(settings_, passed, &egressWitnessFailures_)"));
+  UR_EXPECT_TRUE(Contains(ReadAppSource("daemon/HostSettings.hpp"),
+                          "*failures < settings.egress_witness_failures_to_stop"));
   const std::string message = FunctionBody(host, "std::string DeadTunnelMessage(");
   UR_EXPECT_TRUE(Contains(message, "seconds(settings.deadFastMillis)"));
   UR_EXPECT_TRUE(Contains(message, "seconds(settings.deadSlowMillis)"));

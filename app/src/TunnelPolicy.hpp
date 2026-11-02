@@ -17,6 +17,7 @@
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -658,6 +659,224 @@ constexpr WitnessTreatment WitnessTreatmentVerdict(bool bound, std::string_view 
   // tun is captured whatever it carries.
   if (source == tunnelAddress) return WitnessTreatment::Captured;
   return marked ? WitnessTreatment::Escaped : WitnessTreatment::Unmarked;
+}
+
+// ---- a marked v6 socket on the tunnel's own address -------------------------
+//
+// Bound to the tun's own address is what the treatment leg calls Captured, and
+// a socket with no mark so bound has resolved the capture table: nothing else
+// to ask. A MARKED one has one more reading, on one host shape: an IPv6 default
+// route (often learned from a router advertisement) and no usable global
+// address anywhere off the tunnel. The mark passes the capture rule and main's
+// default route takes the socket, so its route leaves by that interface; source
+// selection runs afterwards, over every interface's addresses, and the kernel
+// scores a ULA as scope global. The tun's ULA therefore beats the interface's
+// own link-local address, and the socket is bound to the tunnel's address with
+// a route that does not go near the tunnel. Its packets leave with a source
+// nothing can answer: IPv6 has no way off this host that could need protecting.
+//
+// The socket alone cannot tell that from a daemon really steered into its own
+// tunnel, by a rule read before the capture rule or a route through the tun in
+// the table the mark leads to: all of them read mark present, source the tun's.
+// So the leg asks the kernel for the route of this mark and for the addresses
+// the host holds. Measured on kernel 7.0 in a network namespace:
+//
+//   default via fe80::1 dev wlan0, no global address
+//     marked socket binds fd00::2; route get: dev wlan0 src fd00::2
+//   the same with `ip -6 route add default dev urnet0 metric 100` or
+//   `ip -6 rule add fwmark <mark> table 51821`: the true capture
+//     marked socket binds fd00::2; route get: dev urnet0 src fd00::2
+//
+// `ip route get` is a hypothetical about no socket, which is why it is never the
+// measurement: it only explains a socket already measured, and an answer naming
+// another source describes something else, so it explains nothing. Anything
+// that cannot be read refuses, as the leg always has. And it is asked again at
+// every check of the witness, so a global address that appears mid-session
+// turns this reading into a socket that binds that address (Escaped) or into a
+// refusal, with no state kept here to go stale.
+enum class CapturedV6 {
+  // Marked, its route leaves by another interface, and no interface off the
+  // tunnel holds a usable global address: no IPv6 egress to protect, and the
+  // socket cannot enter the tunnel. The only reading that does not refuse.
+  NoIpv6Egress,
+  // No mark, or none that could be read: the capture table claimed it.
+  Unmarked,
+  // Marked, and the kernel routes it through the tun itself.
+  RoutedIntoTunnel,
+  // Marked, routed off the tunnel, on the tunnel's address although
+  // `global_interface` holds a usable global address it could have taken.
+  GlobalAddressPresent,
+  // Marked, and the route or the addresses could not be read, or the route's
+  // source is not the socket's: nothing explains the socket.
+  Unexplained,
+};
+
+// What the leg read from the kernel for that socket. `*_ok`: the command ran
+// and exited 0.
+struct Ipv6HostReads {
+  // `ip -o -6 addr show scope global`
+  bool addresses_ok = false;
+  std::string addresses;
+  // `ip -6 route get <the witness's address> mark <the egress mark>`
+  bool route_ok = false;
+  std::string route;
+};
+
+struct CapturedV6Reading {
+  CapturedV6 verdict = CapturedV6::Unexplained;
+  // The interface the route leaves by, when it was read.
+  std::string route_device;
+  // CapturedV6::GlobalAddressPresent's interface.
+  std::string global_interface;
+};
+
+namespace tunnelpolicy_detail {
+
+inline std::vector<std::string_view> SplitWords(std::string_view text) {
+  std::vector<std::string_view> words;
+  std::size_t at = 0;
+  while (at < text.size()) {
+    while (at < text.size() && (text[at] == ' ' || text[at] == '\t' || text[at] == '\r')) ++at;
+    std::size_t end = at;
+    while (end < text.size() && text[end] != ' ' && text[end] != '\t' && text[end] != '\r') ++end;
+    if (end > at) words.push_back(text.substr(at, end - at));
+    at = end;
+  }
+  return words;
+}
+
+}  // namespace tunnelpolicy_detail
+
+// Whether the flags on one line of `ip -o addr` leave the address a source the
+// kernel gives a new socket. Tentative and failed-DAD addresses are no candidate
+// at all; deprecated and optimistic ones rank below a healthy ULA (measured for
+// deprecated, kernel 7.0: the marked socket binds the tun's ULA over it), so
+// neither gets a new socket off this host while the tunnel is up.
+inline bool AddressLineIsUsableSource(std::string_view line) {
+  for (const std::string_view word : tunnelpolicy_detail::SplitWords(line)) {
+    if (word == "tentative" || word == "dadfailed" || word == "deprecated" ||
+        word == "optimistic") {
+      return false;
+    }
+  }
+  return true;
+}
+
+// The first interface other than `tunnelInterface` holding a usable global IPv6
+// address in `listing` (`ip -o -6 addr show scope global`, one address a line:
+// "<index>: <name> inet6 <address>/<length> ..."), "" when none does, nullopt
+// when a line cannot be read: this answer is what lets a tunnel come up, so
+// nothing is assumed about what it could not read. A ULA is scope global to the
+// kernel but no source anything beyond its site can answer, so it does not count.
+inline std::optional<std::string> UsableGlobalIpv6Interface(std::string_view listing,
+                                                            std::string_view tunnelInterface) {
+  std::size_t at = 0;
+  while (at < listing.size()) {
+    std::size_t end = listing.find('\n', at);
+    if (end == std::string_view::npos) end = listing.size();
+    const std::string_view line = listing.substr(at, end - at);
+    at = end + 1;
+    const std::vector<std::string_view> words = tunnelpolicy_detail::SplitWords(line);
+    if (words.empty()) continue;
+    if (words.size() < 4 || words[0].back() != ':' || words[2] != "inet6") return std::nullopt;
+    const std::string_view address = words[3].substr(0, words[3].find('/'));
+    if (!IsIpv6Literal(address)) return std::nullopt;
+    const std::string_view name = words[1].substr(0, words[1].find('@'));  // eth0.10@eth0
+    if (name == tunnelInterface || !AddressLineIsUsableSource(line)) continue;
+    if (!IsIpv6UniqueLocal(address)) return std::string(name);
+  }
+  return std::string();
+}
+
+// The word after `key` on the first line of `ip route get`'s answer ("<dest> from
+// :: via <gateway> dev <name> proto ra src <source> metric 600 pref medium"), ""
+// when it is not there.
+inline std::string RouteGetField(std::string_view answer, std::string_view key) {
+  const std::vector<std::string_view> words =
+      tunnelpolicy_detail::SplitWords(answer.substr(0, answer.find('\n')));
+  for (std::size_t i = 0; i + 1 < words.size(); ++i) {
+    if (words[i] == key) return std::string(words[i + 1]);
+  }
+  return std::string();
+}
+
+// `marked`: the socket reads the egress mark. `source`: the address it bound,
+// the tunnel's. `tunnelInterface`: the tun's name.
+inline CapturedV6Reading ReadCapturedV6(bool marked, std::string_view source,
+                                        std::string_view tunnelInterface,
+                                        const Ipv6HostReads& reads) {
+  CapturedV6Reading reading;
+  if (!marked) {
+    reading.verdict = CapturedV6::Unmarked;
+    return reading;
+  }
+  if (!reads.route_ok) return reading;
+  reading.route_device = RouteGetField(reads.route, "dev");
+  if (reading.route_device.empty() || RouteGetField(reads.route, "src") != source) return reading;
+  if (reading.route_device == tunnelInterface) {
+    reading.verdict = CapturedV6::RoutedIntoTunnel;
+    return reading;
+  }
+  // lo is where an unreachable or a local answer "leaves": no way off anything.
+  if (reading.route_device == "lo" || !reads.addresses_ok) return reading;
+  const std::optional<std::string> global =
+      UsableGlobalIpv6Interface(reads.addresses, tunnelInterface);
+  if (!global) return reading;
+  reading.global_interface = *global;
+  reading.verdict = global->empty() ? CapturedV6::NoIpv6Egress : CapturedV6::GlobalAddressPresent;
+  return reading;
+}
+
+// Why a v6 socket on the tunnel's address refuses, for every reading but
+// NoIpv6Egress. Only Unmarked names the mark as the fault: the others have read
+// it on the socket, and sending someone to debug a mark that works is how this
+// refusal misled the host it was first reported on.
+inline std::string CapturedV6RefusalReason(const CapturedV6Reading& reading,
+                                           const std::string& source,
+                                           const std::string& tunnelInterface) {
+  const std::string head =
+      "a v6 socket this daemon just opened was bound to the tunnel's own address (" + source + ")";
+  switch (reading.verdict) {
+    case CapturedV6::Unmarked:
+      return head +
+             ", so it resolved the capture table before anything could steer it away. The mark "
+             "is not reaching this process's IPv6 sockets at creation time";
+    case CapturedV6::RoutedIntoTunnel:
+      return head + " and the kernel routes it through " + tunnelInterface +
+             ". It carries the mark, so the mark is working: a policy rule read before the "
+             "capture rule, or a route through the tunnel in the table the mark leads to, is "
+             "sending it back in";
+    case CapturedV6::GlobalAddressPresent:
+      return head + " while " + reading.global_interface +
+             " holds a usable global IPv6 address. It carries the mark and its route leaves by " +
+             reading.route_device +
+             ", so the mark is working, but a socket so bound can never be answered and nothing "
+             "explains it";
+    case CapturedV6::NoIpv6Egress:
+    case CapturedV6::Unexplained:
+      break;
+  }
+  return head +
+         ". It carries the mark, so the mark is working, but its route and this host's IPv6 "
+         "addresses could not be read as agreeing with it, so it cannot be shown to stay out of "
+         "the tunnel";
+}
+
+// The v4 half has no reading but the refusal; this is only its sentence, which
+// must not blame a mark the socket carries either.
+inline std::string CapturedV4RefusalReason(bool marked, const std::string& source) {
+  const std::string head =
+      "a socket this daemon just opened was bound to the tunnel's own address (" + source + ")";
+  if (marked) {
+    return head +
+           ". It carries the mark, so the mark is working: a policy rule read before the capture "
+           "rule, a route through the tunnel in the table the mark leads to, or an interface "
+           "with no address of its own took it there";
+  }
+  return head +
+         ", so it resolved the capture table before anything could steer it away. The mark is "
+         "not reaching this process's sockets at creation time, and no mark applied after "
+         "connect() can undo it";
 }
 
 // THE R4 REFUSAL'S TEXT, for every leg of the witness: what failed, and the

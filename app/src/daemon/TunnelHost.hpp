@@ -307,6 +307,14 @@ class TunnelHost {
   void SetOrphanTimeoutSeconds(int seconds) { orphanTimeoutSeconds_ = seconds; }
 
  private:
+  // THE FIRST MEMBER, AND IT HAS TO BE. C++ builds members in the order they are
+  // declared here, whatever a constructor's list says, and members below copy
+  // their timings out of this one when they are built. A member declared before
+  // it would copy raw stack memory, which is what the dead-tunnel failsafe's
+  // windows were from 2026-10-20 (read from the released arm64 daemon: 16, 0, 169
+  // and pointers, not 20, 30 and 90 s).
+  const HostSettings settings_;
+
   static gboolean OnReaperTick(gpointer data);
   static void OnResolvedAppeared(GDBusConnection* connection, const gchar* name,
                                  const gchar* nameOwner, gpointer data);
@@ -520,8 +528,6 @@ class TunnelHost {
   // status_ mutators (take statusMutex_ themselves)
   void PublishError(const std::string& message, const std::string& code);
 
-  // First, so every member below that takes a timing can be built from it.
-  const HostSettings settings_;
   std::string storageRoot_;
   std::optional<urnet::NetworkSpaceManager> spaceManager_;
   std::optional<urnet::NetworkSpace> networkSpace_;

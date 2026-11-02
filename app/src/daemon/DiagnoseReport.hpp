@@ -9,7 +9,9 @@
 //     to go off the tunnel (the witness reads that as unroutable);
 //   * an interface that carries a default route but has no usable global
 //     address makes source selection take another interface's address, the
-//     tunnel's own once one is up, and the witness reads that as captured;
+//     tunnel's own once one is up. With no usable global address on any other
+//     interface either, the witness reads that as no IPv6 to protect and the
+//     tunnel comes up (TunnelPolicy.hpp, ReadCapturedV6);
 //   * whether the mark reaches the daemon's IPv6 sockets at creation, which no
 //     read can show: --selftest-egress measures it, and this says so.
 //
@@ -95,8 +97,8 @@ inline std::vector<std::string> DefaultRouteInterfaces(const std::string& listin
 
 // Usable global addresses per interface, from `ip -o addr show scope global`:
 // one line per address, "<index>: <name> <inet|inet6> <address>/<length> ...".
-// A tentative or failed-DAD address is no source a socket can be given, so it
-// is not counted. The address itself is never kept.
+// An address the kernel would not give a new socket is not counted
+// (AddressLineIsUsableSource). The address itself is never kept.
 inline std::map<std::string, int> UsableGlobalAddressCounts(const std::string& listing) {
   std::map<std::string, int> counts;
   std::istringstream lines(listing);
@@ -109,10 +111,7 @@ inline std::map<std::string, int> UsableGlobalAddressCounts(const std::string& l
     words >> index >> name >> family;
     if (index.empty() || index.back() != ':' || name.empty()) continue;
     if (family != "inet" && family != "inet6") continue;
-    if (line.find(" tentative") != std::string::npos ||
-        line.find(" dadfailed") != std::string::npos) {
-      continue;
-    }
+    if (!AddressLineIsUsableSource(line)) continue;
     const std::string::size_type at = name.find('@');  // a VLAN's "eth0.10@eth0"
     ++counts[at == std::string::npos ? name : name.substr(0, at)];
   }
@@ -160,8 +159,15 @@ inline std::string FamilyReport(const std::string& ip, const std::string& family
          " carries a default route but has no usable global address: a socket\n" +
          kListingIndent +
          "routed through it takes its source address from another interface, which\n" +
-         kListingIndent + "once a tunnel is up can be the tunnel's own (the egress witness\n" +
-         kListingIndent + "then reads it as captured)\n";
+         kListingIndent + "once a tunnel is up can be the tunnel's own\n";
+    // Only IPv6 has the reading that lets a tunnel come up over this shape.
+    if (family == "-6") {
+      s += std::string(kListingIndent) +
+           "(with no usable global IPv6 address on any other interface, the egress\n" +
+           kListingIndent + "witness reads that as no IPv6 to protect and the tunnel comes up)\n";
+    } else {
+      s += std::string(kListingIndent) + "(the egress witness then reads it as captured)\n";
+    }
   }
   return s;
 }

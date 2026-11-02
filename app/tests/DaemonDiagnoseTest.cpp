@@ -142,7 +142,11 @@ UR_TEST(DaemonDiagnose_AnUplinkWithoutAGlobalAddressIsNamed) {
   const std::string v6 = Ipv6Section(Report(bare));
   UR_EXPECT_TRUE_MSG(v6, Has(v6, "      wlan0 carries a default route but has no usable global "
                                  "address: a socket\n"));
-  UR_EXPECT_TRUE(Has(v6, "the tunnel's own (the egress witness\n      then reads it as captured)\n"));
+  UR_EXPECT_TRUE_MSG(v6, Has(v6, "once a tunnel is up can be the tunnel's own\n"
+                                 "      (with no usable global IPv6 address on any other "
+                                 "interface, the egress\n"
+                                 "      witness reads that as no IPv6 to protect and the tunnel "
+                                 "comes up)\n"));
 
   // The same laptop once its address is there, and one still in DAD.
   FakeIp addressed = LaptopWithoutAGlobalIpv6Address();
@@ -159,9 +163,22 @@ UR_TEST(DaemonDiagnose_AnUplinkWithoutAGlobalAddressIsNamed) {
                         "\\       valid_lft 86000sec preferred_lft 14000sec\n"));
   UR_EXPECT_TRUE(Has(Ipv6Section(Report(tentative)), "wlan0 carries a default route but has no "
                                                      "usable global address"));
+  // Deprecated: the kernel gives a new socket the tunnel's ULA over it.
+  FakeIp deprecated = LaptopWithoutAGlobalIpv6Address();
+  deprecated.Set("-6 -o addr show scope global",
+                 Printed("3: wlan0    inet6 2001:db8:5::7/64 scope global deprecated dynamic "
+                         "\\       valid_lft 86000sec preferred_lft 0sec\n"));
+  UR_EXPECT_TRUE(Has(Ipv6Section(Report(deprecated)), "wlan0 carries a default route but has no "
+                                                      "usable global address"));
   // The IPv4 half of that laptop has its address: no note there.
   UR_EXPECT_FALSE(Has(Report(bare).substr(0, Report(bare).find("\nIPv6\n")),
                       "has no usable global address"));
+  // IPv4 has no reading that lets a tunnel up over this shape: its note says so.
+  FakeIp bareV4 = LaptopWithoutAGlobalIpv6Address();
+  bareV4.Set("-4 -o addr show scope global", Printed(""));
+  const std::string v4 = Report(bareV4).substr(0, Report(bareV4).find("\nIPv6\n"));
+  UR_EXPECT_TRUE_MSG(v4, Has(v4, "(the egress witness then reads it as captured)\n"));
+  UR_EXPECT_FALSE(Has(v4, "the tunnel comes up"));
 }
 
 // Counted, never printed: the addresses source selection chooses from are a
