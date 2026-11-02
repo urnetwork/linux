@@ -6483,6 +6483,11 @@ msgid "Start free trial with {} month free"
 msgid_plural "Start free trial with {} months free"
 msgstr[0] "开始免费试用，另享 {} 个月免费"
 
+#. Plan card with the win-back offer (a returning subscriber's first month of the monthly plan at a discount): the billed first-month amount on the monthly card (most prominent line).
+msgctxt "offer_first_month_price"
+msgid "{} for your first month"
+msgstr "首月 {}"
+
 #. Plan card with the welcome offer: the billed first-year amount (most prominent line).
 msgctxt "offer_first_year_price"
 msgid "{} for your first year"
@@ -6494,16 +6499,31 @@ msgid "{} month of Pro, free"
 msgid_plural "{} months of Pro, free"
 msgstr[0] "Pro 免费 {} 个月"
 
+#. Win-back offer line on the monthly plan card and the account plan row. The number is the percent off the first month of the monthly plan.
+msgctxt "offer_percent_off_first_month"
+msgid "{}% off your first month"
+msgstr "首月立减 {}%"
+
 #. Onboarding offer screen sub-line under the headline. The number is the percent off the first year.
 msgctxt "offer_percent_off_first_year"
 msgid "{}% off your first year"
 msgstr "首年立减 {}%"
+
+#. Plan picker with the win-back offer and the monthly plan chosen: the terms line under the button (the discounted first month, then the regular monthly price).
+msgctxt "offer_terms_first_month"
+msgid "{0} for your first month, then {1}/month. Cancel anytime."
+msgstr "首月 {0}，之后 {1}/月。可随时取消。"
 
 #. Plan picker with the welcome offer: the terms line under the button (trial, discounted first year, renewal price).
 msgctxt "offer_terms_first_year"
 msgid "{0} day free, then {1} for your first year, then {2}/year. Cancel anytime."
 msgid_plural "{0} days free, then {1} for your first year, then {2}/year. Cancel anytime."
 msgstr[0] "免费 {0} 天，首年 {1}，之后 {2}/年。可随时取消。"
+
+#. Plan card with the win-back offer: the regular monthly price line under the first-month amount.
+msgctxt "offer_then_regular_monthly_price"
+msgid "then {}/month"
+msgstr "之后 {}/月"
 
 #. Plan card with the welcome offer: the renewal price line under the first-year amount.
 msgctxt "offer_then_regular_price"
@@ -9631,6 +9651,16 @@ msgctxt "site_landing_get_app"
 msgid "Get the app"
 msgstr "获取应用"
 
+#. Email landing page for the re-engagement "Keep me posted" button: shown when the choice could not be recorded; replying to the email is the fallback.
+msgctxt "site_landing_keep_failed"
+msgid "That didn't go through. Reply to the email and we'll keep you on the list."
+msgstr "没有成功。回复那封邮件，我们会把你留在名单上。"
+
+#. Email landing page for the re-engagement "Keep me posted" button: shown once the choice is recorded. Nothing opens; the page stays.
+msgctxt "site_landing_kept"
+msgid "Thanks. You'll keep getting an occasional note from us."
+msgstr "谢谢。我们会不时给你发来消息。"
+
 #. Email landing page: the button that retries the app link.
 msgctxt "site_landing_open_app"
 msgid "Open in the app"
@@ -10268,6 +10298,11 @@ msgstr "发生了意外错误。"
 msgctxt "site_usdc_offer_term"
 msgid "{1} months plus {0} days of Pro"
 msgstr "{1} 个月加 {0} 天 Pro"
+
+#. Upgrade sheet: the win-back offer line while a returning subscriber's offer is active (the monthly plan's first month at a discount). {percent} whole number, {when} a local date and time.
+msgctxt "site_winback_sheet_line"
+msgid "Welcome back: {0}% off your first month, until {1}"
+msgstr "欢迎回来：首月立减 {0}%，有效期至 {1}"
 
 #. Small muted button at the top of the post-login onboarding flow that leaves the whole flow.
 msgctxt "skip"

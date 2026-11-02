@@ -6473,6 +6473,11 @@ msgid "Start free trial with {} month free"
 msgid_plural "Start free trial with {} months free"
 msgstr[0] "무료 체험 시작 + {}개월 무료"
 
+#. Plan card with the win-back offer (a returning subscriber's first month of the monthly plan at a discount): the billed first-month amount on the monthly card (most prominent line).
+msgctxt "offer_first_month_price"
+msgid "{} for your first month"
+msgstr "첫 달 {}"
+
 #. Plan card with the welcome offer: the billed first-year amount (most prominent line).
 msgctxt "offer_first_year_price"
 msgid "{} for your first year"
@@ -6484,16 +6489,31 @@ msgid "{} month of Pro, free"
 msgid_plural "{} months of Pro, free"
 msgstr[0] "Pro {}개월 무료"
 
+#. Win-back offer line on the monthly plan card and the account plan row. The number is the percent off the first month of the monthly plan.
+msgctxt "offer_percent_off_first_month"
+msgid "{}% off your first month"
+msgstr "첫 달 {}% 할인"
+
 #. Onboarding offer screen sub-line under the headline. The number is the percent off the first year.
 msgctxt "offer_percent_off_first_year"
 msgid "{}% off your first year"
 msgstr "첫해 {}% 할인"
+
+#. Plan picker with the win-back offer and the monthly plan chosen: the terms line under the button (the discounted first month, then the regular monthly price).
+msgctxt "offer_terms_first_month"
+msgid "{0} for your first month, then {1}/month. Cancel anytime."
+msgstr "첫 달 {0}, 이후 {1}/월. 언제든 취소 가능."
 
 #. Plan picker with the welcome offer: the terms line under the button (trial, discounted first year, renewal price).
 msgctxt "offer_terms_first_year"
 msgid "{0} day free, then {1} for your first year, then {2}/year. Cancel anytime."
 msgid_plural "{0} days free, then {1} for your first year, then {2}/year. Cancel anytime."
 msgstr[0] "{0}일 무료, 첫해 {1}, 이후 {2}/년. 언제든 취소 가능."
+
+#. Plan card with the win-back offer: the regular monthly price line under the first-month amount.
+msgctxt "offer_then_regular_monthly_price"
+msgid "then {}/month"
+msgstr "이후 {}/월"
 
 #. Plan card with the welcome offer: the renewal price line under the first-year amount.
 msgctxt "offer_then_regular_price"
@@ -8980,6 +9000,11 @@ msgstr "이 네트워크에는 Stripe 결제 정보가 없습니다."
 msgctxt "site_subscription_error_store_unavailable"
 msgid "Stripe could not be reached just now. Try again in a moment."
 msgstr "지금은 Stripe에 연결할 수 없습니다. 잠시 후 다시 시도하세요."
+
+#. Upgrade sheet: the win-back offer line while a returning subscriber's offer is active (the monthly plan's first month at a discount). {percent} whole number, {when} a local date and time.
+msgctxt "site_winback_sheet_line"
+msgid "Welcome back: {0}% off your first month, until {1}"
+msgstr "다시 오신 것을 환영합니다: 첫 달 {0}% 할인, {1}까지"
 
 #. Small muted button at the top of the post-login onboarding flow that leaves the whole flow.
 msgctxt "skip"

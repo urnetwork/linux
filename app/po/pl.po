@@ -6505,6 +6505,11 @@ msgstr[0] "Rozpocznij okres próbny z {} miesiącem gratis"
 msgstr[1] "Rozpocznij okres próbny z {} miesiącami gratis"
 msgstr[2] "Rozpocznij okres próbny z {} miesiącami gratis"
 
+#. Plan card with the win-back offer (a returning subscriber's first month of the monthly plan at a discount): the billed first-month amount on the monthly card (most prominent line).
+msgctxt "offer_first_month_price"
+msgid "{} for your first month"
+msgstr "{} za pierwszy miesiąc"
+
 #. Plan card with the welcome offer: the billed first-year amount (most prominent line).
 msgctxt "offer_first_year_price"
 msgid "{} for your first year"
@@ -6518,10 +6523,20 @@ msgstr[0] "{} miesiąc Pro za darmo"
 msgstr[1] "{} miesiące Pro za darmo"
 msgstr[2] "{} miesięcy Pro za darmo"
 
+#. Win-back offer line on the monthly plan card and the account plan row. The number is the percent off the first month of the monthly plan.
+msgctxt "offer_percent_off_first_month"
+msgid "{}% off your first month"
+msgstr "{}% zniżki na pierwszy miesiąc"
+
 #. Onboarding offer screen sub-line under the headline. The number is the percent off the first year.
 msgctxt "offer_percent_off_first_year"
 msgid "{}% off your first year"
 msgstr "{}% zniżki na pierwszy rok"
+
+#. Plan picker with the win-back offer and the monthly plan chosen: the terms line under the button (the discounted first month, then the regular monthly price).
+msgctxt "offer_terms_first_month"
+msgid "{0} for your first month, then {1}/month. Cancel anytime."
+msgstr "{0} za pierwszy miesiąc, potem {1}/mies. Anuluj w każdej chwili."
 
 #. Plan picker with the welcome offer: the terms line under the button (trial, discounted first year, renewal price).
 msgctxt "offer_terms_first_year"
@@ -6530,6 +6545,11 @@ msgid_plural "{0} days free, then {1} for your first year, then {2}/year. Cancel
 msgstr[0] "{0} dzień za darmo, potem {1} za pierwszy rok, potem {2}/rok. Anuluj w każdej chwili."
 msgstr[1] "{0} dni za darmo, potem {1} za pierwszy rok, potem {2}/rok. Anuluj w każdej chwili."
 msgstr[2] "{0} dni za darmo, potem {1} za pierwszy rok, potem {2}/rok. Anuluj w każdej chwili."
+
+#. Plan card with the win-back offer: the regular monthly price line under the first-month amount.
+msgctxt "offer_then_regular_monthly_price"
+msgid "then {}/month"
+msgstr "potem {}/mies."
 
 #. Plan card with the welcome offer: the renewal price line under the first-year amount.
 msgctxt "offer_then_regular_price"
@@ -9038,6 +9058,11 @@ msgstr "Ta sieć nie ma danych rozliczeniowych w Stripe."
 msgctxt "site_subscription_error_store_unavailable"
 msgid "Stripe could not be reached just now. Try again in a moment."
 msgstr "Nie udało się teraz połączyć ze Stripe. Spróbuj ponownie za chwilę."
+
+#. Upgrade sheet: the win-back offer line while a returning subscriber's offer is active (the monthly plan's first month at a discount). {percent} whole number, {when} a local date and time.
+msgctxt "site_winback_sheet_line"
+msgid "Welcome back: {0}% off your first month, until {1}"
+msgstr "Witaj ponownie: {0}% zniżki na pierwszy miesiąc, do {1}"
 
 #. Small muted button at the top of the post-login onboarding flow that leaves the whole flow.
 msgctxt "skip"
