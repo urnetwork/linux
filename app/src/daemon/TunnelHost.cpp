@@ -2870,7 +2870,8 @@ void TunnelHost::StartDeadTunnelWatchLocked() {
   deadTunnelWatching_ = true;
   DaemonLogf("[tunnel] failsafe: watching this tunnel. It is stopped if it carries nothing: no "
              "proven exit for %llds, %llds of sending with nothing coming back, or %llds of "
-             "sdk silence. Nothing reconnects afterwards.\n",
+             "sdk silence. An account out of balance is stopped for the sdk's silence only. "
+             "Nothing reconnects afterwards.\n",
              static_cast<long long>(deadTunnelWatch_.settings().deadSlowMillis / 1000),
              static_cast<long long>(deadTunnelWatch_.settings().deadFastMillis / 1000),
              static_cast<long long>(deadTunnelWatch_.settings().sdkUnresponsiveMillis / 1000));
@@ -2910,8 +2911,18 @@ bool TunnelHost::CheckDeadTunnelLocked() {
   // Offline, the no-exit rules hold and their windows leave the time out; back
   // after a real stretch, every window starts again (TunnelWatchdog.hpp).
   inputs.offline = networkQualityTracker_.offline();
+  // Out of balance the no-exit rules hold and the traffic stays captured.
+  inputs.balance = sample.balance;
 
   const watchdog::WatchTick tick = deadTunnelWatch_.Tick(inputs);
+  if (tick.balanceStep == watchdog::BalanceStep::Entered) {
+    DaemonLogf("[tunnel] failsafe: this account is out of balance. Its traffic stays in the "
+               "tunnel, and the no-exit rules wait until a contract goes through or the user "
+               "disconnects\n");
+  } else if (tick.balanceStep == watchdog::BalanceStep::Released) {
+    DaemonLogf("[tunnel] failsafe: contracts are going through again, so every window starts "
+               "again from now\n");
+  }
   if (tick.wentOffline) {
     DaemonLogf("[tunnel] failsafe: this computer has no network; the no-exit rules wait for "
                "one, and the time offline is not counted\n");
@@ -2959,6 +2970,10 @@ bool TunnelHost::CheckDeadTunnelLocked() {
     DaemonLogf("[tunnel] failsafe: the countdown waits while this computer has no network\n");
   } else if (armedChanged && tick.offlineStep == watchdog::OfflineStep::BackRebased) {
     DaemonLogf("[tunnel] failsafe: the return to a network reset the countdown\n");
+  } else if (armedChanged && tick.balanceStep == watchdog::BalanceStep::Released) {
+    DaemonLogf("[tunnel] failsafe: the balance coming back reset the countdown\n");
+  } else if (armedChanged && tick.outOfBalance) {
+    DaemonLogf("[tunnel] failsafe: the countdown waits while this account is out of balance\n");
   } else if (armedChanged && (tick.verdictClockReset || tick.trafficClockReset)) {
     DaemonLogf("[tunnel] failsafe: the new destination's clocks reset the countdown\n");
   } else if (armedChanged && tick.verdict.reason == watchdog::DeadTunnelReason::None) {

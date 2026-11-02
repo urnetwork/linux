@@ -30,6 +30,7 @@ struct ExitSampler::Channel {
   int64_t sampleIntervalMillis = 0;
   // Guarded by mutex.
   Kick kick = Kick::None;
+  watchdog::BalanceReading balance;
 
   std::atomic<int64_t> provenCount{0};
   std::atomic<int64_t> lastProvenMillis{-1};
@@ -117,6 +118,10 @@ ExitSampler::Reading ExitSampler::Read() const {
   reading.connectionGeneration = channel_->connectionGeneration.load();
   reading.providerWindowMinSatisfied = channel_->providerWindowMinSatisfied.load();
   reading.sampled = channel_->sampled.load();
+  {
+    std::scoped_lock lock(channel_->mutex);
+    reading.balance = channel_->balance;
+  }
   return reading;
 }
 
@@ -152,6 +157,18 @@ void ExitSampler::Run(const std::shared_ptr<Channel>& channel) {
       if (channel->clock() < nextSampleMillis) continue;
       nextSampleMillis = channel->clock() + channel->sampleIntervalMillis;
 
+      // The contract status before the window status: a destination change
+      // resets the one and moves the other's generation, so in this order a
+      // status it reset is never read with the generation before it
+      // (BalanceReading).
+      std::optional<urnet::ContractStatus> contract;
+      try {
+        contract = ReadSdkJson<urnet::ContractStatus>(
+            urnet_device_get_contract_status(channel->deviceHandle));
+      } catch (const std::exception& e) {
+        NoteSampleFailure("contract status", e.what());
+      }
+      if (channel->cancelled.load()) return;
       std::optional<urnet::WindowStatus> window;
       try {
         window = ReadSdkJson<urnet::WindowStatus>(
@@ -178,6 +195,14 @@ void ExitSampler::Run(const std::shared_ptr<Channel>& channel) {
       if (window) {
         channel->connectionGeneration.store(window->ConnectionGeneration);
         channel->providerWindowMinSatisfied.store(window->MinSatisfied);
+      }
+      if (contract && window) {
+        std::scoped_lock lock(channel->mutex);
+        channel->balance.sampled = true;
+        channel->balance.insufficientBalance = contract->InsufficientBalance;
+        channel->balance.noPermission = contract->NoPermission;
+        channel->balance.connectionGeneration = window->ConnectionGeneration;
+        channel->balance.providerAddedCount = window->ProviderStateAdded;
       }
       channel->provenCount.store(proven);
       if (proven >= 1) channel->lastProvenMillis.store(now);

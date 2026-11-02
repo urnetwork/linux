@@ -463,14 +463,15 @@ class TunnelHost {
 
   // The dead-tunnel failsafe (TunnelWatchdog.hpp; docs/linux_agent_help.md
   // 6.4). From the up edge to the teardown an ExitSampler asks the session's
-  // device for its proven exits and tells it of the reaper's network changes,
-  // so the reaper makes no call on that device; the reaper reads the tun's
-  // packet counters and those readings once a second and hands them to
-  // deadTunnelWatch_. On a dead verdict the session ends through
+  // device for its proven exits and its contract status and tells it of the
+  // reaper's network changes, so the reaper makes no call on that device; the
+  // reaper reads the tun's packet counters and those readings once a second and
+  // hands them to deadTunnelWatch_. On a dead verdict the session ends through
   // StopUnsafeSessionLocked: the armed floor when the kill switch was asked
   // for, no table otherwise, a stop_reason of ctl::kStopReasonFailsafe* and the
-  // sentence saying which. Nothing reconnects. While a countdown is close,
-  // status says failsafe_armed. All three require opMutex_.
+  // sentence saying which. Nothing reconnects. An account out of balance gets no
+  // such verdict for carrying nothing (watchdog::OutOfBalanceHold). While a
+  // countdown is close, status says failsafe_armed. All three require opMutex_.
   void StartDeadTunnelWatchLocked();
   void StopDeadTunnelWatchLocked();
   // True when it ended the session.

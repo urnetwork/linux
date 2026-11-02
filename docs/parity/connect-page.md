@@ -134,7 +134,7 @@ NOTE (code wins over doc): the old idle copy “{network} is ready to connect”
 - If `connected_` && render ∈ {Evaluating, Degraded, Failed}:
   - wfpState ≠ "off" ⇒ Adv("conn_traffic_blocked", "No working provider right now — your traffic is blocked, not exposed. Disconnect to go back to your normal connection.")
   - wfpState == "off" ⇒ Adv("conn_traffic_blocked_unprotected", "No working provider right now — traffic sent into the tunnel is going nowhere, and leak protection is off, so some traffic may bypass it. Disconnect to go back to your normal connection.")
-  - If `statusFailsafeArmed()` append `" "` + Adv("conn_failsafe_armed", "If nothing gets through shortly, URnetwork will turn the tunnel off automatically so you keep your internet.")
+  - If `statusFailsafeArmed()` append `" "` + Adv("conn_failsafe_armed", "If nothing gets through shortly, URnetwork will turn the tunnel off automatically so you keep your internet.") An account out of balance never gets this for a traffic rule: the service holds them, and `failsafe_armed` stays false (`TunnelWatchdog`'s `OutOfBalanceHold`).
 - Else if `!connected_` && `proto::IsFailsafeStop(statusStopReason())`:
   - wfpState ≠ "off" ⇒ Adv("conn_failsafe_blocked", "The tunnel could not carry traffic, so URnetwork shut it down. The kill switch is on, so nothing leaves this machine until you connect again or turn the kill switch off — nothing is leaking.")
   - else ⇒ Adv("conn_failsafe_restored", "URnetwork disconnected you to keep you online: the tunnel was up but nothing was getting through. Your traffic is going out normally now and is NOT protected. Press Connect to try again.")

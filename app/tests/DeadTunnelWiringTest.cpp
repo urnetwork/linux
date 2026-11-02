@@ -101,6 +101,48 @@ UR_TEST(DeadTunnelWiring_TheReaperJudgesAfterTheGuards) {
   UR_EXPECT_TRUE(InOrder(check, {"ioLoopDied_.load()", "return false;"}));
 }
 
+// The hold reads the balance the app's alert reads, off the session's own device:
+// ContractStatus.InsufficientBalance, read on the sampler's thread like every
+// other call on that device, ahead of the window status it is paired with (so a
+// status a destination change reset is never paired with the generation before
+// it), and handed to the watch on every tick. There is no second source: nothing
+// else writes the reading, and the reaper never asks the device itself.
+UR_TEST(DeadTunnelWiring_TheHoldReadsTheBalanceOffTheSessionsDevice) {
+  const std::string sampler = ReadDeadTunnelSource("daemon/ExitSampler.cpp");
+  const std::string run = DeadTunnelBody(sampler, "void ExitSampler::Run(");
+  UR_EXPECT_TRUE(InOrder(run, {"urnet_device_get_contract_status(channel->deviceHandle)",
+                               "urnet_device_get_window_status(channel->deviceHandle)",
+                               "if (contract && window) {",
+                               "channel->balance.sampled = true;",
+                               "channel->balance.insufficientBalance = contract->InsufficientBalance;",
+                               "channel->balance.noPermission = contract->NoPermission;",
+                               "channel->balance.connectionGeneration = window->ConnectionGeneration;",
+                               "channel->balance.providerAddedCount = window->ProviderStateAdded;",
+                               "channel->lastSampleMillis.store(now);"}));
+  // one copy under the channel's lock, written and read whole
+  UR_EXPECT_TRUE(InOrder(run, {"if (contract && window) {", "std::scoped_lock lock(channel->mutex);",
+                               "channel->balance.sampled = true;"}));
+  const std::string read = DeadTunnelBody(sampler, "ExitSampler::Reading ExitSampler::Read() const {");
+  UR_EXPECT_TRUE(InOrder(read, {"std::scoped_lock lock(channel_->mutex);",
+                                "reading.balance = channel_->balance;"}));
+  // no sdk call under that lock: the mutex is taken, and let go, around the copy
+  const size_t copied = run.find("channel->balance.providerAddedCount");
+  UR_EXPECT_TRUE(copied != std::string::npos);
+  UR_EXPECT_FALSE(DeadTunnelHas(run.substr(run.find("if (contract && window) {"),
+                                           copied - run.find("if (contract && window) {")),
+                                "urnet_"));
+
+  const std::string host = ReadDeadTunnelSource("daemon/TunnelHost.cpp");
+  const std::string check = DeadTunnelBody(host, "bool TunnelHost::CheckDeadTunnelLocked() {");
+  UR_EXPECT_TRUE(InOrder(check, {"exitSampler_.Read()", "inputs.balance = sample.balance;",
+                                 "deadTunnelWatch_.Tick(inputs)"}));
+  UR_EXPECT_FALSE(DeadTunnelHas(check, "getContractStatus"));
+  UR_EXPECT_FALSE(DeadTunnelHas(check, "urnet_device_get_contract_status"));
+  // the log says what the hold did, on the tick it did it
+  UR_EXPECT_TRUE(InOrder(check, {"tick.balanceStep == watchdog::BalanceStep::Entered",
+                                 "tick.balanceStep == watchdog::BalanceStep::Released"}));
+}
+
 // The tun's counters in the right directions, the sampler's readings, and a
 // dead verdict ended through the protective teardown with the failsafe's
 // reason and code: the armed floor or no table, the outcome checked, published

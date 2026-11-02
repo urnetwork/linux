@@ -1,8 +1,9 @@
 // The dead-tunnel failsafe's view of the SDK (TunnelWatchdog.hpp): a thread of
-// its own that asks a session's device for its exits and its window status
-// every sample interval (DeadTunnelSettings::sdkSampleIntervalMillis, handed to
-// Start), publishes what the last completed sample said, and tells the device
-// when the physical network changed.
+// its own that asks a session's device for its contract status, its window
+// status and its exits every sample interval
+// (DeadTunnelSettings::sdkSampleIntervalMillis, handed to Start), publishes what
+// the last completed sample said, and tells the device when the physical network
+// changed.
 //
 // A thread, not the reaper, because every one of those calls can block on the
 // device's state lock while the reaper runs on the main loop that answers
@@ -19,7 +20,8 @@
 // block, which it owns a share of.
 //
 // Start, Stop, Read and NoteNetworkChange are called under TunnelHost's
-// opMutex_; the published readings are atomics and a kick is a flag, so none of
+// opMutex_; the published readings are atomics, or a copy under the channel's
+// lock that no SDK call is ever made inside, and a kick is a flag, so none of
 // them waits for the sampler.
 //
 // SPDX-License-Identifier: MPL-2.0
@@ -27,6 +29,8 @@
 
 #include <cstdint>
 #include <memory>
+
+#include "TunnelWatchdog.hpp"
 
 namespace urnw {
 
@@ -44,6 +48,9 @@ class ExitSampler {
     bool providerWindowMinSatisfied = true;
     // A sample has completed, so the two values above are its readings.
     bool sampled = false;
+    // The balance as the last sample that could read it found it. One copy, so
+    // a status is never paired with another sample's generation.
+    watchdog::BalanceReading balance;
   };
   using Clock = int64_t (*)();
 
