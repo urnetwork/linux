@@ -705,3 +705,92 @@ UR_TEST(dataLimitAndCaptureAreWiredIntoTheWindowAndThePage) {
   UR_EXPECT_TRUE(Has(page, "heldAlertUpgrade_->set_visible(offersUpgrade)"));
   UR_EXPECT_TRUE(Has(page, "heldAlertRefresh_->set_visible(offersUpgrade)"));
 }
+
+// ---- paying while refused ------------------------------------------------------
+
+namespace {
+
+using urnw::balance_notice::DisconnectFirstText;
+using urnw::balance_notice::SaysDisconnectFirst;
+
+}  // namespace
+
+// The checkout page and the upgrade sheet's own requests are this machine's
+// ordinary sockets, so the capture takes them and the floor stops them. The alert
+// says so while either stands, and only then: with neither the page goes out the
+// normal way, and a paying account at a limit has nothing to buy.
+UR_TEST(balanceNoticeSaysDisconnectFirstOnlyWhileAPaymentCannotGetThrough) {
+  for (int bits = 0; bits < 128; ++bits) {
+    Signals s;
+    s.insufficientBalance = bits & 1;
+    s.connectRequested = bits & 2;
+    s.pro = bits & 4;
+    s.polling = bits & 8;
+    s.dataLimit = bits & 16;
+    s.captured = bits & 32;
+    s.floorInForce = bits & 64;
+    const bool expected = s.insufficientBalance && s.connectRequested && !s.pro && !s.polling &&
+                          (s.captured || s.floorInForce);
+    if (SaysDisconnectFirst(s) != expected) {
+      UR_FAIL("disconnect-first line wrong for case " + std::to_string(bits));
+    }
+  }
+}
+
+UR_TEST(balanceNoticeDisconnectFirstFollowsTheTrafficLine) {
+  Signals s = Held();
+  s.captured = true;
+  UR_EXPECT_TRUE(TrafficLineFor(s) == TrafficLine::Held);
+  UR_EXPECT_TRUE(SaysDisconnectFirst(s));
+  // the daemon stopped the tunnel under it, the kill switch's floor stands: the
+  // page is stopped there too, and the user's Disconnect lifts the floor
+  s.captured = false;
+  s.floorInForce = true;
+  UR_EXPECT_TRUE(TrafficLineFor(s) == TrafficLine::Blocked);
+  UR_EXPECT_TRUE(SaysDisconnectFirst(s));
+  // no capture and no floor: nothing to disconnect from for a payment
+  s.floorInForce = false;
+  UR_EXPECT_TRUE(TrafficLineFor(s) == TrafficLine::NotProtected);
+  UR_EXPECT_FALSE(SaysDisconnectFirst(s));
+  // a paying account at a limit is offered nothing to pay for
+  Signals limit = AtLimit();
+  limit.captured = true;
+  UR_EXPECT_TRUE(ShowsAlert(limit));
+  UR_EXPECT_FALSE(SaysDisconnectFirst(limit));
+  ExpectText("the line's key", "insufficient_balance_disconnect_first", DisconnectFirstText().key);
+}
+
+UR_TEST(balanceNoticeDisconnectFirstIsOnTheAlertBesideItsDisconnect) {
+  const std::string page = ReadSource("ConnectPage.cpp");
+  const size_t alertAt = page.find("heldAlert_ = Gtk::make_managed");
+  UR_EXPECT_TRUE(alertAt != std::string::npos);
+  if (alertAt != std::string::npos) {
+    const std::string block = page.substr(alertAt, page.find("paneAContent_->append(*heldAlert_)", alertAt) - alertAt);
+    // the line, then the row whose Disconnect it names
+    const size_t lineAt = block.find("heldAlert_->append(*heldAlertDisconnectFirst_)");
+    UR_EXPECT_TRUE(lineAt != std::string::npos);
+    UR_EXPECT_TRUE(lineAt < block.find("heldAlert_->append(*actions)"));
+    UR_EXPECT_TRUE(Has(block, "balance_notice::DisconnectFirstText()"));
+    UR_EXPECT_TRUE(Has(block, "T_(disconnectFirst.key, disconnectFirst.english)"));
+    UR_EXPECT_TRUE(Has(block, "T_(\"disconnect\", \"Disconnect\")"));
+    UR_EXPECT_TRUE(Has(block, "on_balance_disconnect()"));
+  }
+  const std::string apply = FunctionBody(page, "void ConnectPage::ApplyBalanceNotice(const balance_notice::Signals& signals) {");
+  UR_EXPECT_TRUE(Has(apply, "heldAlertDisconnectFirst_->set_visible(balance_notice::SaysDisconnectFirst(signals))"));
+}
+
+// Upgrading comes after the user's own Disconnect, and it has to leave the provide
+// mode where the user set it: the disconnect path only reads it, to keep providing.
+UR_TEST(balanceNoticeDisconnectLeavesTheProvideModeAlone) {
+  const std::string window = ReadSource("MainWindow.cpp");
+  const std::string host = ReadSource("SdkHost.cpp");
+  for (const std::string& body :
+       {FunctionBody(window, "void MainWindow::DisconnectFromBalanceNotice() {"),
+        FunctionBody(window, "void MainWindow::ToggleConnect(bool disconnect) {"),
+        FunctionBody(host, "void SdkHost::Disconnect() {"),
+        FunctionBody(host, "void SdkHost::DisconnectNow() {")}) {
+    UR_EXPECT_FALSE(body.empty());
+    UR_EXPECT_FALSE(Has(body, "SetProvideControlMode"));
+    UR_EXPECT_FALSE(Has(body, "setProvideControlMode"));
+  }
+}
