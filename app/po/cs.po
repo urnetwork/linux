@@ -6505,6 +6505,11 @@ msgstr[0] "Začít zkušební období s {} měsícem zdarma"
 msgstr[1] "Začít zkušební období s {} měsíci zdarma"
 msgstr[2] "Začít zkušební období s {} měsíci zdarma"
 
+#. Plan card with the win-back offer (a returning subscriber's first month of the monthly plan at a discount): the billed first-month amount on the monthly card (most prominent line).
+msgctxt "offer_first_month_price"
+msgid "{} for your first month"
+msgstr "{} za první měsíc"
+
 #. Plan card with the welcome offer: the billed first-year amount (most prominent line).
 msgctxt "offer_first_year_price"
 msgid "{} for your first year"
@@ -6518,10 +6523,20 @@ msgstr[0] "{} měsíc Pro zdarma"
 msgstr[1] "{} měsíce Pro zdarma"
 msgstr[2] "{} měsíců Pro zdarma"
 
+#. Win-back offer line on the monthly plan card and the account plan row. The number is the percent off the first month of the monthly plan.
+msgctxt "offer_percent_off_first_month"
+msgid "{}% off your first month"
+msgstr "{} % sleva na první měsíc"
+
 #. Onboarding offer screen sub-line under the headline. The number is the percent off the first year.
 msgctxt "offer_percent_off_first_year"
 msgid "{}% off your first year"
 msgstr "{} % sleva na první rok"
+
+#. Plan picker with the win-back offer and the monthly plan chosen: the terms line under the button (the discounted first month, then the regular monthly price).
+msgctxt "offer_terms_first_month"
+msgid "{0} for your first month, then {1}/month. Cancel anytime."
+msgstr "{0} za první měsíc, poté {1}/měsíc. Zrušit lze kdykoli."
 
 #. Plan picker with the welcome offer: the terms line under the button (trial, discounted first year, renewal price).
 msgctxt "offer_terms_first_year"
@@ -6530,6 +6545,11 @@ msgid_plural "{0} days free, then {1} for your first year, then {2}/year. Cancel
 msgstr[0] "{0} den zdarma, poté {1} za první rok, poté {2}/rok. Zrušit lze kdykoli."
 msgstr[1] "{0} dny zdarma, poté {1} za první rok, poté {2}/rok. Zrušit lze kdykoli."
 msgstr[2] "{0} dní zdarma, poté {1} za první rok, poté {2}/rok. Zrušit lze kdykoli."
+
+#. Plan card with the win-back offer: the regular monthly price line under the first-month amount.
+msgctxt "offer_then_regular_monthly_price"
+msgid "then {}/month"
+msgstr "poté {}/měsíc"
 
 #. Plan card with the welcome offer: the renewal price line under the first-year amount.
 msgctxt "offer_then_regular_price"
@@ -9038,6 +9058,11 @@ msgstr "Tato síť nemá ve Stripe žádné fakturační údaje."
 msgctxt "site_subscription_error_store_unavailable"
 msgid "Stripe could not be reached just now. Try again in a moment."
 msgstr "Stripe se teď nepodařilo kontaktovat. Zkuste to za chvíli znovu."
+
+#. Upgrade sheet: the win-back offer line while a returning subscriber's offer is active (the monthly plan's first month at a discount). {percent} whole number, {when} a local date and time.
+msgctxt "site_winback_sheet_line"
+msgid "Welcome back: {0}% off your first month, until {1}"
+msgstr "Vítejte zpět: {0} % sleva na první měsíc, do {1}"
 
 #. Small muted button at the top of the post-login onboarding flow that leaves the whole flow.
 msgctxt "skip"

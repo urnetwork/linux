@@ -6521,6 +6521,11 @@ msgstr[1] "התחילו ניסיון בחינם עם חודשיים במתנה"
 msgstr[2] "התחילו ניסיון בחינם עם {} חודשים במתנה"
 msgstr[3] "התחילו ניסיון בחינם עם {} חודשים במתנה"
 
+#. Plan card with the win-back offer (a returning subscriber's first month of the monthly plan at a discount): the billed first-month amount on the monthly card (most prominent line).
+msgctxt "offer_first_month_price"
+msgid "{} for your first month"
+msgstr "{} לחודש הראשון"
+
 #. Plan card with the welcome offer: the billed first-year amount (most prominent line).
 msgctxt "offer_first_year_price"
 msgid "{} for your first year"
@@ -6535,10 +6540,20 @@ msgstr[1] "חודשיים של Pro בחינם"
 msgstr[2] "{} חודשי Pro בחינם"
 msgstr[3] "{} חודשי Pro בחינם"
 
+#. Win-back offer line on the monthly plan card and the account plan row. The number is the percent off the first month of the monthly plan.
+msgctxt "offer_percent_off_first_month"
+msgid "{}% off your first month"
+msgstr "{}% הנחה על החודש הראשון"
+
 #. Onboarding offer screen sub-line under the headline. The number is the percent off the first year.
 msgctxt "offer_percent_off_first_year"
 msgid "{}% off your first year"
 msgstr "{}% הנחה על השנה הראשונה"
+
+#. Plan picker with the win-back offer and the monthly plan chosen: the terms line under the button (the discounted first month, then the regular monthly price).
+msgctxt "offer_terms_first_month"
+msgid "{0} for your first month, then {1}/month. Cancel anytime."
+msgstr "{0} לחודש הראשון, ואז {1} לחודש. אפשר לבטל בכל עת."
 
 #. Plan picker with the welcome offer: the terms line under the button (trial, discounted first year, renewal price).
 msgctxt "offer_terms_first_year"
@@ -6548,6 +6563,11 @@ msgstr[0] "יום אחד בחינם, לאחר מכן {1} לשנה הראשונה
 msgstr[1] "יומיים בחינם, לאחר מכן {1} לשנה הראשונה, ואז {2}/שנה. אפשר לבטל בכל עת."
 msgstr[2] "{0} ימים בחינם, לאחר מכן {1} לשנה הראשונה, ואז {2}/שנה. אפשר לבטל בכל עת."
 msgstr[3] "{0} ימים בחינם, לאחר מכן {1} לשנה הראשונה, ואז {2}/שנה. אפשר לבטל בכל עת."
+
+#. Plan card with the win-back offer: the regular monthly price line under the first-month amount.
+msgctxt "offer_then_regular_monthly_price"
+msgid "then {}/month"
+msgstr "לאחר מכן {} לחודש"
 
 #. Plan card with the welcome offer: the renewal price line under the first-year amount.
 msgctxt "offer_then_regular_price"
@@ -9067,6 +9087,11 @@ msgstr "לרשת הזו אין פרטי חיוב ב-Stripe."
 msgctxt "site_subscription_error_store_unavailable"
 msgid "Stripe could not be reached just now. Try again in a moment."
 msgstr "לא ניתן היה להתחבר ל-Stripe כרגע. נסו שוב בעוד רגע."
+
+#. Upgrade sheet: the win-back offer line while a returning subscriber's offer is active (the monthly plan's first month at a discount). {percent} whole number, {when} a local date and time.
+msgctxt "site_winback_sheet_line"
+msgid "Welcome back: {0}% off your first month, until {1}"
+msgstr "מבצע חזרה: {0}% הנחה על החודש הראשון, עד {1}"
 
 #. Small muted button at the top of the post-login onboarding flow that leaves the whole flow.
 msgctxt "skip"
