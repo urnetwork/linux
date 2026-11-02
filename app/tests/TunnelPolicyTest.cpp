@@ -1300,7 +1300,9 @@ UR_TEST(theNetworkSwitchPathReadsItsTimingsFromSettings) {
   UR_EXPECT_TRUE(Contains(hostHeader, "deadTunnelWatch_{settings_.dead_tunnel};"));
   UR_EXPECT_TRUE(Contains(hostHeader, "networkQualityTracker_{settings_.network_path};"));
   UR_EXPECT_TRUE(Contains(hostHeader, "suspendDetector_{settings_.suspend};"));
-  // Built first, so every member that takes a timing is built from it.
+  // Built first, so every member that takes a timing is built from it: every one
+  // of them, which DeadTunnelWiring_EveryMemberBuiltFromTheSettingsIsBuiltAfterThem
+  // checks, because this used to compare it with one member that was after it.
   UR_EXPECT_TRUE(hostHeader.find("const HostSettings settings_;") <
                  hostHeader.find("std::string storageRoot_;"));
 

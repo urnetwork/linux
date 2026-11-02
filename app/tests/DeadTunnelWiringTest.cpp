@@ -287,3 +287,36 @@ UR_TEST(DeadTunnelWiring_TheCountdownsEndIsLoggedTruthfully) {
                                  "the tunnel is carrying again"}));
   UR_EXPECT_FALSE(DeadTunnelHas(check, "} else if (armedChanged) {"));
 }
+
+// C++ builds members in the order the class declares them, whatever the
+// constructor's list says. deadTunnelWatch_{settings_.dead_tunnel} sat above
+// settings_, so the failsafe copied its windows from memory nothing had written:
+// in the released arm64 daemon, read at start-up, 16, 0, 169 and pointers where 20,
+// 30 and 90 s belong. No test constructs a TunnelHost, because it needs glib and
+// the SDK, so the class is read.
+UR_TEST(DeadTunnelWiring_EveryMemberBuiltFromTheSettingsIsBuiltAfterThem) {
+  const std::string header = ReadDeadTunnelSource("daemon/TunnelHost.hpp");
+  const std::string declaration = "const HostSettings settings_;";
+  const size_t settings = header.find(declaration);
+  UR_EXPECT_TRUE(settings != std::string::npos);
+  // Nothing in the class reads them before they are declared.
+  UR_EXPECT_TRUE_MSG("settings_ is read above its declaration",
+                     header.find("settings_") == settings + declaration.find("settings_"));
+  // The ones that are built from them, which the search above has to have passed.
+  for (const char* const member :
+       {"deadTunnelWatch_{settings_.dead_tunnel};",
+        "networkQualityTracker_{settings_.network_path};",
+        "suspendDetector_{settings_.suspend};"}) {
+    const size_t at = header.find(member);
+    if (at == std::string::npos || at < settings) UR_FAIL(member);
+  }
+  // First of the private members, so no later edit needs to know the order.
+  const size_t privateAt = header.find(" private:\n", header.find("class TunnelHost {"));
+  UR_EXPECT_TRUE(privateAt != std::string::npos);
+  size_t firstMember = privateAt + std::string(" private:\n").size();
+  while (firstMember < header.size() &&
+         (header[firstMember] == ' ' || header[firstMember] == '\n')) {
+    ++firstMember;
+  }
+  UR_EXPECT_TRUE_MSG("settings_ opens the private section", firstMember == settings);
+}
