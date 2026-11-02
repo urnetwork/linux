@@ -18,6 +18,9 @@
 // A paying account refused at a data limit gets the same alert and notification
 // in words for the limit, with no upgrade on offer (DataLimitGate).
 //
+// Checkout rides the tunnel on this platform, so while the traffic is held or
+// blocked the alert also says to disconnect before paying (SaysDisconnectFirst).
+//
 // An episode starts when insufficient balance is first seen and ends when it
 // clears. The notification is posted at most once per episode, at the first
 // observation where the gate holds and a connection is requested (a Pro plan
@@ -131,6 +134,25 @@ inline Text TrafficText(const Signals& s) {
       break;
   }
   return {"conn_not_protected", "Your internet traffic is not protected."};
+}
+
+// Paying while refused. Checkout is a page on the network: the upgrade sheet's web
+// view or the browser it falls back to, and the sheet's own requests. All of them
+// are this machine's ordinary sockets: only the daemon's carry the egress mark
+// (Tunnel.hpp kEgressMark), so the capture takes them and the floor stops them.
+// While the traffic is held or blocked a payment cannot get through, and there is
+// deliberately no way around that: a checkout bypass could leak. So the alert says
+// to disconnect first, and the user's own Disconnect (which lifts the floor too,
+// TunnelHost's stop for a user) gives the network back. Nothing here disconnects.
+// With no capture and no floor the page goes out the normal way, and a paying
+// account at a limit is offered nothing to pay for.
+inline bool SaysDisconnectFirst(const Signals& s) {
+  return HeldAlert(s) && TrafficLineFor(s) != TrafficLine::NotProtected;
+}
+
+inline Text DisconnectFirstText() {
+  return {"insufficient_balance_disconnect_first",
+          "To upgrade, press Disconnect first. Payment can't get through until you do."};
 }
 
 // The alert's refresh line, its Why? and its Upgrade explain a balance to refill.

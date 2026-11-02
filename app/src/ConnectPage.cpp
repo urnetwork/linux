@@ -700,6 +700,16 @@ void ConnectPage::BuildPaneA() {
     heldAlertTraffic_->set_wrap(true);
     CapNatural(heldAlertTraffic_, 20);
     heldAlert_->append(*heldAlertTraffic_);
+    // checkout rides the tunnel here, so Upgrade cannot work until the user
+    // disconnects: the line names the button beside it (SaysDisconnectFirst)
+    const balance_notice::Text disconnectFirst = balance_notice::DisconnectFirstText();
+    heldAlertDisconnectFirst_ =
+        Gtk::make_managed<Gtk::Label>(T_(disconnectFirst.key, disconnectFirst.english));
+    heldAlertDisconnectFirst_->set_xalign(0);
+    heldAlertDisconnectFirst_->set_wrap(true);
+    CapNatural(heldAlertDisconnectFirst_, 20);
+    heldAlertDisconnectFirst_->set_visible(false);
+    heldAlert_->append(*heldAlertDisconnectFirst_);
     auto* actions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
     actions->set_homogeneous(true);
     auto* upgrade = Gtk::make_managed<Gtk::Button>(T_("upgrade", "Upgrade"));
@@ -1877,6 +1887,7 @@ void ConnectPage::ApplyBalanceNotice(const balance_notice::Signals& signals) {
   heldAlert_->set_visible(balance_notice::ShowsAlert(signals));
   const balance_notice::Text traffic = balance_notice::TrafficText(signals);
   heldAlertTraffic_->set_text(T_(traffic.key, traffic.english));
+  heldAlertDisconnectFirst_->set_visible(balance_notice::SaysDisconnectFirst(signals));
   const bool offersUpgrade = balance_notice::AlertOffersUpgrade(signals);
   heldAlertRefresh_->set_visible(offersUpgrade);
   heldAlertUpgrade_->set_visible(offersUpgrade);
