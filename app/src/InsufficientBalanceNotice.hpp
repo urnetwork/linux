@@ -5,7 +5,9 @@
 // is requested the tunnel keeps capturing with no provider behind it, so the
 // user is told that their traffic is held and that Disconnect releases it.
 // Nothing here ever disconnects: the notice only informs, and the user's own
-// Disconnect (MainWindow::ToggleConnect) is the one way out.
+// Disconnect (MainWindow::ToggleConnect) is the one way out. The daemon's
+// dead-tunnel failsafe holds for the same state, read from the same status
+// (TunnelWatchdog.hpp OutOfBalanceHold), so the sentence stays true.
 //
 // An episode starts when insufficient balance is first seen and ends when it
 // clears. The notification is posted at most once per episode, at the first

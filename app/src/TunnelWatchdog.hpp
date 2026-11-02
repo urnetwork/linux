@@ -36,6 +36,20 @@
 // flapping cannot keep a dead tunnel alive.
 // SdkUnresponsive is not about the network, and keeps watching throughout.
 //
+// AND AN ACCOUNT OUT OF BALANCE IS NOT A DEAD TUNNEL EITHER (owner decisions
+// 2026-10-02 and 2026-11-02). The platform refuses its contracts, so it loses its
+// exits and carries nothing, and every reading the no-exit rules take says dead.
+// That is a billing state, which the app already tells the user about
+// (InsufficientBalanceNotice.hpp), and stopping the session for it would let
+// their traffic out in the clear. So while the session is out of balance
+// (OutOfBalanceHold, below) NoInbound and NoExit hold, no countdown for them is
+// shown, the traffic stays captured, and the user's own Disconnect is the way
+// out. When the balance is back every window starts again, as after a suspend:
+// the session is owed the normal window to prove an exit.
+// SdkUnresponsive keeps watching here too. It is about a hung process, which no
+// balance can bring back: a wedged device answers nothing, the balance included,
+// and a Disconnect would only wait on the same lock.
+//
 // Pure, so every rule is a table test: TunnelHost reads the tun's packet
 // counters and the exit sampler's last readings once a second on its reaper,
 // hands them to DeadTunnelWatch with one clock, and acts on the verdict. The
@@ -171,6 +185,97 @@ inline constexpr int64_t StampInSession(int64_t stampMillis, int64_t sessionStar
   return stampMillis >= sessionStartMillis ? stampMillis : -1;
 }
 
+// ---- the balance hold --------------------------------------------------------
+
+// What one sample of the SDK says about the balance: ContractStatus.
+// InsufficientBalance, the same reading the app's held alert and notification
+// take from this device, and the window status read after it.
+struct BalanceReading {
+  // Both were read. False says nothing about the balance, and the hold stays as
+  // it is.
+  bool sampled = false;
+  // ContractStatus::InsufficientBalance: the platform's last word on this
+  // destination's contracts was that the balance falls short.
+  bool insufficientBalance = false;
+  // ContractStatus::NoPermission, which can push a refusal out of the status
+  // with no grant in between (the SDK's status window keeps the kind that fills
+  // it). It says nothing about the balance.
+  bool noPermission = false;
+  // WindowStatus::ConnectionGeneration. The status has to be read first, so a
+  // destination change between the two reads can never pair a status it reset
+  // with the generation before it.
+  int64_t connectionGeneration = 0;
+  // WindowStatus::ProviderStateAdded: the providers that destination's window
+  // admitted. Admission takes an answered ping, which took a granted contract.
+  int64_t providerAddedCount = 0;
+};
+
+// What one reading did to the hold.
+enum class BalanceStep {
+  None,
+  // First seen out of balance: the no-exit rules hold from here.
+  Entered,
+  // Contracts are going through again: every window starts again.
+  Released,
+};
+
+// Whether the session is out of balance, kept across the readings that cannot
+// tell. Raised by the first reading of insufficient balance and kept until the
+// platform has said contracts go through, because the two ways to get it wrong
+// do not cost the same: stopping an account that is out of balance lets its
+// traffic out in the clear, and holding one that is not leaves it captured and
+// told so, with Disconnect working.
+//
+// The SDK's status only says that the last result on this destination was not a
+// refusal, and it reads the same for a grant and for nothing yet: a refusal
+// raises it, a granted contract clears it, a result about something else leaves
+// it, and a new destination resets it with the connection it replaces (a location
+// change, a reconnect). So:
+//   - not raised, same generation as the refusal: a contract was granted.
+//   - not raised, a newer generation: the reset says nothing about the balance,
+//     and the hold stays until that destination's window admits a provider.
+//   - no reading, or a no-permission result in its place: says nothing, either way.
+//
+// The failure directions, each pinned by a test (FailsafeOutOfBalanceTest.cpp):
+//   - A stale or missing signal never stops an account out of balance: an
+//     unreadable status, a reset, and a window that never forms all keep the hold.
+//   - A dead tunnel on an account in balance is stopped as documented. A session
+//     never told it is out of balance is judged by the rules alone, and this
+//     includes a balance nobody has reported yet: a refusal comes back within
+//     seconds of the first contract asked for, far inside the shortest window,
+//     and with no answer at all there is nothing to tell a dead tunnel from a
+//     billing state by, which is the failure the failsafe exists for. A start
+//     out of balance is refused before it gets here (DecideStartConnect).
+//   - Once the account is back in balance but no new provider has been admitted
+//     since a reset, the session stays held: nothing has said so yet. A funded
+//     account whose rebuilt window never forms is the one left captured until
+//     its user acts: the app reads "Couldn't connect" and its Retry starts a new
+//     session, judged afresh. That cost is the one this chooses over a leak.
+class OutOfBalanceHold {
+ public:
+  BalanceStep Observe(const BalanceReading& reading) {
+    if (!reading.sampled) return BalanceStep::None;
+    if (reading.insufficientBalance) {
+      refusedGeneration_ = reading.connectionGeneration;
+      if (held_) return BalanceStep::None;
+      held_ = true;
+      return BalanceStep::Entered;
+    }
+    if (!held_ || reading.noPermission) return BalanceStep::None;
+    const bool granted = reading.connectionGeneration <= refusedGeneration_ ||
+                         reading.providerAddedCount > 0;
+    if (!granted) return BalanceStep::None;
+    held_ = false;
+    return BalanceStep::Released;
+  }
+
+  bool held() const { return held_; }
+
+ private:
+  bool held_ = false;
+  int64_t refusedGeneration_ = 0;
+};
+
 // ---- the verdict ------------------------------------------------------------
 
 enum class DeadTunnelReason {
@@ -234,6 +339,9 @@ struct DeadTunnelSignals {
   bool offline = false;
   int64_t provenOfflineMillis = 0;
   int64_t inboundOfflineMillis = 0;
+
+  // The account is out of balance (OutOfBalanceHold): the no-exit rules hold.
+  bool outOfBalance = false;
 };
 
 struct DeadTunnelVerdict {
@@ -297,10 +405,11 @@ inline DeadTunnelVerdict Evaluate(const DeadTunnelSignals& s, int64_t nowMillis,
   // The two no-exit rules measure online time only, and hold while offline:
   // with no physical path nothing could prove an exit or answer a packet. The
   // veto above and SdkUnresponsive read the raw ages, so being offline neither
-  // extends the veto nor hides a wedged SDK.
+  // extends the veto nor hides a wedged SDK. They hold while out of balance too:
+  // that session is meant to carry nothing until the user acts.
   const int64_t provenOnlineAge = detail::OnlineAge(provenAge, s.provenOfflineMillis);
   const int64_t inboundOnlineAge = detail::OnlineAge(inboundAge, s.inboundOfflineMillis);
-  const bool fastApplies = settings.deadFastMillis > 0 && !s.offline &&
+  const bool fastApplies = settings.deadFastMillis > 0 && !s.offline && !s.outOfBalance &&
                            s.providerWindowReady && s.provenCount == 0 &&
                            s.outboundSinceInbound >= settings.deadFastOutboundPackets;
   if (fastApplies && inboundOnlineAge >= settings.deadFastMillis &&
@@ -311,8 +420,8 @@ inline DeadTunnelVerdict Evaluate(const DeadTunnelSignals& s, int64_t nowMillis,
 
   // Only once the sampler has answered: never having a reading is
   // SdkUnresponsive's question, not this rule's.
-  const bool slowApplies =
-      settings.deadSlowMillis > 0 && !s.offline && s.provenCount == 0 && s.lastSampleMillis >= 0;
+  const bool slowApplies = settings.deadSlowMillis > 0 && !s.offline && !s.outOfBalance &&
+                           s.provenCount == 0 && s.lastSampleMillis >= 0;
   if (slowApplies && provenOnlineAge >= settings.deadSlowMillis) {
     v.reason = DeadTunnelReason::NoExit;
     return v;
@@ -320,7 +429,7 @@ inline DeadTunnelVerdict Evaluate(const DeadTunnelSignals& s, int64_t nowMillis,
 
   // Nothing fired: is a countdown accumulating, and how close is it? The
   // unresponsive one counts only once overdue, the fast one only while its
-  // traffic holds, and neither no-exit one while offline.
+  // traffic holds, and neither no-exit one while offline or out of balance.
   int64_t soonest = -1;
   auto consider = [&soonest](int64_t remaining) {
     if (remaining < 0) remaining = 0;
@@ -452,6 +561,8 @@ struct WatchInputs {
   bool windowSampled = true;
   // The reaper's path tracker finds no usable physical path in any family.
   bool offline = false;
+  // The sampler's last reading of the balance.
+  BalanceReading balance;
 };
 
 struct WatchTick {
@@ -469,13 +580,19 @@ struct WatchTick {
   OfflineStep offlineStep = OfflineStep::Online;
   bool wentOffline = false;
   int64_t offlineStretchMillis = 0;
+  // What this tick's reading did to the balance hold, and whether it holds now.
+  // Released rebases every window, like a freeze, and reaches no verdict on
+  // that tick.
+  BalanceStep balanceStep = BalanceStep::None;
+  bool outOfBalance = false;
   // The verdict's inputs, for the log line of a teardown.
   DeadTunnelSignals signals;
 };
 
 // The evaluator of one Up session: the freeze rebase, the destination clocks,
-// the offline hold and the traffic edges around Evaluate, ticked every
-// evaluateIntervalMillis, every timing read from the settings it was built with.
+// the offline and balance holds and the traffic edges around Evaluate, ticked
+// every evaluateIntervalMillis, every timing read from the settings it was built
+// with.
 class DeadTunnelWatch {
  public:
   DeadTunnelWatch() = default;
@@ -487,6 +604,7 @@ class DeadTunnelWatch {
   void Start(const WatchInputs& in) {
     lastTickMillis_ = in.nowMillis;
     epoch_ = ConnectionEpochTracker();
+    outOfBalance_ = OutOfBalanceHold();
     Rebase(in);
   }
 
@@ -495,6 +613,10 @@ class DeadTunnelWatch {
     const int64_t now = in.nowMillis;
     tick.tickGapMillis = now - lastTickMillis_;
     lastTickMillis_ = now;
+    // Ahead of the rebases: a suspend or a return to a network restarts the
+    // windows, and tells nothing about the balance.
+    tick.balanceStep = outOfBalance_.Observe(in.balance);
+    tick.outOfBalance = outOfBalance_.held();
     if (EvaluatorFroze(tick.tickGapMillis, settings_)) {
       // Nothing watched the session in that gap: every age would be the length
       // of the gap, not of a failure. Rebase, and take the current readings as
@@ -515,6 +637,12 @@ class DeadTunnelWatch {
     if (tick.offlineStep == OfflineStep::BackRebased) {
       // Back on a network after long enough that everything measured before
       // describes another one: a fresh grace, exactly as after a freeze.
+      Rebase(in);
+      return tick;
+    }
+    if (tick.balanceStep == BalanceStep::Released) {
+      // Everything measured while held was a session meant to carry nothing:
+      // a fresh grace, or the rule the hold kept back would fire on this tick.
       Rebase(in);
       return tick;
     }
@@ -560,6 +688,7 @@ class DeadTunnelWatch {
     s.offline = in.offline;
     s.provenOfflineMillis = provenOfflineMillis_;
     s.inboundOfflineMillis = inboundOfflineMillis_;
+    s.outOfBalance = outOfBalance_.held();
     tick.verdict = Evaluate(s, now, settings_);
     return tick;
   }
@@ -568,8 +697,9 @@ class DeadTunnelWatch {
   int64_t trafficStartMillis() const { return trafficStartMillis_; }
 
  private:
-  // Every window starts again from `in`: the up edge, a freeze, and a return
-  // from a long offline stretch. Nothing measured before it is evidence now.
+  // Every window starts again from `in`: the up edge, a freeze, a return from a
+  // long offline stretch, and the balance coming back. Nothing measured before
+  // it is evidence now.
   void Rebase(const WatchInputs& in) {
     sessionStartMillis_ = in.nowMillis;
     trafficStartMillis_ = in.nowMillis;
@@ -598,6 +728,8 @@ class DeadTunnelWatch {
   int64_t inboundOfflineMillis_ = 0;
   int64_t provenSeenMillis_ = -1;
   int64_t inboundSeenMillis_ = -1;
+  // Kept across every rebase; a new session starts it again.
+  OutOfBalanceHold outOfBalance_;
 };
 
 }  // namespace urnw::watchdog

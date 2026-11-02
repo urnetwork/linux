@@ -28,7 +28,9 @@ struct Copy {
   const char* english;
 };
 
-// The countdown warning (StatusReply::failsafe_armed).
+// The countdown warning (StatusReply::failsafe_armed). An account out of balance
+// is told it is held instead, and gets this only for a hung SDK: the rules about
+// traffic hold for it and run no countdown (TunnelWatchdog.hpp OutOfBalanceHold).
 inline Copy ArmedCopy() {
   return {"conn_failsafe_armed",
           "If nothing gets through shortly, URnetwork will turn the tunnel off automatically "

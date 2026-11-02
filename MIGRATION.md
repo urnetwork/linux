@@ -269,7 +269,12 @@ exit for 90 s, or no completed answer from the SDK for 30 s ends the session, un
 packet came back out of the tunnel in the last 20 s. A suspend or a stalled daemon
 rebases every window, and a new destination generation gets its own clocks while its
 window forms. The session ends as the other protective teardowns do: the armed floor
-when the kill switch was asked for, no table otherwise, and nothing reconnects. The
+when the kill switch was asked for, no table otherwise, and nothing reconnects. An
+account out of balance is never stopped by the first two rules: the sampler also reads
+`ContractStatus.InsufficientBalance` off the same device, and from the first refusal
+until a contract goes through the traffic stays captured, the app's held alert and
+notification tell the user, and `failsafe_armed` stays false for them. The 30 s rule
+stays, since a hung SDK is not about traffic (`docs/linux_agent_help.md` 6.4). The
 veto has a known hole (`docs/linux_agent_help.md` 6.4, task #44): the tun's counters
 cannot tell a provider's packet from one the SDK writes itself, and the SDK answers DNS
 on the tun and resets DoT locally, so a machine whose apps keep resolving can keep a

@@ -988,6 +988,40 @@ Verdicts in precedence order:
 3. `NoExit` (DEAD_SLOW) — zero proven exits for `deadSlowMillis` (90000) with at least one
    completed sample.
 
+**An account out of balance is never stopped by rules 2 and 3** (owner decisions 2026-10-02 and
+2026-11-02). The platform refuses its contracts, so the window admits nothing or loses what it had,
+and every reading says dead. That is a billing state, and a stop would let its traffic out in the
+clear, so the traffic stays captured, the app's held alert and notification tell the user, and the
+user's Disconnect is the way out. Neither rule fires and neither counts down while
+`OutOfBalanceHold` holds; on both platforms (`app/src/TunnelWatchdog.hpp`, Windows
+`Service/DeadTunnelVerdict.h`) it is the pure `Observe` over one sample's `BalanceReading`:
+
+- **The signal is the app's own.** `ContractStatus.InsufficientBalance`, read by the failsafe's
+  sampler off the session's device, is the value the GUI reads for its alert over RPC. There is no
+  second source; the GUI's balance fetch does not reach the daemon.
+- **Entered** by the first reading with it raised, for the rest of the session: a suspend or a
+  rebase does not end it.
+- **Released** only on the platform's word that contracts go through: the status cleared on the
+  destination that was refused (a grant; `WindowStatus.ConnectionGeneration` unchanged), or, past a
+  destination change, which resets the status with no news about the balance, that destination's
+  window admitting a provider (`ProviderStateAdded` > 0). A no-permission result or an unreadable
+  status changes nothing. The status has to be read before the window, so a reset is never paired
+  with the generation before it.
+- **On release every window starts again**, as after a suspend, or the rule the hold kept back would
+  fire on that tick. A tunnel still dead a full window later is stopped.
+- **A balance nobody has reported is judged by the rules.** A refusal comes back within seconds of
+  the first contract asked for, inside the shortest window, and a start out of balance is refused
+  before it gets here (`DecideStartConnect`). With no answer at all there is nothing to tell a
+  billing state from the dead network this failsafe exists for.
+- **What it costs:** an account back in balance whose rebuilt window never admits a provider stays
+  held, because nothing has said it is in balance. It stays captured with the connect page reading
+  "Couldn't connect" (Windows: "No working provider right now"), and its Retry or Disconnect ends
+  the session; a new one is judged afresh. That is the cost chosen over a leak.
+- **`SdkUnresponsive` stays.** It is about a hung process, not traffic: a wedged device cannot be
+  brought back by a balance, cannot answer whether it is out of balance, and would hold the user's
+  Disconnect behind the same lock. An out-of-balance session that really wedges is stopped like any
+  other, and told so.
+
 `armed`/`millisToFailsafe` surface to the UI within `failsafeNoticeMillis` (30000) of firing
 (never a surprise teardown). **Freeze detection:** an evaluator tick gap
 ≥ `evaluatorFrozenMillis` (5000, five evaluator ticks) (Modern Standby resume, suspended VM)
