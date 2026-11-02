@@ -7464,6 +7464,16 @@ msgctxt "purchase_could_not_be_verified"
 msgid "This purchase could not be verified with Google Play, so it can't be applied to your account. If you were charged and your plan doesn't update, please contact support."
 msgstr "無法透過 Google Play 驗證此次購買，因此無法套用到你的帳戶。如果你已被扣款但計劃沒有更新，請聯絡支援團隊。"
 
+#. macOS alert body under purchase_disconnect_notice_title. The app reconnects the VPN by itself after the purchase; "it" is the VPN. Until then the user's internet traffic does not go through the VPN.
+msgctxt "purchase_disconnect_notice_message"
+msgid "URnetwork reconnects it afterward. Until it does, your internet traffic won't go through the VPN."
+msgstr "URnetwork 稍後會重新連接。在此之前，你的互聯網流量不會通過 VPN。"
+
+#. macOS alert title, shown when the user starts a purchase while a VPN connection is requested, before the app disconnects the VPN for the purchase. The alert's buttons are Disconnect and Cancel.
+msgctxt "purchase_disconnect_notice_title"
+msgid "Disconnect the VPN for this purchase?"
+msgstr "要為此次購買斷開 VPN 連接嗎？"
+
 #. Restore-purchases outcome: an entitlement for the current network was found; the confirmation poll now bridges the gap until the server credits it (Shared/ViewModels/AppStoreSubscriptionManager.swift).
 msgctxt "purchase_found_confirming_your_plan"
 msgid "Purchase found. Confirming your plan — it will update automatically."
