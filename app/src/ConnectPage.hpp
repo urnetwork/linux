@@ -558,6 +558,7 @@ class ConnectPage : public Gtk::Box {
   Gtk::Box* heldAlertRefresh_ = nullptr;    // the refresh line and its Why?
   Gtk::Label* freeRefreshLabel_ = nullptr;  // the alert's first line
   Gtk::Label* heldAlertTraffic_ = nullptr;  // what the traffic is doing
+  Gtk::Label* heldAlertDisconnectFirst_ = nullptr;  // paying needs a Disconnect first
   Gtk::Button* heldAlertUpgrade_ = nullptr;
   bool balancePro_ = false;                 // SetBalancePlan
   bool balanceDataLimit_ = false;

@@ -997,7 +997,11 @@ from the capture itself (`balance_notice::TrafficLineFor`): held over a tunnel w
 blocked under the kill switch's floor, or not protected. A selected destination and the status
 outlive a tunnel the daemon stopped, so neither is taken as a capture. A paying account refused at
 a data limit (the same status from the server, `balance_notice::DataLimitGate`) gets the same alert
-and notification in words for the limit, with Disconnect alone. Neither rule fires and neither counts down while
+and notification in words for the limit, with Disconnect alone. Checkout is a page on this machine's
+ordinary sockets (the sheet's web view or the browser, and the sheet's own requests), so while the
+traffic is held or blocked a payment cannot get through. There is no bypass, which could leak: the
+alert says to disconnect first (`balance_notice::SaysDisconnectFirst`) and the Disconnect beside it
+is the user's. Neither rule fires and neither counts down while
 `OutOfBalanceHold` holds; on both platforms (`app/src/TunnelWatchdog.hpp`, Windows
 `Service/DeadTunnelVerdict.h`) it is the pure `Observe` over one sample's `BalanceReading`:
 
