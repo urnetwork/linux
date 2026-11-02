@@ -228,12 +228,19 @@ UR_TEST(BittensorWalletFlow_TheRedirectIsTheRegisteredScheme) {
   UR_EXPECT_TRUE(desktop.find("x-scheme-handler/urnetwork;") != std::string::npos);
 }
 
-// The manual sheet lives as long as its challenge (5 minutes) plus the
-// submit; the bridge keeps its 3 minute watchdog.
-UR_TEST(BittensorWalletFlow_TimeoutsFollowTheTransport) {
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportManual) == 330'000u);
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportManual) > 300'000u);
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportBrowserBridge) == 180'000u);
+// The bridge page's "Enter address manually" is the desktop's manual path: the
+// user signs the challenge outside the browser (btcli, a wallet's own tool) and
+// pastes the result, and the server takes it for the challenge's 5 minutes. A
+// return after the watchdog fired is dropped for good (EarningsPage::BeginFlow),
+// so the wait has to outlast the challenge for every wallet the chooser offers,
+// or a proof the server would still take is lost.
+UR_TEST(BittensorWalletFlow_TheBridgeWaitsOutTheChallenge) {
+  constexpr uint32_t kChallengeLifetimeMs = 300'000;  // the server's WalletAuthChallengeLifetime
+  for (const auto& wallet : bt::kChooserWallets) {
+    UR_EXPECT_TRUE_MSG(std::string(wallet.walletId),
+                       bt::TimeoutMsFor(bt::kTransportBrowserBridge, wallet.walletId) >
+                           kChallengeLifetimeMs);
+  }
 }
 
 // The root cause this adoption removes: the app parsed the bridge return
@@ -315,9 +322,6 @@ UR_TEST(BittensorWalletFlow_TheChooserOffersThreeWallets) {
   UR_EXPECT_TRUE(bt::SendsWalletConnectProjectId("walletconnect"));
   UR_EXPECT_FALSE(bt::SendsWalletConnectProjectId("talisman"));
   UR_EXPECT_FALSE(bt::SendsWalletConnectProjectId("taocom"));
-  // pairing, approving the session and the signature get the challenge's life
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportBrowserBridge, "walletconnect") == 330'000u);
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportBrowserBridge, "talisman") == 180'000u);
 }
 
 // The chooser hints and the browser hand-off texts are store keys the linux

@@ -786,7 +786,7 @@ class EarningsPage : public Gtk::Box {
   uint64_t checkGeneration_ = 0;  // bare counter: no timer, no watchdog
   sigc::connection checkDebounce_;
 
-  Flow connectFlow_;   // 180s: the user legitimately spends minutes in a browser
+  Flow connectFlow_;   // 330s: the challenge's life, which signing by hand can take all of
   Flow setWalletFlow_; // 20s: POST /sn/wallet
   Flow pointsPublicFlow_;  // 20s: POST /network/points-ranking-visibility
   Flow claimFlow_;     // 180s: chain round trips

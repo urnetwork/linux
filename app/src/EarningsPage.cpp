@@ -3884,8 +3884,8 @@ void EarningsPage::StartWalletSignature(const std::string& walletId,
   connectWalletId_ = walletId;
   RebuildWalletBlock();
   // minutes, not 20s: the bridge reports errors only when a deep link comes
-  // BACK, and a closed browser tab produces nothing, ever; the manual sheet
-  // lasts as long as its challenge
+  // BACK, and a closed browser tab produces nothing, ever; the wait lasts as
+  // long as the challenge, which the page's manual form can take all of
   const std::string transport =
       urnet::bittensorWalletTransportFor(walletId, std::string(bittensor::kPlatform));
   const uint32_t timeoutMs = bittensor::TimeoutMsFor(transport, walletId);
@@ -4258,9 +4258,8 @@ consent::Flow::Ports EarningsPage::ConsentPorts() {
         });
   };
   // the session takes the challenge as the SDK returned it: its message is
-  // what the wallet signs. It waits as long as the coldkey connect's does:
-  // minutes on the bridge, the challenge's life on the manual sheet and for
-  // WalletConnect.
+  // what the wallet signs. It waits as long as the coldkey connect's does: the
+  // challenge's life.
   ports.sign = [this](const std::string& walletId, const consent::Challenge& challenge,
                       consent::Flow::SignDone done) {
     const std::string transport =

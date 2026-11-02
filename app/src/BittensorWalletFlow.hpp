@@ -260,11 +260,14 @@ constexpr bool KeepsWaiting(std::string_view purpose, std::string_view sessionSt
 }
 
 // How long a flow waits for its answer. A bridge round trip reports nothing
-// when the tab is closed, so it times out; the manual sheet is bounded by the
-// challenge itself (5 minutes) plus the time to submit.
-// WalletConnect pairing (scan, approve the session, approve the signature)
-// gets the challenge's full lifetime too.
-inline constexpr uint32_t kBridgeTimeoutMs = 180'000;
+// when the tab is closed, so it times out, but not before the challenge does (5
+// minutes, plus the time to submit). Every bridge page takes a signature by
+// hand ("Enter address manually": the user signs outside the browser, with
+// btcli or a wallet's own tool, and pastes it), and WalletConnect pairing (scan,
+// approve the session, approve the signature) takes a while too. A return after
+// the watchdog fired is dropped for good (EarningsPage::BeginFlow), so a shorter
+// wait throws away a proof the server would still take.
+inline constexpr uint32_t kBridgeTimeoutMs = 330'000;
 inline constexpr uint32_t kManualTimeoutMs = 330'000;
 
 constexpr uint32_t TimeoutMsFor(std::string_view transport,
