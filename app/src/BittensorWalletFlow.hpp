@@ -45,7 +45,7 @@ struct ChooserWallet {
 
 inline constexpr ChooserWallet kChooserWallets[] = {
     {kWalletTalisman, "", ""},
-    {kWalletTaoCom, "enter_address_manually", "Enter address manually"},
+    {kWalletTaoCom, "", ""},
     {kWalletWalletConnect, "bittensor_walletconnect_hint",
      "Nova, Nightly and other WalletConnect wallets"},
 };
@@ -190,6 +190,13 @@ constexpr BridgeErrorText BridgeErrorTextFor(std::string_view bridgeCode) noexce
     return {"bittensor_error_no_account",
             "Your {} wallet has no account to sign with. Add or connect an account in the wallet, "
             "then try again.",
+            true};
+  }
+  if (bridgeCode == "extension_not_authorized") {
+    return {"bittensor_error_extension_not_authorized",
+            "{} hasn't allowed ur.io to use your Bittensor account yet. Approve the connection "
+            "request in the wallet, or allow ur.io under Connected Sites in its settings, then "
+            "try again.",
             true};
   }
   if (bridgeCode == "user_rejected") {

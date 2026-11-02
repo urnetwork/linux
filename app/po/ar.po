@@ -1122,7 +1122,7 @@ msgctxt "bittensor_error_challenge_expired"
 msgid "This request expired. Start again to get a new message to sign."
 msgstr "انتهت صلاحية هذا الطلب. ابدأ من جديد للحصول على رسالة جديدة للتوقيع."
 
-#. ur.io Bittensor wallet error (Earnings wallet card and payout consent, sign-in, add sign-in): the browser extension has not allowed the site to use an account yet, so nothing was signed. The user rejected or closed the extension's connect window, has no Polkadot/Bittensor account in the extension, removed the site's accounts in the extension's connected sites, or a connect request is still open in it. Talisman says "Site <url> has not been authorised for Talisman yet"; polkadot{.js} and SubWallet say "The source <url> has not been enabled yet" or "is not allowed to interact with this extension". The argument is the wallet product name (Talisman). "Connected Sites" is the extension's settings page that lists the sites allowed to use its accounts: use the extension's own name for it (Talisman: de Verbundene Seiten, es Sitios Conectados, ru Подключенные сайты, zh 连接网站; Talisman has no Arabic, so ar keeps the English name).
+#. Bittensor wallet error (ur.io, and the apps when a ur.io wallet bridge page returns extension_not_authorized): the browser extension has not allowed the site to use an account yet, so nothing was signed. The user rejected or closed the extension's connect window, has no Polkadot/Bittensor account in the extension, removed the site's accounts in the extension's connected sites, or a connect request is still open in it. Talisman says "Site <url> has not been authorised for Talisman yet"; polkadot{.js}, SubWallet and TAO.com say "The source <url> has not been enabled yet" or "is not allowed to interact with this extension". The argument is the wallet product name (Talisman or TAO.com). "Connected Sites" is the extension's settings page that lists the sites allowed to use its accounts: use the extension's own name for it where it ships your language (Talisman: de Verbundene Seiten, es Sitios Conectados, ru Подключенные сайты, zh 连接网站); otherwise keep the English name, followed by a translation in parentheses.
 msgctxt "bittensor_error_extension_not_authorized"
 msgid "{} hasn't allowed ur.io to use your Bittensor account yet. Approve the connection request in the wallet, or allow ur.io under Connected Sites in its settings, then try again."
 msgstr "لم يسمح {} بعد لموقع ur.io باستخدام حساب Bittensor الخاص بك. وافق على طلب الاتصال في المحفظة، أو اسمح لموقع ur.io ضمن «Connected Sites» (المواقع المتصلة) في إعداداتها، ثم حاول مرة أخرى."
@@ -1212,7 +1212,7 @@ msgctxt "bittensor_manual_btcli_steps"
 msgid "On the computer that holds your coldkey (macOS, Linux or WSL), copy this command, paste it into a terminal and press Enter. btcli asks for the wallet name and its password. If it asks about the hotkey, answer n: the coldkey has to sign."
 msgstr "على الكمبيوتر الذي يحتوي على coldkey الخاص بك (macOS أو Linux أو WSL)، انسخ هذا الأمر، والصقه في الطرفية واضغط Enter. سيطلب btcli اسم المحفظة وكلمة مرورها. إذا سأل عن hotkey، فأجب بـ n: يجب أن يوقّع coldkey."
 
-#. The manual signing option in ur.io's Bittensor wallet chooser: the user signs a message outside the page, for example with the btcli command line tool, and pastes the signature back.
+#. The manual signing option in a Bittensor wallet chooser: on ur.io its own entry, and in the phone apps the line under a wallet that has no way to sign here directly. The user signs a message outside the page or app, for example with the btcli command line tool, and pastes the signature back.
 msgctxt "bittensor_manual_choice"
 msgid "Sign manually"
 msgstr "التوقيع يدويًا"
@@ -1242,7 +1242,7 @@ msgctxt "bittensor_manual_no_phrase"
 msgid "You never need your recovery phrase here. Don't paste it on this page or anywhere else."
 msgstr "لا تحتاج هنا أبدًا إلى عبارة الاسترداد الخاصة بك. لا تلصقها في هذه الصفحة ولا في أي مكان آخر."
 
-#. First line of ur.io's manual signing form. Support inbox 8167: a user waited for a wallet window that never comes on this path.
+#. First line of the manual signing form, on ur.io and in the apps' sheet. Support inbox 8167: a user waited for a wallet window that never comes on this path.
 msgctxt "bittensor_manual_no_popup"
 msgid "No wallet window opens for this. You sign the message yourself, then paste the signature below."
 msgstr "لن تُفتح نافذة محفظة هنا. وقّع الرسالة بنفسك، ثم الصق التوقيع أدناه."
@@ -1256,6 +1256,11 @@ msgstr "باستخدام محفظة أخرى"
 msgctxt "bittensor_manual_other_steps"
 msgid "Use its sign message tool with the address below. Copy the message exactly, with its line break."
 msgstr "استخدم أداة توقيع الرسائل فيها مع العنوان أدناه. انسخ الرسالة كما هي تمامًا، مع فاصل الأسطر الموجود فيها."
+
+#. The phone apps' manual signing sheet: what to do when the wallet can't sign a pasted message. WalletConnect and Nova are product names, and ur.io/app/account/earnings is a web address: keep them as they are.
+msgctxt "bittensor_manual_phone_route"
+msgid "If your wallet can't sign a pasted message, go back and choose WalletConnect (Nova and others), or sign at ur.io/app/account/earnings in a computer's browser."
+msgstr "إذا لم تتمكن محفظتك من توقيع رسالة ملصقة، فارجع واختر WalletConnect (Nova وغيرها)، أو وقّع من خلال ur.io/app/account/earnings في متصفح على الكمبيوتر."
 
 #. Manual Bittensor wallet proof: how to sign the shown challenge message. The argument is the wallet product name (Talisman or TAO.com).
 msgctxt "bittensor_manual_sign_instructions"

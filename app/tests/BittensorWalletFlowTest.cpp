@@ -112,6 +112,9 @@ UR_TEST(BittensorWalletFlow_BridgeCodesReadInTheAppsWords) {
            Case{"address_mismatch", "earnings_wallet_mismatch", false},
            Case{"extension_not_found", "bittensor_error_extension_not_found", true},
            Case{"no_account", "bittensor_error_no_account", true},
+           // the follow-up from support inbox 8142: the page used to hand back
+           // wallet_error for this, with the extension's own English
+           Case{"extension_not_authorized", "bittensor_error_extension_not_authorized", true},
            Case{"user_rejected", "bittensor_error_user_rejected", false},
            Case{"walletconnect_expired", "bittensor_error_walletconnect_expired", false},
            Case{"walletconnect_unavailable", "bittensor_error_walletconnect_unavailable", false},
@@ -148,7 +151,7 @@ UR_TEST(BittensorWalletFlow_BridgeCodeStringsAreTranslated) {
   UR_EXPECT_TRUE(languages.size() >= 28);
   int checked = 0;
   for (const char* code : {"address_not_in_wallet", "extension_not_found", "no_account",
-                           "user_rejected", "walletconnect_expired",
+                           "extension_not_authorized", "user_rejected", "walletconnect_expired",
                            "walletconnect_unavailable"}) {
     const bt::BridgeErrorText text = bt::BridgeErrorTextFor(code);
     const std::string entry = "msgctxt \"" + std::string(text.key) + "\"\nmsgid \"" +
@@ -167,7 +170,7 @@ UR_TEST(BittensorWalletFlow_BridgeCodeStringsAreTranslated) {
     }
     ++checked;
   }
-  UR_EXPECT_TRUE(checked == 6);
+  UR_EXPECT_TRUE(checked == 7);
 }
 
 // A failed answer shows its refusal's string, else (a wallet_error only) the
@@ -335,7 +338,7 @@ UR_TEST(BittensorWalletFlow_WalletConnectStringsAreInTheCatalog) {
     UR_EXPECT_TRUE_MSG(std::string(wallet.hintKey), has(wallet.hintKey, wallet.hintEnglish));
     ++hints;
   }
-  UR_EXPECT_TRUE(hints == 2);
+  UR_EXPECT_TRUE(hints == 1);
   const bt::ContinueText wc = bt::ContinueTextFor("walletconnect");
   UR_EXPECT_TRUE(wc.key == "bittensor_walletconnect_continue" && !wc.takesWalletName);
   UR_EXPECT_TRUE_MSG(std::string(wc.key), has(wc.key, wc.english));
