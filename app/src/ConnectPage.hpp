@@ -96,6 +96,9 @@ class ConnectPage : public Gtk::Box {
   // The out-of-balance held alert under the connect action (urnetwork/android#483):
   // shown when balance_notice::HeldAlert holds, with Upgrade and Disconnect.
   void ApplyBalanceNotice(const balance_notice::Signals& signals);
+  // The plan's say over the status row (health::WithPlan). Asked before the
+  // reading it goes with, so the row never paints the wrong word in between.
+  void SetBalancePlan(bool pro, bool dataLimit);
   // The balance recovery (balance_notice::BalanceRecovery): in the held alert
   // whether the data is reserved (with the reserved amount) or used up, and
   // under it "You'll be reconnected when data is available again." with, for
@@ -552,7 +555,12 @@ class ConnectPage : public Gtk::Box {
   Gtk::Label* daemonNoticeText_ = nullptr;
   // the out-of-balance held alert (ApplyBalanceNotice)
   Gtk::Box* heldAlert_ = nullptr;
+  Gtk::Box* heldAlertRefresh_ = nullptr;    // the refresh line and its Why?
   Gtk::Label* freeRefreshLabel_ = nullptr;  // the alert's first line
+  Gtk::Label* heldAlertTraffic_ = nullptr;  // what the traffic is doing
+  Gtk::Button* heldAlertUpgrade_ = nullptr;
+  bool balancePro_ = false;                 // SetBalancePlan
+  bool balanceDataLimit_ = false;
   FreeRefreshTicker freeRefreshTicker_;     // keeps it current while it shows
   Gtk::Label* balanceKindLabel_ = nullptr;  // reserved or used up (ApplyBalanceRecovery)
   // "You'll be reconnected when data is available again." and its Cancel

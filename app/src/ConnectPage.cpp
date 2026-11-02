@@ -661,13 +661,16 @@ void ConnectPage::BuildPaneA() {
   // 2.4b out of balance with a connection requested, the tunnel holds traffic
   // with no provider behind it: say so and offer both ways out. Disconnect is
   // its own always-enabled control so the way out never depends on the
-  // connect action's reading.
+  // connect action's reading. A paying account refused at a data limit gets the
+  // same alert with Disconnect alone, and the line says what the traffic is
+  // doing (ApplyBalanceNotice).
   heldAlert_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
   heldAlert_->set_margin_top(8);
   {
     // first when the free data refreshes, so Upgrade does not read as the only
     // way back; Why? explains the balance in the "About your data" sheet
     auto* refresh = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    heldAlertRefresh_ = refresh;
     freeRefreshLabel_ = Gtk::make_managed<Gtk::Label>();
     freeRefreshLabel_->set_xalign(0);
     freeRefreshLabel_->set_wrap(true);
@@ -691,17 +694,16 @@ void ConnectPage::BuildPaneA() {
     heldAlert_->append(*balanceKindLabel_);
   }
   {
-    auto* text = Gtk::make_managed<Gtk::Label>(
-        T_("insufficient_balance_held_notice",
-           "Your traffic is held in the tunnel until you upgrade or disconnect."));
-    text->add_css_class("ur-error-text");
-    text->set_xalign(0);
-    text->set_wrap(true);
-    CapNatural(text, 20);
-    heldAlert_->append(*text);
+    heldAlertTraffic_ = Gtk::make_managed<Gtk::Label>();
+    heldAlertTraffic_->add_css_class("ur-error-text");
+    heldAlertTraffic_->set_xalign(0);
+    heldAlertTraffic_->set_wrap(true);
+    CapNatural(heldAlertTraffic_, 20);
+    heldAlert_->append(*heldAlertTraffic_);
     auto* actions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
     actions->set_homogeneous(true);
     auto* upgrade = Gtk::make_managed<Gtk::Button>(T_("upgrade", "Upgrade"));
+    heldAlertUpgrade_ = upgrade;
     upgrade->add_css_class("ur-pane-primary");
     upgrade->signal_clicked().connect([this] {
       if (on_open_upgrade) on_open_upgrade();
@@ -1765,7 +1767,9 @@ void ConnectPage::ApplyConnectStatus() {
   // flight too, and a connect as a session coming up (ConnectTap.hpp): the
   // reading can be from before the tap until then.
   const bool disconnecting = intent || tapPending_ == connect_tap::Pending::Disconnect;
-  const health::Signals signals = connect_tap::Fold(reading_.ToSignals(disconnecting), tapPending_);
+  const health::Signals signals = health::WithPlan(
+      connect_tap::Fold(reading_.ToSignals(disconnecting), tapPending_), balancePro_,
+      balanceDataLimit_);
   const health::Reading view = health::Render(signals);
   renderedState_ = view.state;
 
@@ -1862,8 +1866,20 @@ void ConnectPage::RepublishStatus() {
   ApplyLocationRow();
 }
 
+void ConnectPage::SetBalancePlan(bool pro, bool dataLimit) {
+  if (pro == balancePro_ && dataLimit == balanceDataLimit_) return;
+  balancePro_ = pro;
+  balanceDataLimit_ = dataLimit;
+  ApplyConnectStatus();
+}
+
 void ConnectPage::ApplyBalanceNotice(const balance_notice::Signals& signals) {
-  heldAlert_->set_visible(balance_notice::HeldAlert(signals));
+  heldAlert_->set_visible(balance_notice::ShowsAlert(signals));
+  const balance_notice::Text traffic = balance_notice::TrafficText(signals);
+  heldAlertTraffic_->set_text(T_(traffic.key, traffic.english));
+  const bool offersUpgrade = balance_notice::AlertOffersUpgrade(signals);
+  heldAlertRefresh_->set_visible(offersUpgrade);
+  heldAlertUpgrade_->set_visible(offersUpgrade);
   // the alert leads with when the free data refreshes, kept current while it shows
   if (data_info::AlertShowsFreeRefresh(balance_notice::HeldAlert(signals))) {
     if (!freeRefreshTicker_.Running()) {

@@ -490,6 +490,12 @@ class MainWindow : public Gtk::ApplicationWindow {
   // Another connect, the user's Disconnect, a sign-out or Cancel: nothing
   // waits on the balance any more.
   void ClearBalanceRecovery();
+  // Reads whether the refusal in hand is a paying account's data limit, and tells
+  // the Connect page's status row, ahead of the reading it goes with.
+  void ObserveDataLimit();
+  balance_notice::DataLimitGate dataLimitGate_;
+  bool dataLimit_ = false;
+  bool planSaysRefusal_ = false;  // a refusal stands over a Pro plan (health::WithPlan)
   // The held alert's signals, as UpdateBalanceNotice builds them, and the
   // balance as the gate reads it, for the recovery and its lines.
   balance_notice::Signals BalanceSignals() const;

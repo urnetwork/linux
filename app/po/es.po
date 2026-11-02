@@ -1760,7 +1760,7 @@ msgctxt "conn_finding_providers"
 msgid "Finding providers…"
 msgstr "Buscando proveedores…"
 
-#. Connect page: warning that the internet traffic is not protected.
+#. Connect page and the out-of-balance or data-limit alert: warning that the internet traffic is not protected, shown when the tunnel is not capturing traffic.
 msgctxt "conn_not_protected"
 msgid "Your internet traffic is not protected."
 msgstr "Tu tráfico de internet no está protegido."
@@ -2513,6 +2513,16 @@ msgstr "Datos que has usado hasta ahora."
 msgctxt "data_info_why"
 msgid "Why?"
 msgstr "¿Por qué?"
+
+#. Alert body shown in the app and in a local notification when a paying account is refused at a data limit while the tunnel is capturing traffic. Connect stays requested and the VPN keeps holding traffic until the limit allows more data or the user disconnects. The paying counterpart of insufficient_balance_held_notice, with no upgrade to offer.
+msgctxt "data_limit_held_notice"
+msgid "Your traffic is held in the tunnel until more data is available or you disconnect."
+msgstr "Tu tráfico se mantiene en el túnel hasta que haya más datos disponibles o te desconectes."
+
+#. Alert title and status line on the connect screen, and the title of a local notification, when the server refuses a paying account's connection because a data limit was reached (a per-device data cap or the plan's data), not because the account has no balance. Short.
+msgctxt "data_limit_reached"
+msgid "Data limit reached"
+msgstr "Límite de datos alcanzado"
 
 #. Call to action
 msgctxt "data_usage"

@@ -1647,7 +1647,7 @@ msgctxt "conn_finding_providers"
 msgid "Finding providers…"
 msgstr "제공업체를 찾는 중…"
 
-#. Connect page: warning that the internet traffic is not protected.
+#. Connect page and the out-of-balance or data-limit alert: warning that the internet traffic is not protected, shown when the tunnel is not capturing traffic.
 msgctxt "conn_not_protected"
 msgid "Your internet traffic is not protected."
 msgstr "인터넷 트래픽이 보호되지 않습니다."
@@ -2398,6 +2398,16 @@ msgstr "지금까지 사용한 데이터입니다."
 msgctxt "data_info_why"
 msgid "Why?"
 msgstr "왜 그런가요?"
+
+#. Alert body shown in the app and in a local notification when a paying account is refused at a data limit while the tunnel is capturing traffic. Connect stays requested and the VPN keeps holding traffic until the limit allows more data or the user disconnects. The paying counterpart of insufficient_balance_held_notice, with no upgrade to offer.
+msgctxt "data_limit_held_notice"
+msgid "Your traffic is held in the tunnel until more data is available or you disconnect."
+msgstr "추가 데이터를 사용할 수 있게 되거나 연결을 해제할 때까지 트래픽이 터널 안에 보류됩니다."
+
+#. Alert title and status line on the connect screen, and the title of a local notification, when the server refuses a paying account's connection because a data limit was reached (a per-device data cap or the plan's data), not because the account has no balance. Short.
+msgctxt "data_limit_reached"
+msgid "Data limit reached"
+msgstr "데이터 한도에 도달했습니다"
 
 #. Call to action
 msgctxt "data_usage"

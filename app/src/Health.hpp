@@ -129,6 +129,9 @@ struct Signals {
   // Billing, not connection. It replaces the headline but never the action:
   // an out-of-balance session still has to be disconnectable.
   bool insufficientBalance = false;
+  // The refusal is a paying account's data limit, not a lack of balance
+  // (balance_notice::DataLimitGate): the same state, in words for the limit.
+  bool dataLimit = false;
   // The user pressed Disconnect and the teardown is still in flight. Bounded
   // by the caller (ConnectPage::DisconnectIntentLive: it clears the moment the
   // session actually reads down, and in any case after 8s).
@@ -234,8 +237,13 @@ inline Reading Render(const Signals& s) {
       r.hero = Hero::Processing;
       break;
     case State::Blocked:
-      r.textKey = "insufficient_balance_add_balance_or_plan";
-      r.textEnglish = "Insufficient balance — add balance or a plan";
+      if (s.dataLimit) {
+        r.textKey = "data_limit_reached";
+        r.textEnglish = "Data limit reached";
+      } else {
+        r.textKey = "insufficient_balance_add_balance_or_plan";
+        r.textEnglish = "Insufficient balance — add balance or a plan";
+      }
       r.dot = Dot::Coral;
       r.hero = Hero::Error;
       break;
@@ -257,6 +265,16 @@ inline Reading Render(const Signals& s) {
   // still a session to stop: a Retry press stops it first.
   if (r.state == State::Failed) r.action = Action::Retry;
   return r;
+}
+
+// The plan's say over a refusal, which the reading cannot know. A paying account
+// is not told to add balance: its refusal is a data limit, or one from before the
+// purchase that has not cleared yet and says nothing (DataLimitGate), and then the
+// connection reading stands.
+inline Signals WithPlan(Signals s, bool pro, bool dataLimit) {
+  s.dataLimit = dataLimit;
+  if (pro && !dataLimit) s.insufficientBalance = false;
+  return s;
 }
 
 // The line under the status that says why a connect is not there yet, from
