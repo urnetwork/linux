@@ -1,8 +1,7 @@
 // The login's browser round trips (BrowserSignInGate.hpp): coming back to the
-// app after one gives the sign-in affordances back once, never while the
-// Bittensor manual sheet carries the flow, and never for the moment's focus
-// loss of closing the app's own chooser dialog; the attempt itself is never
-// cancelled. The window's call sites need GTK and the SDK, so the wiring cases
+// app after one gives the sign-in affordances back once, and never for the
+// moment's focus loss of closing the app's own chooser dialog; the attempt itself
+// is never cancelled. The window's call sites need GTK and the SDK, so the wiring cases
 // read MainWindow.cpp with the comments blanked.
 // SPDX-License-Identifier: MPL-2.0
 #include <cstdint>
@@ -80,32 +79,22 @@ UR_TEST(BrowserSignInGate_AReturnGivesTheAffordancesBackOnce) {
   UR_EXPECT_FALSE(gate.InFlight());
   gate.Begin();
   UR_EXPECT_TRUE(gate.InFlight());
-  UR_EXPECT_TRUE(gate.TakeOnReturn(kMinAwayMillis, /*inAppSheetOpen=*/false));
+  UR_EXPECT_TRUE(gate.TakeOnReturn(kMinAwayMillis));
   UR_EXPECT_FALSE(gate.InFlight());
   // a second return has nothing to give back
-  UR_EXPECT_FALSE(gate.TakeOnReturn(10 * kMinAwayMillis, false));
+  UR_EXPECT_FALSE(gate.TakeOnReturn(10 * kMinAwayMillis));
   // and a new attempt arms it again
   gate.Begin();
-  UR_EXPECT_TRUE(gate.TakeOnReturn(10 * kMinAwayMillis, false));
+  UR_EXPECT_TRUE(gate.TakeOnReturn(10 * kMinAwayMillis));
 }
 
 UR_TEST(BrowserSignInGate_AnAnsweredAttemptIsNoReturn) {
   BrowserFlowGate gate;
-  UR_EXPECT_FALSE(gate.TakeOnReturn(10 * kMinAwayMillis, false));
+  UR_EXPECT_FALSE(gate.TakeOnReturn(10 * kMinAwayMillis));
   gate.Begin();
   gate.Settle();
   UR_EXPECT_FALSE(gate.InFlight());
-  UR_EXPECT_FALSE(gate.TakeOnReturn(10 * kMinAwayMillis, false));
-}
-
-// The Bittensor manual sheet is the flow, in the app: the gate waits for a
-// return with the sheet closed.
-UR_TEST(BrowserSignInGate_TheManualSheetKeepsTheGateArmed) {
-  BrowserFlowGate gate;
-  gate.Begin();
-  UR_EXPECT_FALSE(gate.TakeOnReturn(10 * kMinAwayMillis, /*inAppSheetOpen=*/true));
-  UR_EXPECT_TRUE(gate.InFlight());
-  UR_EXPECT_TRUE(gate.TakeOnReturn(10 * kMinAwayMillis, /*inAppSheetOpen=*/false));
+  UR_EXPECT_FALSE(gate.TakeOnReturn(10 * kMinAwayMillis));
 }
 
 // Closing a chooser dialog hands the focus back to the window: a short
@@ -113,10 +102,10 @@ UR_TEST(BrowserSignInGate_TheManualSheetKeepsTheGateArmed) {
 UR_TEST(BrowserSignInGate_AShortAbsenceIsNoReturn) {
   BrowserFlowGate gate;
   gate.Begin();
-  UR_EXPECT_FALSE(gate.TakeOnReturn(0, false));
-  UR_EXPECT_FALSE(gate.TakeOnReturn(kMinAwayMillis - 1, false));
+  UR_EXPECT_FALSE(gate.TakeOnReturn(0));
+  UR_EXPECT_FALSE(gate.TakeOnReturn(kMinAwayMillis - 1));
   UR_EXPECT_TRUE(gate.InFlight());
-  UR_EXPECT_TRUE(gate.TakeOnReturn(kMinAwayMillis, false));
+  UR_EXPECT_TRUE(gate.TakeOnReturn(kMinAwayMillis));
 }
 
 UR_TEST(BrowserSignInGate_TheAbsenceIsMeasuredFromTheFirstUnfocusedReading) {
@@ -163,8 +152,8 @@ UR_TEST(BrowserSignInWiring_TheBrowserSignInsArmTheGateAndTheAnswerSettlesIt) {
 }
 
 // The app-wide focus reading feeds the return, which gives the affordances
-// back behind the gate and the manual sheet, clears only the progress notice,
-// and cancels nothing: a late deep link must still land.
+// back behind the gate, clears only the progress notice, and cancels nothing: a
+// late deep link must still land.
 UR_TEST(BrowserSignInWiring_TheReturnEnablesTheAffordancesAndCancelsNothing) {
   const std::string window = ReadBrowserSignInSource("MainWindow.cpp");
   const std::string sync = BrowserSignInBody(window, "void MainWindow::ScheduleAppFocusSync() {");
@@ -174,9 +163,8 @@ UR_TEST(BrowserSignInWiring_TheReturnEnablesTheAffordancesAndCancelsNothing) {
   const std::string returned =
       BrowserSignInBody(window, "void MainWindow::OnAppReturned(int64_t awayMillis) {");
   UR_EXPECT_TRUE(BrowserSignInInOrder(
-      returned, {"bittensorManualSheet_->get_visible()",
-                 "browserSignIn_.TakeOnReturn(awayMillis, manualSheetOpen)", "return;",
-                 "SetLoginBusy(false);", "has_css_class(\"dim-label\")"}));
+      returned, {"browserSignIn_.TakeOnReturn(awayMillis)", "return;", "SetLoginBusy(false);",
+                 "has_css_class(\"dim-label\")"}));
   UR_EXPECT_FALSE(BrowserSignInHas(returned, "Cancel"));
   UR_EXPECT_FALSE(BrowserSignInHas(returned, "host_."));
 }

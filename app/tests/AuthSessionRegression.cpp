@@ -99,7 +99,7 @@ struct Obligation { signout::Delivery Begin(int) { return signout::Delivery::Del
 struct Backoff { void NoteSuccess() {} void NoteFailure(long) {} };
 struct ConnectCommandQueue { enum class Kind { Connect, Disconnect, Device }; bool signingOut=false; void BeginSignOut() { signingOut=true; } void EndSignOut() { signingOut=false; } bool SigningOut() const { return signingOut; } };
 enum class DrawerEvent { DeviceLifecycle };
-struct AuthResult { bool ok=false, verification_required=false; std::string error, errorCode, bittensorWalletId, authAllowed; bool sso=false, sso_needs_network=false, wallet_needs_network=false; };
+struct AuthResult { bool ok=false, verification_required=false; std::string error, authAllowed; bool sso=false, sso_needs_network=false, wallet_needs_network=false; };
 struct InstantAccount { bool ok=false; std::string seedphrase, error; };
 enum class LoginRoute { Error, Login, Password, IncorrectAuth, Create };
 struct LoginRouting { LoginRoute route=LoginRoute::Error; std::string userAuth,error,authAllowed; };
@@ -131,7 +131,7 @@ struct SdkHost {
   uint64_t walletAuthEpoch_=0,pendingWalletAuthEpoch_=0,pendingSsoAuthEpoch_=0,pendingInstantAuthEpoch_=0;
   std::optional<urnet::WalletAuthArgs> pendingWalletAuth_;
   bool pendingSsoAuth_=false;
-  std::string pendingSsoType_,pendingSsoJwt_,bittensorWalletId_;
+  std::string pendingSsoType_,pendingSsoJwt_;
   std::optional<std::string> pendingInstantJwt_;
   Backoff signOutBackoff_,providerBackoff_;
   Obligation signOut_;
@@ -166,7 +166,7 @@ struct SdkHost {
   void CreateNetwork(const std::string&,const std::string&,const std::string&,const std::string&,std::function<void(AuthResult)>);
   void CreateInstantAccount(const std::string&,std::function<void(InstantAccount)>);
   void ConfirmInstantAccount(std::function<void(AuthResult)>);
-  void HandleNetworkCreateResult(std::optional<urnet::NetworkCreateResult>,std::optional<std::string>,std::function<void(AuthResult)>,uint64_t,const std::string& = {});
+  void HandleNetworkCreateResult(std::optional<urnet::NetworkCreateResult>,std::optional<std::string>,std::function<void(AuthResult)>,uint64_t);
   void AuthLoginWithSso(const std::string&,const std::string&);
   void AuthLoginWithWallet(const std::string&,const std::string&,const std::string&,const std::string&);
   void RegisterNetworkClient(const std::string&,std::function<void(AuthResult)>,uint64_t);

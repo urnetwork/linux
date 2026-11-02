@@ -703,11 +703,10 @@ UR_TEST(Consent_OtherErrorsGoToThePagesErrorSurface) {
   }
 }
 
-// CONSENT §4: a wallet step the user closed, or one another wallet flow took
-// the bridge from, ends quietly: no refusal, no error
-UR_TEST(Consent_AClosedOrSupersededWalletStepEndsQuietly) {
-  const std::string quiet[] = {std::string(urnw::bittensor::kCancelled),
-                               "superseded by a wallet connect request",
+// CONSENT §4: a wallet step another wallet flow took the bridge from ends
+// quietly: no refusal, no error
+UR_TEST(Consent_ASupersededWalletStepEndsQuietly) {
+  const std::string quiet[] = {"superseded by a wallet connect request",
                                "superseded by another wallet flow"};
   for (const std::string& error : quiet) {
     for (const Status& status : {NoConsent(), InForce()}) {
@@ -817,7 +816,7 @@ UR_TEST(Consent_AReturnNeverSpeaksForTheConsent) {
   const std::string ret = FunctionBody(wallet, "void WalletConnect::HandleBittensorReturn(");
   UR_EXPECT_TRUE(Contains(ret, "bittensor::KeepsWaiting(bittensorSession_->purpose(), "
                                "bittensorSession_->state(),"));
-  UR_EXPECT_TRUE(Before(ret, "bittensor::KeepsWaiting(", "DeliverBittensorResult(result,"));
+  UR_EXPECT_TRUE(Before(ret, "bittensor::KeepsWaiting(", "DeliverBittensorResult(result)"));
 }
 
 // A3: sign-out answers and empties the one signature slot a coldkey connect or a
@@ -869,7 +868,6 @@ UR_TEST(Consent_CodesMatchOnTheSdksPrefix) {
   UR_EXPECT_TRUE(NoticeFor(Step::Submit, "invalid_ss58_address: x") == Notice::None);
   UR_EXPECT_TRUE(NoticeFor(Step::Submit, "The request was declined in your wallet.") ==
                  Notice::None);
-  UR_EXPECT_TRUE(consent::IsQuiet(urnw::bittensor::kCancelled));
   UR_EXPECT_TRUE(consent::IsQuiet("superseded by another sign-in method"));
   UR_EXPECT_FALSE(consent::IsQuiet("challenge_expired: "));
   UR_EXPECT_FALSE(consent::IsQuiet(""));
@@ -1044,8 +1042,8 @@ UR_TEST(ConsentWiring_TheWalletThenTheTypedColdkey) {
 }
 
 // CONSENT §4, A1: the signature is the existing connector's: a consent session
-// over the challenge as it came, on the same bridge and manual sheet as every
-// Bittensor flow, whose proof the flow checks before it submits
+// over the challenge as it came, on the same bridge as every Bittensor flow,
+// whose proof the flow checks before it submits
 UR_TEST(ConsentWiring_TheSignatureIsTheExistingConnectors) {
   const std::string page = ReadCode("EarningsPage.cpp");
   const std::string host = ReadCode("SdkHost.cpp");
@@ -1103,8 +1101,8 @@ UR_TEST(ConsentWiring_EachAnswerIsMarshaledAndWatched) {
   UR_EXPECT_EQ(3u, CountOf(ports, "BeginFlow("));
   UR_EXPECT_EQ(3u, CountOf(ports, "SettleFlow(consentStep_, generation,"));
   // the signature waits as the coldkey connect does; the calls 20 s
-  UR_EXPECT_EQ(1u, CountOf(ports, "BeginFlow(\n        consentStep_, static_cast<int>("
-                                  "bittensor::TimeoutMsFor(transport, walletId))"));
+  UR_EXPECT_EQ(1u, CountOf(ports, "BeginFlow(consentStep_, static_cast<int>("
+                                  "bittensor::kBridgeTimeoutMs),"));
   UR_EXPECT_EQ(1u, CountOf(ports, "NotifyContinueInBrowser(walletId);"));
   UR_EXPECT_EQ(2u, CountOf(ports, "BeginFlow(consentStep_, kApiTimeoutMs,"));
   const std::string teardown = FunctionBody(page, "EarningsPage::~EarningsPage()");

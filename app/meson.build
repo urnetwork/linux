@@ -227,7 +227,7 @@ executable('urnetwork-gui',
     'src/EarningsPage.cpp',
     'src/ProtocolBoard.cpp',
     'src/SolanaWalletSheet.cpp',
-    'src/BittensorManualSheet.cpp',
+    'src/BittensorWalletChooser.cpp',
     'src/Top200SignSheet.cpp',
     'src/EmojiTagSheet.cpp',
     'src/AccountPage.cpp',
@@ -780,7 +780,6 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/MainReadTest.cpp',
     'tests/CryptoPayTest.cpp',
     'tests/CryptoPayWiringTest.cpp',
-    'tests/BittensorManualSheetWiringTest.cpp',
     'tests/PaymentPastDueTest.cpp',
     'tests/SlowInternetTest.cpp',
     'tests/SlowInternetWiringTest.cpp',
@@ -919,8 +918,6 @@ urnetwork_tests = executable('urnetwork-tests',
               # invoice and its host, the upgrade sheet, the onboarding, the
               # Account plan pane, the window, meson.build and the Flatpak
               # manifest the same way.
-              # BittensorManualSheetWiringTest reads the manual proof sheet's
-              # message box the same way.
               # PaymentPastDueTest reads the balance store, the window and the
               # Account plan pane the same way, and every source for the wire's
               # update_payment_url.

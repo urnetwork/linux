@@ -432,16 +432,16 @@ class EarningsPage : public Gtk::Box {
   void ApplyWalletCheck(uint64_t generation, const std::string& address,
                         std::optional<SnWalletCheck> check, const std::string& err);
   void OnConnectManual();
-  // Which Bittensor wallet signs (Talisman on the browser bridge, TAO.com on
-  // the manual sheet, WalletConnect on the bridge's pairing): `chosen` gets its
-  // id; a dismissed chooser chooses nothing. The coldkey connect hands it to
+  // Which Bittensor wallet signs on the browser bridge (Talisman or TAO.com
+  // through its extension, WalletConnect through the bridge's pairing): `chosen`
+  // gets its id; a dismissed chooser chooses nothing. The coldkey connect hands it to
   // StartWalletSignature, the payout consent to its flow.
   void ChooseBittensorWallet(std::function<void(const std::string& walletId)> chosen);
   // The wallet as a signer: `expectedAddress` is the typed address (the wallet
   // must sign with that account) or empty (whichever account the wallet picks).
   void StartWalletSignature(const std::string& walletId, const std::string& expectedAddress);
-  // A browser-bridge wallet's step is in the system browser now: the snackbar
-  // says where to look (nothing for the manual sheet, which is on screen).
+  // The wallet's step is in the system browser now: the snackbar says where to
+  // look.
   void NotifyContinueInBrowser(const std::string& walletId);
   void OnWalletSigned(uint32_t generation, const SdkHost::WalletSignature& signature,
                       const std::string& expectedAddress);
@@ -766,7 +766,6 @@ class EarningsPage : public Gtk::Box {
   // in-flight gates
   bool connecting_ = false;      // bridge / set-wallet in flight
   // the wallet the current coldkey connect signs with (its refusal names it)
-  std::string connectWalletId_;
   bool changingWallet_ = false;  // "Change" opened the connect affordances
   bool manualEntryOpen_ = false;
   // a v1 or a v2 claim in flight: the gas key sends one claim at a time

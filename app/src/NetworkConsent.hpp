@@ -13,8 +13,8 @@
 //      range from the next epoch (A2.1);
 //   4. the wallet signs exactly that message through the existing connector
 //      (SdkHost::SignBittensorConsent: the SDK's BittensorWalletSession with
-//      purpose "consent", on the bridge or the manual sheet, bound to the
-//      message's coldkey and expiry);
+//      purpose "consent", on the bridge, bound to the message's coldkey and
+//      expiry);
 //   5. SnNetworkConsentSubmit stores it, only when the proof is for the issued
 //      message and its coldkey (anything else reads sn_consent_failed), and
 //      the status is read again.
@@ -35,8 +35,8 @@
 // server does not verify for the coldkey (signature_mismatch, the submit), and
 // a session that is not the network owner's (network_owner_only, the status,
 // the challenge and the submit). Text from a wallet's return is never one of
-// them (A3). A wallet step the user closed, or another wallet flow took over,
-// ends quietly; every other failure goes to the page's error surface.
+// them (A3). A wallet step another wallet flow took over ends quietly; every
+// other failure goes to the page's error surface.
 //
 // Header-only and free of GTK and the SDK (tests/NetworkConsentTest.cpp): the
 // page hands the flow its ports, the SDK's consent calls and the wallet, and
@@ -51,7 +51,6 @@
 #include <string_view>
 #include <utility>
 
-#include "BittensorWalletFlow.hpp"
 #include "WalletBridgeRoute.hpp"
 
 namespace urnw::consent {
@@ -99,10 +98,9 @@ constexpr Notice NoticeFor(Step step, std::string_view error) noexcept {
   return Notice::None;
 }
 
-// A wallet step the user closed (the manual sheet), or one another wallet flow
-// took the bridge from: nothing failed.
+// A wallet step another wallet flow took the bridge from: nothing failed.
 constexpr bool IsQuiet(std::string_view error) noexcept {
-  return bittensor::IsCancelled(error) || bridge::IsSuperseded(error);
+  return bridge::IsSuperseded(error);
 }
 
 // The SDK's SnNetworkConsentStatus. Its generation is not read: it stays 0

@@ -16,7 +16,6 @@
 #include "ApiKeysPage.hpp"
 #include "AuthLogout.hpp"
 #include "AuthViews.hpp"
-#include "BittensorManualSheet.hpp"
 #include "BrowserSignInGate.hpp"
 #include "ConnectPage.hpp"
 #include "DataInfoSheet.hpp"
@@ -159,7 +158,6 @@ class MainWindow : public Gtk::ApplicationWindow {
   void OnSolana(WalletConnect::Provider provider);
   void OnBittensor();
   void OnBittensorWallet(const std::string& walletId);
-  void ShowBittensorManualSheet(const SdkHost::BittensorManualRequest& request);
   void OnWalletAuth(const AuthResult& result);  // shared tail of both wallet sign-ins
   void OnSeedphraseChanged();
   void OnSeedphraseSubmit();
@@ -325,7 +323,6 @@ class MainWindow : public Gtk::ApplicationWindow {
   // Create Account (android/apple parity)
   ReferralCodeBox* instantReferralCode_ = nullptr;
   std::unique_ptr<SeedphraseSheet> seedphraseSheet_;
-  std::unique_ptr<BittensorManualSheet> bittensorManualSheet_;
   std::unique_ptr<NetworkServerSheet> networkServerSheet_;
   std::unique_ptr<ConnectionRegionSheet> connectionRegionSheet_;
   Gtk::Button* connectionRegionBtn_ = nullptr;   // "Connecting from: <region>"

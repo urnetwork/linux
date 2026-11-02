@@ -115,11 +115,11 @@ Bring these to Linux (same cross-platform SDK the apple app uses):
   **DONE**: the same bridge, but **one hop** (`provider=bittensor&method=signMessage`)
   and a **plain-query return** (`?address=<ss58>&signature=<0xhex>`, no NaCl
   envelope — sr25519 signatures are public). Since UPGRADE.md 4.6 it runs on the
-  SDK's `BittensorWalletSession` with a wallet chooser: **Talisman** signs on the
-  bridge (`&wallet=talisman`, extension only, no WalletConnect project id) and
-  **TAO.com** on the manual sheet (`BittensorManualSheet`: the challenge, the
-  address, a pasted signature), because TAO.com documents no programmatic
-  interface. `SdkHost::SignInWithBittensor(walletId)` →
+  SDK's `BittensorWalletSession` with a wallet chooser: **Talisman** and
+  **TAO.com** sign on the bridge (`&wallet=talisman`, `&wallet=taocom`, that
+  extension only, no WalletConnect project id), and the page's "Enter address
+  manually" takes a signature made by hand, with btcli or a wallet's own tool.
+  `SdkHost::SignInWithBittensor(walletId)` →
   `authLogin{wallet_auth, blockchain: urnet::TAO}`; the server verifies sr25519.
   "Sign in with Bittensor" sits **above** the Phantom/Solflare buttons on the
   login view. Same deploy dependency as Solana

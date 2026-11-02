@@ -12,7 +12,7 @@
 #include <cstdio>
 #include <utility>
 
-#include "BittensorManualSheet.hpp"
+#include "BittensorWalletChooser.hpp"
 #include "BittensorWalletFlow.hpp"
 #include "DisplayText.hpp"
 #include "EmojiKeyboard.hpp"
@@ -3881,16 +3881,13 @@ void EarningsPage::StartWalletSignature(const std::string& walletId,
                                         const std::string& expectedAddress) {
   if (connecting_) return;
   connecting_ = true;
-  connectWalletId_ = walletId;
   RebuildWalletBlock();
   // minutes, not 20s: the bridge reports errors only when a deep link comes
   // BACK, and a closed browser tab produces nothing, ever; the wait lasts as
   // long as the challenge, which the page's manual form can take all of
-  const std::string transport =
-      urnet::bittensorWalletTransportFor(walletId, std::string(bittensor::kPlatform));
-  const uint32_t timeoutMs = bittensor::TimeoutMsFor(transport, walletId);
   NotifyContinueInBrowser(walletId);
-  const uint32_t generation = BeginFlow(connectFlow_, static_cast<int>(timeoutMs), [this] {
+  const uint32_t generation =
+      BeginFlow(connectFlow_, static_cast<int>(bittensor::kBridgeTimeoutMs), [this] {
     FinishConnecting();
     Notify(T_("wallet_connect_failed", "Failed to connect the wallet."),
            kit::Snackbar::Severity::Error);
@@ -3909,9 +3906,6 @@ void EarningsPage::StartWalletSignature(const std::string& walletId,
 }
 
 void EarningsPage::NotifyContinueInBrowser(const std::string& walletId) {
-  const std::string transport =
-      urnet::bittensorWalletTransportFor(walletId, std::string(bittensor::kPlatform));
-  if (transport != bittensor::kTransportBrowserBridge) return;
   // the page in the browser carries the flow now: say where to look
   const bittensor::ContinueText text = bittensor::ContinueTextFor(walletId);
   const std::string key(text.key);
@@ -3927,10 +3921,6 @@ void EarningsPage::OnWalletSigned(uint32_t generation, const SdkHost::WalletSign
   if (!SettleFlow(connectFlow_, generation, "wallet signature")) return;
   if (!signature.ok) {
     FinishConnecting();
-    if (bittensor::IsCancelled(signature.error)) {
-      // the user closed the manual sheet: the block is simply ready again
-      return;
-    }
     if (bridge::IsSuperseded(signature.error)) {
       // the user started another wallet flow (the Solana sheet): this attempt
       // ended by their choice, and the block is simply ready again
@@ -4042,21 +4032,6 @@ void EarningsPage::ApplyWalletConnectResult(uint32_t generation, bool ok,
   if (!SettleFlow(setWalletFlow_, generation, "wallet connect")) return;
   if (!ok) {
     FinishConnecting();
-    // a signature pasted from the manual wallet that is not from the entered
-    // address: say so, and what to do in that wallet
-    const bittensor::ErrorText mismatch = bittensor::ConnectErrorTextFor(
-        SnErrorCode(serverError),
-        connectWalletId_.empty() ? std::string()
-                                 : urnet::bittensorWalletTransportFor(
-                                       connectWalletId_, std::string(bittensor::kPlatform)));
-    if (!mismatch.key.empty()) {
-      const std::string key(mismatch.key);
-      const std::string english(mismatch.english);
-      Notify(Format(g_dpgettext2(GETTEXT_PACKAGE, key.c_str(), english.c_str()),
-                    urnet::bittensorWalletDisplayName(connectWalletId_)),
-             kit::Snackbar::Severity::Error);
-      return;
-    }
     // a coded refusal in the store's words (wallet_blocked, invalid address),
     // else the raw server error VERBATIM (often the only diagnostic); Error
     // severity persists until dismissed
@@ -4262,11 +4237,9 @@ consent::Flow::Ports EarningsPage::ConsentPorts() {
   // challenge's life.
   ports.sign = [this](const std::string& walletId, const consent::Challenge& challenge,
                       consent::Flow::SignDone done) {
-    const std::string transport =
-        urnet::bittensorWalletTransportFor(walletId, std::string(bittensor::kPlatform));
     NotifyContinueInBrowser(walletId);
-    const uint32_t generation = BeginFlow(
-        consentStep_, static_cast<int>(bittensor::TimeoutMsFor(transport, walletId)), [done] {
+    const uint32_t generation =
+        BeginFlow(consentStep_, static_cast<int>(bittensor::kBridgeTimeoutMs), [done] {
           done(consent::Signed{false, {}, {}, {},
                                T_("wallet_connect_failed", "Failed to connect the wallet.")});
         });

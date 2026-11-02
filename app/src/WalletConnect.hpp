@@ -11,12 +11,12 @@
 //
 // Bittensor runs through the SDK's BittensorWalletSession (sdk
 // bittensor_wallet.go), one session per challenge: the session builds the
-// bridge url (Talisman: the page uses only window.injectedWeb3["talisman"])
-// and judges every result, a bridge return or a manually pasted signature,
-// against the challenge it issued (message, purpose, typed address, ss58,
-// signature shape, expiry). Only an accepted proof reaches on_signature; what
-// the outcomes mean for the flow is BittensorWalletFlow.hpp. sr25519
-// signatures are public, so there is no envelope and no keypair.
+// bridge url (Talisman, TAO.com: the page uses only that wallet's extension)
+// and judges every bridge return, whether a wallet signed it or the user pasted
+// it on the page, against the challenge it issued (message, purpose, typed
+// address, ss58, signature shape, expiry). Only an accepted proof reaches
+// on_signature; what the outcomes mean for the flow is BittensorWalletFlow.hpp.
+// sr25519 signatures are public, so there is no envelope and no keypair.
 //
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
@@ -44,20 +44,13 @@ class WalletConnect {
   // on_signature fires (base64) on the urnetwork://<provider>-sign-message callback.
   void SignMessage(const std::string& message);
 
-  // Bittensor: hand the wallet the session (its challenge already set). The
-  // browser_bridge transport opens session->bridgeUrl(); the manual transport
-  // opens nothing (the host shows the manual sheet and calls
-  // SubmitBittensorManual). Results arrive on on_signature with publicKey()
-  // and message() taken from the accepted proof.
+  // Bittensor: hand the wallet the session (its challenge already set): this
+  // opens session->bridgeUrl(), and a session that has none (any other transport)
+  // answers on_error. Results arrive on on_signature with publicKey() and
+  // message() taken from the accepted proof.
   void SignWithBittensor(std::shared_ptr<urnet::BittensorWalletSession> session);
 
-  // The manual sheet's Continue: the session judges the typed address and the
-  // pasted signature. An accepted proof goes on to on_signature; the result is
-  // returned either way so the sheet can show a correctable refusal.
-  urnet::BittensorWalletResult SubmitBittensorManual(const std::string& address,
-                                                     const std::string& signature);
-
-  // The session in flight, if any (the host cancels it when the sheet closes).
+  // The session in flight, if any (the host cancels it with its flow).
   std::shared_ptr<urnet::BittensorWalletSession> bittensorSession() const {
     return bittensorSession_;
   }
@@ -108,8 +101,8 @@ class WalletConnect {
   // urnetwork://bittensor-sign-message?...: judged by the session
   void HandleBittensorReturn(const std::string& url);
   // an accepted proof -> on_signature; a refusal for this flow -> on_error;
-  // an answer that is not this flow's -> dropped. Returns the outcome.
-  void DeliverBittensorResult(const urnet::BittensorWalletResult& result, bool manual);
+  // an answer that is not this flow's -> dropped.
+  void DeliverBittensorResult(const urnet::BittensorWalletResult& result);
   // urnetwork://oauth/<apple|google>?state=…&id_token=… (or &error=…)
   void HandleOAuthReturn(const std::string& url);
 
