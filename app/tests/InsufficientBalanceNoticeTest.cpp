@@ -27,7 +27,13 @@ struct CountingSink {
   int posts = 0;
   int withdraws = 0;
   int disconnects = 0;
-  void Post() { ++posts; }
+  std::string title;
+  std::string body;
+  void Post(const urnw::balance_notice::Text& t, const urnw::balance_notice::Text& b) {
+    ++posts;
+    title = t.key;
+    body = b.key;
+  }
   void Withdraw() { ++withdraws; }
   void Disconnect() { ++disconnects; }
 };
@@ -196,7 +202,9 @@ UR_TEST(balanceNoticeHeldAlertIsOnTheReachableConnectPage) {
   if (alertAt != std::string::npos) {
     const size_t endAt = page.find("paneAContent_->append(*heldAlert_)", alertAt);
     const std::string block = page.substr(alertAt, endAt - alertAt);
-    UR_EXPECT_TRUE(Has(block, "T_(\"insufficient_balance_held_notice\""));
+    // what the traffic is doing is a live line, not one written when it was built
+    UR_EXPECT_FALSE(Has(block, "insufficient_balance_held_notice"));
+    UR_EXPECT_TRUE(Has(block, "heldAlertTraffic_ = Gtk::make_managed<Gtk::Label>()"));
     UR_EXPECT_TRUE(Has(block, "T_(\"upgrade\", \"Upgrade\")"));
     UR_EXPECT_TRUE(Has(block, "T_(\"disconnect\", \"Disconnect\")"));
     UR_EXPECT_TRUE(Has(block, "on_open_upgrade()"));
@@ -205,7 +213,7 @@ UR_TEST(balanceNoticeHeldAlertIsOnTheReachableConnectPage) {
     UR_EXPECT_FALSE(Has(block, "set_sensitive"));
     UR_EXPECT_FALSE(Has(block, "RelayConnectPress"));
   }
-  UR_EXPECT_TRUE(Has(page, "heldAlert_->set_visible(balance_notice::HeldAlert(signals))"));
+  UR_EXPECT_TRUE(Has(page, "heldAlert_->set_visible(balance_notice::ShowsAlert(signals))"));
   UR_EXPECT_TRUE(Has(window, "connectPage_->ApplyBalanceNotice(signals)"));
   UR_EXPECT_TRUE(Has(window, "on_balance_disconnect = [this] { DisconnectFromBalanceNotice(); }"));
   UR_EXPECT_TRUE(Has(window, "connectPage_->on_open_upgrade"));
@@ -457,4 +465,243 @@ UR_TEST(balanceRecoveryIsWiredIntoTheWindowAndTheConnectPage) {
   UR_EXPECT_TRUE(Has(page, "OutOfBalanceKindText("));
   // the upgrade sheet a blocked connect opens says it too
   UR_EXPECT_TRUE(Has(sheet, "OutOfBalanceKindText("));
+}
+
+// ---- what the traffic is doing while refused ----------------------------------
+
+namespace {
+
+using urnw::balance_notice::AlertOffersUpgrade;
+using urnw::balance_notice::AlertTitle;
+using urnw::balance_notice::Captured;
+using urnw::balance_notice::DaemonCapture;
+using urnw::balance_notice::DataLimitAlert;
+using urnw::balance_notice::DataLimitGate;
+using urnw::balance_notice::ShowsAlert;
+using urnw::balance_notice::TrafficLine;
+using urnw::balance_notice::TrafficLineFor;
+using urnw::balance_notice::TrafficText;
+
+// A paying account refused at a limit, with the tunnel asked for.
+Signals AtLimit() {
+  Signals s = Held();
+  s.pro = true;
+  s.dataLimit = true;
+  return s;
+}
+
+}  // namespace
+
+UR_TEST(balanceNoticeTrafficLineSaysWhatTheCaptureIs) {
+  Signals s = Held();
+  s.captured = true;
+  UR_EXPECT_TRUE(TrafficLineFor(s) == TrafficLine::Held);
+  s.floorInForce = true;
+  UR_EXPECT_TRUE(TrafficLineFor(s) == TrafficLine::Held);
+  s.captured = false;
+  UR_EXPECT_TRUE(TrafficLineFor(s) == TrafficLine::Blocked);
+  s.floorInForce = false;
+  UR_EXPECT_TRUE(TrafficLineFor(s) == TrafficLine::NotProtected);
+}
+
+UR_TEST(balanceNoticeCapturedFollowsTheBoundDeviceFirst) {
+  // the defect's reading: the daemon stopped the tunnel, the last status in hand
+  // still says routes, and the selected destination outlives both
+  UR_EXPECT_FALSE(Captured(false, DaemonCapture{true, true}));
+  UR_EXPECT_FALSE(Captured(false, std::nullopt));
+  // a bound device with no status yet stands on its own
+  UR_EXPECT_TRUE(Captured(true, std::nullopt));
+  UR_EXPECT_TRUE(Captured(true, DaemonCapture{true, true}));
+  // a running tunnel the daemon says holds no routes captures nothing
+  UR_EXPECT_FALSE(Captured(true, DaemonCapture{true, false}));
+  // a status from before the tunnel came up says nothing about it
+  UR_EXPECT_TRUE(Captured(true, DaemonCapture{false, false}));
+}
+
+UR_TEST(balanceNoticeSaysHeldOnlyOverACapture) {
+  Signals s = Held();
+  s.captured = true;
+  UR_EXPECT_TRUE(std::string(TrafficText(s).key) == "insufficient_balance_held_notice");
+  s.captured = false;
+  UR_EXPECT_TRUE(std::string(TrafficText(s).key) == "conn_not_protected");
+  s.floorInForce = true;
+  UR_EXPECT_TRUE(std::string(TrafficText(s).key) == "conn_traffic_blocked");
+}
+
+UR_TEST(balanceNoticeNotificationSaysWhatIsTrueAndFollowsIt) {
+  Tracker tracker;
+  CountingSink sink;
+  Signals s = Held();
+  s.captured = true;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(1, sink.posts);
+  UR_EXPECT_TRUE(sink.title == "insufficient_balance");
+  UR_EXPECT_TRUE(sink.body == "insufficient_balance_held_notice");
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(1, sink.posts);
+  // the daemon stopped the tunnel under it: the notice up is replaced in place
+  s.captured = false;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(2, sink.posts);
+  UR_EXPECT_TRUE(sink.body == "conn_not_protected");
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(2, sink.posts);
+  // the user disconnects: withdrawn, and not posted again in the episode
+  s.connectRequested = false;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(1, sink.withdraws);
+  s.connectRequested = true;
+  s.captured = true;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(2, sink.posts);
+  UR_EXPECT_EQ(0, sink.disconnects);
+}
+
+UR_TEST(balanceNoticeSessionThatNeverCapturedIsNotToldItIsHeld) {
+  Tracker tracker;
+  CountingSink sink;
+  Signals s = Held();
+  s.captured = false;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(1, sink.posts);
+  UR_EXPECT_TRUE(sink.body == "conn_not_protected");
+}
+
+// ---- a paying account refused: the data limit ---------------------------------
+
+UR_TEST(dataLimitIsAPayingAccountsRefusal) {
+  {
+    DataLimitGate gate;
+    UR_EXPECT_TRUE(gate.Observe(true, true, true, false));
+    UR_EXPECT_FALSE(gate.Observe(false, true, true, false));
+  }
+  {
+    DataLimitGate gate;
+    UR_EXPECT_FALSE(gate.Observe(true, true, false, false));
+  }
+  {
+    DataLimitGate gate;
+    UR_EXPECT_FALSE(gate.Observe(false, true, true, false));
+  }
+  {
+    DataLimitGate gate;
+    UR_EXPECT_FALSE(gate.Observe(true, true, true, true));
+    UR_EXPECT_TRUE(gate.Observe(true, true, true, false));
+  }
+}
+
+UR_TEST(dataLimitIgnoresARefusalFromBeforePro) {
+  DataLimitGate gate;
+  UR_EXPECT_FALSE(gate.Observe(true, true, false, false));
+  UR_EXPECT_FALSE(gate.Observe(true, true, false, true));
+  UR_EXPECT_FALSE(gate.Observe(true, true, true, true));
+  // the purchase landed with the old refusal still standing
+  UR_EXPECT_FALSE(gate.Observe(true, true, true, false));
+  UR_EXPECT_FALSE(gate.Observe(true, true, true, false));
+  UR_EXPECT_FALSE(gate.Observe(false, true, true, false));
+  // one the Pro plan got for itself
+  UR_EXPECT_TRUE(gate.Observe(true, true, true, false));
+}
+
+UR_TEST(dataLimitWaitsForTheFirstBalance) {
+  {
+    DataLimitGate gate;
+    UR_EXPECT_FALSE(gate.Observe(true, false, false, false));
+    // Pro on the first reading of a launch is no upgrade
+    UR_EXPECT_TRUE(gate.Observe(true, true, true, false));
+  }
+  {
+    DataLimitGate gate;
+    UR_EXPECT_FALSE(gate.Observe(true, false, false, false));
+    UR_EXPECT_FALSE(gate.Observe(true, true, false, false));
+    UR_EXPECT_FALSE(gate.Observe(true, true, true, false));
+  }
+}
+
+UR_TEST(dataLimitAlertIsTheSameKindWithNothingToBuy) {
+  Signals s = AtLimit();
+  UR_EXPECT_TRUE(DataLimitAlert(s));
+  UR_EXPECT_TRUE(ShowsAlert(s));
+  UR_EXPECT_FALSE(urnw::balance_notice::HeldAlert(s));
+  UR_EXPECT_FALSE(AlertOffersUpgrade(s));
+  UR_EXPECT_TRUE(AlertOffersUpgrade(Held()));
+  UR_EXPECT_TRUE(std::string(AlertTitle(s).key) == "data_limit_reached");
+  UR_EXPECT_TRUE(std::string(AlertTitle(Held()).key) == "insufficient_balance");
+  s.captured = true;
+  UR_EXPECT_TRUE(std::string(TrafficText(s).key) == "data_limit_held_notice");
+  s.captured = false;
+  UR_EXPECT_TRUE(std::string(TrafficText(s).key) == "conn_not_protected");
+  s.floorInForce = true;
+  UR_EXPECT_TRUE(std::string(TrafficText(s).key) == "conn_traffic_blocked");
+  // a Disconnect ends it
+  s.connectRequested = false;
+  UR_EXPECT_FALSE(ShowsAlert(s));
+}
+
+UR_TEST(dataLimitNotificationOncePerEpisodeAndNeverDisconnects) {
+  Tracker tracker;
+  CountingSink sink;
+  Signals s = AtLimit();
+  s.captured = true;
+  tracker.Observe(s, sink);
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(1, sink.posts);
+  UR_EXPECT_TRUE(sink.title == "data_limit_reached");
+  UR_EXPECT_TRUE(sink.body == "data_limit_held_notice");
+  s.captured = false;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(2, sink.posts);
+  UR_EXPECT_TRUE(sink.body == "conn_not_protected");
+  s.insufficientBalance = false;
+  s.dataLimit = false;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(1, sink.withdraws);
+  s = AtLimit();
+  s.captured = true;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(3, sink.posts);
+  UR_EXPECT_EQ(0, sink.disconnects);
+}
+
+UR_TEST(dataLimitNotificationNotAnnouncedForAPurchase) {
+  // the refusal from before the purchase, Pro now, the gate has said no limit
+  Tracker tracker;
+  CountingSink sink;
+  Signals s = Held();
+  s.pro = true;
+  s.dataLimit = false;
+  tracker.Observe(s, sink);
+  UR_EXPECT_EQ(0, sink.posts);
+}
+
+UR_TEST(dataLimitAndCaptureAreWiredIntoTheWindowAndThePage) {
+  const std::string window = ReadSource("MainWindow.cpp");
+  const std::string page = ReadSource("ConnectPage.cpp");
+  // no surface writes the held sentence itself any more
+  UR_EXPECT_FALSE(Has(window, "insufficient_balance_held_notice"));
+  UR_EXPECT_FALSE(Has(page, "insufficient_balance_held_notice"));
+  UR_EXPECT_TRUE(Has(window, "Gio::Notification::create(T_(title.key, title.english))"));
+  UR_EXPECT_TRUE(Has(window, "notification->set_body(T_(body.key, body.english))"));
+  // the window's signals carry the capture and the limit, from the raw status
+  const size_t signalsAt = window.find("balance_notice::Signals MainWindow::BalanceSignals() const {");
+  UR_EXPECT_TRUE(signalsAt != std::string::npos);
+  const std::string signals = window.substr(signalsAt, window.find("balance_notice::AccountBalance MainWindow::", signalsAt) - signalsAt);
+  UR_EXPECT_TRUE(Has(signals, "signals.dataLimit = dataLimit_;"));
+  UR_EXPECT_TRUE(Has(signals, "balance_notice::Captured(reading_.tunnelBound, daemon)"));
+  UR_EXPECT_TRUE(Has(signals, "daemonStatus_->routes_installed"));
+  UR_EXPECT_TRUE(Has(signals, "ctl::KillSwitchState::Armed"));
+  UR_EXPECT_TRUE(Has(window, "dataLimitGate_.Observe(reading_.insufficientBalance, balance_.HasFetched(),"));
+  // the status the tray and the page read has the plan's say over the refusal
+  UR_EXPECT_TRUE(Has(window, "health::WithPlan(folded, balance_.IsPro(), dataLimit_)"));
+  UR_EXPECT_TRUE(Has(page, "health::WithPlan(\n      connect_tap::Fold(reading_.ToSignals(disconnecting), tapPending_), balancePro_,"));
+  // a poll's answer about the capture reaches the alert
+  const size_t healthAt = window.find("void MainWindow::ApplyDaemonHealth(");
+  UR_EXPECT_TRUE(healthAt != std::string::npos);
+  const std::string health = window.substr(healthAt, window.find("if (!connected_) {", healthAt) - healthAt);
+  UR_EXPECT_TRUE(Has(health, "UpdateBalanceNotice();"));
+  // the alert shows the line the signals say, and offers Upgrade only for a balance
+  UR_EXPECT_TRUE(Has(page, "balance_notice::TrafficText(signals)"));
+  UR_EXPECT_TRUE(Has(page, "heldAlertTraffic_->set_text(T_(traffic.key, traffic.english))"));
+  UR_EXPECT_TRUE(Has(page, "heldAlertUpgrade_->set_visible(offersUpgrade)"));
+  UR_EXPECT_TRUE(Has(page, "heldAlertRefresh_->set_visible(offersUpgrade)"));
 }

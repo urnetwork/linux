@@ -548,7 +548,7 @@ namespace {
 struct CountingSink {
   int posts = 0;
   int withdraws = 0;
-  void Post() { ++posts; }
+  void Post(const balance_notice::Text&, const balance_notice::Text&) { ++posts; }
   void Withdraw() { ++withdraws; }
 };
 

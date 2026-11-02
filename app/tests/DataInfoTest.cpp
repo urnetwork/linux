@@ -255,7 +255,7 @@ UR_TEST(DataInfo_EntryPointsReachTheSheet) {
   UR_EXPECT_TRUE(Contains(alert, "T_(\"data_info_why\", \"Why?\")"));
   UR_EXPECT_TRUE(Contains(alert, "on_open_data_info()"));
   // the refresh line comes before the held text
-  UR_EXPECT_TRUE(alert.find("freeRefreshLabel_") < alert.find("insufficient_balance_held_notice"));
+  UR_EXPECT_TRUE(alert.find("freeRefreshLabel_") < alert.find("heldAlertTraffic_"));
   UR_EXPECT_TRUE(Contains(
       Body(page, "void ConnectPage::ApplyBalanceNotice(const balance_notice::Signals& signals) {"),
       "data_info::AlertShowsFreeRefresh(balance_notice::HeldAlert(signals))"));

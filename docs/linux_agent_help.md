@@ -992,7 +992,12 @@ Verdicts in precedence order:
 2026-11-02). The platform refuses its contracts, so the window admits nothing or loses what it had,
 and every reading says dead. That is a billing state, and a stop would let its traffic out in the
 clear, so the traffic stays captured, the app's held alert and notification tell the user, and the
-user's Disconnect is the way out. Neither rule fires and neither counts down while
+user's Disconnect is the way out. The alert and the notification say what the traffic is doing
+from the capture itself (`balance_notice::TrafficLineFor`): held over a tunnel with its routes,
+blocked under the kill switch's floor, or not protected. A selected destination and the status
+outlive a tunnel the daemon stopped, so neither is taken as a capture. A paying account refused at
+a data limit (the same status from the server, `balance_notice::DataLimitGate`) gets the same alert
+and notification in words for the limit, with Disconnect alone. Neither rule fires and neither counts down while
 `OutOfBalanceHold` holds; on both platforms (`app/src/TunnelWatchdog.hpp`, Windows
 `Service/DeadTunnelVerdict.h`) it is the pure `Observe` over one sample's `BalanceReading`:
 

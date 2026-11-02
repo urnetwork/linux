@@ -123,6 +123,24 @@ UR_TEST(stateTableDisconnectingAndBalance) {
             Action::Connect);
 }
 
+// A paying account is not told to add balance. Its refusal reads as the data limit,
+// the same row in words for the limit, with its Disconnect. A refusal from before
+// the purchase that has not cleared says nothing, and the connection reading stands.
+UR_TEST(aPayingAccountsRefusalReadsAsItsDataLimit) {
+  Signals refused = Session(SdkStatus::Connected, 11);
+  refused.insufficientBalance = true;
+  ExpectRow("at the limit", WithPlan(refused, /*pro=*/true, /*dataLimit=*/true), State::Blocked,
+            "Data limit reached", Dot::Coral, Hero::Error, Action::Disconnect);
+  ExpectRow("the refusal from before the purchase", WithPlan(refused, /*pro=*/true, /*dataLimit=*/false),
+            State::Connected, "Connected", Dot::Green, Hero::Connected, Action::Disconnect);
+  ExpectRow("not Pro", WithPlan(refused, /*pro=*/false, /*dataLimit=*/false), State::Blocked,
+            "Insufficient balance — add balance or a plan", Dot::Coral, Hero::Error,
+            Action::Disconnect);
+  Signals fine = Session(SdkStatus::Connected, 11);
+  ExpectRow("no refusal, Pro", WithPlan(fine, /*pro=*/true, /*dataLimit=*/false), State::Connected,
+            "Connected", Dot::Green, Hero::Connected, Action::Disconnect);
+}
+
 // ---- THE REPORTED DEFECT ---------------------------------------------------
 
 UR_TEST(destinationSetOverACarryingTunnelIsNotConnecting) {

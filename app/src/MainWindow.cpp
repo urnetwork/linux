@@ -1103,8 +1103,14 @@ void MainWindow::ApplyDaemonHealth(const std::optional<ctl::StatusReply>& status
   // the strip's Routes, with a session or without one, when the kill
   // switch's floor can be armed with no tunnel
   if (status) {
+    const balance_notice::Signals before = BalanceSignals();
     daemonStatus_ = status;
     ApplyStatusStripDetails();
+    // the held alert says what the traffic is doing, from this reply too
+    const balance_notice::Signals after = BalanceSignals();
+    if (before.captured != after.captured || before.floorInForce != after.floorInForce) {
+      UpdateBalanceNotice();
+    }
   }
   if (!connected_) {
     // A countdown belongs to a live tunnel, and there is none.
@@ -2720,9 +2726,11 @@ void MainWindow::ApplyConnectReading(const ConnectReading& reading) {
   readingApplied_ = true;
   const bool wasConnected = connected_;
   reading_ = reading;
+  ObserveDataLimit();
   // a tap waiting on the command queue shows its own state (ConnectTap.hpp)
-  const health::Signals signals =
+  const health::Signals folded =
       connect_tap::Fold(reading.ToSignals(/*disconnectRequested=*/false), pendingTap_);
+  const health::Signals signals = health::WithPlan(folded, balance_.IsPro(), dataLimit_);
   const health::Reading view = health::Render(signals);
   // "There is a session to disconnect from." Exactly what SdkHost::Connected()
   // used to be asked for, now asked once: the tray's label, the tray's action
@@ -2846,14 +2854,11 @@ void MainWindow::NoteHiddenToTray() {
 // the tracker decides, this only talks to GApplication. It never disconnects.
 void MainWindow::UpdateBalanceNotice() {
   struct Sink {
-    void Post() {
+    void Post(const balance_notice::Text& title, const balance_notice::Text& body) {
       auto app = NotifyingApp();
       if (!app) return;
-      auto notification =
-          Gio::Notification::create(T_("insufficient_balance", "Insufficient balance"));
-      notification->set_body(
-          T_("insufficient_balance_held_notice",
-             "Your traffic is held in the tunnel until you upgrade or disconnect."));
+      auto notification = Gio::Notification::create(T_(title.key, title.english));
+      notification->set_body(T_(body.key, body.english));
       notification->add_button(T_("disconnect", "Disconnect"),
                                std::string("app.") + kBalanceNoticeDisconnectAction);
       app->send_notification(kBalanceNoticeId, notification);
@@ -2862,11 +2867,18 @@ void MainWindow::UpdateBalanceNotice() {
       if (auto app = NotifyingApp()) app->withdraw_notification(kBalanceNoticeId);
     }
   };
-  balance_notice::Signals signals;
-  signals.insufficientBalance = reading_.insufficientBalance;
-  signals.pro = balance_.IsPro();
-  signals.polling = balance_.IsPolling();
-  signals.connectRequested = reading_.destinationSelected;
+  // a balance push that moves the plan's say re-renders the tray and the status
+  // row from the reading the window holds
+  const bool saidBefore = planSaysRefusal_;
+  const bool dataLimitBefore = dataLimit_;
+  ObserveDataLimit();
+  planSaysRefusal_ = reading_.insufficientBalance && balance_.IsPro();
+  if ((dataLimit_ != dataLimitBefore || planSaysRefusal_ != saidBefore) && readingApplied_) {
+    readingApplied_ = false;
+    ApplyConnectReading(reading_);
+    return;  // which came back through here with the new say
+  }
+  const balance_notice::Signals signals = BalanceSignals();
   if (connectPage_) connectPage_->ApplyBalanceNotice(signals);
   Sink sink;
   balanceNotice_.Observe(signals, sink);
@@ -3116,12 +3128,27 @@ void MainWindow::ClearBalanceRecovery() {
   ApplyBalanceRecoveryLines();
 }
 
+void MainWindow::ObserveDataLimit() {
+  dataLimit_ = dataLimitGate_.Observe(reading_.insufficientBalance, balance_.HasFetched(),
+                                      balance_.IsPro(), balance_.IsPolling());
+  if (connectPage_) connectPage_->SetBalancePlan(balance_.IsPro(), dataLimit_);
+}
+
 balance_notice::Signals MainWindow::BalanceSignals() const {
   balance_notice::Signals signals;
   signals.insufficientBalance = reading_.insufficientBalance;
   signals.pro = balance_.IsPro();
   signals.polling = balance_.IsPolling();
   signals.connectRequested = reading_.destinationSelected;
+  signals.dataLimit = dataLimit_;
+  std::optional<balance_notice::DaemonCapture> daemon;
+  if (daemonStatus_) {
+    daemon = balance_notice::DaemonCapture{daemonStatus_->tunnel_state == ctl::TunnelState::Up,
+                                           daemonStatus_->routes_installed};
+    signals.floorInForce = daemonStatus_->kill_switch == ctl::KillSwitchState::Armed ||
+                           daemonStatus_->kill_switch == ctl::KillSwitchState::Connected;
+  }
+  signals.captured = balance_notice::Captured(reading_.tunnelBound, daemon);
   return signals;
 }
 

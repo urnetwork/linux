@@ -9,12 +9,21 @@
 // dead-tunnel failsafe holds for the same state, read from the same status
 // (TunnelWatchdog.hpp OutOfBalanceHold), so the sentence stays true.
 //
+// It is true only over a tunnel that is there. The selected destination and the
+// status outlive a tunnel the daemon stopped (the DeviceRemote keeps answering
+// with its last values), so the alert and the notification say what the traffic
+// is doing from the capture itself (TrafficLineFor): held, blocked by the kill
+// switch's floor, or not protected.
+//
+// A paying account refused at a data limit gets the same alert and notification
+// in words for the limit, with no upgrade on offer (DataLimitGate).
+//
 // An episode starts when insufficient balance is first seen and ends when it
 // clears. The notification is posted at most once per episode, at the first
 // observation where the gate holds and a connection is requested (a Pro plan
-// or a balance poll at entry defers it). It is withdrawn when the episode ends
-// or the connection is no longer requested; a disconnect does not re-arm it
-// within the episode.
+// or a balance poll at entry defers it), and replaced in place if what it says
+// stops being true. It is withdrawn when the episode ends or the connection is
+// no longer requested; a disconnect does not re-arm it within the episode.
 //
 // A new connect is a different matter: with no balance it is blocked and the
 // entry point shows the upgrade path instead (DecideStartConnect, below). That gate
@@ -41,17 +50,122 @@ struct Signals {
   bool polling = false;
   // A destination is selected, i.e. the tunnel is asked to carry traffic.
   bool connectRequested = false;
+  // The refusal is a paying account's data limit (DataLimitGate).
+  bool dataLimit = false;
+  // The tunnel is there and its routes capture this machine's traffic (Captured).
+  bool captured = false;
+  // The kill switch's floor is installed, with or without a tunnel.
+  bool floorInForce = false;
 };
 
 // The existing out-of-balance gate (mac ConnectActions).
 inline bool Gate(const Signals& s) { return s.insufficientBalance && !s.pro && !s.polling; }
 
-// The tunnel is holding traffic for an out-of-balance account: the Connect
-// page shows the held alert with Upgrade and Disconnect.
+// A connection is requested for an out-of-balance account: the Connect page
+// shows the held alert with Upgrade and Disconnect.
 inline bool HeldAlert(const Signals& s) { return Gate(s) && s.connectRequested; }
 
-// Posts and withdraws the desktop notification through a sink with Post() and
-// Withdraw(). The sink is a template parameter so tests can count calls.
+// A connection is requested for a paying account refused at a data limit: the
+// same alert, with Disconnect alone.
+inline bool DataLimitAlert(const Signals& s) { return s.dataLimit && s.connectRequested; }
+
+// The page's alert shows, for either reason.
+inline bool ShowsAlert(const Signals& s) { return HeldAlert(s) || DataLimitAlert(s); }
+
+// Whether the capture is there. The bound device falls with the daemon's
+// verdict, at once and whatever the daemon's last status said. A status in hand
+// can add that a running tunnel holds no routes; one from before the tunnel came
+// up, or none yet, says nothing about it.
+struct DaemonCapture {
+  bool tunnelUp = false;
+  bool routesInstalled = false;
+};
+
+inline bool Captured(bool tunnelBound, const std::optional<DaemonCapture>& daemon) {
+  if (!tunnelBound) return false;
+  return !daemon || !daemon->tunnelUp || daemon->routesInstalled;
+}
+
+// What the traffic is doing while refused.
+enum class TrafficLine {
+  // the routes are installed: traffic goes into the tunnel and waits
+  Held,
+  // no capture, and the kill switch's floor keeps the machine's traffic in
+  Blocked,
+  // no capture and no floor: traffic goes out the normal way
+  NotProtected,
+};
+
+inline TrafficLine TrafficLineFor(const Signals& s) {
+  if (s.captured) return TrafficLine::Held;
+  return s.floorInForce ? TrafficLine::Blocked : TrafficLine::NotProtected;
+}
+
+// A string of the alert or the notification. The key and the English travel
+// together, as gettext looks them up.
+struct Text {
+  const char* key = "";
+  const char* english = "";
+};
+
+inline Text AlertTitle(const Signals& s) {
+  if (s.dataLimit) return {"data_limit_reached", "Data limit reached"};
+  return {"insufficient_balance", "Insufficient balance"};
+}
+
+inline Text TrafficText(const Signals& s) {
+  switch (TrafficLineFor(s)) {
+    case TrafficLine::Held:
+      if (s.dataLimit) {
+        return {"data_limit_held_notice",
+                "Your traffic is held in the tunnel until more data is available or you "
+                "disconnect."};
+      }
+      return {"insufficient_balance_held_notice",
+              "Your traffic is held in the tunnel until you upgrade or disconnect."};
+    case TrafficLine::Blocked:
+      return {"conn_traffic_blocked",
+              "No working provider right now — your traffic is blocked, not exposed. Disconnect "
+              "to go back to your normal connection."};
+    case TrafficLine::NotProtected:
+      break;
+  }
+  return {"conn_not_protected", "Your internet traffic is not protected."};
+}
+
+// The alert's refresh line, its Why? and its Upgrade explain a balance to refill.
+// A paying account at a limit has neither to act on.
+inline bool AlertOffersUpgrade(const Signals& s) { return !s.dataLimit; }
+
+// A refusal the plan does not explain. The server refuses a paying account with
+// the same status it gives an empty one when a data limit stands in the way: the
+// client's own data cap, or the plan's data. Gate never applies to it, so without
+// this the account hears nothing.
+//
+// Pro and the status together do not always mean that. A refusal made before a
+// purchase still stands right after it: the status changes only with the next
+// contract result, and a held connection that sends nothing may not get one. So a
+// refusal seen while the plan was known not to be Pro says nothing about the Pro
+// plan until it clears, and the first balance of a launch is not an upgrade: a
+// plan not fetched yet decides nothing.
+class DataLimitGate {
+ public:
+  bool Observe(bool insufficientBalance, bool planKnown, bool pro, bool polling) {
+    if (!insufficientBalance) {
+      refusedBeforePro_ = false;
+      return false;
+    }
+    if (planKnown && !pro) refusedBeforePro_ = true;
+    return planKnown && pro && !refusedBeforePro_ && !polling;
+  }
+
+ private:
+  bool refusedBeforePro_ = false;
+};
+
+// Posts and withdraws the desktop notification through a sink with
+// Post(title, body) and Withdraw(). The sink is a template parameter so tests can
+// count calls.
 class Tracker {
  public:
   template <class Sink>
@@ -68,16 +182,27 @@ class Tracker {
       Withdraw(sink);
       return;
     }
-    if (!posted_ && Gate(s)) {
+    if (!Gate(s) && !s.dataLimit) return;
+    // the same id replaces in place, so a notice still up never goes on saying
+    // what has stopped being true (a tunnel the daemon stopped under it)
+    const Said said{s.dataLimit, TrafficLineFor(s)};
+    if (!posted_ || (shown_ && !(said == said_))) {
       posted_ = true;
       shown_ = true;
-      sink.Post();
+      said_ = said;
+      sink.Post(AlertTitle(s), TrafficText(s));
     }
   }
 
   bool Shown() const { return shown_; }
 
  private:
+  struct Said {
+    bool dataLimit = false;
+    TrafficLine line = TrafficLine::NotProtected;
+    bool operator==(const Said& o) const { return dataLimit == o.dataLimit && line == o.line; }
+  };
+
   template <class Sink>
   void Withdraw(Sink& sink) {
     if (!shown_) return;
@@ -87,6 +212,7 @@ class Tracker {
 
   bool posted_ = false;
   bool shown_ = false;
+  Said said_;
 };
 
 // ---- the start-connect gate ----------------------------------------------------
