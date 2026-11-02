@@ -1136,7 +1136,10 @@ class Tunnel {
   // session waits out a network switch instead of being torn down as
   // unprotected. `requireOffTunnelRoute` is the bring-up gate's extra demand: at
   // least one family must bind an off-tunnel source, and a Connect on a machine
-  // with no network at all fails as kCodeNoNetwork, saying so.
+  // with no network at all fails as kCodeNoNetwork, saying so. Nor is a marked v6
+  // socket on the tun's own address, when the kernel routes it off the tunnel and
+  // no interface off the tunnel has a usable global address (ReadCapturedV6): that
+  // host has no IPv6 to protect, and this is asked again at every check.
   //
   // `when` is a short tag for the message ("bring-up", "connected", "recheck").
   // Cheap enough for the reaper tick: one `nft` read, two sockets, no name

@@ -2776,23 +2776,20 @@ bool TunnelHost::CheckEgressWitnessLocked() {
   egressWitnessTicks_ = 0;
 
   // No route off the tunnel is a pass here: a network switch in progress, or an
-  // IPv6-only network, is not a session to stop (Tunnel::VerifyEgressWitness).
+  // IPv6-only network, is not a session to stop (Tunnel::VerifyEgressWitness). So
+  // is an IPv6 route with no global address to leave by, read again each time: a
+  // global address that arrives, or leaves, changes this check's reading, and a
+  // reading a change caught half way costs one warning (StepEgressRecheck).
   TunnelError witnessError;
-  if (tunnel_->VerifyEgressWitness("recheck", /*requireOffTunnelRoute=*/false, &witnessError)) {
-    egressWitnessFailures_ = 0;
-    {
-      std::scoped_lock lock(statusMutex_);
-      status_.egress_protected = true;
-    }
-    return false;
-  }
-
-  ++egressWitnessFailures_;
+  const bool passed =
+      tunnel_->VerifyEgressWitness("recheck", /*requireOffTunnelRoute=*/false, &witnessError);
+  const EgressRecheckStep step = StepEgressRecheck(settings_, passed, &egressWitnessFailures_);
   {
     std::scoped_lock lock(statusMutex_);
-    status_.egress_protected = false;
+    status_.egress_protected = passed;
   }
-  if (egressWitnessFailures_ < settings_.egress_witness_failures_to_stop) {
+  if (step == EgressRecheckStep::Passed) return false;
+  if (step == EgressRecheckStep::Warned) {
     DaemonLogf(
         "[tunnel] WARNING: the egress witness failed (%s). Re-checking in %ds; %d in a row "
         "tears this tunnel down.\n",

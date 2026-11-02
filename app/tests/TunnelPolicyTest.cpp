@@ -1309,7 +1309,9 @@ UR_TEST(theNetworkSwitchPathReadsItsTimingsFromSettings) {
   UR_EXPECT_TRUE(
       Contains(witness, "if (++egressWitnessTicks_ < settings_.egress_witness_interval_ticks)"));
   UR_EXPECT_TRUE(
-      Contains(witness, "if (egressWitnessFailures_ < settings_.egress_witness_failures_to_stop)"));
+      Contains(witness, "StepEgressRecheck(settings_, passed, &egressWitnessFailures_)"));
+  UR_EXPECT_TRUE(Contains(ReadAppSource("daemon/HostSettings.hpp"),
+                          "*failures < settings.egress_witness_failures_to_stop"));
   const std::string message = FunctionBody(host, "std::string DeadTunnelMessage(");
   UR_EXPECT_TRUE(Contains(message, "seconds(settings.deadFastMillis)"));
   UR_EXPECT_TRUE(Contains(message, "seconds(settings.deadSlowMillis)"));

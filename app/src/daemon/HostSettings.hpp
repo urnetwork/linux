@@ -104,6 +104,28 @@ inline bool FilterFailureLogged(const HostSettings& settings, int failures) {
   return failures % every == 0;
 }
 
+// What one re-check of the egress witness does to a running session. `failures`
+// is the run of failed re-checks before this one: a pass ends it, and a failure
+// stops the session once the run reaches egress_witness_failures_to_stop, so a
+// reading a network change caught half way costs a warning and not the session.
+// The run is the caller's to clear after it has logged a stop.
+enum class EgressRecheckStep {
+  Passed,
+  Warned,
+  Stop,
+};
+
+inline EgressRecheckStep StepEgressRecheck(const HostSettings& settings, bool passed,
+                                           int* failures) {
+  if (passed) {
+    *failures = 0;
+    return EgressRecheckStep::Passed;
+  }
+  ++*failures;
+  return *failures < settings.egress_witness_failures_to_stop ? EgressRecheckStep::Warned
+                                                              : EgressRecheckStep::Stop;
+}
+
 // How many ticks the next DNS check waits: the file tiers' every-tick read
 // while their check passes and the file is not contested, the slower interval
 // for a check that forks, after a failed repair, and for a contested file.
