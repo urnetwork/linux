@@ -1277,11 +1277,6 @@ msgctxt "bittensor_signature_placeholder"
 msgid "Paste the 0x… signature"
 msgstr "粘贴 0x… 签名"
 
-#. Note under ur.io's Bittensor wallet chooser: the TAO.com browser extension signs only when a website asks it to, and this page does not ask it yet, so its users choose another wallet or sign with btcli.
-msgctxt "bittensor_taocom_not_direct"
-msgid "The TAO.com extension can't sign on this page yet. Choose another wallet here, or sign manually with btcli."
-msgstr "TAO.com 扩展目前还无法在此页面上签名。请在此选择其他钱包，或使用 btcli 手动签名。"
-
 #. Label of the connected wallet block.
 msgctxt "bittensor_wallet"
 msgid "Bittensor wallet"
