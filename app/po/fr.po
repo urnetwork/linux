@@ -1110,6 +1110,11 @@ msgctxt "bittensor_error_challenge_expired"
 msgid "This request expired. Start again to get a new message to sign."
 msgstr "Cette demande a expiré. Recommencez pour obtenir un nouveau message à signer."
 
+#. Bittensor wallet error (ur.io, and the apps when a ur.io wallet bridge page returns extension_not_authorized): the browser extension has not allowed the site to use an account yet, so nothing was signed. The user rejected or closed the extension's connect window, has no Polkadot/Bittensor account in the extension, removed the site's accounts in the extension's connected sites, or a connect request is still open in it. Talisman says "Site <url> has not been authorised for Talisman yet"; polkadot{.js}, SubWallet and TAO.com say "The source <url> has not been enabled yet" or "is not allowed to interact with this extension". The argument is the wallet product name (Talisman or TAO.com). "Connected Sites" is the extension's settings page that lists the sites allowed to use its accounts: use the extension's own name for it where it ships your language (Talisman: de Verbundene Seiten, es Sitios Conectados, ru Подключенные сайты, zh 连接网站); otherwise keep the English name, followed by a translation in parentheses.
+msgctxt "bittensor_error_extension_not_authorized"
+msgid "{} hasn't allowed ur.io to use your Bittensor account yet. Approve the connection request in the wallet, or allow ur.io under Connected Sites in its settings, then try again."
+msgstr "{} n'a pas encore autorisé ur.io à utiliser votre compte Bittensor. Approuvez la demande de connexion dans le portefeuille ou autorisez ur.io dans « Connected Sites » (sites connectés) dans ses réglages, puis réessayez."
+
 #. Error: the wallet's browser extension is not installed in this browser (on ur.io, or in the apps when a ur.io wallet bridge page returns extension_not_found). The argument is the wallet product name (Talisman on the Bittensor page, Phantom or Solflare on the Solana page).
 msgctxt "bittensor_error_extension_not_found"
 msgid "The {} extension was not found in this browser. Install it, then try again."
@@ -1149,6 +1154,21 @@ msgstr "La demande WalletConnect a expiré avant que le portefeuille ne réponde
 msgctxt "bittensor_error_walletconnect_unavailable"
 msgid "WalletConnect is not available right now. Try again later, or enter your address manually."
 msgstr "WalletConnect n'est pas disponible pour le moment. Réessayez plus tard ou saisissez votre adresse manuellement."
+
+#. The manual signing option in a Bittensor wallet chooser: on ur.io its own entry, and in the phone apps the line under a wallet that has no way to sign here directly. The user signs a message outside the page or app, for example with the btcli command line tool, and pastes the signature back.
+msgctxt "bittensor_manual_choice"
+msgid "Sign manually"
+msgstr "Signer manuellement"
+
+#. First line of the manual signing form, on ur.io and in the apps' sheet. Support inbox 8167: a user waited for a wallet window that never comes on this path.
+msgctxt "bittensor_manual_no_popup"
+msgid "No wallet window opens for this. You sign the message yourself, then paste the signature below."
+msgstr "Aucune fenêtre de portefeuille ne s'ouvre ici. Vous signez le message vous-même, puis vous collez la signature ci-dessous."
+
+#. The phone apps' manual signing sheet: what to do when the wallet can't sign a pasted message. WalletConnect and Nova are product names, and ur.io/app/account/earnings is a web address: keep them as they are.
+msgctxt "bittensor_manual_phone_route"
+msgid "If your wallet can't sign a pasted message, go back and choose WalletConnect (Nova and others), or sign at ur.io/app/account/earnings in a computer's browser."
+msgstr "Si votre portefeuille ne peut pas signer un message collé, revenez en arrière et choisissez WalletConnect (Nova et d'autres), ou signez sur ur.io/app/account/earnings dans le navigateur d'un ordinateur."
 
 #. Manual Bittensor wallet proof: how to sign the shown challenge message. The argument is the wallet product name (Talisman or TAO.com).
 msgctxt "bittensor_manual_sign_instructions"
