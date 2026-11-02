@@ -249,8 +249,8 @@ enum class BalanceStep {
 //   - Once the account is back in balance but no new provider has been admitted
 //     since a reset, the session stays held: nothing has said so yet. A funded
 //     account whose rebuilt window never forms is the one left captured until
-//     its user acts, told "No working provider right now". That cost is the one
-//     this chooses over a leak.
+//     its user acts: the app reads "Couldn't connect" and its Retry starts a new
+//     session, judged afresh. That cost is the one this chooses over a leak.
 class OutOfBalanceHold {
  public:
   BalanceStep Observe(const BalanceReading& reading) {

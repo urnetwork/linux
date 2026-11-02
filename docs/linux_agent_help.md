@@ -1014,8 +1014,9 @@ user's Disconnect is the way out. Neither rule fires and neither counts down whi
   before it gets here (`DecideStartConnect`). With no answer at all there is nothing to tell a
   billing state from the dead network this failsafe exists for.
 - **What it costs:** an account back in balance whose rebuilt window never admits a provider stays
-  held, because nothing has said it is in balance. It stays captured, is told "No working provider
-  right now", and Disconnect works. That is the cost chosen over a leak.
+  held, because nothing has said it is in balance. It stays captured with the connect page reading
+  "Couldn't connect" (Windows: "No working provider right now"), and its Retry or Disconnect ends
+  the session; a new one is judged afresh. That is the cost chosen over a leak.
 - **`SdkUnresponsive` stays.** It is about a hung process, not traffic: a wedged device cannot be
   brought back by a balance, cannot answer whether it is out of balance, and would hold the user's
   Disconnect behind the same lock. An out-of-balance session that really wedges is stopped like any
