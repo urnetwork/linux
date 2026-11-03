@@ -17,6 +17,7 @@
 
 #include "AddSignInFlow.hpp"
 #include "AuthViews.hpp"
+#include "BittensorKeyHost.hpp"
 #include "BittensorWalletChooser.hpp"
 #include "BrandIcons.hpp"
 #include "BittensorWalletFlow.hpp"
@@ -1371,8 +1372,29 @@ class AccountDeleteSheet : public Gtk::Window {
     error_->set_visible(false);
     box->append(*error_);
 
+    // the network's one-tap key isn't backed up (3g): deleting the account
+    // deletes it from this device too
+    keyWarning_ = MakeSizedLabel(
+        T_("bittensor_key_delete_account_message_2",
+           "Your Bittensor key isn't backed up. Deleting your account also deletes it from this "
+           "device, and URnetwork can't get it back."),
+        13, "ur-body");
+    SetToned(*keyWarning_, kUrDanger,
+             T_("bittensor_key_delete_account_message_2",
+                "Your Bittensor key isn't backed up. Deleting your account also deletes it from "
+                "this device, and URnetwork can't get it back."));
+    keyWarning_->set_visible(false);
+    box->append(*keyWarning_);
+
     auto* actions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
     actions->set_halign(Gtk::Align::END);
+    backUpFirst_ = Gtk::make_managed<Gtk::Button>(T_("bittensor_key_back_up_first", "Back up first"));
+    backUpFirst_->add_css_class("suggested-action");
+    backUpFirst_->set_visible(false);
+    backUpFirst_->signal_clicked().connect([this] {
+      if (on_back_up_first) on_back_up_first();
+    });
+    actions->append(*backUpFirst_);
     cancel_ = Gtk::make_managed<Gtk::Button>(T_("cancel", "Cancel"));
     cancel_->signal_clicked().connect([this] { set_visible(false); });
     actions->append(*cancel_);
@@ -1395,20 +1417,31 @@ class AccountDeleteSheet : public Gtk::Window {
   // the request went out): the session is meaningless once the network is
   // gone, and a sign-in made since belongs to another network.
   std::function<void(const auth_logout::Report& signIn)> on_deleted;
+  // Back up first: the Key screen of the network's one-tap key
+  std::function<void()> on_back_up_first;
 
-  void Open() {
+  // `keyNeedsBackup`: the network's one-tap key isn't backed up, and the
+  // deletion warns, with Back up first.
+  void Open(bool keyNeedsBackup) {
     ++*epoch_;
     nameFlow_.Abandon();
     deleteFlow_.Abandon();
     deleting_ = false;
     name_.clear();
+    deletedNetworkId_.clear();
     confirm_->set_text("");
     confirm_->set_sensitive(false);
     error_->set_visible(false);
+    keyWarning_->set_visible(keyNeedsBackup);
+    backUpFirst_->set_visible(keyNeedsBackup);
     Gate();
     ReadName();
     present();
   }
+
+  // The network the deletion was made for, read with its sign-in as the request
+  // went out: its one-tap key is forgotten after it.
+  const std::string& DeletedNetworkId() const { return deletedNetworkId_; }
 
  private:
   bool CanAct() const { return canAct_ && canAct_(); }
@@ -1497,6 +1530,10 @@ class AccountDeleteSheet : public Gtk::Window {
     // The sign-in being deleted, read now: by the answer a server sign-out
     // and another sign-in may have landed, and only this one is signed out.
     const auth_logout::Report signIn = host_.SignInNow("account deleted");
+    // ...and its network, whose one-tap key goes with it
+    if (const std::optional<urnet::ByJwt> jwt = host_.ParseByJwt()) {
+      deletedNetworkId_ = jwt->NetworkId.value_or(std::string());
+    }
     host_.api().networkDelete(
         [this, epoch, seen, flow, signIn](std::optional<urnet::NetworkDeleteResult> result,
                                           std::optional<std::string> err) {
@@ -1541,7 +1578,10 @@ class AccountDeleteSheet : public Gtk::Window {
   Gtk::Label* error_ = nullptr;
   Gtk::Button* deleteButton_ = nullptr;
   Gtk::Button* cancel_ = nullptr;
+  Gtk::Label* keyWarning_ = nullptr;
+  Gtk::Button* backUpFirst_ = nullptr;
   std::string name_;  // the FRESHLY read name; empty means the gate is closed
+  std::string deletedNetworkId_;
   bool deleting_ = false;
 };
 
@@ -2453,10 +2493,9 @@ void AccountPage::BuildDangerGroup(Gtk::Box& host) {
   {
     auto row = kit::MakePaneTwoLineRowButton(T_("sign_out", "Sign out"), {}, kRowTall,
                                              RowIcon(MdiGlyph::Logout));
-    row.root->signal_clicked().connect([this] {
-      // no confirm: signing out costs nothing and is instantly reversible
-      host_.Logout();
-    });
+    // no confirm: signing out costs nothing and is instantly reversible, unless
+    // the network's one-tap key isn't backed up (RequestSignOut)
+    row.root->signal_clicked().connect([this] { RequestSignOut(); });
     host.append(*row.root);
   }
   {
@@ -3307,13 +3346,88 @@ void AccountPage::ShowDeleteAccountSheet() {
     deleteSheet_ = std::make_unique<AccountDeleteSheet>(
         *root, host_, [this] { return CanCallApi(); });
     deleteSheet_->on_deleted = [this](const auth_logout::Report& signIn) {
+      // the deleted network's one-tap key goes from this device first, with
+      // its notes and its reminder (3g): the account it paid is gone
+      BittensorKeyForgetNetwork(deleteSheet_->DeletedNetworkId(), nullptr);
       // the session is meaningless once the network is gone, and only the
       // deleted network's sign-in is signed out (android signOutApplies)
       host_.LogoutIfStill(signIn);
     };
+    // Back up first: the Key screen instead of the deletion
+    deleteSheet_->on_back_up_first = [this] {
+      deleteSheet_->set_visible(false);
+      if (on_back_up_bittensor_key) on_back_up_bittensor_key();
+    };
     WireSheet(*deleteSheet_);
   }
-  deleteSheet_->Open();
+  // the deletion warns while the network's one-tap key isn't backed up, which
+  // the store answers off the main loop
+  const std::optional<urnet::ByJwt> jwt = host_.ParseByJwt();
+  const std::string networkId = jwt ? jwt->NetworkId.value_or(std::string()) : std::string();
+  auto alive = alive_;
+  BittensorKeyNeedsBackup(networkId, [this, alive](bool needsBackup) {
+    if (!*alive || !deleteSheet_) return;
+    deleteSheet_->Open(needsBackup);
+  });
+}
+
+// Sign out asks nothing, unless the network's one-tap key isn't backed up (3e,
+// 3f): the key stays on this device and comes back with the network's next
+// sign-in, but a device lost before its phrase is saved takes the only copy.
+void AccountPage::RequestSignOut() {
+  const std::optional<urnet::ByJwt> jwt = host_.ParseByJwt();
+  const std::string networkId = jwt ? jwt->NetworkId.value_or(std::string()) : std::string();
+  auto alive = alive_;
+  BittensorKeyNeedsBackup(networkId, [this, alive](bool needsBackup) {
+    if (!*alive) return;
+    if (!needsBackup) {
+      host_.Logout();
+      return;
+    }
+    ShowKeySignOutWarning();
+  });
+}
+
+// The action sheet of 3f: Back up first (the Key screen), Sign out, Cancel.
+// The app's AdwMessageDialog idiom, its deprecation warnings silenced here only.
+void AccountPage::ShowKeySignOutWarning() {
+  Gtk::Window* root = RootWindow();
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+  GtkWidget* dialog = adw_message_dialog_new(
+      root ? root->gobj() : nullptr,
+      T_("bittensor_key_sign_out_title_2", "Your Bittensor key isn't backed up"),
+      T_("bittensor_key_sign_out_message_2",
+         "It stays on this device and comes back when you sign in to this network again. If you "
+         "lose this device before saving it, your SN25α can't be reached."));
+  adw_message_dialog_add_responses(
+      ADW_MESSAGE_DIALOG(dialog), "cancel", T_("cancel", "Cancel"), "back-up",
+      T_("bittensor_key_back_up_first", "Back up first"), "sign-out", T_("sign_out", "Sign out"),
+      nullptr);
+  adw_message_dialog_set_response_appearance(ADW_MESSAGE_DIALOG(dialog), "back-up",
+                                             ADW_RESPONSE_SUGGESTED);
+  adw_message_dialog_set_response_appearance(ADW_MESSAGE_DIALOG(dialog), "sign-out",
+                                             ADW_RESPONSE_DESTRUCTIVE);
+  adw_message_dialog_set_default_response(ADW_MESSAGE_DIALOG(dialog), "cancel");
+  adw_message_dialog_set_close_response(ADW_MESSAGE_DIALOG(dialog), "cancel");
+  G_GNUC_END_IGNORE_DEPRECATIONS
+  struct Ctx {
+    AccountPage* self;
+    std::shared_ptr<bool> alive;
+  };
+  g_signal_connect_data(
+      dialog, "response",
+      G_CALLBACK(+[](AdwMessageDialog*, const char* response, gpointer data) {
+        auto* ctx = static_cast<Ctx*>(data);
+        if (!*ctx->alive) return;
+        if (g_strcmp0(response, "sign-out") == 0) {
+          ctx->self->host_.Logout();
+        } else if (g_strcmp0(response, "back-up") == 0 && ctx->self->on_back_up_bittensor_key) {
+          ctx->self->on_back_up_bittensor_key();
+        }
+      }),
+      new Ctx{this, alive_}, +[](gpointer data, GClosure*) { delete static_cast<Ctx*>(data); },
+      G_CONNECT_DEFAULT);
+  gtk_window_present(GTK_WINDOW(dialog));
 }
 
 }  // namespace urnw

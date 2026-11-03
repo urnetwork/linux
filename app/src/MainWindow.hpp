@@ -76,6 +76,11 @@ class MainWindow : public Gtk::ApplicationWindow {
   // it never starts a connection.
   static constexpr const char* kBalanceNoticeDisconnectAction = "balance-notice-disconnect";
   void DisconnectFromBalanceNotice();
+  // The one-tap Bittensor key's Key screen, on Earnings: Back up first (sign
+  // out, account deletion) and the reminder's notification ("app." +
+  // BittensorKeyHost::kReminderAction, registered in main.cpp). Signed out:
+  // nothing.
+  void OpenEarningsKeyScreen();
   // Closing just hid the window to the tray: the first time ever, a
   // notification says the app is still running there (TrayPolicy.hpp).
   void NoteHiddenToTray();
