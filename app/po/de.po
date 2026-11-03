@@ -4870,6 +4870,11 @@ msgctxt "extender_activation_refused"
 msgid "Activation refused: {}"
 msgstr "Aktivierung abgelehnt: {}"
 
+#. Extender status when the operator's required test could not reach this device from the internet on TCP port 443, usually because a firewall rejects it or a router doesn't forward the port, and no family is active. The extender is an optional extra on top of providing, so this tells the user what it needs and that they can turn it off. 'Extender' names the Extender switch; use its label. The argument is the operator's technical reason.
+msgctxt "extender_activation_unreachable"
+msgid "The internet can't reach this device on TCP port 443. Allow or forward TCP 443 (and UDP 443 and 4053), or turn Extender off: {}"
+msgstr "Dieses Gerät ist aus dem Internet nicht über TCP-Port 443 erreichbar. Gib TCP 443 (und UDP 443 und 4053) frei oder leite sie weiter, oder schalte den Extender aus: {}"
+
 #. Extender status when at least one address family is activated. The argument is the family or families, from the IPv4, IPv6 and IPv4 and IPv6 labels.
 msgctxt "extender_active"
 msgid "Active · {}"

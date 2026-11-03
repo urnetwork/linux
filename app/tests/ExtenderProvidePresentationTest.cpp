@@ -226,6 +226,9 @@ UR_TEST(ExtenderProvide_EachErrorCaseByErrorCaseAlone) {
        "Could not listen: tcp: bind: permission denied; quic: bind: permission denied"},
       {"activation_refused", "not reachable from the operator", "extender_activation_refused",
        "Activation refused: not reachable from the operator"},
+      {"activation_unreachable", "the tcp carrier failed after 0.05 s: no route to host",
+       "extender_activation_unreachable",
+       "The internet can't reach this device on TCP port 443. Allow or forward TCP 443 (and UDP 443 and 4053), or turn Extender off: the tcp carrier failed after 0.05 s: no route to host"},
       {"activation_failed", "context deadline exceeded", "extender_activation_failed",
        "Activation failed: context deadline exceeded"},
   };
