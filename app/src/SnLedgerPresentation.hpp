@@ -298,4 +298,18 @@ class ClaimProgress {
   bool needsGas_ = false;
 };
 
+// The Transaction link of URnetwork's claim (the claim relay's 4d): the
+// explorer page the SDK names from the chain settings (ClaimTxUrl), opened in
+// the browser only when it is a web page, an https URL with nothing that isn't
+// printable in it. "" is no link.
+inline std::string TransactionLink(const std::string& url) {
+  static const std::string kScheme = "https://";
+  if (url.size() <= kScheme.size() || url.compare(0, kScheme.size(), kScheme) != 0) return {};
+  for (const char c : url) {
+    const auto byte = static_cast<unsigned char>(c);
+    if (byte <= 0x20 || byte == 0x7f) return {};
+  }
+  return url;
+}
+
 }  // namespace urnw::snledger

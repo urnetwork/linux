@@ -257,6 +257,9 @@ class Flow {
   // a signing is in flight: the bridge is the consent's
   bool Busy() const { return phase_ == Phase::Signing; }
   Phase phase() const { return phase_; }
+  // the status read last; none while it is not known (the one-tap key's flow
+  // reads it, with its first epoch)
+  const std::optional<Status>& status() const { return status_; }
 
   View Current() const {
     View view;

@@ -1952,6 +1952,8 @@ void MainWindow::BuildHome() {
   accountPage_->on_open_api_keys = [this] {
     if (shell_) shell_->Navigate("api_keys");
   };
+  // Back up first, from the sign-out and account-deletion warnings
+  accountPage_->on_back_up_bittensor_key = [this] { OpenEarningsKeyScreen(); };
   shell_->SetPage("api_keys", *apiKeysPage_);
   supportPage_ = Gtk::make_managed<SupportPage>(host_);
   supportPage_->on_snackbar = [this](const Glib::ustring& message, bool error) {
@@ -2454,6 +2456,15 @@ void MainWindow::HandleTop200Link(const std::string& url) {
   present();
   shell_->Navigate("earnings");
   earningsPage_->OpenTop200SignSheet(link.binding, /*fromLink=*/true);
+}
+
+void MainWindow::OpenEarningsKeyScreen() {
+  // signed out: dropped, nothing is kept for later
+  if (!host_.IsLoggedIn() || !shell_ || !earningsPage_) return;
+  present();
+  // Earnings reads its key's flow on the way in; the screen opens once it has it
+  shell_->Navigate("earnings");
+  earningsPage_->OpenBittensorKeyScreen();
 }
 
 void MainWindow::OpenOnboardingIfPending() {

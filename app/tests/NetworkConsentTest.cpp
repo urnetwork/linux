@@ -925,8 +925,11 @@ UR_TEST(ConsentWiring_TheSectionDrawsTheFlowsView) {
   UR_EXPECT_TRUE(Before(draw, "case consent::Notice::Expired:", "T_(\"sn_consent_expired\""));
   UR_EXPECT_TRUE(Before(draw, "case consent::Notice::Failed:", "T_(\"sn_consent_failed\""));
   UR_EXPECT_TRUE(Before(draw, "case consent::Notice::OwnerOnly:", "T_(\"sn_consent_owner_only\""));
-  // the flow redraws the section, and its other errors are the page's snackbar
-  UR_EXPECT_TRUE(Contains(page, "consent_.on_changed = [this] { RebuildWalletBlock(); };"));
+  // the flow redraws the section, after the one-tap key's flow reads the same
+  // status, and its other errors are the page's snackbar
+  UR_EXPECT_TRUE(Contains(page, "consent_.on_changed = [this] { OnConsentChanged(); };"));
+  UR_EXPECT_TRUE(Before(FunctionBody(page, "void EarningsPage::OnConsentChanged()"),
+                        "FeedKeyConsent();", "RebuildWalletBlock();"));
   UR_EXPECT_TRUE(Contains(FunctionBody(page, "void EarningsPage::RebuildWalletBlock()"),
                           "RebuildConsentSection();"));
   UR_EXPECT_TRUE(Contains(page, "consent_.on_error = [this](const std::string& error) {"));
