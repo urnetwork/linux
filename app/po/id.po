@@ -1152,6 +1152,271 @@ msgctxt "bittensor_error_walletconnect_unavailable"
 msgid "WalletConnect is not available right now. Try again later, or enter your address manually."
 msgstr "WalletConnect sedang tidak tersedia. Coba lagi nanti, atau masukkan alamat Anda secara manual."
 
+#. The reason in the system's device authentication prompt (Face ID, Touch ID, passcode). macOS shows it after the app's name: 'URnetwork is trying to use your Bittensor recovery phrase'. iOS shows it alone. Write the phrase that reads naturally in both, in your language's form for a purpose, and start it in lower case where your language allows.
+msgctxt "bittensor_key_auth_reason"
+msgid "use your Bittensor recovery phrase"
+msgstr "menggunakan frasa cadangan Bittensor Anda"
+
+#. Earnings screen: the title of a warning banner, and a button on the payout card. Both open the Key screen, where the user saves the recovery phrase.
+msgctxt "bittensor_key_back_up"
+msgid "Back up your key"
+msgstr "Cadangkan kunci Anda"
+
+#. Earnings screen: the warning banner under Back up your key, which stays until the phrase is saved.
+msgctxt "bittensor_key_banner_body"
+msgid "If you lose this device before saving your recovery phrase, your SN25α can't be reached."
+msgstr "Jika Anda kehilangan perangkat ini sebelum menyimpan frasa cadangan Anda, SN25α Anda tidak dapat diakses."
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. Shown while a screen recording or mirroring is running.
+msgctxt "bittensor_key_capture_hidden"
+msgid "The words stay hidden while your screen is being recorded or mirrored."
+msgstr "Kata-kata tetap tersembunyi selama layar Anda direkam atau dicerminkan."
+
+#. Earnings screen, the payout card for the network's payouts. Explains the one tap, read before it. A miner is a device on the network that earns; this is the Bittensor sense of the word.
+msgctxt "bittensor_key_card_explain"
+msgid "URnetwork creates a Bittensor key on this device and pays every miner on your network to it, from the next epoch."
+msgstr "URnetwork membuat kunci Bittensor di perangkat ini dan membayar setiap penambang di jaringan Anda ke kunci itu, mulai epoch berikutnya."
+
+#. Earnings screen, the payout card for the network's payouts. The first line while the network has no payout wallet. Set up payouts is the main button below it.
+msgctxt "bittensor_key_card_none"
+msgid "No payout wallet yet. Earnings aren't paid until you set one up."
+msgstr "Belum ada dompet pembayaran. Penghasilan tidak dibayarkan sampai Anda menyiapkannya."
+
+#. Earnings screen, the payout card for the network's payouts. The key was made and stored, but the step that links it to payouts did not finish. The Finish setup button follows.
+msgctxt "bittensor_key_card_not_linked"
+msgid "Your key is on this device, but payouts aren't set up yet."
+msgstr "Kunci Anda ada di perangkat ini, tetapi pembayaran belum disiapkan."
+
+#. Earnings screen, the payout card for the network's payouts. The short form of the warning, read before the one tap.
+msgctxt "bittensor_key_card_not_wallet"
+msgid "URnetwork is not a wallet. To transfer or use your SN25α, you enter the key's recovery phrase into a Bittensor wallet or btcli. If you lose this device before saving it, your SN25α can't be reached."
+msgstr "URnetwork bukan dompet. Untuk mentransfer atau menggunakan SN25α Anda, Anda memasukkan frasa cadangan kunci ke dompet Bittensor atau btcli. Jika Anda kehilangan perangkat ini sebelum menyimpan frasa tersebut, SN25α Anda tidak dapat diakses."
+
+#. Earnings screen, the payout card for the network's payouts. Payouts go to another wallet, and a key made earlier is still on this device.
+msgctxt "bittensor_key_card_other_consent"
+msgid "The key on this device isn't receiving payouts."
+msgstr "Kunci di perangkat ini tidak menerima pembayaran."
+
+#. Earnings screen, the payout card for the network's payouts. The user proved they saved the phrase and chose to keep the key on the device.
+msgctxt "bittensor_key_card_saved"
+msgid "Your recovery phrase is saved, and the key stays on this device."
+msgstr "Frasa cadangan Anda sudah disimpan, dan kunci tetap ada di perangkat ini."
+
+#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. 
+msgctxt "bittensor_key_confirm_body"
+msgid "URnetwork can't get this key back. Earnings keep going to this address, and only the recovery phrase can move them."
+msgstr "URnetwork tidak dapat mengambil kembali kunci ini. Penghasilan tetap dikirim ke alamat ini, dan hanya frasa cadangan yang dapat memindahkannya."
+
+#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. 
+msgctxt "bittensor_key_confirm_convert"
+msgid "This app also can't convert your SN25α to TAO after this. A Bittensor wallet or btcli can, with this recovery phrase."
+msgstr "Setelah ini, aplikasi ini juga tidak dapat mengonversi SN25α Anda ke TAO. Dompet Bittensor atau btcli dapat melakukannya, dengan frasa cadangan ini."
+
+#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. Two fields follow, labeled Word 3, Word 9 and so on.
+msgctxt "bittensor_key_confirm_prompt"
+msgid "To show you saved it, enter these two words from your recovery phrase."
+msgstr "Untuk menunjukkan bahwa Anda sudah menyimpannya, masukkan dua kata ini dari frasa cadangan Anda."
+
+#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. Top 200 is a ranking the network's miners can claim a place on.
+msgctxt "bittensor_key_confirm_top200"
+msgid "Deleting this key also gives up claiming a Top 200 spot with one tap. You could still claim from a Bittensor wallet holding this recovery phrase."
+msgstr "Menghapus kunci ini juga berarti melepaskan kesempatan mengamankan tempat Top 200 dengan satu ketukan. Anda masih dapat mengamankannya dari dompet Bittensor yang memuat frasa cadangan ini."
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. Next to the Copy button.
+msgctxt "bittensor_key_copy_warning"
+msgid "Other apps may be able to read the clipboard. It's cleared after 60 seconds."
+msgstr "Aplikasi lain mungkin dapat membaca papan klip. Papan klip dikosongkan setelah 60 detik."
+
+#. Earnings screen, the payout card for the network's payouts. A small link when payouts go to another wallet. A warning follows before anything changes.
+msgctxt "bittensor_key_create_here"
+msgid "Create a key on this device"
+msgstr "Buat kunci di perangkat ini"
+
+#. The confirmation of Delete account, shown only while the Bittensor key's recovery phrase is not saved.
+msgctxt "bittensor_key_delete_account_message"
+msgid "Your Bittensor recovery phrase isn't saved yet. Deleting your account also deletes this key from this device, and without the phrase your SN25α can't be reached."
+msgstr "Frasa cadangan Bittensor Anda belum disimpan. Menghapus akun Anda juga menghapus kunci ini dari perangkat ini, dan tanpa frasa tersebut SN25α Anda tidak dapat diakses."
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. The one destructive button: the user says the phrase is saved, and the app may forget it.
+msgctxt "bittensor_key_delete_action"
+msgid "I have saved the key, it's OK to delete it now."
+msgstr "Saya sudah menyimpan kunci, kunci boleh dihapus sekarang."
+
+#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. The destructive button.
+msgctxt "bittensor_key_delete_confirm"
+msgid "Delete key"
+msgstr "Hapus kunci"
+
+#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. The title.
+msgctxt "bittensor_key_delete_title"
+msgid "Delete this key from this app?"
+msgstr "Hapus kunci ini dari aplikasi ini?"
+
+#. Earnings screen, the payout card for the network's payouts. Payouts go to an address whose key is not in this app. The phrase cannot be shown here.
+msgctxt "bittensor_key_elsewhere"
+msgid "This key is on another device or in your wallet."
+msgstr "Kunci ini ada di perangkat lain atau di dompet Anda."
+
+#. Earnings screen, the payout card for the network's payouts. A general error under the Set up payouts button.
+msgctxt "bittensor_key_failure_consent"
+msgid "Couldn't set up payouts. Try again."
+msgstr "Tidak dapat menyiapkan pembayaran. Coba lagi."
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. An error after the user asked to delete the key.
+msgctxt "bittensor_key_failure_delete"
+msgid "Couldn't delete the key from this device. It's still here."
+msgstr "Tidak dapat menghapus kunci dari perangkat ini. Kunci masih ada di sini."
+
+#. Earnings screen, the payout card for the network's payouts. An error under the Set up payouts button.
+msgctxt "bittensor_key_failure_generate"
+msgid "Couldn't make a key on this device. Try again."
+msgstr "Tidak dapat membuat kunci di perangkat ini. Coba lagi."
+
+#. Earnings screen, the payout card for the network's payouts. The device's secure storage (Apple's Keychain) did not answer, usually because the device is locked.
+msgctxt "bittensor_key_failure_keychain"
+msgid "Couldn't read this device's keychain. Unlock your device and try again."
+msgstr "Tidak dapat membaca rantai kunci perangkat ini. Buka kunci perangkat Anda dan coba lagi."
+
+#. Earnings screen, the payout card for the network's payouts. An error under the Set up payouts button: the new key could not be written to the device's secure storage.
+msgctxt "bittensor_key_failure_store"
+msgid "Couldn't save the key on this device, so nothing was signed. Try again, or save the recovery phrase first."
+msgstr "Tidak dapat menyimpan kunci di perangkat ini, jadi tidak ada yang ditandatangani. Coba lagi, atau simpan frasa cadangan terlebih dahulu."
+
+#. Earnings screen, the payout card for the network's payouts. Button that retries the link between the key on this device and the network's payouts.
+msgctxt "bittensor_key_finish_setup"
+msgid "Finish setup"
+msgstr "Selesaikan penyiapan"
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. Button that covers the words again.
+msgctxt "bittensor_key_hide"
+msgid "Hide"
+msgstr "Sembunyikan"
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. A smaller link: the user says the phrase is saved, and the key stays on the device, so the reminders stop.
+msgctxt "bittensor_key_keep_action"
+msgid "I've saved it. Keep it on this device."
+msgstr "Saya sudah menyimpannya. Tetap simpan di perangkat ini."
+
+#. Key screen, the button that finishes the check and keeps the key on the device.
+msgctxt "bittensor_key_keep_confirm"
+msgid "Keep key"
+msgstr "Tetap simpan kunci"
+
+#. Key screen, the check before the key stays on the device: the user enters two of its words.
+msgctxt "bittensor_key_keep_title"
+msgid "Keep this key on this device?"
+msgstr "Tetap simpan kunci ini di perangkat ini?"
+
+#. Earnings screen, the payout card for the network's payouts. A status line after the user saved the phrase and the app deleted its copy of the key.
+msgctxt "bittensor_key_no_longer_here"
+msgid "This app no longer has the key"
+msgstr "Aplikasi ini tidak lagi memiliki kunci"
+
+#. Earnings screen, the payout card for the network's payouts. Under: This app no longer has the key.
+msgctxt "bittensor_key_no_longer_here_body"
+msgid "Your earnings keep going to this address. To transfer or use your SN25α, enter your recovery phrase into a Bittensor wallet such as Talisman or Nova, or into btcli."
+msgstr "Penghasilan Anda tetap dikirim ke alamat ini. Untuk mentransfer atau menggunakan SN25α Anda, masukkan frasa cadangan Anda ke dompet Bittensor seperti Talisman atau Nova, atau ke btcli."
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. The app also has a sign-in seed phrase of 24 words, a different secret, and people mix them up. Keep the two terms clearly different: use the same word for 'seed phrase' as the sign-up screen's 'Your Seedphrase' does in your language where it fits, and the word for 'recovery phrase' everywhere else in these strings.
+msgctxt "bittensor_key_not_seed_phrase"
+msgid "This is not your account seed phrase from sign-up. It only controls this Bittensor key."
+msgstr "Ini bukan frasa pemulihan akun Anda dari saat mendaftar. Frasa cadangan ini hanya mengendalikan kunci Bittensor ini."
+
+#. Earnings screen, the payout card for the network's payouts. A status line after setup. An epoch is the network's settlement period.
+msgctxt "bittensor_key_payouts_start"
+msgid "Payouts start next epoch"
+msgstr "Pembayaran dimulai pada epoch berikutnya"
+
+#. A local notification, the body.
+msgctxt "bittensor_key_reminder_body"
+msgid "Your first epoch of earnings can now be claimed. If you lose this device before saving your recovery phrase, your SN25α can't be reached."
+msgstr "Penghasilan epoch pertama Anda kini dapat diklaim. Jika Anda kehilangan perangkat ini sebelum menyimpan frasa cadangan Anda, SN25α Anda tidak dapat diakses."
+
+#. A local notification, the title. It arrives once, when the first epoch's earnings can be claimed.
+msgctxt "bittensor_key_reminder_title"
+msgid "Back up your Bittensor key"
+msgstr "Cadangkan kunci Bittensor Anda"
+
+#. Earnings screen, a warning before a new key on this device replaces the network's payout wallet.
+msgctxt "bittensor_key_replace_message"
+msgid "This key replaces your payout wallet from the next epoch. Earlier earnings stay on the old wallet."
+msgstr "Kunci ini menggantikan dompet pembayaran Anda mulai epoch berikutnya. Penghasilan sebelumnya tetap ada di dompet lama."
+
+#. Earnings screen, the title of a warning before a new key on this device replaces the network's payout wallet.
+msgctxt "bittensor_key_replace_title"
+msgid "Replace your payout wallet?"
+msgstr "Ganti dompet pembayaran Anda?"
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. The words are covered, and this is on the cover.
+msgctxt "bittensor_key_reveal"
+msgid "Tap to reveal"
+msgstr "Ketuk untuk menampilkan"
+
+#. Earnings screen, the payout card for the network's payouts. A smaller link under Set up payouts: shows the phrase to save before anything else happens.
+msgctxt "bittensor_key_save_first"
+msgid "Save the recovery phrase first"
+msgstr "Simpan frasa cadangan terlebih dahulu"
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. After the link to payouts failed, for a key that exists only in memory. A Retry button follows.
+msgctxt "bittensor_key_save_now_retry"
+msgid "Payouts aren't set up yet. No earnings went to this key, and leaving discards it."
+msgstr "Pembayaran belum disiapkan. Tidak ada penghasilan yang masuk ke kunci ini, dan jika Anda keluar, kunci ini akan dibuang."
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. The screen's title.
+msgctxt "bittensor_key_screen_title"
+msgid "Bittensor recovery phrase"
+msgstr "Frasa cadangan Bittensor"
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. Shown after the user took a screenshot of the screen.
+msgctxt "bittensor_key_screenshot_warning"
+msgid "If that screenshot shows your recovery phrase, delete it. Anyone with this phrase controls your SN25α."
+msgstr "Jika tangkapan layar itu menampilkan frasa cadangan Anda, hapus tangkapan layar tersebut. Siapa pun yang memiliki frasa ini mengendalikan SN25α Anda."
+
+#. Earnings screen, the payout card for the network's payouts. The main button: one tap makes the key, stores it on the device and links it to payouts.
+msgctxt "bittensor_key_set_up"
+msgid "Set up payouts"
+msgstr "Siapkan pembayaran"
+
+#. Earnings screen, the payout card for the network's payouts. A small link that opens the Key screen.
+msgctxt "bittensor_key_show"
+msgid "Show key"
+msgstr "Tampilkan kunci"
+
+#. The confirmation of Sign out, the message.
+msgctxt "bittensor_key_sign_out_message"
+msgid "Your Bittensor recovery phrase isn't saved yet. The key stays on this device and comes back when this network signs in again. If you lose this device before saving it, your SN25α can't be reached."
+msgstr "Frasa cadangan Bittensor Anda belum disimpan. Kunci tetap ada di perangkat ini dan kembali saat jaringan ini masuk lagi. Jika Anda kehilangan perangkat ini sebelum menyimpan frasa tersebut, SN25α Anda tidak dapat diakses."
+
+#. The confirmation of Sign out, shown only while the Bittensor key's recovery phrase is not saved. The buttons are Sign out and Cancel.
+msgctxt "bittensor_key_sign_out_title"
+msgid "Sign out without saving your key?"
+msgstr "Keluar tanpa menyimpan kunci Anda?"
+
+#. Earnings screen, the payout card for the network's payouts. A smaller link under Set up payouts: for someone who already has a Bittensor wallet.
+msgctxt "bittensor_key_use_wallet"
+msgid "Use a wallet I already have"
+msgstr "Gunakan dompet yang sudah saya miliki"
+
+#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. A field label: which word of the phrase to enter, counting from 1, for example Word 3.
+msgctxt "bittensor_key_word_number"
+msgid "Word {}"
+msgstr "Kata {}"
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. Always visible on the screen.
+msgctxt "bittensor_key_wording_control"
+msgid "Anyone with this phrase controls your SN25α. URnetwork will never ask for it, and can't recover it. If you lose this device before saving it, your SN25α can't be reached."
+msgstr "Siapa pun yang memiliki frasa ini mengendalikan SN25α Anda. URnetwork tidak akan pernah memintanya, dan tidak dapat memulihkannya. Jika Anda kehilangan perangkat ini sebelum menyimpan frasa tersebut, SN25α Anda tidak dapat diakses."
+
+#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. Always visible on the screen.
+msgctxt "bittensor_key_wording_not_wallet"
+msgid "URnetwork is not a wallet. It created this key so you can receive SN25α. To transfer or use your SN25α, enter this recovery phrase into a Bittensor wallet such as Talisman or Nova, or into btcli."
+msgstr "URnetwork bukan dompet. URnetwork membuat kunci ini agar Anda dapat menerima SN25α. Untuk mentransfer atau menggunakan SN25α Anda, masukkan frasa cadangan ini ke dompet Bittensor seperti Talisman atau Nova, atau ke btcli."
+
+#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. An error under the two fields.
+msgctxt "bittensor_key_words_rejected"
+msgid "Those words don't match. Check your saved recovery phrase."
+msgstr "Kata-kata itu tidak cocok. Periksa frasa cadangan yang Anda simpan."
+
 #. The manual signing option in a Bittensor wallet chooser: on ur.io its own entry, and in the phone apps the line under a wallet that has no way to sign here directly. The user signs a message outside the page or app, for example with the btcli command line tool, and pastes the signature back.
 msgctxt "bittensor_manual_choice"
 msgid "Sign manually"
