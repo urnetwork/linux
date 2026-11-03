@@ -4783,7 +4783,7 @@ bool EarningsPage::RebuildConsentKeyPart(const consent::View& view) {
         }
       } else if (state == urnet::BittensorLocalKeyStateStoreUnavailable) {
         note(T_("bittensor_key_failure_keychain",
-                "Couldn't read this device's keychain. Unlock your device and try again."));
+                "Couldn't read this device's secure storage. Unlock your device and try again."));
         link(T_("retry", "Retry"), [this] { keys_->Reload(); });
       } else {
         title(T_("bittensor_key_card_none",
@@ -4868,7 +4868,7 @@ bool EarningsPage::RebuildConsentKeyPart(const consent::View& view) {
         failure();
       } else if (state == urnet::BittensorLocalKeyStateStoreUnavailable) {
         note(T_("bittensor_key_failure_keychain",
-                "Couldn't read this device's keychain. Unlock your device and try again."));
+                "Couldn't read this device's secure storage. Unlock your device and try again."));
         link(T_("retry", "Retry"), [this] { keys_->Reload(); });
       } else {
         failure();

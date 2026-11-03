@@ -1322,10 +1322,10 @@ msgctxt "bittensor_key_failure_generate"
 msgid "Couldn't make a key on this device. Try again."
 msgstr "ไม่สามารถสร้างคีย์บนอุปกรณ์นี้ได้ ลองอีกครั้ง"
 
-#. Earnings screen, the payout card for the network's payouts. The device's secure storage (Apple's Keychain) did not answer, usually because the device is locked.
+#. Earnings screen, the payout card for the network's payouts. The device's secure storage did not answer, usually because the device is locked: Keychain on Apple, Keystore on Android, the credential store on a desktop. The same words on every platform, so name none of them.
 msgctxt "bittensor_key_failure_keychain"
-msgid "Couldn't read this device's keychain. Unlock your device and try again."
-msgstr "ไม่สามารถอ่านพวงกุญแจของอุปกรณ์นี้ได้ ปลดล็อกอุปกรณ์ของคุณแล้วลองอีกครั้ง"
+msgid "Couldn't read this device's secure storage. Unlock your device and try again."
+msgstr "ไม่สามารถอ่านพื้นที่จัดเก็บที่ปลอดภัยของอุปกรณ์นี้ได้ ปลดล็อกอุปกรณ์ของคุณแล้วลองอีกครั้ง"
 
 #. Earnings screen, the payout card for the network's payouts. An error under the Set up payouts button: the new key could not be written to the device's secure storage.
 msgctxt "bittensor_key_failure_store"
@@ -9580,6 +9580,11 @@ msgstr "“รับตอนนี้” ออกค่าใช้จ่า�
 msgctxt "sn_claim_relay_claim_now_paid_each"
 msgid "Paid by URnetwork, once every {} days for each coldkey."
 msgstr "ออกค่าใช้จ่ายโดย URnetwork ใช้ได้ {} วันต่อครั้งสำหรับแต่ละ coldkey"
+
+#. Earnings, the claim sheet and the settlement v2 tile, once URnetwork has claimed the balance and paid the gas (the claimed state, beside a link to the transaction). The first placeholder is the amount claimed, as 0.8420; the second is the user's Bittensor address, shortened (5F3s…kQ9v); keep both as they are.
+msgctxt "sn_claim_relay_claimed"
+msgid "Claimed by URnetwork. {0} SN25α is on your key, {1}."
+msgstr "URnetwork รับให้แล้ว {0} SN25α อยู่ในคีย์ของคุณ {1}"
 
 #. Earnings screen, the settlement v2 tile and the claim sheet: a line beside a relay icon. URnetwork sends the claim transaction and pays its gas; the SN25α goes to the user's own address.
 msgctxt "sn_claim_relay_for_you"

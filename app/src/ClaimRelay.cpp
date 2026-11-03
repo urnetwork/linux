@@ -176,9 +176,10 @@ Gtk::Button* MakeLink(const Glib::ustring& text, const std::function<void()>& ac
   return button;
 }
 
-// URnetwork's claim, the latest (4d): the claim, what it paid and the coldkey it
-// landed on, then its transaction. The store has no sentence for the mocks'
-// banner yet (ClaimRelay.hpp), so its facts are lines of their own.
+// URnetwork's claim, the latest (4d): the store's one sentence for it on every
+// app, sn_claim_relay_claimed, with what it paid and the coldkey it is on, or
+// Claimed alone without an amount or a coldkey to name; then its transaction.
+// The sentence names SN25α, so the amount carries no symbol.
 void AppendClaimedBanner(Gtk::Box& into, const urnet::SnClaimStatusResult& status,
                          const std::function<void(const std::string& url)>& openLink) {
   auto* banner = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 10);
@@ -192,16 +193,19 @@ void AppendClaimedBanner(Gtk::Box& into, const urnet::SnClaimStatusResult& statu
   banner->append(*icon);
   auto* lines = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
   lines->set_hexpand(true);
-  lines->append(*MakeStrong(T_("claim_confirmed", "Claimed")));
   const int64_t amountRao = status.claim_amount_rao.value_or(0);
-  if (0 < amountRao) lines->append(*MakeText(urnet::formatAlpha(amountRao), "ur-value"));
   const std::string coldkey = status.coldkey_ss58.value_or(std::string());
-  if (!coldkey.empty()) {
-    auto* address = MakeText(urnet::shortSs58(coldkey), "ur-row-note");
-    address->set_tooltip_text(coldkey);
+  if (0 < amountRao && !coldkey.empty()) {
+    const Glib::ustring text = Format(T_("sn_claim_relay_claimed",
+                                         "Claimed by URnetwork. {0} SN25α is on your key, {1}."),
+                                      urnet::formatAlphaAmount(amountRao), urnet::shortSs58(coldkey));
+    auto* sentence = MakeText(text, "ur-body");
+    sentence->set_tooltip_text(coldkey);
     kit::SetAccessibleLabel(
-        *address, Glib::ustring(T_("bittensor_wallet", "Bittensor wallet")) + ", " + coldkey);
-    lines->append(*address);
+        *sentence, text + ", " + Glib::ustring(T_("bittensor_wallet", "Bittensor wallet")) + ", " + coldkey);
+    lines->append(*sentence);
+  } else {
+    lines->append(*MakeStrong(T_("claim_confirmed", "Claimed")));
   }
   banner->append(*lines);
   into.append(*banner);

@@ -30,7 +30,7 @@ Glib::ustring BittensorKeyFailureText(const std::string& code, const std::string
   }
   if (code == urnet::BittensorLocalKeyFailureStoreUnavailable) {
     return T_("bittensor_key_failure_keychain",
-              "Couldn't read this device's keychain. Unlock your device and try again.");
+              "Couldn't read this device's secure storage. Unlock your device and try again.");
   }
   if (code == urnet::BittensorLocalKeyFailureDelete) {
     return T_("bittensor_key_failure_delete",
