@@ -8,6 +8,7 @@
 #include <exception>
 #include <utility>
 
+#include "BittensorKeyHost.hpp"
 #include "BrandIcons.hpp"
 #include "Formatters.hpp"
 #include "I18n.hpp"
@@ -670,10 +671,24 @@ void SessionsPage::PressSignOut(const sessions::Target& target) {
   const std::optional<sessions::Confirmation> confirmation =
       flow_.Press(snapshot_, target, MakeWords());
   if (!confirmation) return;
-  ShowConfirmation(*confirmation);
+  if (!confirmation->self) {
+    ShowConfirmation(*confirmation, false);
+    return;
+  }
+  // this app's own session: a sign-out leaves the network's one-tap key
+  // behind, and the confirmation says so while its phrase isn't saved
+  const std::optional<urnet::ByJwt> jwt = host_.ParseByJwt();
+  const std::string networkId = jwt ? jwt->NetworkId.value_or(std::string()) : std::string();
+  auto alive = alive_;
+  const sessions::Confirmation asked = *confirmation;
+  BittensorKeyNeedsBackup(networkId, [this, alive, asked](bool keyNeedsBackup) {
+    if (!*alive) return;
+    ShowConfirmation(asked, keyNeedsBackup);
+  });
 }
 
-void SessionsPage::ShowConfirmation(const sessions::Confirmation& confirmation) {
+void SessionsPage::ShowConfirmation(const sessions::Confirmation& confirmation,
+                                    bool keyNeedsBackup) {
   Gtk::Window* root = RootWindow();
   if (root == nullptr) {
     g_warning("sessions: no window root; the sign-out confirmation did not open");
@@ -721,7 +736,15 @@ void SessionsPage::ShowConfirmation(const sessions::Confirmation& confirmation) 
   heading->set_xalign(0);
   heading->set_wrap(true);
   box->append(*heading);
-  auto* body = Gtk::make_managed<Gtk::Label>(sessions::ConfirmationBody(confirmation, MakeWords()));
+  std::string bodyText = sessions::ConfirmationBody(confirmation, MakeWords());
+  if (confirmation.self && keyNeedsBackup) {
+    bodyText += "\n\n";
+    bodyText += T_("bittensor_key_sign_out_message",
+                   "Your Bittensor recovery phrase isn't saved yet. The key stays on this device and "
+                   "comes back when this network signs in again. If you lose this device before "
+                   "saving it, your SN25α can't be reached.");
+  }
+  auto* body = Gtk::make_managed<Gtk::Label>(bodyText);
   body->add_css_class("ur-body");
   body->set_xalign(0);
   body->set_wrap(true);

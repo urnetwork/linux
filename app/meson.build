@@ -228,6 +228,14 @@ executable('urnetwork-gui',
     'src/ProtocolBoard.cpp',
     'src/SolanaWalletSheet.cpp',
     'src/BittensorWalletChooser.cpp',
+    # the one-tap Bittensor key: its Secret Service store, polkit's check, its
+    # flow's host, the Key screen and the claim relay (apple BTEASY.md)
+    'src/BittensorKeyStore.cpp',
+    'src/BittensorKeyAuth.cpp',
+    'src/BittensorKeyText.cpp',
+    'src/BittensorKeyHost.cpp',
+    'src/BittensorKeyScreen.cpp',
+    'src/ClaimRelay.cpp',
     'src/Top200SignSheet.cpp',
     'src/EmojiTagSheet.cpp',
     'src/AccountPage.cpp',
@@ -635,6 +643,8 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/SnClaimStatusWiringTest.cpp',
     'tests/SnLedgerPresentationTest.cpp',
     'tests/NetworkConsentTest.cpp',
+    'tests/BittensorKeyPlatformTest.cpp',
+    'tests/BittensorKeyWiringTest.cpp',
     'tests/WalletBridgeRouteTest.cpp',
     'tests/BittensorWalletFlowTest.cpp',
     'tests/ManageSubscriptionTest.cpp',
@@ -914,6 +924,10 @@ urnetwork_tests = executable('urnetwork-tests',
               # page's tabs, panes, Top 200 tile and shared switch, and the
               # stylesheet the same way; ProtocolBoardPresentationTest reads
               # po/en.po.
+              # BittensorKeyWiringTest reads the one-tap Bittensor key's store,
+              # polkit check, host, Key screen, Earnings, Account and Sessions
+              # pages, window, main.cpp, meson.build, po/POTFILES.in, the polkit
+              # policy and the Flatpak manifest the same way.
               # CryptoPayWiringTest reads the payment-method row, the crypto
               # invoice and its host, the upgrade sheet, the onboarding, the
               # Account plan pane, the window, meson.build and the Flatpak

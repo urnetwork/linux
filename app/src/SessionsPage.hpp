@@ -101,7 +101,9 @@ class SessionsPage : public Gtk::Box {
   void UpdateRow(RowWidgets& row, const sessions::Row& text, sessions::ActionView view);
   void RenderOthers(const sessions::Screen& screen);
   void PressSignOut(const sessions::Target& target);
-  void ShowConfirmation(const sessions::Confirmation& confirmation);
+  // `keyNeedsBackup`: this app's own session leaves an unsaved one-tap key
+  // behind, and the confirmation says so
+  void ShowConfirmation(const sessions::Confirmation& confirmation, bool keyNeedsBackup);
   void RestoreFocus(const sessions::Target& target);
   void Retry();
   void CopySessionId(const std::string& sessionId);

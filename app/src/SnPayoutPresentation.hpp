@@ -26,12 +26,14 @@
 namespace urnw::snpayout {
 
 // The current epoch's settlement times (the SDK's SnEpochSchedule): when it
-// ends, when its share can be claimed and when an unclaimed share expires.
+// ends, when its share can be claimed and when an unclaimed share expires,
+// and the policy's epoch length in blocks (the one-tap key's reminder reads it).
 struct EpochSchedule {
   int64_t epoch = 0;
   int64_t endMillis = 0;
   int64_t claimOpenMillis = 0;
   int64_t expiryMillis = 0;
+  int64_t epochBlocks = 0;
 };
 
 enum class LineKind {

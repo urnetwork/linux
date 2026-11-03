@@ -12,6 +12,8 @@
 #include <cstdio>
 #include <utility>
 
+#include "BittensorKeyScreen.hpp"
+#include "BittensorKeyText.hpp"
 #include "BittensorWalletChooser.hpp"
 #include "BittensorWalletFlow.hpp"
 #include "DisplayText.hpp"
@@ -871,6 +873,7 @@ void FetchClaims(SdkHost& host, ClaimsDone done) {
         s.endMillis = result->schedule->end_millis;
         s.claimOpenMillis = result->schedule->claim_open_millis;
         s.expiryMillis = result->schedule->expiry_millis;
+        s.epochBlocks = result->schedule->epoch_blocks;
         schedule = s;
       }
       done(std::move(rows), result->total_claimable_rao, std::string(), schedule);
@@ -1044,6 +1047,52 @@ void LedgerClaim(SdkHost& host, urnet::SnLedgerClaimCallback callback) {
     return;
   }
   host.device().snLedgerClaim(std::move(callback));
+}
+
+// URnetwork's claim relay (sdk sn_claim_relay.go), through the device like the
+// claims: what it says of the network's settlement v2 balance, and Claim now.
+// The status carries its own error (the balances unavailable, never zero); a
+// call that could not run answers nullopt, as with no device yet.
+using ClaimStatusDone = std::function<void(std::optional<urnet::SnClaimStatusResult> status)>;
+void FetchClaimStatus(SdkHost& host, ClaimStatusDone done) {
+  if (!host.DeviceSteady()) {
+    done(std::nullopt);
+    return;
+  }
+  host.device().snClaimStatus([done](std::optional<urnet::SnClaimStatusResult> result,
+                                     std::optional<std::string> err) {
+    if (err || !result) {
+      done(std::nullopt);
+      return;
+    }
+    done(std::move(result));
+  });
+}
+
+using ClaimNowDone = std::function<void(ClaimNowOutcome outcome)>;
+void ClaimNow(SdkHost& host, const std::string& coldkeySs58, ClaimNowDone done) {
+  ClaimNowOutcome outcome;
+  if (!host.DeviceSteady()) {
+    outcome.kind = ClaimNowOutcome::Kind::Failed;
+    outcome.message = kNoDevice;
+    done(std::move(outcome));
+    return;
+  }
+  host.device().snClaimNow(coldkeySs58, [done](std::optional<urnet::SnClaimNowResult> result,
+                                               std::optional<std::string> err) {
+    ClaimNowOutcome outcome;
+    if (err || !result || result->error) {
+      outcome.kind = ClaimNowOutcome::Kind::Failed;
+      outcome.message = ErrorText(result ? result->error : std::nullopt, err, "no result");
+    } else if (result->requested) {
+      outcome.kind = ClaimNowOutcome::Kind::Requested;
+    } else {
+      outcome.kind = ClaimNowOutcome::Kind::Refused;
+      outcome.reason = result->reason.value_or(std::string());
+      outcome.nextAtMillis = result->next_at_millis.value_or(0);
+    }
+    done(std::move(outcome));
+  });
 }
 
 // The network payout consent (NetworkConsent.hpp, CONSENT.md §9): the Api's
@@ -1817,9 +1866,23 @@ EarningsPage::EarningsPage(SdkHost& host)
     : Gtk::Box(Gtk::Orientation::HORIZONTAL, 0), host_(host), consent_(ConsentPorts()) {
   EnsureBrandCss();
   EnsureDrawerCss();
+  // the one-tap Bittensor key: its flow's mirror draws the payout card, the
+  // banner, the wallet card, the payout line, the claim tiles and the Key
+  // screen, and a consent it got accepted reads everything again
+  keys_ = std::make_unique<BittensorKeyHost>();
+  keys_->on_changed = [this] { OnKeysChanged(); };
+  {
+    auto alive = alive_;
+    keys_->on_linked = [this, alive] {
+      PostToMain([this, alive] {
+        if (*alive) Load();
+      });
+    };
+  }
   // the consent section redraws with the wallet block, whose bridge it shares
-  // (RebuildWalletBlock); a failure it does not word itself is the snackbar's
-  consent_.on_changed = [this] { RebuildWalletBlock(); };
+  // (RebuildWalletBlock), after the key's flow reads the same status; a
+  // failure it does not word itself is the snackbar's
+  consent_.on_changed = [this] { OnConsentChanged(); };
   consent_.on_error = [this](const std::string& error) {
     Notify(SnErrorMessage(error, T_("something_went_wrong", "Something went wrong.")),
            kit::Snackbar::Severity::Error);
@@ -1845,6 +1908,8 @@ EarningsPage::EarningsPage(SdkHost& host)
   protocol_->on_mine_changed = [this] {
     RebuildTop200();
     ApplyProtocolPublic();
+    // deleting the key gives up one-tap Top 200 only until a fleet is bound
+    keys_->SetTop200Registered(Top200Registered());
   };
   protocol_->on_list_changed = [this] {
     if (paneB_.meta != nullptr) ApplyLedgerMeta();
@@ -1920,6 +1985,10 @@ EarningsPage::~EarningsPage() {
   consentStep_.timer.disconnect();
   consent_.on_changed = nullptr;
   consent_.on_error = nullptr;
+  // the key's flow ends with the page: nothing of it may reach a widget now
+  keys_->on_changed = nullptr;
+  keys_->on_linked = nullptr;
+  keyScreen_.reset();
   sheet_.reset();
 }
 
@@ -2016,6 +2085,9 @@ void EarningsPage::OpenLink(const std::string& url) {
 
 void EarningsPage::Load() {
   ++*epoch_;  // drop every completion armed for the previous session
+  // a Claim now still out was the previous load's: its answer is dropped
+  claimingNow_ = false;
+  claimNowOutcome_ = ClaimNowOutcome{};
   if (samplePinned_) return;
   LoadEarnings();
   LoadLegacyWallets();  // the Solana payout wallet: its own reads, never chained
@@ -2082,6 +2154,8 @@ void EarningsPage::ApplyBreakpoint(int widthDip) {
 void EarningsPage::SetBalanceState(bool isPro, bool guest) {
   isPro_ = isPro;
   isGuest_ = guest;
+  // a guest network has no login to come back to: no key, only the wallet
+  keys_->SetGuest(KeyGuest());
 }
 
 void EarningsPage::SetPreviewMode(bool on) {
@@ -2099,6 +2173,11 @@ void EarningsPage::ShowPreviewSnackbar() {
 void EarningsPage::SettleAllEmpty() {
   // no session: no consent to show, and nothing in flight counts any more
   consent_.Reset();
+  // ...and no key's flow: its phrase in memory, if any, goes
+  keyConsentFed_.reset();
+  keys_->SignedOut();
+  claimStatus_.reset();
+  claimNowOutcome_ = ClaimNowOutcome{};
   ApplyPoints(urnet::AccountPointsList{}, Fetch::Ready);
   ApplyEpochs(std::vector<AccountEpochRow>{}, Fetch::Ready);
   ApplySnWallet(std::nullopt, Fetch::Ready);
@@ -2136,6 +2215,45 @@ void EarningsPage::BuildEarningsPane() {
   paneA_.root->set_hexpand(false);
   kit::SetAccessibleLabel(*paneA_.root, T_("earnings", "Earnings"));
   Gtk::Box* content = paneA_.content;
+  paneAContent_ = content;
+
+  // 0. the backup banner: leads Earnings while the one-tap key's phrase isn't
+  //    known to be saved (the flow's BackupReminder), and opens the Key screen
+  {
+    keyBanner_ = Gtk::make_managed<Gtk::Button>();
+    keyBanner_->add_css_class("ur-key-banner");
+    keyBanner_->set_margin_start(12);
+    keyBanner_->set_margin_end(12);
+    keyBanner_->set_margin_top(12);
+    auto* inside = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 10);
+    auto* warning = Gtk::make_managed<Gtk::Image>();
+    warning->set_from_icon_name("dialog-warning-symbolic");
+    warning->set_valign(Gtk::Align::START);
+    warning->add_css_class("ur-key-icon-warn");
+    kit::MarkDecorative(*warning);
+    inside->append(*warning);
+    auto* words = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
+    words->set_hexpand(true);
+    auto* title = MakeWrappedNote(T_("bittensor_key_back_up", "Back up your key"), "ur-value");
+    title->add_css_class("ur-key-strong");
+    words->append(*title);
+    words->append(*MakeWrappedNote(
+        T_("bittensor_key_banner_body",
+           "If you lose this device before saving your recovery phrase, your SN25α can't be "
+           "reached."),
+        "ur-row-note"));
+    inside->append(*words);
+    auto* chevron = Gtk::make_managed<Gtk::Image>();
+    chevron->set_from_icon_name("go-next-symbolic");
+    chevron->set_valign(Gtk::Align::CENTER);
+    kit::MarkDecorative(*chevron);
+    inside->append(*chevron);
+    keyBanner_->set_child(*inside);
+    kit::SetAccessibleLabel(*keyBanner_, T_("bittensor_key_back_up", "Back up your key"));
+    keyBanner_->signal_clicked().connect([this] { keys_->OpenScreen(); });
+    keyBanner_->set_visible(false);
+    content->append(*keyBanner_);
+  }
 
   // 1. points earned — the headline, always
   {
@@ -2196,6 +2314,11 @@ void EarningsPage::BuildEarningsPane() {
     claimButton_->set_sensitive(false);
     claimButton_->signal_clicked().connect(sigc::mem_fun(*this, &EarningsPage::OnClaim));
     tile->append(*claimButton_);
+    // the first claim tile carries the claim card's disclaimer, while the
+    // payout card shows none (the flow's ClaimFundsDisclaimer)
+    unclaimedDisclaimer_ = MakeBittensorFundsDisclaimer(/*boxed=*/false);
+    unclaimedDisclaimer_->set_margin_top(4);
+    tile->append(*unclaimedDisclaimer_);
     row.content->append(*tile);
     unclaimedCard_->set_visible(false);
     content->append(*row.root);
@@ -2213,12 +2336,21 @@ void EarningsPage::BuildEarningsPane() {
     ledgerStatus_ = MakeWrappedNote({}, "ur-row-note");
     ledgerStatus_->set_visible(false);
     tile->append(*ledgerStatus_);
+    // what URnetwork's claim relay says (ClaimRelay.hpp): in place of the
+    // device's own Claim while it says something
+    ledgerRelay_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+    ledgerRelay_->set_margin_top(8);
+    ledgerRelay_->set_visible(false);
+    tile->append(*ledgerRelay_);
     ledgerClaimButton_ = MakeGoldButton(T_("claim", "Claim"));
     ledgerClaimButton_->set_margin_top(4);
     ledgerClaimButton_->set_sensitive(false);
     ledgerClaimButton_->signal_clicked().connect(
         sigc::mem_fun(*this, &EarningsPage::OnLedgerClaim));
     tile->append(*ledgerClaimButton_);
+    ledgerDisclaimer_ = MakeBittensorFundsDisclaimer(/*boxed=*/false);
+    ledgerDisclaimer_->set_margin_top(4);
+    tile->append(*ledgerDisclaimer_);
     row.content->append(*tile);
     ledgerCard_->set_visible(false);
     content->append(*row.root);
@@ -2243,6 +2375,10 @@ void EarningsPage::BuildEarningsPane() {
            "Sign once with your Bittensor wallet so this network's earnings are paid to it."),
         "ur-row-note");
     row.content->append(*consentBody_);
+    // the one-tap key's part of the card (RebuildConsentKeyPart)
+    consentKeyBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+    consentKeyBox_->set_visible(false);
+    row.content->append(*consentKeyBox_);
     consentNotice_ = MakeWrappedNote({}, "ur-row-note");
     consentNotice_->add_css_class("ur-danger-text");
     consentNotice_->set_visible(false);
@@ -2263,6 +2399,10 @@ void EarningsPage::BuildEarningsPane() {
         T_("sn_consent_change_note", "A new wallet takes effect from the next epoch."),
         "ur-row-note");
     row.content->append(*consentChangeNote_);
+    // the flow's funds disclaimer for the card (none for the wallet card)
+    consentDisclaimer_ = MakeBittensorFundsDisclaimer(/*boxed=*/false);
+    consentDisclaimer_->set_margin_top(4);
+    row.content->append(*consentDisclaimer_);
     consentCard_->set_visible(false);
     content->append(*row.root);
   }
@@ -2305,6 +2445,32 @@ void EarningsPage::BuildEarningsPane() {
            "epoch after connecting."),
         "ur-row-note"));
     walletConnectedPanel_->set_visible(false);
+    content->append(*row.root);
+  }
+  {
+    // the one-tap key on this device, while no wallet is read: its address in
+    // place of the connect call, which would invite a second wallet
+    auto row = MakePaddedRow(12);
+    row.content->set_spacing(6);
+    walletKeyPanel_ = row.root;
+    usdcWaitingLineKey_ = MakeWrappedNote({}, "ur-row-note");
+    usdcWaitingLineKey_->set_visible(false);
+    row.content->append(*usdcWaitingLineKey_);
+    auto* line = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    walletKeyIcon_ = Gtk::make_managed<Gtk::Image>();
+    walletKeyIcon_->set_valign(Gtk::Align::CENTER);
+    kit::MarkDecorative(*walletKeyIcon_);
+    line->append(*walletKeyIcon_);
+    walletKeyAddress_ = Gtk::make_managed<Gtk::Label>();
+    walletKeyAddress_->add_css_class("ur-earn-address");
+    walletKeyAddress_->set_xalign(0);
+    walletKeyAddress_->set_hexpand(true);
+    line->append(*walletKeyAddress_);
+    line->append(*BuildWalletOverflow(connectSolanaMenu_));
+    row.content->append(*line);
+    walletKeyNote_ = MakeWrappedNote({}, "ur-row-note");
+    row.content->append(*walletKeyNote_);
+    walletKeyPanel_->set_visible(false);
     content->append(*row.root);
   }
   {
@@ -2884,6 +3050,12 @@ void EarningsPage::LoadEarnings() {
   // 4b. the payout consent: the status, whatever the wallet above
   consent_.Load();
 
+  // 4c. the one-tap key's flow for this network, read again (a key comes back
+  //     here after a sign-out, a crash or a reinstall), and what URnetwork's
+  //     claim relay says of the network's settlement v2 balance
+  VisitKeys();
+  LoadClaimStatus();
+
   // 5. the Top 200 tile and the Protocol card: this network's own place on
   // the board (GET /sn/top/me). A failure only hides the tile: it must not
   // shout; the card says it and offers a retry.
@@ -3122,6 +3294,7 @@ void EarningsPage::ApplyClaims(std::optional<std::vector<SnClaimRow>> claims,
   RebuildPayoutLine();
   RebuildUnclaimedTile();
   RebuildHistory();
+  FeedKeyEarnings();
 }
 
 void EarningsPage::ApplyGas(std::optional<SnGasInfo> gas) {
@@ -3136,6 +3309,7 @@ void EarningsPage::ApplyLedger(snledger::Load load, std::vector<snledger::Accoun
   ledgerAccounts_ = std::move(accounts);
   ledgerConfigured_ = claimConfigured;
   RebuildLedgerTile();
+  FeedKeyEarnings();
 }
 
 void EarningsPage::ApplyReliability(std::optional<urnet::ReliabilityWindow> window,
@@ -3246,8 +3420,12 @@ void EarningsPage::RebuildPointsCard() {
 // and the Bittensor block's.
 void EarningsPage::RebuildPayoutLine() {
   if (payoutCard_ == nullptr) return;
+  // the SDK says the consent pays the key on this device: the network has a
+  // coldkey before the wallet read lists one, so the line never asks for one
+  const bool paysKeyHere = keys_->Card().pays_key_on_this_device;
   const snpayout::PayoutLineView view = snpayout::PayoutLineFor(
-      walletState_ == Fetch::Ready, wallet_.has_value(), totalClaimableRao_, schedule_,
+      walletState_ == Fetch::Ready || paysKeyHere, wallet_.has_value() || paysKeyHere,
+      totalClaimableRao_, schedule_,
       g_get_real_time() / 1000, [](int64_t millis) {
         return snpayout::FormatScheduleTime(millis, LocalUtcOffsetMinutes(millis));
       });
@@ -3300,20 +3478,35 @@ void EarningsPage::RebuildUnclaimedTile() {
   }
   kit::SetTextOrCollapse(*unclaimedStatus_, status);
   claimButton_->set_sensitive(ready && totalClaimableRao_ > 0 && !claiming_);
+  // the first claim tile shown carries the claim card's disclaimer
+  SetBittensorFundsDisclaimer(*unclaimedDisclaimer_, keys_->Card().claim_funds_disclaimer);
 }
 
 // The Settlement v2 tile under the unclaimed one: snledger::SectionFor's
 // decision, with the alpha in the app's formatting. Claim opens the v2 claim
-// dialog.
+// dialog. URnetwork's claim relay (ClaimRelay.hpp) takes the Claim's place
+// while it says something, and a network with no wallet here sees the balance
+// the relay claims for its consent.
 void EarningsPage::RebuildLedgerTile() {
   if (ledgerCard_ == nullptr) return;
   const bool connected = wallet_.has_value() && walletState_ == Fetch::Ready;
   const snledger::SectionView view =
       snledger::SectionFor(connected, ledgerLoad_, ledgerAccounts_, ledgerConfigured_, claiming_,
                            FormatAlphaRao);
-  ledgerCard_->set_visible(view.visible);
-  if (!view.visible) return;
+  const bool relayOnly = !view.visible && LedgerTileShowsRelayOnly();
+  ledgerCard_->set_visible(view.visible || relayOnly);
+  if (!view.visible && !relayOnly) return;
   RemoveAllChildren(*ledgerRows_);
+  if (relayOnly) {
+    const Glib::ustring claimableLabel = T_("sn_ledger_claimable", "Claimable");
+    const std::string claimable = FormatAlphaRao(claimStatus_->claimable_rao);
+    auto* block = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
+    block->append(*MakeSizedLabel(claimableLabel, 12, "ur-caption"));
+    auto* value = MakeGoldLabel(claimable, 34, /*condensed=*/true);
+    kit::SetAccessibleLabel(*value, claimableLabel + ", " + claimable);
+    block->append(*value);
+    ledgerRows_->append(*block);
+  }
   for (const snledger::AccountView& account : view.accounts) {
     auto* block = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
     if (view.showPools) {
@@ -3353,8 +3546,25 @@ void EarningsPage::RebuildLedgerTile() {
       break;
   }
   kit::SetTextOrCollapse(*ledgerStatus_, status);
-  ledgerClaimButton_->set_visible(view.showClaim);
+  // the relay's part, while it says something or its claim is the latest, in
+  // place of the device's own Claim, which stays as its fallback link
+  const bool relay = claimStatus_ && !claimStatus_->error &&
+                     (claimStatus_->action != urnet::SnClaimActionNone ||
+                      0 < claimStatus_->claimable_rao || claimStatus_->shows_claimed);
+  RemoveAllChildren(*ledgerRelay_);
+  ledgerRelay_->set_visible(relay);
+  if (relay) {
+    AppendClaimRelaySection(
+        *ledgerRelay_, *claimStatus_, [this] { OnRelayClaimNow(); }, [this] { OnLedgerClaim(); },
+        [this](const std::string& url) { OpenLink(url); });
+  }
+  ledgerClaimButton_->set_visible(!relay && view.showClaim);
   ledgerClaimButton_->set_sensitive(view.claimEnabled);
+  // the claim card's disclaimer when this is the first claim tile on Earnings:
+  // with a wallet here the unclaimed tile above carries it
+  SetBittensorFundsDisclaimer(*ledgerDisclaimer_,
+                              connected ? std::string(urnet::BittensorFundsDisclaimerNone)
+                                        : keys_->Card().claim_funds_disclaimer);
 }
 
 void EarningsPage::RebuildWalletBlock() {
@@ -3369,7 +3579,28 @@ void EarningsPage::RebuildWalletBlock() {
                                 wallet_->coldkeySs58);
     changeWalletButton_->set_sensitive(!connecting_ && !consent_.Busy());
   }
-  const bool offerConnect = walletState_ != Fetch::Loading && (!connected || changingWallet_);
+  // the one-tap key on this device, while no wallet is read: its address, and
+  // whether the consent pays it yet
+  const bool keyPanel = KeyPanelShows();
+  walletKeyPanel_->set_visible(keyPanel);
+  if (keyPanel) {
+    const urnet::BittensorLocalKeyCard& card = keys_->Card();
+    const bool linked = card.pays_key_on_this_device;
+    walletKeyIcon_->set_from_icon_name(linked ? "emblem-ok-symbolic" : "dialog-password-symbolic");
+    walletKeyAddress_->set_text(ShortSs58(card.stored_address));
+    walletKeyAddress_->set_tooltip_text(card.stored_address);
+    kit::SetAccessibleLabel(*walletKeyAddress_,
+                            Glib::ustring(T_("bittensor_wallet", "Bittensor wallet")) + ", " +
+                                card.stored_address);
+    walletKeyNote_->set_text(
+        linked ? T_("wallet_connected_to_protocol",
+                    "Connected to the UR protocol. Claims land here. Alpha accrues from the next "
+                    "epoch after connecting.")
+               : T_("bittensor_key_card_not_linked",
+                    "Your key is on this device, but payouts aren't set up yet."));
+  }
+  const bool offerConnect =
+      walletState_ != Fetch::Loading && (!connected || changingWallet_) && !keyPanel;
   walletConnectPanel_->set_visible(offerConnect);
   // "Change" opens the connect panel under a connected wallet: its overflow
   // would repeat the one beside "Change"
@@ -4120,6 +4351,20 @@ void EarningsPage::RebuildConsentSection() {
   consentSignButton_->set_sensitive(!connecting_);
   consentChangeButton_->set_sensitive(!connecting_);
   consentChangeNote_->set_visible(view.changeNote);
+  // The one-tap key's part, from the flow's card: where it applies it draws
+  // the whole card (the one tap with no consent in force, and where the key is
+  // with one); elsewhere it adds its lines under the consent's. The card's
+  // disclaimer is the flow's: none for the wallet card.
+  const bool keyDraws = RebuildConsentKeyPart(view);
+  consentLine_->set_visible(!keyDraws);
+  if (keyDraws) {
+    consentBody_->set_visible(false);
+    consentSignButton_->set_visible(false);
+    consentChangeButton_->set_visible(false);
+    consentChangeNote_->set_visible(false);
+  }
+  SetBittensorFundsDisclaimer(*consentDisclaimer_,
+                              keys_->HasFlow() ? keys_->Card().funds_disclaimer : std::string());
 }
 
 void EarningsPage::OnConsentAction() {
@@ -4127,6 +4372,12 @@ void EarningsPage::OnConsentAction() {
   if (connecting_ || consent_.Busy()) return;
   if (!CanCallApi()) {
     RefuseNoSession();
+    return;
+  }
+  // Change wallet on a consent in force offers a key on this device first,
+  // while the flow offers one (3b)
+  if (consent_.phase() == consent::Phase::Active && keys_->Card().offers_set_up) {
+    ShowChangeWalletSheet();
     return;
   }
   ChooseBittensorWallet([this](const std::string& walletId) { AskConsentColdkey(walletId); });
@@ -4276,6 +4527,670 @@ consent::Flow::Ports EarningsPage::ConsentPorts() {
                       });
   };
   return ports;
+}
+
+void EarningsPage::OnConsentChanged() {
+  FeedKeyConsent();
+  RebuildWalletBlock();
+}
+
+// ---- the one-tap Bittensor key ---------------------------------------------------
+// The SDK's flow decides every state of the key and what each screen offers
+// (BittensorKeyHost mirrors it); the page draws the payout card's key part,
+// the banner, the key in the wallet card, the payout line, the claim tiles'
+// disclaimer and the Key screen from it, and adds only the warning before a
+// replacement and the order of the cards.
+
+void EarningsPage::VisitKeys() {
+  if (!CanCallApi() || ownNetworkId_.empty()) {
+    keyConsentFed_.reset();
+    keys_->SignedOut();
+    return;
+  }
+  keys_->Visit(host_.api(), ownNetworkId_, KeyGuest());
+  // the flow, new or read again, is told the consent and the Top 200 place
+  keyConsentFed_.reset();
+  FeedKeyConsent();
+  keys_->SetTop200Registered(Top200Registered());
+}
+
+void EarningsPage::FeedKeyConsent() {
+  const consent::Phase phase = consent_.phase();
+  KeyConsentFed fed;
+  fed.phase = phase;
+  switch (phase) {
+    case consent::Phase::Unavailable:
+    case consent::Phase::None:
+      break;
+    case consent::Phase::Active:
+      if (!consent_.status()) return;
+      fed.coldkeySs58 = consent_.status()->coldkeySs58;
+      fed.fromEpoch = consent_.status()->fromEpoch;
+      break;
+    case consent::Phase::Hidden:
+    case consent::Phase::Loading:
+    case consent::Phase::Signing:
+      // nothing new is known: the flow keeps what it was told
+      return;
+  }
+  // a flow publishes on every input, so it is told only what changed
+  if (keyConsentFed_ && *keyConsentFed_ == fed) return;
+  keyConsentFed_ = fed;
+  if (phase == consent::Phase::Unavailable) {
+    keys_->SetConsentUnavailable();
+  } else if (phase == consent::Phase::None) {
+    keys_->SetConsent(false, std::string(), 0);
+  } else {
+    keys_->SetConsent(true, fed.coldkeySs58, fed.fromEpoch);
+  }
+}
+
+void EarningsPage::FeedKeyEarnings() {
+  int64_t ledgerClaimableRao = 0;
+  for (const snledger::Account& account : ledgerAccounts_) ledgerClaimableRao += account.claimableRao;
+  const int64_t relayClaimableRao =
+      claimStatus_ && !claimStatus_->error ? claimStatus_->claimable_rao : 0;
+  const bool claimable = 0 < totalClaimableRao_ || 0 < ledgerClaimableRao || 0 < relayClaimableRao;
+  keys_->EarningsRead(schedule_ ? schedule_->epoch : 0, schedule_ ? schedule_->claimOpenMillis : 0,
+                      schedule_ ? schedule_->epochBlocks : 0, claimable);
+}
+
+// The balance's word or the jwt's: a guest gets no key.
+bool EarningsPage::KeyGuest() {
+  if (isGuest_) return true;
+  const std::optional<urnet::ByJwt> jwt = host_.ParseByJwt();
+  return jwt && jwt->GuestMode;
+}
+
+bool EarningsPage::Top200Registered() {
+  const protocol_board::MeState& mine = protocol_->Mine();
+  return mine.me && !mine.me->row.fleets.empty();
+}
+
+void EarningsPage::OnKeysChanged() {
+  RebuildKeyBanner();
+  PlaceConsentBlock();
+  RebuildWalletBlock();  // the payout card and the key in the wallet card
+  RebuildPayoutLine();
+  RebuildUnclaimedTile();
+  RebuildLedgerTile();
+  ApplyClaimRelaySheet();
+  ApplyKeyScreen();
+}
+
+void EarningsPage::RebuildKeyBanner() {
+  if (keyBanner_ == nullptr) return;
+  // until the key's phrase is saved, and for nothing else
+  keyBanner_->set_visible(keys_->HasFlow() && keys_->Card().backup_reminder);
+}
+
+void EarningsPage::PlaceConsentBlock() {
+  if (paneAContent_ == nullptr || consentHeader_ == nullptr || consentCard_ == nullptr) return;
+  const bool lead = keys_->HasFlow() && keys_->Card().shows_key_path;
+  if (lead == keyLeads_) return;
+  keyLeads_ = lead;
+  // right under the banner while it needs action, else in its place under the
+  // Settlement v2 tile
+  const Gtk::Widget& anchor =
+      lead ? static_cast<const Gtk::Widget&>(*keyBanner_) : static_cast<const Gtk::Widget&>(*ledgerCard_);
+  paneAContent_->reorder_child_after(*consentHeader_, anchor);
+  paneAContent_->reorder_child_after(*consentCard_, *consentHeader_);
+}
+
+bool EarningsPage::KeyPanelShows() const {
+  return !wallet_.has_value() && walletState_ != Fetch::Failed && keys_->HasFlow() &&
+         !keys_->Card().stored_address.empty();
+}
+
+bool EarningsPage::RebuildConsentKeyPart(const consent::View& view) {
+  RemoveAllChildren(*consentKeyBox_);
+  consentKeyBox_->set_visible(false);
+  if (!keys_->HasFlow() || !view.visible) return false;
+  const urnet::BittensorLocalKeyCard& card = keys_->Card();
+  const std::string& state = card.state;
+  const bool busy = card.busy;
+  Gtk::Box& box = *consentKeyBox_;
+
+  const auto title = [&box](const Glib::ustring& text) {
+    auto* label = MakeWrappedNote(text, "ur-value");
+    label->add_css_class("ur-key-strong");
+    box.append(*label);
+  };
+  const auto note = [&box](const Glib::ustring& text) {
+    box.append(*MakeWrappedNote(text, "ur-row-note"));
+  };
+  const auto failure = [&box, &card] {
+    const Glib::ustring text = BittensorKeyFailureText(card.failure_code, card.failure_message);
+    if (text.empty()) return;
+    auto* label = MakeWrappedNote(text, "ur-row-note");
+    label->add_css_class("ur-danger-text");
+    box.append(*label);
+  };
+  const auto link = [&box](const Glib::ustring& text, std::function<void()> action) {
+    auto* button = Gtk::make_managed<Gtk::Button>(text);
+    button->add_css_class("flat");
+    button->add_css_class("ur-key-link");
+    button->set_halign(Gtk::Align::START);
+    button->signal_clicked().connect([action] { action(); });
+    box.append(*button);
+    return button;
+  };
+  // a button with a spinner while the flow works
+  const auto action = [&box](const Glib::ustring& text, const char* cssClass, bool working,
+                             std::function<void()> act) {
+    auto* button = Gtk::make_managed<Gtk::Button>();
+    auto* inside = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    inside->set_halign(Gtk::Align::CENTER);
+    inside->append(*Gtk::make_managed<Gtk::Label>(text));
+    if (working) {
+      auto* spinner = Gtk::make_managed<Gtk::Spinner>();
+      spinner->set_spinning(true);
+      inside->append(*spinner);
+    }
+    button->set_child(*inside);
+    button->add_css_class(cssClass);
+    button->set_hexpand(true);
+    button->set_sensitive(!working);
+    kit::SetAccessibleLabel(*button, text);
+    button->signal_clicked().connect([act] { act(); });
+    box.append(*button);
+  };
+  // where the key is: a colored dot or an icon, then the words
+  const auto status = [&box](const char* dotClass, const char* iconName, const Glib::ustring& text) {
+    auto* row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    if (dotClass != nullptr) {
+      auto* dot = Gtk::make_managed<Gtk::Label>("●");
+      dot->add_css_class(dotClass);
+      kit::MarkDecorative(*dot);
+      row->append(*dot);
+    } else {
+      auto* icon = Gtk::make_managed<Gtk::Image>();
+      icon->set_from_icon_name(iconName);
+      icon->add_css_class("ur-key-muted-icon");
+      kit::MarkDecorative(*icon);
+      row->append(*icon);
+    }
+    auto* label = MakeWrappedNote(text, "ur-value");
+    label->add_css_class("ur-key-strong");
+    label->set_hexpand(true);
+    row->append(*label);
+    box.append(*row);
+  };
+  // the address the consent pays, with Copy: not a secret
+  const auto address = [this, &box](const std::string& coldkeySs58) {
+    auto* row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    auto* seal = Gtk::make_managed<Gtk::Image>();
+    seal->set_from_icon_name("emblem-ok-symbolic");
+    seal->add_css_class("ur-key-icon-info");
+    kit::MarkDecorative(*seal);
+    row->append(*seal);
+    auto* label = Gtk::make_managed<Gtk::Label>(ShortSs58(coldkeySs58));
+    label->add_css_class("ur-earn-address");
+    label->set_tooltip_text(coldkeySs58);
+    kit::SetAccessibleLabel(*label, coldkeySs58);
+    row->append(*label);
+    auto* copy = Gtk::make_managed<Gtk::Button>();
+    copy->set_icon_name("edit-copy-symbolic");
+    copy->add_css_class("flat");
+    copy->set_valign(Gtk::Align::CENTER);
+    kit::SetAccessibleLabel(*copy, T_("copy", "Copy"));
+    copy->signal_clicked().connect([this, copy, coldkeySs58] {
+      copy->get_clipboard()->set_text(coldkeySs58);
+      Notify(T_("copied", "Copied!"), kit::Snackbar::Severity::Success);
+    });
+    row->append(*copy);
+    box.append(*row);
+  };
+  const auto openScreen = [this] { keys_->OpenScreen(); };
+  const auto changeWallet = [this] { OnConsentAction(); };
+  const auto payoutsTitle = [&title, &card] {
+    title(card.payouts_start_next_epoch ? T_("bittensor_key_payouts_start", "Payouts start next epoch")
+                                        : T_("bittensor_key_payouts_on", "Payouts are on"));
+  };
+  const auto changeWalletButton = [&card, &action, &note, &changeWallet] {
+    if (card.owner_only) return;
+    action(T_("sn_consent_change", "Change wallet"), "ur-pane-secondary", false, changeWallet);
+    note(T_("sn_consent_change_note", "A new wallet takes effect from the next epoch."));
+  };
+  const auto ownerOnly = [&note, &card] {
+    if (card.owner_only) {
+      note(T_("sn_consent_owner_only", "Only the network owner can choose the payout wallet."));
+    }
+  };
+
+  bool drawsAll = false;
+  switch (view.line) {
+    case consent::Line::None:
+      // no consent in force: the one tap, Finish setup, or a store that can't
+      // answer (1a, 1b, 3i)
+      if (!card.shows_key_path) break;
+      drawsAll = true;
+      if (state == urnet::BittensorLocalKeyStateSaveLaterNotLinked) {
+        title(T_("bittensor_key_card_not_linked",
+                 "Your key is on this device, but payouts aren't set up yet."));
+        note(T_("bittensor_key_finish_body",
+                "Setup stopped before signing, so nothing was paid to this key. Finish setup signs "
+                "the consent with it."));
+        failure();
+        if (card.offers_finish_setup) {
+          action(T_("bittensor_key_finish_setup", "Finish setup"), "ur-pane-primary", busy,
+                 [this] { RequestKeyAction(KeyAction::FinishSetup); });
+        }
+        if (card.offers_wallet) {
+          link(T_("bittensor_key_use_wallet", "Use a wallet I already have"), [this] {
+            OnUseWallet();
+          })->set_sensitive(!busy);
+        }
+      } else if (state == urnet::BittensorLocalKeyStateStoreUnavailable) {
+        note(T_("bittensor_key_failure_keychain",
+                "Couldn't read this device's secure storage. Unlock your device and try again."));
+        link(T_("retry", "Retry"), [this] { keys_->Reload(); });
+      } else {
+        title(T_("bittensor_key_card_none",
+                 "No payout wallet yet. Earnings aren't paid until you set one up."));
+        note(T_("bittensor_key_card_short",
+                "URnetwork is not a wallet. Set up payouts creates a Bittensor key on this device, "
+                "and your whole network's SN25α is paid to it. Back up its recovery phrase: if you "
+                "lose this device before saving it, your SN25α can't be reached."));
+        failure();
+        action(T_("bittensor_key_set_up", "Set up payouts"), "ur-pane-primary", busy,
+               [this] { RequestKeyAction(KeyAction::SetUp); });
+        if (busy) {
+          note(T_("bittensor_key_setting_up",
+                  "Saving the key on this device and reading it back, then signing."));
+        }
+        link(T_("bittensor_key_save_first", "Save the recovery phrase first"), [this] {
+          RequestKeyAction(KeyAction::SaveFirst);
+        })->set_sensitive(!busy);
+        if (card.offers_wallet) {
+          link(T_("bittensor_key_use_wallet", "Use a wallet I already have"), [this] {
+            OnUseWallet();
+          })->set_sensitive(!busy);
+        }
+      }
+      break;
+    case consent::Line::Active:
+      if (state == urnet::BittensorLocalKeyStateSaveLaterLinked) {
+        // the key here is paid (1c, 1i)
+        drawsAll = true;
+        payoutsTitle();
+        address(view.coldkeySs58);
+        note(T_("bittensor_key_every_device", "Every device on your network is paid to this address."));
+        if (card.key_saved) {
+          status("ur-key-dot-green", nullptr,
+                 T_("bittensor_key_status_saved", "Key on this device, recovery phrase saved"));
+          link(T_("bittensor_key_view", "View key"), openScreen);
+        } else {
+          status("ur-key-dot-amber", nullptr,
+                 T_("bittensor_key_status_unsaved", "Key on this device, not backed up yet"));
+          action(T_("bittensor_key_back_up", "Back up your key"), "ur-pane-secondary", false,
+                 openScreen);
+        }
+        failure();
+        if (!card.owner_only) link(T_("sn_consent_change", "Change wallet"), changeWallet);
+        ownerOnly();
+      } else if (state == urnet::BittensorLocalKeyStateSavedAndDeleted) {
+        // the key was here and is gone (1l, 2h)
+        drawsAll = true;
+        payoutsTitle();
+        address(view.coldkeySs58);
+        note(T_("bittensor_key_every_device", "Every device on your network is paid to this address."));
+        status(nullptr, "action-unavailable-symbolic",
+               T_("bittensor_key_no_longer_here", "This app no longer has the key"));
+        note(T_("bittensor_key_deleted_body",
+                "Claims keep working. To transfer or convert your SN25α, or to claim a Top 200 "
+                "spot, use a Bittensor wallet holding your recovery phrase."));
+        failure();
+        changeWalletButton();
+        ownerOnly();
+      } else if (state == urnet::BittensorLocalKeyStateElsewhere) {
+        // a wallet, or another device's key: nothing here tells them apart (3a, 3d)
+        drawsAll = true;
+        title(Format(T_("sn_consent_active", "Earnings are paid to {}"), ShortSs58(view.coldkeySs58)));
+        status(nullptr, "dialog-password-symbolic",
+               T_("bittensor_key_elsewhere", "This key is on another device or in your wallet."));
+        note(T_("bittensor_key_elsewhere_body", "Its recovery phrase can't be shown here."));
+        failure();
+        changeWalletButton();
+        ownerOnly();
+      } else if (state == urnet::BittensorLocalKeyStateSaveLaterNotLinked) {
+        // a key here that another consent pays instead: under the consent's own line
+        note(T_("bittensor_key_card_other_consent", "The key on this device isn't receiving payouts."));
+        if (card.offers_finish_setup) {
+          action(T_("bittensor_key_finish_setup", "Finish setup"), "ur-pane-secondary", busy,
+                 [this] { RequestKeyAction(KeyAction::FinishSetup); });
+        }
+        if (card.offers_key_screen) {
+          link(card.key_saved ? T_("bittensor_key_view", "View key")
+                              : T_("bittensor_key_back_up", "Back up your key"),
+               openScreen);
+        }
+        failure();
+      } else if (state == urnet::BittensorLocalKeyStateStoreUnavailable) {
+        note(T_("bittensor_key_failure_keychain",
+                "Couldn't read this device's secure storage. Unlock your device and try again."));
+        link(T_("retry", "Retry"), [this] { keys_->Reload(); });
+      } else {
+        failure();
+      }
+      break;
+    case consent::Line::Loading:
+    case consent::Line::Unavailable:
+    case consent::Line::Signing:
+      // the consent's own line: a stored key still offers its screen
+      if (card.offers_key_screen) {
+        link(card.key_saved ? T_("bittensor_key_view", "View key")
+                            : T_("bittensor_key_back_up", "Back up your key"),
+             openScreen);
+      }
+      break;
+  }
+  consentKeyBox_->set_visible(box.get_first_child() != nullptr);
+  return drawsAll;
+}
+
+void EarningsPage::RequestKeyAction(KeyAction action) {
+  // the bridge's consent signing and a key's are one consent at a time
+  if (connecting_ || consent_.Busy()) return;
+  if (!CanCallApi()) {
+    RefuseNoSession();
+    return;
+  }
+  // a key replaces the payout wallet from the next epoch: warned first, and
+  // never the default
+  if (keys_->Card().replaces_payout_wallet) {
+    ShowReplaceWarning(action);
+    return;
+  }
+  RunKeyAction(action, false);
+}
+
+void EarningsPage::RunKeyAction(KeyAction action, bool replaceConfirmed) {
+  switch (action) {
+    case KeyAction::SetUp:
+      keys_->SetUpPayouts(replaceConfirmed);
+      break;
+    case KeyAction::SaveFirst:
+      keys_->SaveFirst(replaceConfirmed);
+      break;
+    case KeyAction::FinishSetup:
+      keys_->FinishSetup(replaceConfirmed);
+      break;
+  }
+}
+
+// The replace warning (3c), the app's AdwMessageDialog idiom (AskConsentColdkey).
+void EarningsPage::ShowReplaceWarning(KeyAction action) {
+  auto* window = dynamic_cast<Gtk::Window*>(get_root());
+  const std::string body =
+      Format(T_("bittensor_key_replace_message_2",
+                "From the next epoch, your network's earnings go to a new key on this device. "
+                "Earlier earnings stay on {}. The network admin gets an email about this change."),
+             ShortSs58(keys_->Card().address));
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+  GtkWidget* dialog = adw_message_dialog_new(
+      window ? window->gobj() : nullptr,
+      T_("bittensor_key_replace_title", "Replace your payout wallet?"), body.c_str());
+  adw_message_dialog_add_responses(ADW_MESSAGE_DIALOG(dialog), "cancel", T_("cancel", "Cancel"),
+                                   "replace",
+                                   T_("bittensor_key_replace_confirm", "Replace payout wallet"),
+                                   nullptr);
+  adw_message_dialog_set_response_appearance(ADW_MESSAGE_DIALOG(dialog), "replace",
+                                             ADW_RESPONSE_DESTRUCTIVE);
+  adw_message_dialog_set_default_response(ADW_MESSAGE_DIALOG(dialog), "cancel");
+  adw_message_dialog_set_close_response(ADW_MESSAGE_DIALOG(dialog), "cancel");
+  G_GNUC_END_IGNORE_DEPRECATIONS
+  struct Ctx {
+    EarningsPage* self;
+    KeyAction action;
+    std::shared_ptr<uint64_t> epoch;
+    uint64_t seen;
+  };
+  g_signal_connect_data(
+      dialog, "response",
+      G_CALLBACK(+[](AdwMessageDialog*, const char* response, gpointer data) {
+        auto* ctx = static_cast<Ctx*>(data);
+        if (*ctx->epoch != ctx->seen) return;  // the page was reset meanwhile
+        if (g_strcmp0(response, "replace") != 0) return;
+        ctx->self->RunKeyAction(ctx->action, /*replaceConfirmed=*/true);
+      }),
+      new Ctx{this, action, epoch_, *epoch_},
+      +[](gpointer data, GClosure*) { delete static_cast<Ctx*>(data); }, G_CONNECT_DEFAULT);
+  gtk_window_present(GTK_WINDOW(dialog));
+}
+
+// Change wallet with a key on this device first (3b): the key's offer, its
+// disclaimer, then the wallets of the shared chooser. Creating the key closes
+// the sheet first; the replace warning follows once it is gone.
+void EarningsPage::ShowChangeWalletSheet() {
+  auto* root = dynamic_cast<Gtk::Window*>(get_root());
+  if (root == nullptr || sheet_ || (sheet_open && sheet_open())) return;
+  auto sheet = std::make_shared<Gtk::Window>();
+  sheet->set_title(T_("sn_consent_title", "Payout consent"));
+  sheet->set_default_size(kSheetMinWidth, -1);
+  auto* column = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+  column->set_margin(24);
+  column->set_size_request(kSheetMinWidth, -1);
+  auto* heading = MakeWrappedNote(T_("sn_consent_title", "Payout consent"), "ur-step-heading");
+  column->append(*heading);
+  column->append(*MakeWrappedNote(
+      T_("bittensor_key_change_wallet_body",
+         "Choose where this network's earnings are paid from the next epoch. Earlier earnings "
+         "stay where they were paid."),
+      "ur-body"));
+  std::weak_ptr<Gtk::Window> weakSheet = sheet;
+  auto alive = alive_;
+  auto* create = Gtk::make_managed<Gtk::Button>(
+      T_("bittensor_key_create_here", "Create a key on this device"));
+  create->add_css_class("ur-pane-primary");
+  create->signal_clicked().connect([this, weakSheet, alive] {
+    if (auto open = weakSheet.lock()) open->set_visible(false);
+    // after the sheet's close has run, so the warning has the window to itself
+    PostToMain([this, alive] {
+      if (*alive) RequestKeyAction(KeyAction::SetUp);
+    });
+  });
+  column->append(*create);
+  column->append(*MakeWrappedNote(
+      T_("bittensor_key_create_here_body",
+         "URnetwork is not a wallet. One tap creates a Bittensor key on this device; back up its "
+         "recovery phrase afterwards."),
+      "ur-row-note"));
+  auto* disclaimer = MakeBittensorFundsDisclaimer(/*boxed=*/true);
+  SetBittensorFundsDisclaimer(
+      *disclaimer, keys_->FundsDisclaimerAt(urnet::BittensorFundsDisclaimerPlaceChangeWallet));
+  column->append(*disclaimer);
+  auto* choose =
+      MakeWrappedNote(T_("bittensor_key_or_choose_wallet", "Or choose your Bittensor wallet"),
+                      "ur-value");
+  choose->add_css_class("ur-key-strong");
+  choose->set_margin_top(8);
+  column->append(*choose);
+  for (const auto& wallet : bittensor::kChooserWallets) {
+    const std::string walletId(wallet.walletId);
+    // wallet names are product names: never translated (the SDK names them)
+    auto* button = Gtk::make_managed<Gtk::Button>(urnet::bittensorWalletDisplayName(walletId));
+    button->add_css_class("ur-pane-secondary");
+    button->signal_clicked().connect([this, weakSheet, alive, walletId] {
+      if (auto open = weakSheet.lock()) open->set_visible(false);
+      PostToMain([this, alive, walletId] {
+        if (*alive && !connecting_ && !consent_.Busy()) AskConsentColdkey(walletId);
+      });
+    });
+    column->append(*button);
+    if (!wallet.hintKey.empty()) {
+      const std::string hintKey(wallet.hintKey);
+      const std::string hintEnglish(wallet.hintEnglish);
+      column->append(*MakeWrappedNote(
+          g_dpgettext2(GETTEXT_PACKAGE, hintKey.c_str(), hintEnglish.c_str()), "ur-row-note"));
+    }
+  }
+  auto* cancel = Gtk::make_managed<Gtk::Button>(T_("cancel", "Cancel"));
+  cancel->add_css_class("flat");
+  cancel->set_halign(Gtk::Align::CENTER);
+  cancel->signal_clicked().connect([weakSheet] {
+    if (auto open = weakSheet.lock()) open->set_visible(false);
+  });
+  column->append(*cancel);
+  auto* scroller = Gtk::make_managed<Gtk::ScrolledWindow>();
+  scroller->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
+  scroller->set_propagate_natural_height(true);
+  scroller->set_max_content_height(kClaimSheetMaxHeight);
+  scroller->set_child(*column);
+  sheet->set_child(*scroller);
+  PresentSheet(sheet);
+}
+
+void EarningsPage::OnUseWallet() {
+  // the bridge carries one wallet flow at a time
+  if (connecting_ || consent_.Busy()) return;
+  if (!CanCallApi()) {
+    RefuseNoSession();
+    return;
+  }
+  ChooseBittensorWallet([this](const std::string& walletId) { AskConsentColdkey(walletId); });
+}
+
+void EarningsPage::ApplyKeyScreen() {
+  const urnet::BittensorLocalKeyScreen& screen = keys_->Screen();
+  if (!screen.open) {
+    if (keyScreen_) {
+      // its hide handler lets the window go, outside the hide signal
+      std::shared_ptr<BittensorKeyScreen> closing = std::move(keyScreen_);
+      closing->set_visible(false);
+    }
+    return;
+  }
+  if (!keyScreen_) {
+    auto* root = dynamic_cast<Gtk::Window*>(get_root());
+    // one modal at a time: a screen that can't show isn't open, and a phrase
+    // that is only in memory goes with it
+    if (root == nullptr || sheet_ || (sheet_open && sheet_open())) {
+      g_message("earnings: the key screen was not opened: a modal is already open");
+      keys_->CloseScreen();
+      return;
+    }
+    auto opened = std::make_shared<BittensorKeyScreen>(*root, *keys_);
+    keyScreen_ = opened;
+    if (on_sheet_open_changed) on_sheet_open_changed(true);
+    auto alive = alive_;
+    std::weak_ptr<BittensorKeyScreen> weak = opened;
+    opened->signal_hide().connect([this, alive, weak] {
+      // never destroy a window inside its own signal
+      PostToMain([this, alive, weak] {
+        if (!*alive) return;
+        std::shared_ptr<BittensorKeyScreen> closed = weak.lock();
+        if (closed && closed == keyScreen_) {
+          // closed by the window manager: leaving discards a phrase in memory
+          if (keys_->Screen().open) keys_->CloseScreen();
+          keyScreen_.reset();
+        }
+        if (on_sheet_open_changed) on_sheet_open_changed(false);
+      });
+    });
+    opened->present();
+  }
+  keyScreen_->Apply();
+}
+
+void EarningsPage::OpenBittensorKeyScreen() {
+  if (!CanCallApi()) return;
+  keys_->OpenScreen();
+}
+
+// ---- claims through URnetwork's relay ----------------------------------------------
+
+void EarningsPage::LoadClaimStatus() {
+  if (!CanCallApi()) return;
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  sn::FetchClaimStatus(host_, [this, epoch, seen](std::optional<urnet::SnClaimStatusResult> status) {
+    PostToMain([this, epoch, seen, status = std::move(status)]() mutable {
+      if (*epoch != seen) return;
+      ApplyClaimStatus(std::move(status));
+    });
+  });
+}
+
+void EarningsPage::ApplyClaimStatus(std::optional<urnet::SnClaimStatusResult> status) {
+  claimStatus_ = std::move(status);
+  // URnetwork's claim went through (4d): a Claim now tap's answer is spent, and
+  // the sheet draws the claim instead
+  if (claimStatus_ && !claimStatus_->error && claimStatus_->shows_claimed) {
+    claimNowOutcome_ = ClaimNowOutcome{};
+  }
+  RebuildLedgerTile();
+  ApplyClaimRelaySheet();
+  FeedKeyEarnings();
+}
+
+// A network with no wallet here sees the Settlement v2 tile exactly while the
+// SDK's claim status says it shows (a balance claimable or pending for its
+// consent, and URnetwork's claim once made). A wallet here has its own tile.
+bool EarningsPage::LedgerTileShowsRelayOnly() const {
+  return claimStatus_ && !claimStatus_->error && claimStatus_->shows_tile;
+}
+
+void EarningsPage::OnRelayClaimNow() {
+  if (sheet_ || (sheet_open && sheet_open())) {
+    g_message("earnings: claim now sheet suppressed — a modal is already open");
+    return;
+  }
+  auto* root = dynamic_cast<Gtk::Window*>(get_root());
+  if (root == nullptr) {
+    g_warning("earnings: no window root; the claim now sheet was not opened");
+    return;
+  }
+  claimNowOutcome_ = ClaimNowOutcome{};
+  auto sheet = std::make_shared<ClaimRelaySheet>(*root);
+  sheet->on_claim_now = [this] { StartClaimNow(); };
+  sheet->on_open_link = [this](const std::string& url) { OpenLink(url); };
+  auto alive = alive_;
+  std::weak_ptr<ClaimRelaySheet> weakSheet = sheet;
+  // the device's own claim, with its gas key: the v2 claim sheet, once this one is gone
+  sheet->on_self_claim = [this, alive, weakSheet] {
+    if (auto open = weakSheet.lock()) open->set_visible(false);
+    PostToMain([this, alive] {
+      if (*alive) OnLedgerClaim();
+    });
+  };
+  claimRelaySheet_ = sheet;
+  PresentSheet(sheet);
+  ApplyClaimRelaySheet();
+}
+
+void EarningsPage::StartClaimNow() {
+  if (!claimStatus_ || !claimStatus_->claim_now_available || claimingNow_) return;
+  if (!CanCallApi()) {
+    RefuseNoSession();
+    return;
+  }
+  claimingNow_ = true;
+  ApplyClaimRelaySheet();
+  const std::string coldkey = claimStatus_->coldkey_ss58.value_or(std::string());
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  sn::ClaimNow(host_, coldkey, [this, epoch, seen](ClaimNowOutcome outcome) {
+    PostToMain([this, epoch, seen, outcome = std::move(outcome)]() mutable {
+      if (*epoch != seen) return;
+      claimingNow_ = false;
+      if (outcome.kind == ClaimNowOutcome::Kind::Failed) {
+        outcome.message =
+            SnErrorMessage(outcome.message, T_("something_went_wrong", "Something went wrong."));
+      }
+      claimNowOutcome_ = std::move(outcome);
+      ApplyClaimRelaySheet();
+      // what the relay says now: the tap is queued, or why not
+      LoadClaimStatus();
+    });
+  });
+}
+
+void EarningsPage::ApplyClaimRelaySheet() {
+  auto sheet = claimRelaySheet_.lock();
+  if (!sheet) return;
+  sheet->Apply(claimStatus_, claimNowOutcome_, claimingNow_,
+               keys_->FundsDisclaimerAt(urnet::BittensorFundsDisclaimerPlaceClaimSheet));
 }
 
 // ---- the Solana payout wallet --------------------------------------------------
@@ -4432,7 +5347,7 @@ void EarningsPage::NotifyPromotedPayoutWallet() {
 
 void EarningsPage::RebuildSolanaCard() {
   if (solanaCard_ == nullptr || usdcWaitingLine_ == nullptr ||
-      usdcWaitingLineConnected_ == nullptr) {
+      usdcWaitingLineConnected_ == nullptr || usdcWaitingLineKey_ == nullptr) {
     return;
   }
   const solana::CardView view = solana::CardFor(legacyCommitted_);
@@ -4469,12 +5384,17 @@ void EarningsPage::RebuildSolanaCard() {
   // opens the connect panel under a connected wallet, and then the line stays
   // with the connected panel rather than showing twice.
   const bool bittensorConnected = wallet_.has_value() && walletState_ == Fetch::Ready;
-  kit::SetTextOrCollapse(*usdcWaitingLine_, view.showWaitingLine && !bittensorConnected
-                                                ? waiting
-                                                : Glib::ustring());
+  // ...or in the one-tap key's panel, which takes the connect panel's place
+  const bool keyPanel = !bittensorConnected && KeyPanelShows();
+  kit::SetTextOrCollapse(*usdcWaitingLine_,
+                         view.showWaitingLine && !bittensorConnected && !keyPanel
+                             ? waiting
+                             : Glib::ustring());
   kit::SetTextOrCollapse(*usdcWaitingLineConnected_, view.showWaitingLine && bittensorConnected
                                                          ? waiting
                                                          : Glib::ustring());
+  kit::SetTextOrCollapse(*usdcWaitingLineKey_,
+                         view.showWaitingLine && keyPanel ? waiting : Glib::ustring());
 }
 
 void EarningsPage::OnConnectSolanaWallet() {
@@ -5024,6 +5944,7 @@ void EarningsPage::CloseSheet() {
   sheet_.reset();
   claimSheet_.reset();
   ledgerClaimSheet_.reset();
+  claimRelaySheet_.reset();
   top200SignSheet_.reset();
   if (on_sheet_open_changed) on_sheet_open_changed(false);
 }

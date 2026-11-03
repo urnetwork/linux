@@ -1331,10 +1331,10 @@ msgctxt "bittensor_key_failure_generate"
 msgid "Couldn't make a key on this device. Try again."
 msgstr "לא ניתן היה ליצור מפתח במכשיר הזה. נסו שוב."
 
-#. Earnings screen, the payout card for the network's payouts. The device's secure storage (Apple's Keychain) did not answer, usually because the device is locked.
+#. Earnings screen, the payout card for the network's payouts. The device's secure storage did not answer, usually because the device is locked: Keychain on Apple, Keystore on Android, the credential store on a desktop. The same words on every platform, so name none of them.
 msgctxt "bittensor_key_failure_keychain"
-msgid "Couldn't read this device's keychain. Unlock your device and try again."
-msgstr "לא ניתן היה לקרוא את צרור המפתחות של המכשיר הזה. בטלו את נעילת המכשיר ונסו שוב."
+msgid "Couldn't read this device's secure storage. Unlock your device and try again."
+msgstr "לא ניתן היה לקרוא את האחסון המאובטח של המכשיר הזה. בטלו את נעילת המכשיר ונסו שוב."
 
 #. Earnings screen, the payout card for the network's payouts. An error under the Set up payouts button: the new key could not be written to the device's secure storage.
 msgctxt "bittensor_key_failure_store"
@@ -9675,6 +9675,11 @@ msgstr[0] "משולם על ידי URnetwork, פעם ביום לכל coldkey."
 msgstr[1] "משולם על ידי URnetwork, פעם ביומיים לכל coldkey."
 msgstr[2] "משולם על ידי URnetwork, פעם ב-{} ימים לכל coldkey."
 msgstr[3] "משולם על ידי URnetwork, פעם ב-{} ימים לכל coldkey."
+
+#. Earnings, the claim sheet and the settlement v2 tile, once URnetwork has claimed the balance and paid the gas (the claimed state, beside a link to the transaction). The first placeholder is the amount claimed, as 0.8420; the second is the user's Bittensor address, shortened (5F3s…kQ9v); keep both as they are.
+msgctxt "sn_claim_relay_claimed"
+msgid "Claimed by URnetwork. {0} SN25α is on your key, {1}."
+msgstr "מומש על ידי URnetwork. {0} SN25α נמצאים במפתח שלכם, {1}."
 
 #. Earnings screen, the settlement v2 tile and the claim sheet: a line beside a relay icon. URnetwork sends the claim transaction and pays its gas; the SN25α goes to the user's own address.
 msgctxt "sn_claim_relay_for_you"

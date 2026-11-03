@@ -88,6 +88,15 @@ finish-args:
   # provider. Optional — a refused permission costs the override, nothing else.
   - --system-talk-name=org.freedesktop.GeoClue2
 
+  # polkit: the one-tap Bittensor key asks for the user's own password before
+  # it shows or deletes the recovery phrase (app/src/BittensorKeyAuth.cpp,
+  # the action com.bringyour.network.bittensor-key the host package installs).
+  # Its subject is this app's own bus name. Without it the check cannot ask,
+  # which the app counts as passed. The phrase itself is kept by libsecret's
+  # Flatpak backend: the app's own keyring file, encrypted with a key the
+  # secret portal holds in the host's Secret Service (no talk-name needed).
+  - --system-talk-name=org.freedesktop.PolicyKit1
+
 cleanup:
   - /include
   - /lib/pkgconfig

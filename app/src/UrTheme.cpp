@@ -410,6 +410,71 @@ button.ur-usage-referral-row:active { background-color: #2A2A2A; }
   0% { opacity: 1; } 50% { opacity: 0.45; } 100% { opacity: 1; }
 }
 .ur-skeleton-shimmer { animation: ur-skeleton-shimmer 1.8s ease-in-out infinite; }
+/* ---- the one-tap Bittensor key (BittensorKeyScreen.cpp, EarningsPage.cpp,
+   ClaimRelay.cpp; the approved mocks). The destructive action is the danger
+   coral with DARK text: white on coral fails contrast (2.8:1), #101010 passes
+   (6.8:1). The notices are tinted boxes: light blue for information, yellow for
+   a warning, coral for a failure, the referral gold for Top 200, and green with
+   a green hairline for URnetwork's claim (4d). */
+.ur-key-strong { font-weight: 600; color: #F8F8F8; }
+button.ur-key-link {
+  background: none; border: none; box-shadow: none; padding: 2px 0; min-height: 0;
+  font-family: "PP Neue Montreal"; font-size: 13px; font-weight: 600; color: #D6E6F4;
+}
+button.ur-key-link:hover { color: #FFFFFF; }
+button.ur-key-link:disabled { opacity: 0.38; }
+.ur-key-notice { border-radius: 8px; padding: 12px; }
+.ur-key-notice-info { background-color: alpha(#D6E6F4, .12); }
+.ur-key-notice-warn { background-color: alpha(#E6EA23, .12); }
+.ur-key-notice-danger { background-color: alpha(#F8523B, .12); }
+.ur-key-notice-gold { background-color: alpha(#F5B93C, .12); }
+.ur-key-notice-green {
+  background-color: alpha(#87FB67, .08); border: 1px solid alpha(#87FB67, .35);
+}
+.ur-key-icon-info { color: #D6E6F4; }
+.ur-key-icon-warn { color: #E6EA23; }
+.ur-key-icon-danger { color: #F8523B; }
+.ur-key-icon-gold { color: #F5B93C; }
+.ur-key-icon-green { color: #87FB67; }
+.ur-key-muted-icon { color: #989898; }
+.ur-key-warn-text { color: #E6EA23; }
+.ur-key-dot-green { color: #87FB67; font-size: 10px; }
+.ur-key-dot-amber { color: #F5C242; font-size: 10px; }
+.ur-key-disclaimer-boxed { background-color: #1C1C1C; border-radius: 8px; padding: 12px; }
+.ur-key-disclaimer-text { font-family: "PP Neue Montreal"; font-size: 12px; color: #F8F8F8; }
+/* the backup banner that leads Earnings: the card fill, a yellow hairline */
+button.ur-key-banner {
+  background-color: #1C1C1C; background-image: none; box-shadow: none;
+  border: 1px solid alpha(#E6EA23, .6); border-radius: 12px; padding: 12px;
+}
+button.ur-key-banner:hover { background-color: #2A2A2A; }
+/* the cover over the hidden words */
+button.ur-key-cover {
+  background-color: #1C1C1C; background-image: none; box-shadow: none;
+  border: 1px solid alpha(#989898, .3); border-radius: 8px; min-height: 180px;
+}
+button.ur-key-cover:hover { background-color: #2A2A2A; }
+.ur-key-words { border: 1px solid alpha(#989898, .3); border-radius: 8px; padding: 12px; }
+.ur-key-word-cell { background-color: #1C1C1C; border-radius: 6px; padding: 6px 8px; }
+.ur-key-word { font-family: monospace; font-size: 14px; color: #F8F8F8; }
+.ur-key-word-number { font-family: monospace; font-size: 11px; color: #989898; }
+entry.ur-key-word-field { font-family: monospace; }
+button.ur-key-primary, button.ur-key-light, button.ur-key-destructive,
+button.ur-key-destructive-outline, button.ur-key-outline {
+  background-image: none; box-shadow: none; border-radius: 8px; min-height: 44px;
+  padding: 0 12px; font-family: "PP Neue Montreal"; font-size: 14px; font-weight: 600;
+}
+button.ur-key-primary { background-color: #638BFC; color: #101010; border: none; }
+button.ur-key-light { background-color: #F8F8F8; color: #101010; border: none; }
+button.ur-key-destructive { background-color: #F8523B; color: #101010; border: none; }
+button.ur-key-destructive-outline {
+  background-color: transparent; color: #F8523B; border: 1px solid #F8523B;
+}
+button.ur-key-outline {
+  background-color: transparent; color: #F8F8F8; border: 1px solid alpha(#ffffff, .22);
+}
+button.ur-key-primary:disabled, button.ur-key-light:disabled, button.ur-key-destructive:disabled,
+button.ur-key-destructive-outline:disabled, button.ur-key-outline:disabled { opacity: 0.38; }
 )";
 
 void AddFontFile(const std::string& dir, const char* file) {
