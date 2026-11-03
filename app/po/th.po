@@ -1172,6 +1172,11 @@ msgctxt "bittensor_key_back_up"
 msgid "Back up your key"
 msgstr "สำรองคีย์ของคุณ"
 
+#. Sign out and Delete account confirmations: a button that opens the Key screen, so the user can save the recovery phrase before going on. Short: a button.
+msgctxt "bittensor_key_back_up_first"
+msgid "Back up first"
+msgstr "สำรองก่อน"
+
 #. Earnings screen: the warning banner under Back up your key, which stays until the phrase is saved.
 msgctxt "bittensor_key_banner_body"
 msgid "If you lose this device before saving your recovery phrase, your SN25α can't be reached."
@@ -1181,11 +1186,6 @@ msgstr "หากคุณทำอุปกรณ์นี้หายก่อ
 msgctxt "bittensor_key_capture_hidden"
 msgid "The words stay hidden while your screen is being recorded or mirrored."
 msgstr "คำเหล่านี้จะถูกซ่อนไว้ขณะที่หน้าจอของคุณกำลังถูกบันทึกหรือสะท้อนภาพ"
-
-#. Earnings screen, the payout card for the network's payouts. Explains the one tap, read before it. A miner is a device on the network that earns; this is the Bittensor sense of the word.
-msgctxt "bittensor_key_card_explain"
-msgid "URnetwork creates a Bittensor key on this device and pays every miner on your network to it, from the next epoch."
-msgstr "URnetwork จะสร้างคีย์ Bittensor บนอุปกรณ์นี้ และจ่ายรายได้ของนักขุดทุกรายในเครือข่ายของคุณเข้าคีย์นี้ ตั้งแต่อีพอคถัดไป"
 
 #. Earnings screen, the payout card for the network's payouts. The first line while the network has no payout wallet. Set up payouts is the main button below it.
 msgctxt "bittensor_key_card_none"
@@ -1197,75 +1197,115 @@ msgctxt "bittensor_key_card_not_linked"
 msgid "Your key is on this device, but payouts aren't set up yet."
 msgstr "คีย์ของคุณอยู่บนอุปกรณ์นี้ แต่ยังไม่ได้ตั้งค่าการจ่าย"
 
-#. Earnings screen, the payout card for the network's payouts. The short form of the warning, read before the one tap.
-msgctxt "bittensor_key_card_not_wallet"
-msgid "URnetwork is not a wallet. To transfer or use your SN25α, you enter the key's recovery phrase into a Bittensor wallet or btcli. If you lose this device before saving it, your SN25α can't be reached."
-msgstr "URnetwork ไม่ใช่กระเป๋าเงิน หากต้องการโอนหรือใช้ SN25α ของคุณ คุณต้องป้อนวลีสำรองของคีย์ลงในกระเป๋าเงิน Bittensor หรือ btcli หากคุณทำอุปกรณ์นี้หายก่อนบันทึกวลีนี้ จะไม่สามารถเข้าถึง SN25α ของคุณได้"
-
 #. Earnings screen, the payout card for the network's payouts. Payouts go to another wallet, and a key made earlier is still on this device.
 msgctxt "bittensor_key_card_other_consent"
 msgid "The key on this device isn't receiving payouts."
 msgstr "คีย์บนอุปกรณ์นี้ไม่ได้รับการจ่าย"
 
-#. Earnings screen, the payout card for the network's payouts. The user proved they saved the phrase and chose to keep the key on the device.
-msgctxt "bittensor_key_card_saved"
-msgid "Your recovery phrase is saved, and the key stays on this device."
-msgstr "บันทึกวลีสำรองของคุณแล้ว และคีย์จะยังอยู่บนอุปกรณ์นี้"
+#. Earnings screen, the payout card before setup, under its title and above the Set up payouts button. Read before the one tap: what the tap does and the one risk. Set up payouts is the button's label; keep it recognizable as that label.
+msgctxt "bittensor_key_card_short"
+msgid "URnetwork is not a wallet. Set up payouts creates a Bittensor key on this device, and your whole network's SN25α is paid to it. Back up its recovery phrase: if you lose this device before saving it, your SN25α can't be reached."
+msgstr "URnetwork ไม่ใช่กระเป๋าเงิน “ตั้งค่าการจ่าย” จะสร้างคีย์ Bittensor บนอุปกรณ์นี้ และ SN25α ของทั้งเครือข่ายของคุณจะจ่ายเข้าคีย์นี้ บันทึกวลีสำรองของคีย์นี้เก็บไว้ หากคุณทำอุปกรณ์นี้หายก่อนบันทึกวลีนี้ จะไม่สามารถเข้าถึง SN25α ของคุณได้"
 
-#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. 
-msgctxt "bittensor_key_confirm_body"
-msgid "URnetwork can't get this key back. Earnings keep going to this address, and only the recovery phrase can move them."
-msgstr "URnetwork ไม่สามารถเอาคีย์นี้คืนมาได้ รายได้ยังคงเข้าที่อยู่นี้ และมีเพียงวลีสำรองเท่านั้นที่ย้ายรายได้เหล่านั้นได้"
-
-#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. 
-msgctxt "bittensor_key_confirm_convert"
-msgid "This app also can't convert your SN25α to TAO after this. A Bittensor wallet or btcli can, with this recovery phrase."
-msgstr "หลังจากนี้ แอปนี้จะแปลง SN25α ของคุณเป็น TAO ไม่ได้เช่นกัน กระเป๋าเงิน Bittensor หรือ btcli ทำได้ โดยใช้วลีสำรองนี้"
-
-#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. Two fields follow, labeled Word 3, Word 9 and so on.
-msgctxt "bittensor_key_confirm_prompt"
-msgid "To show you saved it, enter these two words from your recovery phrase."
-msgstr "เพื่อแสดงว่าคุณบันทึกไว้แล้ว ให้ป้อนคำสองคำนี้จากวลีสำรองของคุณ"
+#. The payout consent sheet when the network already pays a wallet (Change wallet): what changing does. An epoch is the subnet's payout period.
+msgctxt "bittensor_key_change_wallet_body"
+msgid "Choose where this network's earnings are paid from the next epoch. Earlier earnings stay where they were paid."
+msgstr "เลือกว่าจะให้จ่ายรายได้ของเครือข่ายนี้ไปที่ใดตั้งแต่อีพอคถัดไป รายได้ก่อนหน้านี้จะยังอยู่ในที่ที่จ่ายไปแล้ว"
 
 #. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. Top 200 is a ranking the network's miners can claim a place on.
 msgctxt "bittensor_key_confirm_top200"
 msgid "Deleting this key also gives up claiming a Top 200 spot with one tap. You could still claim from a Bittensor wallet holding this recovery phrase."
 msgstr "การลบคีย์นี้ยังหมายถึงการสละการจองที่ใน Top 200 ด้วยการแตะครั้งเดียว คุณยังจองที่ได้จากกระเป๋าเงิน Bittensor ที่มีวลีสำรองนี้"
 
-#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. Next to the Copy button.
-msgctxt "bittensor_key_copy_warning"
-msgid "Other apps may be able to read the clipboard. It's cleared after 60 seconds."
-msgstr "แอปอื่นอาจอ่านคลิปบอร์ดได้ คลิปบอร์ดจะถูกล้างหลังจาก 60 วินาที"
+#. Key screen, under the Copy button for the recovery phrase: a warning about the clipboard. The copy isn't shared to the user's other devices and is removed after 60 seconds; 60 s is 60 seconds, abbreviate seconds as usual.
+msgctxt "bittensor_key_copy_warning_2"
+msgid "Other apps may be able to read the clipboard. The copy stays on this device and is cleared after 60 s."
+msgstr "แอปอื่นอาจอ่านคลิปบอร์ดได้ สำเนาจะอยู่บนอุปกรณ์นี้และจะถูกล้างหลังจาก 60 วินาที"
 
 #. Earnings screen, the payout card for the network's payouts. A small link when payouts go to another wallet. A warning follows before anything changes.
 msgctxt "bittensor_key_create_here"
 msgid "Create a key on this device"
 msgstr "สร้างคีย์บนอุปกรณ์นี้"
 
-#. The confirmation of Delete account, shown only while the Bittensor key's recovery phrase is not saved.
-msgctxt "bittensor_key_delete_account_message"
-msgid "Your Bittensor recovery phrase isn't saved yet. Deleting your account also deletes this key from this device, and without the phrase your SN25α can't be reached."
-msgstr "ยังไม่ได้บันทึกวลีสำรอง Bittensor ของคุณ การลบบัญชีจะลบคีย์นี้ออกจากอุปกรณ์นี้ด้วย และหากไม่มีวลีนี้ จะไม่สามารถเข้าถึง SN25α ของคุณได้"
+#. The payout consent sheet (Change wallet), under the button Create a key on this device: what it does.
+msgctxt "bittensor_key_create_here_body"
+msgid "URnetwork is not a wallet. One tap creates a Bittensor key on this device; back up its recovery phrase afterwards."
+msgstr "URnetwork ไม่ใช่กระเป๋าเงิน การแตะครั้งเดียวจะสร้างคีย์ Bittensor บนอุปกรณ์นี้ จากนั้นให้บันทึกวลีสำรองของคีย์ไว้"
+
+#. Delete account, the confirmation while this device holds the network's Bittensor key and its recovery phrase isn't saved. It is the key.
+msgctxt "bittensor_key_delete_account_message_2"
+msgid "Your Bittensor key isn't backed up. Deleting your account also deletes it from this device, and URnetwork can't get it back."
+msgstr "คีย์ Bittensor ของคุณยังไม่ได้สำรอง การลบบัญชีจะลบคีย์นี้ออกจากอุปกรณ์นี้ด้วย และ URnetwork ไม่สามารถเอาคีย์นี้คืนมาได้"
 
 #. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. The one destructive button: the user says the phrase is saved, and the app may forget it.
 msgctxt "bittensor_key_delete_action"
 msgid "I have saved the key, it's OK to delete it now."
 msgstr "ฉันบันทึกคีย์แล้ว ตอนนี้ลบได้เลย"
 
+#. Key screen, the delete confirmation: one point of a short list. The placeholder is the key's Bittensor address, shortened to its first and last characters around an ellipsis (5F3s…kQ9v); keep it as it is.
+msgctxt "bittensor_key_delete_bullet_address"
+msgid "Earnings keep going to this address, {}."
+msgstr "รายได้ยังคงเข้าที่อยู่นี้ {}"
+
+#. Key screen, the delete confirmation: one point of a short list. Convert to TAO is the app's action that swaps SN25α for TAO with this key.
+msgctxt "bittensor_key_delete_bullet_convert"
+msgid "Convert to TAO stops working in this app."
+msgstr "การแปลงเป็น TAO จะใช้ไม่ได้ในแอปนี้อีกต่อไป"
+
+#. Key screen, the delete confirmation: one point of a short list.
+msgctxt "bittensor_key_delete_bullet_no_recovery"
+msgid "URnetwork can't get this key back."
+msgstr "URnetwork ไม่สามารถเอาคีย์นี้คืนมาได้"
+
+#. Key screen, the delete confirmation: one point of a short list, after Earnings keep going to this address. Them is the earnings.
+msgctxt "bittensor_key_delete_bullet_phrase"
+msgid "Only the recovery phrase can move them."
+msgstr "มีเพียงวลีสำรองเท่านั้นที่ย้ายรายได้เหล่านั้นได้"
+
 #. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. The destructive button.
 msgctxt "bittensor_key_delete_confirm"
 msgid "Delete key"
 msgstr "ลบคีย์"
 
-#. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. The title.
-msgctxt "bittensor_key_delete_title"
-msgid "Delete this key from this app?"
-msgstr "ลบคีย์นี้ออกจากแอปนี้ใช่ไหม"
+#. Key screen, the title of the confirmation when the user saved the recovery phrase first: payouts get set up with the key, and then the app drops it.
+msgctxt "bittensor_key_delete_save_now_title"
+msgid "Set up payouts and delete the key?"
+msgstr "ตั้งค่าการจ่ายและลบคีย์ใช่ไหม"
+
+#. Key screen, the title of the confirmation before this app deletes its copy of the Bittensor key. The user has said they saved the recovery phrase.
+msgctxt "bittensor_key_delete_title_2"
+msgid "Delete the key from this device?"
+msgstr "ลบคีย์ออกจากอุปกรณ์นี้ใช่ไหม"
+
+#. Earnings screen, the payout card after this app deleted its copy of the key (the user saved the recovery phrase first). Earnings keep going to the same address. Top 200 is the leaderboard of the subnet's top 200 miners; keep it as the app writes it elsewhere.
+msgctxt "bittensor_key_deleted_body"
+msgid "Claims keep working. To transfer or convert your SN25α, or to claim a Top 200 spot, use a Bittensor wallet holding your recovery phrase."
+msgstr "การรับรายได้ยังทำได้ตามปกติ หากต้องการโอนหรือแปลง SN25α ของคุณ หรือจองที่ใน Top 200 ให้ใช้กระเป๋าเงิน Bittensor ที่มีวลีสำรองของคุณ"
 
 #. Earnings screen, the payout card for the network's payouts. Payouts go to an address whose key is not in this app. The phrase cannot be shown here.
 msgctxt "bittensor_key_elsewhere"
 msgid "This key is on another device or in your wallet."
 msgstr "คีย์นี้อยู่บนอุปกรณ์อื่นหรือในกระเป๋าเงินของคุณ"
+
+#. Earnings screen, the payout card, under This key is on another device or in your wallet: this app doesn't hold the key, so it can't show the key's recovery phrase.
+msgctxt "bittensor_key_elsewhere_body"
+msgid "Its recovery phrase can't be shown here."
+msgstr "ไม่สามารถแสดงวลีสำรองของคีย์นี้ที่นี่ได้"
+
+#. Key screen, the title of the sheet where the user types two words of the recovery phrase, to show it was saved.
+msgctxt "bittensor_key_enter_two_words"
+msgid "Enter two of the words"
+msgstr "ป้อนคำสองคำ"
+
+#. Key screen, the two-word sheet before deleting the key: what to do. The fields below say which word, as Word 4.
+msgctxt "bittensor_key_enter_two_words_body"
+msgid "To confirm you've saved the recovery phrase, enter these two words from it."
+msgstr "เพื่อยืนยันว่าคุณบันทึกวลีสำรองไว้แล้ว ให้ป้อนคำสองคำนี้จากวลีนั้น"
+
+#. Earnings screen, the payout card, under the Bittensor address the network's earnings go to. Every device (miner) the user runs on this network earns to it.
+msgctxt "bittensor_key_every_device"
+msgid "Every device on your network is paid to this address."
+msgstr "รายได้ของทุกอุปกรณ์ในเครือข่ายของคุณจะจ่ายเข้าที่อยู่นี้"
 
 #. Earnings screen, the payout card for the network's payouts. A general error under the Set up payouts button.
 msgctxt "bittensor_key_failure_consent"
@@ -1292,6 +1332,11 @@ msgctxt "bittensor_key_failure_store"
 msgid "Couldn't save the key on this device, so nothing was signed. Try again, or save the recovery phrase first."
 msgstr "ไม่สามารถบันทึกคีย์บนอุปกรณ์นี้ได้ จึงไม่มีการลงนามใดๆ ลองอีกครั้ง หรือบันทึกวลีสำรองก่อน"
 
+#. Earnings screen, the payout card when a key was stored but setup stopped before the payout consent was signed, for example after a crash. Finish setup is the button's label below; keep it recognizable as that label.
+msgctxt "bittensor_key_finish_body"
+msgid "Setup stopped before signing, so nothing was paid to this key. Finish setup signs the consent with it."
+msgstr "การตั้งค่าหยุดลงก่อนลงนาม จึงไม่มีการจ่ายใดๆ เข้าคีย์นี้ “ตั้งค่าให้เสร็จสิ้น” จะใช้คีย์นี้ลงนามในความยินยอม"
+
 #. Earnings screen, the payout card for the network's payouts. Button that retries the link between the key on this device and the network's payouts.
 msgctxt "bittensor_key_finish_setup"
 msgid "Finish setup"
@@ -1302,55 +1347,90 @@ msgctxt "bittensor_key_hide"
 msgid "Hide"
 msgstr "ซ่อน"
 
+#. Key screen, while the recovery phrase's words show: a countdown until they hide by themselves. The placeholder is minutes and seconds, as 0:58.
+msgctxt "bittensor_key_hides_in"
+msgid "Hides again in {}"
+msgstr "จะซ่อนอีกครั้งใน {}"
+
 #. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. A smaller link: the user says the phrase is saved, and the key stays on the device, so the reminders stop.
 msgctxt "bittensor_key_keep_action"
 msgid "I've saved it. Keep it on this device."
 msgstr "ฉันบันทึกแล้ว เก็บไว้บนอุปกรณ์นี้"
 
-#. Key screen, the button that finishes the check and keeps the key on the device.
-msgctxt "bittensor_key_keep_confirm"
-msgid "Keep key"
-msgstr "เก็บคีย์ไว้"
+#. Key screen, the keep sheet: what keeping does. Convert is the app's SN25α to TAO action; one-tap Top 200 is claiming a spot on the subnet's Top 200 leaderboard with one tap. Keep Top 200 as the app writes it.
+msgctxt "bittensor_key_keep_body"
+msgid "You've saved the recovery phrase, so the backup reminder ends. The key stays on this device for convert and one-tap Top 200."
+msgstr "คุณบันทึกวลีสำรองแล้ว การแจ้งเตือนให้สำรองคีย์จึงสิ้นสุดลง คีย์จะยังอยู่บนอุปกรณ์นี้สำหรับการแปลงเป็น TAO และการจองที่ใน Top 200 ด้วยการแตะครั้งเดียว"
 
-#. Key screen, the check before the key stays on the device: the user enters two of its words.
-msgctxt "bittensor_key_keep_title"
-msgid "Keep this key on this device?"
-msgstr "เก็บคีย์นี้ไว้บนอุปกรณ์นี้ใช่ไหม"
+#. Key screen, the keep sheet's button, enabled once the two words are right. Short: a button. It is the key that stays.
+msgctxt "bittensor_key_keep_confirm_2"
+msgid "Keep it on this device"
+msgstr "เก็บไว้บนอุปกรณ์นี้"
+
+#. Key screen, the keep sheet: what to do. The fields below say which word, as Word 4.
+msgctxt "bittensor_key_keep_prompt"
+msgid "To confirm, enter these two words from the phrase."
+msgstr "เพื่อยืนยัน ให้ป้อนคำสองคำนี้จากวลี"
+
+#. Key screen, the keep sheet when the user saved the recovery phrase first: the key gets stored on this device, and then the app sets up payouts with it. Convert is the SN25α to TAO action; keep Top 200 as the app writes it.
+msgctxt "bittensor_key_keep_save_now_body"
+msgid "You've saved the recovery phrase. The key is stored on this device for convert and one-tap Top 200, and then payouts are set up."
+msgstr "คุณบันทึกวลีสำรองแล้ว คีย์จะถูกจัดเก็บไว้บนอุปกรณ์นี้สำหรับการแปลงเป็น TAO และการจองที่ใน Top 200 ด้วยการแตะครั้งเดียว จากนั้นจะตั้งค่าการจ่าย"
+
+#. Key screen, the title of the sheet for keeping the Bittensor key on this device after the user saved its recovery phrase.
+msgctxt "bittensor_key_keep_title_2"
+msgid "Keep the key on this device?"
+msgstr "เก็บคีย์ไว้บนอุปกรณ์นี้ใช่ไหม"
 
 #. Earnings screen, the payout card for the network's payouts. A status line after the user saved the phrase and the app deleted its copy of the key.
 msgctxt "bittensor_key_no_longer_here"
 msgid "This app no longer has the key"
 msgstr "แอปนี้ไม่มีคีย์แล้ว"
 
-#. Earnings screen, the payout card for the network's payouts. Under: This app no longer has the key.
-msgctxt "bittensor_key_no_longer_here_body"
-msgid "Your earnings keep going to this address. To transfer or use your SN25α, enter your recovery phrase into a Bittensor wallet such as Talisman or Nova, or into btcli."
-msgstr "รายได้ของคุณยังคงเข้าที่อยู่นี้ หากต้องการโอนหรือใช้ SN25α ของคุณ ให้ป้อนวลีสำรองของคุณลงในกระเป๋าเงิน Bittensor เช่น Talisman หรือ Nova หรือลงใน btcli"
+#. Key screen: tells apart the two phrases a user may have. The account seedphrase from sign-up (24 words) signs in to URnetwork; this Bittensor recovery phrase (12 words) controls the user's SN25α tokens. Use the app's usual words for each.
+msgctxt "bittensor_key_not_seed_2"
+msgid "Not the seedphrase from sign-up: that one is 24 words and signs you in to URnetwork. This Bittensor recovery phrase is 12 words and holds your SN25α."
+msgstr "ไม่ใช่วลีกู้คืนจากตอนสมัคร วลีนั้นมี 24 คำและใช้ลงชื่อเข้าใช้ URnetwork ส่วนวลีสำรอง Bittensor นี้มี 12 คำและเก็บ SN25α ของคุณไว้"
 
-#. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. The app also has a sign-in seed phrase of 24 words, a different secret, and people mix them up. Keep the two terms clearly different: use the same word for 'seed phrase' as the sign-up screen's 'Your Seedphrase' does in your language where it fits, and the word for 'recovery phrase' everywhere else in these strings.
-msgctxt "bittensor_key_not_seed_phrase"
-msgid "This is not your account seed phrase from sign-up. It only controls this Bittensor key."
-msgstr "นี่ไม่ใช่วลีกู้คืนของบัญชีคุณจากตอนสมัคร วลีสำรองนี้ควบคุมเฉพาะคีย์ Bittensor นี้เท่านั้น"
+#. The payout consent sheet (Change wallet), a heading above the list of Bittensor wallet apps, after the option to create a key on this device.
+msgctxt "bittensor_key_or_choose_wallet"
+msgid "Or choose your Bittensor wallet"
+msgstr "หรือเลือกกระเป๋าเงิน Bittensor ของคุณ"
+
+#. Earnings screen, the payout card's title once the network's earnings are being paid to its Bittensor key (from the first epoch after setup). Before that the title is Payouts start next epoch.
+msgctxt "bittensor_key_payouts_on"
+msgid "Payouts are on"
+msgstr "การจ่ายเปิดใช้งานแล้ว"
 
 #. Earnings screen, the payout card for the network's payouts. A status line after setup. An epoch is the network's settlement period.
 msgctxt "bittensor_key_payouts_start"
 msgid "Payouts start next epoch"
 msgstr "การจ่ายจะเริ่มในอีพอคถัดไป"
 
-#. A local notification, the body.
-msgctxt "bittensor_key_reminder_body"
-msgid "Your first epoch of earnings can now be claimed. If you lose this device before saving your recovery phrase, your SN25α can't be reached."
-msgstr "ตอนนี้คุณรับรายได้จากอีพอคแรกได้แล้ว หากคุณทำอุปกรณ์นี้หายก่อนบันทึกวลีสำรองของคุณ จะไม่สามารถเข้าถึง SN25α ของคุณได้"
+#. The one local notification of an unsaved Bittensor key: the body. Tapping it opens the Key screen.
+msgctxt "bittensor_key_reminder_body_2"
+msgid "Back up your Bittensor recovery phrase now. If you lose this device before saving it, your SN25α can't be reached."
+msgstr "บันทึกวลีสำรอง Bittensor ของคุณตอนนี้ หากคุณทำอุปกรณ์นี้หายก่อนบันทึกวลีนี้ จะไม่สามารถเข้าถึง SN25α ของคุณได้"
 
-#. A local notification, the title. It arrives once, when the first epoch's earnings can be claimed.
-msgctxt "bittensor_key_reminder_title"
-msgid "Back up your Bittensor key"
-msgstr "สำรองคีย์ Bittensor ของคุณ"
+#. The one local notification, sent when the network's first earnings on the Bittensor key can be claimed while its recovery phrase still isn't saved: the title.
+msgctxt "bittensor_key_reminder_title_2"
+msgid "Your first SN25α is claimable"
+msgstr "SN25α แรกของคุณรับได้แล้ว"
+
+#. The warning before a new key replaces the network's payout wallet: the button that goes ahead. Short: a button.
+msgctxt "bittensor_key_replace_confirm"
+msgid "Replace payout wallet"
+msgstr "แทนที่กระเป๋ารับยอดจ่าย"
 
 #. Earnings screen, a warning before a new key on this device replaces the network's payout wallet.
 msgctxt "bittensor_key_replace_message"
 msgid "This key replaces your payout wallet from the next epoch. Earlier earnings stay on the old wallet."
 msgstr "คีย์นี้จะแทนที่กระเป๋ารับยอดจ่ายของคุณตั้งแต่อีพอคถัดไป รายได้ก่อนหน้านี้จะยังอยู่ในกระเป๋าเงินเดิม"
+
+#. The warning before a new key on this device replaces the network's payout wallet. The placeholder is the old wallet's Bittensor address, shortened (5F3s…kQ9v); keep it as it is.
+msgctxt "bittensor_key_replace_message_2"
+msgid "From the next epoch, your network's earnings go to a new key on this device. Earlier earnings stay on {}. The network admin gets an email about this change."
+msgstr "ตั้งแต่อีพอคถัดไป รายได้ของเครือข่ายของคุณจะเข้าคีย์ใหม่บนอุปกรณ์นี้ รายได้ก่อนหน้านี้จะยังอยู่ที่ {} ผู้ดูแลเครือข่ายจะได้รับอีเมลเกี่ยวกับการเปลี่ยนแปลงนี้"
 
 #. Earnings screen, the title of a warning before a new key on this device replaces the network's payout wallet.
 msgctxt "bittensor_key_replace_title"
@@ -1367,10 +1447,40 @@ msgctxt "bittensor_key_save_first"
 msgid "Save the recovery phrase first"
 msgstr "บันทึกวลีสำรองก่อน"
 
+#. Key screen, a banner at the top when the user chose to save the recovery phrase first: the key exists only in memory. The 12 words are the recovery phrase. Below are two choices: keep the key on this device, or set up payouts and delete it.
+msgctxt "bittensor_key_save_now_banner"
+msgid "This key isn't saved on this device. Write the 12 words down, then choose below. If you leave this screen, the key is discarded and nothing is paid to it."
+msgstr "คีย์นี้ไม่ได้บันทึกไว้บนอุปกรณ์นี้ จดคำทั้ง 12 คำไว้ แล้วเลือกด้านล่าง หากคุณออกจากหน้าจอนี้ คีย์จะถูกทิ้งและจะไม่มีการจ่ายใดๆ เข้าคีย์นี้"
+
+#. Key screen, the confirmation when the user saved the recovery phrase first: one point of a short list. The placeholder is the key's Bittensor address, shortened (5F3s…kQ9v); keep it as it is. An epoch is the subnet's payout period.
+msgctxt "bittensor_key_save_now_bullet_address"
+msgid "Payouts go to this address, {}, from the next epoch."
+msgstr "การจ่ายจะเข้าที่อยู่นี้ {} ตั้งแต่อีพอคถัดไป"
+
+#. Key screen, the confirmation when the user saved the recovery phrase first: one point of a short list. Convert to TAO is the app's action that swaps SN25α for TAO.
+msgctxt "bittensor_key_save_now_bullet_convert"
+msgid "Convert to TAO needs this key, so it won't be available in this app."
+msgstr "การแปลงเป็น TAO ต้องใช้คีย์นี้ จึงจะไม่พร้อมใช้งานในแอปนี้"
+
+#. Key screen, the confirmation when the user saved the recovery phrase first: one point of a short list.
+msgctxt "bittensor_key_save_now_bullet_phrase"
+msgid "Only the recovery phrase can move your SN25α."
+msgstr "มีเพียงวลีสำรองเท่านั้นที่ย้าย SN25α ของคุณได้"
+
+#. Key screen, the button that sets up payouts with the key and then drops it, after the user entered two words of the recovery phrase. Short: a button.
+msgctxt "bittensor_key_save_now_delete_confirm"
+msgid "Set up payouts and delete key"
+msgstr "ตั้งค่าการจ่ายและลบคีย์"
+
 #. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. After the link to payouts failed, for a key that exists only in memory. A Retry button follows.
 msgctxt "bittensor_key_save_now_retry"
 msgid "Payouts aren't set up yet. No earnings went to this key, and leaving discards it."
 msgstr "ยังไม่ได้ตั้งค่าการจ่าย ไม่มีรายได้เข้าคีย์นี้ และหากออกจากหน้านี้ คีย์จะถูกทิ้ง"
+
+#. Key screen, a small heading above the two choices for after the user has written the recovery phrase down: keep the key on this device, or delete it.
+msgctxt "bittensor_key_saved_question"
+msgid "Saved the recovery phrase?"
+msgstr "บันทึกวลีสำรองแล้วหรือยัง"
 
 #. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. The screen's title.
 msgctxt "bittensor_key_screen_title"
@@ -1387,30 +1497,60 @@ msgctxt "bittensor_key_set_up"
 msgid "Set up payouts"
 msgstr "ตั้งค่าการจ่าย"
 
-#. Earnings screen, the payout card for the network's payouts. A small link that opens the Key screen.
-msgctxt "bittensor_key_show"
-msgid "Show key"
-msgstr "แสดงคีย์"
+#. Earnings screen, the payout card: under the Set up payouts button while it works, which takes a few seconds. The app writes the new key to the device's secure storage, reads it back to check it, and then signs the payout consent with it.
+msgctxt "bittensor_key_setting_up"
+msgid "Saving the key on this device and reading it back, then signing."
+msgstr "กำลังบันทึกคีย์บนอุปกรณ์นี้และอ่านกลับมา จากนั้นจึงลงนาม"
 
 #. The confirmation of Sign out, the message.
 msgctxt "bittensor_key_sign_out_message"
 msgid "Your Bittensor recovery phrase isn't saved yet. The key stays on this device and comes back when this network signs in again. If you lose this device before saving it, your SN25α can't be reached."
 msgstr "ยังไม่ได้บันทึกวลีสำรอง Bittensor ของคุณ คีย์จะยังอยู่บนอุปกรณ์นี้และจะกลับมาเมื่อเครือข่ายนี้ลงชื่อเข้าใช้อีกครั้ง หากคุณทำอุปกรณ์นี้หายก่อนบันทึกวลีนี้ จะไม่สามารถเข้าถึง SN25α ของคุณได้"
 
-#. The confirmation of Sign out, shown only while the Bittensor key's recovery phrase is not saved. The buttons are Sign out and Cancel.
-msgctxt "bittensor_key_sign_out_title"
-msgid "Sign out without saving your key?"
-msgstr "ออกจากระบบโดยไม่บันทึกคีย์ของคุณใช่ไหม"
+#. Sign out, the confirmation while the Bittensor key's recovery phrase isn't saved: what happens to the key. It is the key.
+msgctxt "bittensor_key_sign_out_message_2"
+msgid "It stays on this device and comes back when you sign in to this network again. If you lose this device before saving it, your SN25α can't be reached."
+msgstr "คีย์จะยังอยู่บนอุปกรณ์นี้และจะกลับมาเมื่อคุณลงชื่อเข้าใช้เครือข่ายนี้อีกครั้ง หากคุณทำอุปกรณ์นี้หายก่อนบันทึกคีย์ จะไม่สามารถเข้าถึง SN25α ของคุณได้"
+
+#. Sign out, the confirmation while this device holds the network's Bittensor key and its recovery phrase isn't saved: the title.
+msgctxt "bittensor_key_sign_out_title_2"
+msgid "Your Bittensor key isn't backed up"
+msgstr "คีย์ Bittensor ของคุณยังไม่ได้สำรอง"
+
+#. Key screen, a banner with a spinner while the app signs the network's payout consent with the new key, after the user confirmed two words of the recovery phrase.
+msgctxt "bittensor_key_signing"
+msgid "Setting up payouts: signing your network's payout consent with this key."
+msgstr "กำลังตั้งค่าการจ่าย: กำลังลงนามความยินยอมรับยอดจ่ายของเครือข่ายคุณด้วยคีย์นี้"
+
+#. Earnings screen, the payout card: a status line beside a green dot. The Bittensor key is stored on this device and the user confirmed saving its recovery phrase.
+msgctxt "bittensor_key_status_saved"
+msgid "Key on this device, recovery phrase saved"
+msgstr "คีย์อยู่บนอุปกรณ์นี้ บันทึกวลีสำรองแล้ว"
+
+#. Earnings screen, the payout card: a status line beside an amber dot. The Bittensor key is stored on this device and the user hasn't confirmed saving its recovery phrase.
+msgctxt "bittensor_key_status_unsaved"
+msgid "Key on this device, not backed up yet"
+msgstr "คีย์อยู่บนอุปกรณ์นี้ ยังไม่ได้สำรอง"
 
 #. Earnings screen, the payout card for the network's payouts. A smaller link under Set up payouts: for someone who already has a Bittensor wallet.
 msgctxt "bittensor_key_use_wallet"
 msgid "Use a wallet I already have"
 msgstr "ใช้กระเป๋าเงินที่ฉันมีอยู่แล้ว"
 
+#. Earnings screen, the payout card: a link that opens the Key screen, where the recovery phrase can be shown after device authentication.
+msgctxt "bittensor_key_view"
+msgid "View key"
+msgstr "ดูคีย์"
+
 #. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. A field label: which word of the phrase to enter, counting from 1, for example Word 3.
 msgctxt "bittensor_key_word_number"
 msgid "Word {}"
 msgstr "คำที่ {}"
+
+#. Key screen, the two-word sheet: an error under a field whose word is wrong. The placeholder is the word's position in the phrase, counting from 1.
+msgctxt "bittensor_key_word_wrong"
+msgid "That isn't word {} of this recovery phrase."
+msgstr "นั่นไม่ใช่คำที่ {} ของวลีสำรองนี้"
 
 #. Key screen: the screen that shows the Bittensor recovery phrase, a 12 word secret for a key this app made on the device. Always visible on the screen.
 msgctxt "bittensor_key_wording_control"
@@ -1421,6 +1561,11 @@ msgstr "ใครก็ตามที่มีวลีนี้จะควบ
 msgctxt "bittensor_key_wording_not_wallet"
 msgid "URnetwork is not a wallet. It created this key so you can receive SN25α. To transfer or use your SN25α, enter this recovery phrase into a Bittensor wallet such as Talisman or Nova, or into btcli."
 msgstr "URnetwork ไม่ใช่กระเป๋าเงิน แต่สร้างคีย์นี้เพื่อให้คุณรับ SN25α ได้ หากต้องการโอนหรือใช้ SN25α ของคุณ ให้ป้อนวลีสำรองนี้ลงในกระเป๋าเงิน Bittensor เช่น Talisman หรือ Nova หรือลงใน btcli"
+
+#. Key screen, a small label above the recovery phrase's words: that it has 12 words, and the key's Bittensor address, shortened to its first and last characters around an ellipsis (5F3s…kQ9v); keep the address as it is.
+msgctxt "bittensor_key_words_label"
+msgid "12 words · address {}"
+msgstr "12 คำ · ที่อยู่ {}"
 
 #. Key screen, the confirmation before the key leaves the app, where the user enters two of its words. An error under the two fields.
 msgctxt "bittensor_key_words_rejected"
@@ -9410,6 +9555,106 @@ msgstr "ความล่าช้าในการอัปโหลด"
 msgctxt "sn_alpha_symbol"
 msgid "SN25α"
 msgstr "SN25α"
+
+#. Earnings, the settlement v2 tile and the claim sheet: Claim now was used for this address, and works again from this date. The placeholder is a date, as Dec 3.
+msgctxt "sn_claim_relay_again_on"
+msgid "Claim now is available again on {}."
+msgstr "“รับตอนนี้” จะใช้ได้อีกครั้งในวันที่ {}"
+
+#. Earnings, the settlement v2 tile and the claim sheet: URnetwork's daily budget for paying claim gas is spent, so the claim waits for the next day (UTC).
+msgctxt "sn_claim_relay_cap"
+msgid "Today's claim budget is used up, so this waits for the next day. Nothing is lost: this credit never expires."
+msgstr "งบประมาณสำหรับการรับของวันนี้หมดแล้ว รายการนี้จึงรอถึงวันถัดไป ไม่มีอะไรสูญหาย ยอดนี้ไม่มีวันหมดอายุ"
+
+#. Earnings, the settlement v2 tile and the claim sheet: a button that asks URnetwork to claim the balance now, without waiting for the automatic threshold. Short: a button.
+msgctxt "sn_claim_relay_claim_now"
+msgid "Claim now"
+msgstr "รับตอนนี้"
+
+#. Earnings, the settlement v2 tile, under the Claim now button: URnetwork pays the gas, and the button can be used once in this many days (30). Claim now is the button's label; keep it recognizable as that label.
+msgctxt "sn_claim_relay_claim_now_paid"
+msgid "Claim now is paid by URnetwork, once every {} days."
+msgstr "“รับตอนนี้” ออกค่าใช้จ่ายโดย URnetwork ใช้ได้ {} วันต่อครั้ง"
+
+#. Earnings claim sheet, under the Claim now button: URnetwork pays the gas, once in this many days (30) for each Bittensor address (coldkey). Keep coldkey as the app writes it elsewhere.
+msgctxt "sn_claim_relay_claim_now_paid_each"
+msgid "Paid by URnetwork, once every {} days for each coldkey."
+msgstr "ออกค่าใช้จ่ายโดย URnetwork ใช้ได้ {} วันต่อครั้งสำหรับแต่ละ coldkey"
+
+#. Earnings screen, the settlement v2 tile and the claim sheet: a line beside a relay icon. URnetwork sends the claim transaction and pays its gas; the SN25α goes to the user's own address.
+msgctxt "sn_claim_relay_for_you"
+msgid "URnetwork claims this for you"
+msgstr "URnetwork ดำเนินการรับให้คุณ"
+
+#. Earnings claim sheet: who claims and where the tokens go. The placeholder is the user's Bittensor address, shortened (5F3s…kQ9v); keep it as it is.
+msgctxt "sn_claim_relay_lands_on"
+msgid "URnetwork claims this for you. It pays the gas, and your SN25α lands on {}."
+msgstr "URnetwork ดำเนินการรับให้คุณ โดยเป็นผู้จ่ายค่า gas และ SN25α ของคุณจะเข้าสู่ {}"
+
+#. Earnings, the settlement v2 tile and the claim sheet: URnetwork isn't sending claims at the moment.
+msgctxt "sn_claim_relay_not_running"
+msgid "Automatic claims aren't running right now."
+msgstr "ขณะนี้การรับอัตโนมัติไม่ได้ทำงาน"
+
+#. Earnings, the settlement v2 tile and the claim sheet: URnetwork paused claims for everyone for a while.
+msgctxt "sn_claim_relay_paused"
+msgid "URnetwork has paused claims for now."
+msgstr "URnetwork หยุดการรับไว้ชั่วคราว"
+
+#. Earnings, the settlement v2 tile and the claim sheet: why the balance is still pending, it is in line to be claimed.
+msgctxt "sn_claim_relay_queued"
+msgid "URnetwork claims this soon."
+msgstr "URnetwork จะดำเนินการรับในไม่ช้า"
+
+#. Earnings claim sheet: the Claim now button, disabled, after the claim was asked for. Short: a button.
+msgctxt "sn_claim_relay_queued_button"
+msgid "Queued"
+msgstr "อยู่ในคิว"
+
+#. Earnings, the settlement v2 tile and the claim sheet: the last claim transaction failed, and URnetwork will try again by itself.
+msgctxt "sn_claim_relay_refused"
+msgid "The last claim didn't go through. URnetwork tries again later."
+msgstr "คำขอรับครั้งล่าสุดไม่สำเร็จ URnetwork จะลองอีกครั้งในภายหลัง"
+
+#. Earnings, the settlement v2 tile and the claim sheet, after the user tapped Claim now: the claim is in line and goes out before the automatic ones, as long as the day's gas budget lasts.
+msgctxt "sn_claim_relay_requested"
+msgid "Claim now is queued. URnetwork sends it first, within today's budget."
+msgstr "“รับตอนนี้” อยู่ในคิวแล้ว URnetwork จะส่งรายการนี้ก่อน ภายในงบประมาณของวันนี้"
+
+#. Earnings, the settlement v2 tile and the claim sheet: a link to claim the balance from this device, paying the gas with the user's gas key (a small TAO account on this device). Keep gas key as the app writes it elsewhere.
+msgctxt "sn_claim_relay_self_claim"
+msgid "Claim it yourself with your gas key"
+msgstr "รับเองด้วยคีย์ gas ของคุณ"
+
+#. Earnings, the settlement v2 tile and the claim sheet: why Claim now can't be used yet. The placeholder is the smallest amount, in TAO (0.0001).
+msgctxt "sn_claim_relay_under_floor"
+msgid "Claim now needs a balance worth at least {} TAO."
+msgstr "“รับตอนนี้” ต้องมียอดคงเหลือมูลค่าอย่างน้อย {} TAO"
+
+#. Earnings, the settlement v2 tile and the claim sheet: why the balance is still pending. URnetwork claims automatically once a balance is worth a set amount.
+msgctxt "sn_claim_relay_under_threshold"
+msgid "Below the automatic threshold."
+msgstr "ต่ำกว่าเกณฑ์การรับอัตโนมัติ"
+
+#. Earnings, the settlement v2 tile and the claim sheet, under Below the automatic threshold. The placeholders are amounts: the threshold in TAO (0.0125), then the same in SN25α at today's price (3).
+msgctxt "sn_claim_relay_under_threshold_body"
+msgid "It's claimed for you once it's worth about {0} TAO, about {1} SN25α at today's price. Waiting costs nothing: this credit never expires."
+msgstr "เมื่อยอดนี้มีมูลค่าประมาณ {0} TAO หรือประมาณ {1} SN25α ตามราคาวันนี้ จะมีการดำเนินการรับให้คุณ การรอไม่มีค่าใช้จ่าย ยอดนี้ไม่มีวันหมดอายุ"
+
+#. Earnings, the settlement v2 tile and the claim sheet, under Below the automatic threshold, when today's SN25α price isn't known. The placeholder is the threshold in TAO (0.0125).
+msgctxt "sn_claim_relay_under_threshold_no_price"
+msgid "It's claimed for you once it's worth about {} TAO. Waiting costs nothing: this credit never expires."
+msgstr "เมื่อยอดนี้มีมูลค่าประมาณ {} TAO จะมีการดำเนินการรับให้คุณ การรอไม่มีค่าใช้จ่าย ยอดนี้ไม่มีวันหมดอายุ"
+
+#. Earnings, the settlement v2 tile and the claim sheet, under Automatic claims aren't running right now: nothing is lost. The vault is the settlement contract holding the user's balance.
+msgctxt "sn_claim_relay_waits"
+msgid "Your SN25α waits in the vault, and this credit never expires."
+msgstr "SN25α ของคุณรออยู่ในห้องนิรภัย และยอดนี้ไม่มีวันหมดอายุ"
+
+#. Earnings, the settlement v2 tile and the claim sheet, when URnetwork isn't claiming: the link below claims with the user's own gas key. Ends with a colon before that link.
+msgctxt "sn_claim_relay_waits_for_relay"
+msgid "Claim now waits until claims are running again. To claim right away, pay the gas yourself:"
+msgstr "“รับตอนนี้” จะรอจนกว่าการรับจะกลับมาทำงานอีกครั้ง หากต้องการรับทันที ให้ชำระค่า gas เอง:"
 
 #. Payout consent section, beside the settlement v2 tile and claim: the status while a consent covers the current epoch. The placeholder is the consented Bittensor coldkey, shortened to its first and last four characters around an ellipsis (5F3s…kQ9v); keep it as is.
 msgctxt "sn_consent_active"
