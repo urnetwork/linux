@@ -9600,15 +9600,19 @@ msgctxt "sn_claim_relay_claim_now"
 msgid "Claim now"
 msgstr "Réclamer maintenant"
 
-#. Earnings, the settlement v2 tile, under the Claim now button: URnetwork pays the gas, and the button can be used once in this many days (30). Claim now is the button's label; keep it recognizable as that label.
+#. Earnings, the settlement v2 tile, under the Claim now button: URnetwork pays the gas, and the button can be used once in this many days (30 today; the count selects the plural form). Claim now is the button's label; keep it recognizable as that label.
 msgctxt "sn_claim_relay_claim_now_paid"
-msgid "Claim now is paid by URnetwork, once every {} days."
-msgstr "« Réclamer maintenant » est payé par URnetwork, une fois tous les {} jours."
+msgid "Claim now is paid by URnetwork, once a day."
+msgid_plural "Claim now is paid by URnetwork, once every {} days."
+msgstr[0] "« Réclamer maintenant » est payé par URnetwork, une fois par jour."
+msgstr[1] "« Réclamer maintenant » est payé par URnetwork, une fois tous les {} jours."
 
-#. Earnings claim sheet, under the Claim now button: URnetwork pays the gas, once in this many days (30) for each Bittensor address (coldkey). Keep coldkey as the app writes it elsewhere.
+#. Earnings claim sheet, under the Claim now button: URnetwork pays the gas, once in this many days (30 today; the count selects the plural form) for each Bittensor address (coldkey). Keep coldkey as the app writes it elsewhere.
 msgctxt "sn_claim_relay_claim_now_paid_each"
-msgid "Paid by URnetwork, once every {} days for each coldkey."
-msgstr "Payé par URnetwork, une fois tous les {} jours pour chaque coldkey."
+msgid "Paid by URnetwork, once a day for each coldkey."
+msgid_plural "Paid by URnetwork, once every {} days for each coldkey."
+msgstr[0] "Payé par URnetwork, une fois par jour pour chaque coldkey."
+msgstr[1] "Payé par URnetwork, une fois tous les {} jours pour chaque coldkey."
 
 #. Earnings screen, the settlement v2 tile and the claim sheet: a line beside a relay icon. URnetwork sends the claim transaction and pays its gas; the SN25α goes to the user's own address.
 msgctxt "sn_claim_relay_for_you"
