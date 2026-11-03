@@ -5,9 +5,10 @@
   /usr/share/polkit-1/actions/com.bringyour.network.policy, 0644 root:root
   (polkit ignores group- or world-writable .policy files).
 
-  These are checked by urnetworkd, never by the GUI. The subject is derived
-  from SO_PEERCRED on the control-socket connection, so a client cannot
-  nominate its own subject and cannot skip the check by not asking.
+  These are checked by urnetworkd, never by the GUI, with one exception below
+  (bittensor-key). The subject is derived from SO_PEERCRED on the
+  control-socket connection, so a client cannot nominate its own subject and
+  cannot skip the check by not asking.
 
   DEFAULTS ARE MODELLED ON NetworkManager's network-control, which is the
   incumbent for "let the person at this screen change how this machine
@@ -118,6 +119,26 @@
       <allow_any>auth_admin_keep</allow_any>
       <allow_inactive>auth_admin_keep</allow_inactive>
       <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+  <!-- Showing or deleting the one-tap Bittensor key's recovery phrase on the
+       Earnings page (app/src/BittensorKeyAuth.cpp). THE ONE ACTION THE GUI
+       CHECKS, for its own process (its system bus name as the subject), never
+       for another. auth_self, never _keep: the person at the screen types
+       their own login password each time, through the desktop's polkit agent.
+       Nobody away from the screen reveals it: no for an inactive or remote
+       session. The phrase itself is in the user's own Secret Service, which
+       any program of theirs can read, so this guards the app's own screen.
+       Where polkit cannot ask at all (no agent, an older package without
+       this action), the app counts the check as passed, as Apple counts a
+       device with no passcode, so a key can always be backed up. -->
+  <action id="com.bringyour.network.bittensor-key">
+    <description>Show or delete your Bittensor recovery phrase</description>
+    <message>Authentication is required to show or delete the Bittensor recovery phrase kept on this device.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_self</allow_active>
     </defaults>
   </action>
 </policyconfig>

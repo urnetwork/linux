@@ -80,6 +80,8 @@
 
 #include <urnetwork_sdk.hpp>
 
+#include "BittensorKeyHost.hpp"
+#include "ClaimRelay.hpp"
 #include "DemandChart.hpp"
 #include "ExtenderProvidePresentation.hpp"
 #include "LeaderboardIndicator.hpp"
@@ -142,6 +144,7 @@ struct SnWalletCheck {
   std::string message;
 };
 
+class BittensorKeyScreen;
 class ClaimAlphaSheet;
 class EmojiTagSheet;
 class LedgerClaimSheet;
@@ -250,6 +253,10 @@ class EarningsPage : public Gtk::Box {
   // `prefill` (nullopt with `fromLink`: the link's binding did not decode). A
   // link that lands while the sheet is open pre-fills that sheet. Never signs.
   void OpenTop200SignSheet(const std::optional<std::string>& prefill, bool fromLink);
+
+  // Back up first (sign out, account deletion) and the reminder's notification:
+  // the Key screen of the signed-in network's key, once Earnings has its flow.
+  void OpenBittensorKeyScreen();
 
   // ---- window-level routing --------------------------------------------------
   // The window's one-ContentDialog-at-a-time gate.
@@ -463,6 +470,57 @@ class EarningsPage : public Gtk::Box {
   // marshaled to the main loop, dropped once the page's epoch moved, and given
   // up on by consentStep_'s watchdog (one step is in flight at a time).
   consent::Flow::Ports ConsentPorts();
+  // The consent's view changed: the key's flow reads the same status, then the
+  // section draws again.
+  void OnConsentChanged();
+
+  // ---- the one-tap Bittensor key (BittensorKeyHost; apple BTEASY.md) ---------
+  // The flow decides; the payout card, the banner, the wallet card, the payout
+  // line, the claim tiles and the Key screen draw what it says.
+  // A visit: the signed-in network's flow, read again.
+  void VisitKeys();
+  // The consent status as the flow takes it, only when it changed.
+  void FeedKeyConsent();
+  // The earnings as the flow takes them: the epoch and the one reminder.
+  void FeedKeyEarnings();
+  bool KeyGuest();
+  bool Top200Registered();
+  // the flow's mirror changed: everything it draws, and the Key screen
+  void OnKeysChanged();
+  void RebuildKeyBanner();
+  // The payout card leads Earnings, right under the banner, while the flow
+  // says it needs action (ShowsKeyPath); otherwise it keeps its place.
+  void PlaceConsentBlock();
+  // The key's part of the payout card, from the flow's card and the consent.
+  // True when the key's part draws the whole card (the consent's own lines
+  // and buttons then hide).
+  bool RebuildConsentKeyPart(const consent::View& view);
+  // The key on this device in the Bittensor wallet card, while no wallet is
+  // read: in place of the connect call.
+  bool KeyPanelShows() const;
+  // Set up payouts, Save the recovery phrase first and Finish setup: with a
+  // consent in force the warning comes first (3c).
+  enum class KeyAction { SetUp, SaveFirst, FinishSetup };
+  void RequestKeyAction(KeyAction action);
+  void RunKeyAction(KeyAction action, bool replaceConfirmed);
+  void ShowReplaceWarning(KeyAction action);
+  // Change wallet on an active consent, while the flow offers a key: the key
+  // first, then the wallets (3b).
+  void ShowChangeWalletSheet();
+  // Use a wallet I already have: the wallets, with no key part.
+  void OnUseWallet();
+  // The Key screen follows the flow's screen: shown while it is open.
+  void ApplyKeyScreen();
+
+  // ---- claims through URnetwork's relay (ClaimRelay.hpp; flow 4) -------------
+  void LoadClaimStatus();
+  void ApplyClaimStatus(std::optional<urnet::SnClaimStatusResult> status);
+  // the Settlement v2 tile shows for a network with no wallet here while the
+  // relay reports something claimable or pending
+  bool LedgerTileShowsRelayOnly() const;
+  void OnRelayClaimNow();  // Claim now on the tile: the sheet
+  void StartClaimNow();    // Claim now on the sheet: the relay is asked
+  void ApplyClaimRelaySheet();
 
   // ---- the Solana payout wallet (USDC until the Bittensor migration) ---------
   // The three-dot overflow (icon-only, named "Wallet options") over `menu`.
@@ -538,10 +596,17 @@ class EarningsPage : public Gtk::Box {
   Gtk::Label* unclaimedValue_ = nullptr;
   Gtk::Label* unclaimedStatus_ = nullptr;
   Gtk::Button* claimButton_ = nullptr;
+  Gtk::Box* unclaimedDisclaimer_ = nullptr;  // the claim tile's disclaimer (the flow's)
   Gtk::Box* ledgerCard_ = nullptr;  // the Settlement v2 tile
   Gtk::Box* ledgerRows_ = nullptr;
   Gtk::Label* ledgerStatus_ = nullptr;
+  Gtk::Box* ledgerRelay_ = nullptr;  // the relay's part (ClaimRelay.hpp)
   Gtk::Button* ledgerClaimButton_ = nullptr;
+  Gtk::Box* ledgerDisclaimer_ = nullptr;
+  // the backup banner that leads Earnings while the key's phrase isn't saved
+  Gtk::Button* keyBanner_ = nullptr;
+  // pane A's column, where the payout card moves to lead
+  Gtk::Box* paneAContent_ = nullptr;
   // the payout consent section (RebuildConsentSection)
   Gtk::Widget* consentHeader_ = nullptr;
   Gtk::Box* consentCard_ = nullptr;
@@ -551,6 +616,15 @@ class EarningsPage : public Gtk::Box {
   Gtk::Button* consentSignButton_ = nullptr;
   Gtk::Button* consentChangeButton_ = nullptr;
   Gtk::Label* consentChangeNote_ = nullptr;
+  // the key's part of the card, drawn again on every change, and its disclaimer
+  Gtk::Box* consentKeyBox_ = nullptr;
+  Gtk::Box* consentDisclaimer_ = nullptr;
+  // the key on this device in the Bittensor wallet card
+  Gtk::Box* walletKeyPanel_ = nullptr;
+  Gtk::Image* walletKeyIcon_ = nullptr;
+  Gtk::Label* walletKeyAddress_ = nullptr;
+  Gtk::Label* walletKeyNote_ = nullptr;
+  Gtk::Label* usdcWaitingLineKey_ = nullptr;  // in the key panel
   Gtk::Label* walletStatus_ = nullptr;
   Gtk::Box* walletConnectedPanel_ = nullptr;
   Gtk::Label* walletAddressLabel_ = nullptr;
@@ -797,6 +871,29 @@ class EarningsPage : public Gtk::Box {
 
   // the payout consent (NetworkConsent.hpp); its ports reach host_ and epoch_
   consent::Flow consent_;
+
+  // the one-tap Bittensor key: the flow's host, the consent it was last told,
+  // the Key screen while it is open, and the sheet Change wallet opens
+  std::unique_ptr<BittensorKeyHost> keys_;
+  struct KeyConsentFed {
+    consent::Phase phase = consent::Phase::Hidden;
+    std::string coldkeySs58;
+    int64_t fromEpoch = 0;
+    bool operator==(const KeyConsentFed& other) const {
+      return phase == other.phase && coldkeySs58 == other.coldkeySs58 &&
+             fromEpoch == other.fromEpoch;
+    }
+  };
+  std::optional<KeyConsentFed> keyConsentFed_;
+  std::shared_ptr<BittensorKeyScreen> keyScreen_;
+  bool keyLeads_ = false;  // the payout card sits at the top of pane A
+
+  // claims through the relay: what it said last (nullopt: never asked, or no
+  // device), and Claim now's answer and its sheet
+  std::optional<urnet::SnClaimStatusResult> claimStatus_;
+  ClaimNowOutcome claimNowOutcome_;
+  bool claimingNow_ = false;
+  std::weak_ptr<ClaimRelaySheet> claimRelaySheet_;
 
   // preview + balance relay
   bool previewMode_ = false;

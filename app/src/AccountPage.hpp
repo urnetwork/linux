@@ -210,6 +210,9 @@ class AccountPage : public Gtk::Box {
   std::function<void()> on_open_sessions;
   // the API keys row: the window navigates to the API keys page
   std::function<void()> on_open_api_keys;
+  // Back up first, from the sign-out and account-deletion warnings: the window
+  // opens Earnings on the one-tap key's Key screen
+  std::function<void()> on_back_up_bittensor_key;
   // The window's one-modal-at-a-time gate (§0.8): every sheet path asks first
   // and reports both edges.
   std::function<bool()> sheet_open;
@@ -273,6 +276,9 @@ class AccountPage : public Gtk::Box {
   void ShowAddAuthSheet();
   void ShowAuthCodeSheet();
   void ShowDeleteAccountSheet();
+  // Sign out, with the warning while the network's one-tap key isn't backed up
+  void RequestSignOut();
+  void ShowKeySignOutWarning();
   void ShowExtenderShareSheet();
   void ShowExtenderImportSheet();
   // The Extenders section's Reset extenders, confirmed in the page's modal

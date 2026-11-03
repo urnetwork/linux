@@ -57,6 +57,37 @@
 > The rules are `SolanaWalletPresentation.hpp`, host-tested. `URNETWORK_PREVIEW_SOLANA=1` (the
 > card with 3.87 USDC waiting; its remove confirmation opens with Remove disabled) and
 > `URNETWORK_PREVIEW_USDC_WAITING=1` (the line, no wallet) extend the sample.
+>
+> **2026-11-03 — the one-tap Bittensor key and claims through URnetwork's relay (apple
+> BTEASY.md, the approved mocks' flows 1 to 4).** The SDK's `BittensorLocalKeyFlow` decides every
+> card, screen and step, and `SnClaimStatus` / `SnClaimNow` every claim; `BittensorKeyHost`
+> mirrors the flow on the GTK loop, and the page draws the payout card's key path, the backup
+> banner, the Key screen (`BittensorKeyScreen`) and the relay's tile and sheet (`ClaimRelay`),
+> each with the funds disclaimer the SDK names for it. What only Linux decides:
+> - **Store:** the Secret Service through libsecret, one item per network id (in the Flatpak,
+>   libsecret's file backend under the secret portal). No Secret Service on the bus is the SDK's
+>   `BittensorLocalKeyStoreAbsent`: the flow makes no key there and the card is the wallet card, as
+>   for a guest; the phrase never goes to a plain file. A locked keyring or a dismissed prompt is
+>   `BittensorLocalKeyStoreUnavailable`, and a read on the GTK loop never asks to unlock. The
+>   store's notes (the saved and deleted addresses, the reminder's time) are a 0600 file beside
+>   `app_prefs.json`.
+> - **Device authentication:** polkit's `com.bringyour.network.bittensor-key` (`auth_self`: the
+>   user's own login password, every time) before a stored key is revealed or deleted, the same
+>   on every desktop. A dismissed or refused dialog never passes. Where polkit can't ask at all
+>   (no polkitd, no agent, a package without the action) the check passes, as Apple's device with
+>   no passcode does, so a key can always be backed up.
+> - **Privacy:** Linux can't keep a window out of a screenshot or tell that one is taken, so the
+>   screen says nothing about either. The words hide whenever the window loses the focus and after
+>   the SDK's 60 seconds, and are plain labels, never selectable. Copy clears the clipboard after
+>   60 seconds and marks the copy as a password for KDE's clipboard history.
+> - **Reminder:** an in-process timer at the SDK's time, then a desktop notification whose action
+>   opens the Key screen.
+> - **Claims:** with no wallet here the Settlement v2 tile shows exactly while the SDK's
+>   `ShowsTile` says so. URnetwork's claim (`ShowsClaimed`, 4d) draws "Claimed", the amount and the
+>   coldkey on lines of their own (the store has no sentence for the mocks' banner yet), the
+>   Transaction link to `ClaimTxUrl` (an https page only), Done, and "Claim now is available again
+>   on {date}" from `ClaimNowNextAtMillis`. The points card counts a key the consent pays here as
+>   the network's coldkey (`PaysKeyOnThisDevice`).
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 

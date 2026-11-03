@@ -75,3 +75,7 @@ src/ApiKeysPage.cpp
 src/TransferChart.cpp
 src/WalletConnect.cpp
 src/SlowInternetPill.cpp
+src/BittensorKeyText.cpp
+src/BittensorKeyHost.cpp
+src/BittensorKeyScreen.cpp
+src/ClaimRelay.cpp

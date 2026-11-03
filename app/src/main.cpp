@@ -26,6 +26,7 @@
 #include "I18n.hpp"
 #include "InstanceHandover.hpp"
 #include "LaunchAtStartup.hpp"
+#include "BittensorKeyHost.hpp"
 #include "MainWindow.hpp"
 #include "QuitSequence.hpp"
 #include "RuntimePaths.hpp"
@@ -259,6 +260,10 @@ int main(int argc, char** argv) {
     // the out-of-balance notification's Disconnect button
     app->add_action(urnw::MainWindow::kBalanceNoticeDisconnectAction, [&] {
       if (window) window->DisconnectFromBalanceNotice();
+    });
+    // the one-tap Bittensor key's reminder: a click opens Earnings on the Key screen
+    app->add_action(urnw::BittensorKeyHost::kReminderAction, [&] {
+      if (window) window->OpenEarningsKeyScreen();
     });
     tray->on_quit = [&] { endApp(/*teardown=*/true); };
     // the session ending, as an ending of its own (onSessionEnd)

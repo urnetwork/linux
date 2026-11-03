@@ -5,7 +5,8 @@
 // what a pending root adds); and the claim sheet's rows through a claim (sent,
 // claimed with the vault's amount, needs gas, already claimed, another
 // failure, a failure about no account, Done), the gas a v2 claim needs (and a
-// v1 claim, on the v1 sheet) and how long the page waits for one. The page and
+// v1 claim, on the v1 sheet) and how long the page waits for one; and which
+// Transaction link of URnetwork's claim the tile and its sheet open. The page and
 // the sheets need GTK and the SDK, so their wiring and their English fallbacks
 // (which must be the catalog's msgids) are read from the sources and po/en.po.
 // SPDX-License-Identifier: MPL-2.0
@@ -569,6 +570,20 @@ UR_TEST(SnLedgerEnglishMatchesTheCatalogMsgids) {
   // the spec's words for a pending root
   UR_EXPECT_TRUE(catalog.find("msgid \"Pending: +{}, awaiting finalization\"") !=
                  std::string::npos);
+}
+
+// The Transaction link of URnetwork's claim (the claim relay's 4d): the SDK's
+// explorer page opens only as an https web page; anything else is no link.
+UR_TEST(SnLedger_TheClaimsTransactionLinkIsAnHttpsPage) {
+  const std::string page = "https://evm.taostats.io/tx/0x" + std::string(64, 'a');
+  UR_EXPECT_TRUE(urnw::snledger::TransactionLink(page) == page);
+  for (const char* url :
+       {"", "https://", "http://evm.taostats.io/tx/0x1", "HTTPS://evm.taostats.io/tx/0x1",
+        "javascript:alert(1)", "file:///etc/passwd", "evm.taostats.io/tx/0x1",
+        "https://evm.taostats.io/tx/0x1 more", "https://evm.taostats.io/tx/0x1\n",
+        "https://evm.taostats.io/\x7f/tx"}) {
+    UR_EXPECT_TRUE_MSG(url, urnw::snledger::TransactionLink(url).empty());
+  }
 }
 
 }  // namespace
