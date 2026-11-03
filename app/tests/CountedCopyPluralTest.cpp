@@ -47,6 +47,12 @@ const CountedCopy kCounted[] = {
     {"LocationsSheet.cpp", "provider_count", "{} provider", "{} providers"},
     {"ConnectPage.cpp", "providing_client_count", "Providing to {} client",
      "Providing to {} clients"},
+    // Claim now's period: the relay's 30 days today, any count tomorrow
+    {"ClaimRelay.cpp", "sn_claim_relay_claim_now_paid", "Claim now is paid by URnetwork, once a day.",
+     "Claim now is paid by URnetwork, once every {} days."},
+    {"ClaimRelay.cpp", "sn_claim_relay_claim_now_paid_each",
+     "Paid by URnetwork, once a day for each coldkey.",
+     "Paid by URnetwork, once every {} days for each coldkey."},
 };
 
 UR_TEST(CountedCopyIsLookedUpAsAPlural) {

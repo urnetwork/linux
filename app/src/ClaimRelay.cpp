@@ -113,13 +113,18 @@ Glib::ustring ClaimNowNote(bool available, const std::string& reason, int64_t ne
                            int64_t periodDays, int64_t floorTaoRao, bool eachColdkey) {
   if (available) {
     if (periodDays <= 0) return {};
-    return eachColdkey ? Glib::ustring(Format(T_("sn_claim_relay_claim_now_paid_each",
-                                                 "Paid by URnetwork, once every {} days for each "
-                                                 "coldkey."),
-                                              periodDays))
-                       : Glib::ustring(Format(T_("sn_claim_relay_claim_now_paid",
-                                                 "Claim now is paid by URnetwork, once every {} days."),
-                                              periodDays));
+    // the period is a count: each language reads it in its own plural form
+    const unsigned long count = static_cast<unsigned long>(periodDays);
+    return eachColdkey
+               ? Glib::ustring(Format(
+                     TN_("sn_claim_relay_claim_now_paid_each",
+                         "Paid by URnetwork, once a day for each coldkey.",
+                         "Paid by URnetwork, once every {} days for each coldkey.", count),
+                     periodDays))
+               : Glib::ustring(Format(TN_("sn_claim_relay_claim_now_paid",
+                                          "Claim now is paid by URnetwork, once a day.",
+                                          "Claim now is paid by URnetwork, once every {} days.", count),
+                                      periodDays));
   }
   if (reason == urnet::SnClaimNowReasonUnderFloor && 0 < floorTaoRao) {
     return Format(T_("sn_claim_relay_under_floor", "Claim now needs a balance worth at least {} TAO."),
