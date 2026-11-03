@@ -40,6 +40,7 @@ inline constexpr const char* kProvideErrorTcpUnavailable = "tcp_unavailable";
 inline constexpr const char* kProvideErrorListen = "listen";
 inline constexpr const char* kProvideErrorActivationFailed = "activation_failed";
 inline constexpr const char* kProvideErrorActivationRefused = "activation_refused";
+inline constexpr const char* kProvideErrorActivationUnreachable = "activation_unreachable";
 
 // What joins the active text and the other family's failure on one line (N7).
 inline constexpr const char* kProvideTextSeparator = " · ";
@@ -165,6 +166,12 @@ inline ProvideRow ProvideRowFor(bool haveStatus, bool supported, const std::stri
     } else if (errorCase == kProvideErrorActivationRefused) {
       row.textKey = "extender_activation_refused";
       row.textEnglish = "Activation refused: {}";
+      row.argument = reason;
+    } else if (errorCase == kProvideErrorActivationUnreachable) {
+      // the operator's required tcp test found no answer: say what it needs
+      row.textKey = "extender_activation_unreachable";
+      row.textEnglish =
+          "The internet can't reach this device on TCP port 443. Allow or forward TCP 443 (and UDP 443 and 4053), or turn Extender off: {}";
       row.argument = reason;
     } else if (errorCase == kProvideErrorActivationFailed) {
       row.textKey = "extender_activation_failed";
