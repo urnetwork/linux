@@ -11,11 +11,9 @@
 // (ShowsClaimed, with its transaction, amount and coldkey: 4d). These views
 // only word it.
 //
-// 4d's banner is drawn from the store's existing strings: "Claimed", the
-// amount and the coldkey on lines of their own. The mocks' sentence ("Claimed
-// by URnetwork. 0.8420 SN25α is on your key, 5F3s…") has no store key yet, and
-// the claim relay's keys are Apple's first; AppendClaimedBanner is the one
-// place to switch to it.
+// 4d's banner is the store's one sentence for it on every app,
+// sn_claim_relay_claimed ("Claimed by URnetwork. 0.8420 SN25α is on your key,
+// 5F3s…"), drawn in AppendClaimedBanner.
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 

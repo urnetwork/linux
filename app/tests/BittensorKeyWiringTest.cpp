@@ -333,6 +333,12 @@ UR_TEST(BittensorKeyWiring_TheEarningsPageDrawsTheFlow) {
   UR_EXPECT_TRUE(Contains(banner, "status.claim_amount_rao.value_or(0)"));
   UR_EXPECT_TRUE(Contains(banner, "status.coldkey_ss58.value_or(std::string())"));
   UR_EXPECT_TRUE(Contains(banner, "ClaimTransactionLink(status)"));
+  // the store's one claimed-state sentence on every app, the amount without its
+  // symbol, which the sentence names; Claimed alone without an amount or a coldkey
+  UR_EXPECT_TRUE(Contains(banner, "T_(\"sn_claim_relay_claimed\","));
+  UR_EXPECT_TRUE(Contains(banner, "urnet::formatAlphaAmount(amountRao), urnet::shortSs58(coldkey)"));
+  UR_EXPECT_TRUE(!Contains(banner, "urnet::formatAlpha(amountRao)"));
+  UR_EXPECT_TRUE(Contains(banner, "T_(\"claim_confirmed\", \"Claimed\")"));
   UR_EXPECT_TRUE(Contains(FunctionBody(relay, "std::string ClaimTransactionLink("),
                           "snledger::TransactionLink(status.claim_tx_url.value_or(std::string()))"));
   UR_EXPECT_TRUE(Contains(FunctionBody(relay, "Glib::ustring ClaimedAgainNote("),
