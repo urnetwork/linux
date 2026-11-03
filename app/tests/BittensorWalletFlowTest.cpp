@@ -1,7 +1,7 @@
 // The Bittensor wallet-connect adoption (UPGRADE.md 4.6): the SDK session
-// judges every wallet answer; the app maps each refusal onto the flow (drop,
-// retry on the manual sheet, fail) and onto a store string, and the bridge
-// return goes through the session rather than an ad-hoc query parse.
+// judges every wallet answer; the app maps each refusal onto the flow (drop or
+// fail) and onto a store string, and the bridge return goes through the session
+// rather than an ad-hoc query parse.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -49,26 +49,20 @@ std::string FunctionBody(const std::string& source, const std::string& signature
 // A proof continues the flow; an answer for another purpose, a late return
 // after cancel or a replay is not this flow's and must not end it.
 UR_TEST(BittensorWalletFlow_ProofsContinueAndForeignAnswersAreDropped) {
-  UR_EXPECT_TRUE(bt::Classify("", false) == bt::Outcome::Accept);
-  UR_EXPECT_TRUE(bt::Classify("", true) == bt::Outcome::Accept);
+  UR_EXPECT_TRUE(bt::Classify("") == bt::Outcome::Accept);
   // unsupported_wallet: a return naming another wallet's page (a stale tab
   // from an earlier choice) is not this flow's either
   for (const char* code : {"purpose_mismatch", "not_bittensor_return", "not_awaiting_wallet",
                            "unsupported_wallet"}) {
-    UR_EXPECT_TRUE_MSG(code, bt::Classify(code, false) == bt::Outcome::Ignore);
+    UR_EXPECT_TRUE_MSG(code, bt::Classify(code) == bt::Outcome::Ignore);
   }
 }
 
-// A typo on the manual sheet is corrected in place; on the bridge the same
-// refusal ends the attempt (the page cannot be asked again).
-UR_TEST(BittensorWalletFlow_ManualTyposRetryBridgeRefusalsFail) {
-  for (const char* code : {"invalid_signature", "address_mismatch", "invalid_ss58_address"}) {
-    UR_EXPECT_TRUE_MSG(code, bt::Classify(code, true) == bt::Outcome::Retry);
-    UR_EXPECT_TRUE_MSG(code, bt::Classify(code, false) == bt::Outcome::Fail);
-  }
-  for (const char* code : {"challenge_expired", "message_mismatch", "wallet_error"}) {
-    UR_EXPECT_TRUE_MSG(code, bt::Classify(code, true) == bt::Outcome::Fail);
-    UR_EXPECT_TRUE_MSG(code, bt::Classify(code, false) == bt::Outcome::Fail);
+// A refusal of a bridge return ends the attempt (the page cannot be asked again).
+UR_TEST(BittensorWalletFlow_BridgeRefusalsFail) {
+  for (const char* code : {"invalid_signature", "address_mismatch", "invalid_ss58_address",
+                           "challenge_expired", "message_mismatch", "wallet_error"}) {
+    UR_EXPECT_TRUE_MSG(code, bt::Classify(code) == bt::Outcome::Fail);
   }
 }
 
@@ -228,12 +222,43 @@ UR_TEST(BittensorWalletFlow_TheRedirectIsTheRegisteredScheme) {
   UR_EXPECT_TRUE(desktop.find("x-scheme-handler/urnetwork;") != std::string::npos);
 }
 
-// The manual sheet lives as long as its challenge (5 minutes) plus the
-// submit; the bridge keeps its 3 minute watchdog.
-UR_TEST(BittensorWalletFlow_TimeoutsFollowTheTransport) {
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportManual) == 330'000u);
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportManual) > 300'000u);
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportBrowserBridge) == 180'000u);
+// The bridge page's "Enter address manually" is the desktop's manual path: the
+// user signs the challenge outside the browser (btcli, a wallet's own tool) and
+// pastes the result, and the server takes it for the challenge's 5 minutes. A
+// return after the watchdog fired is dropped for good (EarningsPage::BeginFlow),
+// so the wait has to outlast the challenge, or a proof the server would still
+// take is lost.
+UR_TEST(BittensorWalletFlow_TheBridgeWaitsOutTheChallenge) {
+  constexpr uint32_t kChallengeLifetimeMs = 300'000;  // the server's WalletAuthChallengeLifetime
+  UR_EXPECT_TRUE(bt::kBridgeTimeoutMs > kChallengeLifetimeMs);
+  // the coldkey connect waits on it, as the payout consent does (NetworkConsentTest)
+  const std::string start =
+      FunctionBody(ReadFile("EarningsPage.cpp"), "void EarningsPage::StartWalletSignature(");
+  UR_EXPECT_TRUE(start.find("BeginFlow(connectFlow_, static_cast<int>(bittensor::kBridgeTimeoutMs),") !=
+                 std::string::npos);
+}
+
+// The bridge is how a session signs on linux: every chooser wallet opens the
+// page (the SDK's BittensorWalletTransportFor), and the app has no form of its
+// own. A session of any other transport has no bridge url, so asking for one
+// answers the flow with the session's refusal at once: nothing may end the hop
+// quietly and leave the flow waiting out its watchdog with nothing on screen.
+UR_TEST(BittensorWalletFlow_ASessionOffTheBridgeFailsAtOnce) {
+  const std::string wallet = ReadFile("WalletConnect.cpp");
+  const std::string open = FunctionBody(wallet, "void WalletConnect::SignWithBittensor(");
+  UR_EXPECT_TRUE_MSG("the hop is read", !open.empty());
+  UR_EXPECT_TRUE_MSG("the transport does not end the hop", open.find("transport()") == std::string::npos);
+  const size_t url = open.find("url = bittensorSession_->bridgeUrl();");
+  const size_t refusal = open.find("on_error(e.what())", url);
+  const size_t opened = open.find("OpenUrl(url);", url);
+  UR_EXPECT_TRUE_MSG("the session's refusal reaches the flow before anything opens",
+                     url != std::string::npos && refusal != std::string::npos &&
+                         opened != std::string::npos && refusal < opened);
+  // and the host keeps no other way to take an answer
+  const std::string start = FunctionBody(ReadFile("SdkHost.cpp"), "void SdkHost::StartBittensorSession(");
+  UR_EXPECT_TRUE_MSG("the session starts", !start.empty());
+  UR_EXPECT_TRUE_MSG("no other transport has a step", start.find("transport()") == std::string::npos);
+  UR_EXPECT_TRUE(wallet.find("handleSignature") == std::string::npos);
 }
 
 // The root cause this adoption removes: the app parsed the bridge return
@@ -265,8 +290,7 @@ UR_TEST(BittensorWalletFlow_TheBridgeReturnIsJudgedByTheSession) {
                          classify < signature);
 }
 
-// Every Bittensor flow starts a session for its own purpose on linux, and the
-// manual sheet's cancel only ends the flow it belongs to.
+// Every Bittensor flow starts a session for its own purpose on linux.
 UR_TEST(BittensorWalletFlow_TheHostRunsEveryFlowOnASession) {
   const std::string host = ReadFile("SdkHost.cpp");
   if (host.empty()) {
@@ -290,14 +314,11 @@ UR_TEST(BittensorWalletFlow_TheHostRunsEveryFlowOnASession) {
                        body.find("StartBittensorSession(") != std::string::npos &&
                            body.find(purpose) != std::string::npos);
   }
-  const std::string cancel = FunctionBody(host, "void SdkHost::CancelBittensorManual(");
-  UR_EXPECT_TRUE_MSG("cancel leaves a newer flow alone",
-                     cancel.find("walletFlows_.IsCurrent(flow)") != std::string::npos);
 }
 
 // WalletConnect is the third wallet (Nova, Nightly and other WalletConnect v2
-// substrate wallets), after Talisman and manual entry; the chooser's response
-// id is the wallet id and nothing else chooses a wallet.
+// substrate wallets), after Talisman and TAO.com; the chooser's response id is
+// the wallet id and nothing else chooses a wallet.
 UR_TEST(BittensorWalletFlow_TheChooserOffersThreeWallets) {
   const std::string_view expected[] = {"talisman", "taocom", "walletconnect"};
   size_t n = 0;
@@ -315,9 +336,6 @@ UR_TEST(BittensorWalletFlow_TheChooserOffersThreeWallets) {
   UR_EXPECT_TRUE(bt::SendsWalletConnectProjectId("walletconnect"));
   UR_EXPECT_FALSE(bt::SendsWalletConnectProjectId("talisman"));
   UR_EXPECT_FALSE(bt::SendsWalletConnectProjectId("taocom"));
-  // pairing, approving the session and the signature get the challenge's life
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportBrowserBridge, "walletconnect") == 330'000u);
-  UR_EXPECT_TRUE(bt::TimeoutMsFor(bt::kTransportBrowserBridge, "talisman") == 180'000u);
 }
 
 // The chooser hints and the browser hand-off texts are store keys the linux
@@ -353,12 +371,12 @@ UR_TEST(BittensorWalletFlow_ChoosersAndSessionCarryWalletConnect) {
   const std::string window = ReadFile("MainWindow.cpp");
   const std::string earnings = ReadFile("EarningsPage.cpp");
   const std::string host = ReadFile("SdkHost.cpp");
-  const std::string sheet = ReadFile("BittensorManualSheet.cpp");
-  if (window.empty() || earnings.empty() || host.empty() || sheet.empty()) {
+  const std::string source = ReadFile("BittensorWalletChooser.cpp");
+  if (window.empty() || earnings.empty() || host.empty() || source.empty()) {
     UR_FAIL("could not read the sources");
     return;
   }
-  const std::string chooser = FunctionBody(sheet, "GtkWidget* NewBittensorWalletChooser(");
+  const std::string chooser = FunctionBody(source, "GtkWidget* NewBittensorWalletChooser(");
   UR_EXPECT_TRUE_MSG("the chooser lists every kChooserWallets row",
                      chooser.find("bittensor::kChooserWallets") != std::string::npos);
   for (const auto& [source, fn] :
@@ -376,81 +394,21 @@ UR_TEST(BittensorWalletFlow_ChoosersAndSessionCarryWalletConnect) {
                      guard != std::string::npos && set != std::string::npos && guard < set);
 }
 
-// POST /sn/wallet refuses a pasted signature that is not from the entered
-// address (signature_mismatch, kept by the sdk in SnError.code): after a
-// manual entry the page says to sign again in that wallet, in the catalog's
-// words; a bridge signature and every other refusal read as before.
-UR_TEST(BittensorWalletFlow_ASignatureFromAnotherAccountNamesTheManualWallet) {
-  const bt::ErrorText text = bt::ConnectErrorTextFor("signature_mismatch", bt::kTransportManual);
-  UR_EXPECT_TRUE(text.key == "bittensor_error_signature_mismatch");
-  UR_EXPECT_TRUE(text.english ==
-                 "This signature isn't from the address you entered. In {}, sign the message "
-                 "with that address, then paste the signature again.");
-  UR_EXPECT_TRUE(bt::ConnectErrorTextFor("signature_mismatch", bt::kTransportBrowserBridge).key.empty());
-  UR_EXPECT_TRUE(bt::ConnectErrorTextFor("signature_mismatch", "").key.empty());
-  UR_EXPECT_TRUE(bt::ConnectErrorTextFor("server_error", bt::kTransportManual).key.empty());
-  UR_EXPECT_TRUE(bt::ConnectErrorTextFor("", bt::kTransportManual).key.empty());
-
-  // the key with its English as msgid (g_dpgettext2 matches both)
-  const std::string pot = ReadFile("../po/urnetwork.pot");
-  if (pot.empty()) {
-    UR_FAIL("could not read po/urnetwork.pot");
-    return;
-  }
-  const std::string entry = "msgctxt \"" + std::string(text.key) + "\"\nmsgid \"" +
-                            std::string(text.english) + "\"";
-  UR_EXPECT_TRUE_MSG(std::string(text.key), pot.find(entry) != std::string::npos);
-
-  // a refused connect asks it with the wallet the connect signed with
-  const std::string earnings = ReadFile("EarningsPage.cpp");
-  const std::string apply = FunctionBody(earnings, "void EarningsPage::ApplyWalletConnectResult(");
-  UR_EXPECT_TRUE(apply.find("bittensor::ConnectErrorTextFor(") != std::string::npos);
-  const std::string start = FunctionBody(earnings, "void EarningsPage::StartWalletSignature(");
-  UR_EXPECT_TRUE(start.find("connectWalletId_ = walletId;") != std::string::npos);
-  // the Api fallback (no bound device) keeps the refusal's code, as the device does
-  const std::string setWallet = FunctionBody(earnings, "void SetWallet(SdkHost& host,");
-  UR_EXPECT_TRUE(setWallet.find("result->error->code.value_or(std::string())") != std::string::npos);
-}
-
-// Sign-in, network create and an added sign-in method refuse the same pasted
-// signature with the same code (sign-in and create when they ask for
-// result_errors). The host carries the code and the Bittensor wallet that
-// signed, and each page words it with WalletProofRefusalText (the manual
-// sheet's ConnectErrorTextFor and the wallet's name); any other refusal reads
-// as sent.
-UR_TEST(BittensorWalletFlow_SignInCreateAndAddNameTheManualWallet) {
+// Sign-in and network create ask for result_errors, so a signature from another
+// account than the address comes back in the server's words rather than as a
+// 401, and each page shows them as sent. The bridge page's manual form checks a
+// paste before it hands it back, so this is what is left when it could not.
+UR_TEST(BittensorWalletFlow_ARefusedProofReadsInTheServersWords) {
   const std::string host = ReadFile("SdkHost.cpp");
   for (const char* signature : {"void SdkHost::AuthLoginWithWallet(",
                                 "void SdkHost::FinishCreateNetworkWithWallet("}) {
     const std::string body = FunctionBody(host, signature);
     UR_EXPECT_TRUE_MSG(signature, body.find("args.result_errors = true;") != std::string::npos);
-    UR_EXPECT_TRUE_MSG(signature, body.find("bittensorWalletId = bittensorWalletId_;") != std::string::npos);
   }
-  const std::string login = FunctionBody(host, "void SdkHost::AuthLoginWithWallet(");
-  UR_EXPECT_TRUE(login.find("r.errorCode = result->error->code.value_or(std::string());") !=
-                 std::string::npos);
-  const std::string create = FunctionBody(host, "void SdkHost::HandleNetworkCreateResult(");
-  UR_EXPECT_TRUE(create.find("r.errorCode = result->error->code.value_or(std::string());") !=
-                 std::string::npos);
-  const std::string add = FunctionBody(host, "void SdkHost::AddAuthMethod(");
-  UR_EXPECT_TRUE(add.find("result->error->code.value_or(std::string())") != std::string::npos);
-
-  const std::string sheet = ReadFile("BittensorManualSheet.cpp");
-  const std::string words = FunctionBody(sheet, "std::string WalletProofRefusalText(");
-  UR_EXPECT_TRUE(words.find("bittensor::ConnectErrorTextFor(") != std::string::npos);
-  UR_EXPECT_TRUE(words.find("urnet::bittensorWalletTransportFor(bittensorWalletId,") != std::string::npos);
-  UR_EXPECT_TRUE(words.find("urnet::bittensorWalletDisplayName(bittensorWalletId)") != std::string::npos);
-
   const std::string window = ReadFile("MainWindow.cpp");
   UR_EXPECT_TRUE_MSG("sign-in", FunctionBody(window, "void MainWindow::OnWalletAuth(")
-                                        .find("WalletProofRefusalText(result.errorCode, result.error, "
-                                              "result.bittensorWalletId)") != std::string::npos);
-  UR_EXPECT_TRUE_MSG("create", ReadFile("AuthViews.cpp")
-                                   .find("WalletProofRefusalText(r.errorCode, r.error, r.bittensorWalletId)") !=
-                                   std::string::npos);
-  const std::string account = ReadFile("AccountPage.cpp");
-  UR_EXPECT_TRUE_MSG("add", account.find("WalletProofRefusalText(result.code, result.error, bittensorWalletId)") !=
-                                std::string::npos);
-  UR_EXPECT_TRUE_MSG("add names its wallet",
-                     account.find("Answer(addsignin::Method::Wallet, walletId)") != std::string::npos);
+                                        .find("SetLoginError(result.error);") != std::string::npos);
+  UR_EXPECT_TRUE_MSG("create", ReadFile("AuthViews.cpp").find(": r.error);") != std::string::npos);
+  UR_EXPECT_TRUE_MSG("add", ReadFile("AccountPage.cpp")
+                                .find("providerError_ = result.error.empty()") != std::string::npos);
 }

@@ -109,6 +109,5 @@ UR_TEST(AddSignIn_AnAddedWalletsSignatureNeverSignsIn) {
 UR_TEST(AddSignIn_BittensorAddHasItsOwnPurpose) {
   UR_EXPECT_TRUE(std::string("add") == std::string(urnw::bittensor::kPurposeAdd));
   UR_EXPECT_TRUE(urnw::bittensor::kPurposeAdd != urnw::bittensor::kPurposeLogin);
-  UR_EXPECT_TRUE(urnw::bittensor::Classify("purpose_mismatch", false) ==
-                 urnw::bittensor::Outcome::Ignore);
+  UR_EXPECT_TRUE(urnw::bittensor::Classify("purpose_mismatch") == urnw::bittensor::Outcome::Ignore);
 }

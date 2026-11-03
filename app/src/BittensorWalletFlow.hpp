@@ -4,20 +4,20 @@
 // the flow on screen, and which string explains it. Header-only and free of
 // GTK and the SDK (tests/BittensorWalletFlowTest.cpp).
 //
-// Wallets and transports on linux (the SDK's BittensorWalletTransportFor):
-//   - Talisman: browser_bridge. The system browser opens
-//     https://ur.io/bittensor-connect?...&wallet=talisman, the page drives the
-//     Talisman extension, and the result comes back on the app's existing
-//     urnetwork://bittensor-sign-message scheme handler (the .desktop file's
-//     x-scheme-handler/urnetwork).
-//   - TAO.com (and any other wallet): manual. TAO.com documents no
-//     programmatic interface, so the manual sheet shows the challenge and takes
-//     the address and a pasted signature.
+// Wallets on linux, all on the SDK's browser_bridge transport
+// (BittensorWalletTransportFor). The system browser opens the ur.io bridge page,
+// and the result comes back on the app's existing
+// urnetwork://bittensor-sign-message scheme handler (the .desktop file's
+// x-scheme-handler/urnetwork):
+//   - Talisman and TAO.com (wallet=talisman, wallet=taocom): the page drives that
+//     wallet's browser extension.
 //   - WalletConnect (Nova, Nightly and other WalletConnect v2 substrate
-//     wallets): browser_bridge with wallet=walletconnect. The page pairs (a QR
-//     to scan with the wallet app) with the build's WalletConnect project id
-//     (Config.hpp, -Dwalletconnect_project_id; empty = the page's own) and
-//     returns on the same scheme handler.
+//     wallets): wallet=walletconnect. The page pairs (a QR to scan with the
+//     wallet app) with the build's WalletConnect project id (Config.hpp,
+//     -Dwalletconnect_project_id; empty = the page's own).
+// Signing by hand, with btcli or a wallet's own tool, happens on the same page
+// ("Enter address manually"): the page checks the paste and returns it like any
+// other proof. The app has no form of its own for it.
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
@@ -93,15 +93,6 @@ inline constexpr std::string_view kPurposeAdd = "add";
 // message SnNetworkConsentChallenge issued, not a /auth/wallet-challenge one
 inline constexpr std::string_view kPurposeConsent = "consent";
 
-inline constexpr std::string_view kTransportBrowserBridge = "browser_bridge";
-inline constexpr std::string_view kTransportManual = "manual";
-
-// The error every flow is answered with when the user closes the manual
-// sheet: the flow ends by their choice, so nothing is shown as a failure.
-inline constexpr std::string_view kCancelled = "bittensor wallet request cancelled";
-
-constexpr bool IsCancelled(std::string_view error) noexcept { return error == kCancelled; }
-
 // What a session answer means for the flow waiting on it.
 enum class Outcome {
   // a proof: continue the flow (sign in, create, connect)
@@ -109,23 +100,17 @@ enum class Outcome {
   // not this flow's answer (another purpose, a late or replayed return): drop
   // it and keep waiting
   Ignore,
-  // manual entry the user can correct: keep the sheet open and say why
-  Retry,
   // the flow is over: answer it with the error
   Fail,
 };
 
-constexpr Outcome Classify(std::string_view errorCode, bool manual) noexcept {
+constexpr Outcome Classify(std::string_view errorCode) noexcept {
   if (errorCode.empty()) return Outcome::Accept;
   // unsupported_wallet on a return: it names another wallet's page (a stale
   // tab from an earlier choice), so it is not this flow's answer either
   if (errorCode == "purpose_mismatch" || errorCode == "not_bittensor_return" ||
       errorCode == "not_awaiting_wallet" || errorCode == "unsupported_wallet") {
     return Outcome::Ignore;
-  }
-  if (manual && (errorCode == "invalid_signature" || errorCode == "address_mismatch" ||
-                 errorCode == "invalid_ss58_address")) {
-    return Outcome::Retry;
   }
   return Outcome::Fail;
 }
@@ -260,38 +245,13 @@ constexpr bool KeepsWaiting(std::string_view purpose, std::string_view sessionSt
 }
 
 // How long a flow waits for its answer. A bridge round trip reports nothing
-// when the tab is closed, so it times out; the manual sheet is bounded by the
-// challenge itself (5 minutes) plus the time to submit.
-// WalletConnect pairing (scan, approve the session, approve the signature)
-// gets the challenge's full lifetime too.
-inline constexpr uint32_t kBridgeTimeoutMs = 180'000;
-inline constexpr uint32_t kManualTimeoutMs = 330'000;
-
-constexpr uint32_t TimeoutMsFor(std::string_view transport,
-                                std::string_view walletId = {}) noexcept {
-  if (transport == kTransportManual || walletId == kWalletWalletConnect) return kManualTimeoutMs;
-  return kBridgeTimeoutMs;
-}
-
-// POST /sn/wallet refuses a well-formed signature that does not verify for the
-// entered address with this SnError code (sdk SnErrorCodeSignatureMismatch): the
-// wallet signed with another account (or other text), and the server cannot
-// say which.
-inline constexpr std::string_view kSnErrorSignatureMismatch = "signature_mismatch";
-
-// The words for a refused coldkey connect when the page has its own, with one
-// {} for the wallet's product name. Only a manual entry pastes a signature, so
-// only then does the page say to sign again in that wallet; empty otherwise
-// (the SDK's error text, as before). A browser-bridge wallet signed with the
-// account it returned.
-constexpr ErrorText ConnectErrorTextFor(std::string_view snErrorCode,
-                                        std::string_view transport) noexcept {
-  if (snErrorCode == kSnErrorSignatureMismatch && transport == kTransportManual) {
-    return {"bittensor_error_signature_mismatch",
-            "This signature isn't from the address you entered. In {}, sign the message with "
-            "that address, then paste the signature again."};
-  }
-  return {"", ""};
-}
+// when the tab is closed, so it times out, but not before the challenge does (5
+// minutes, plus the time to submit). Every bridge page takes a signature by
+// hand ("Enter address manually": the user signs outside the browser, with
+// btcli or a wallet's own tool, and pastes it), and WalletConnect pairing (scan,
+// approve the session, approve the signature) takes a while too. A return after
+// the watchdog fired is dropped for good (EarningsPage::BeginFlow), so a shorter
+// wait throws away a proof the server would still take.
+inline constexpr uint32_t kBridgeTimeoutMs = 330'000;
 
 }  // namespace urnw::bittensor

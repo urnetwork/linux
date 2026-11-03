@@ -13,6 +13,7 @@
 #include <glibmm/datetime.h>
 
 #include "AppPrefs.hpp"
+#include "BittensorWalletChooser.hpp"
 #include "BittensorWalletFlow.hpp"
 #include "ReferralRoyalty.hpp"
 #include "BrandIcons.hpp"
@@ -371,9 +372,6 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   });
   host_.SetJwtRefreshedHandler([this] {
     PostToMain([this] { balance_.OnJwtRefreshed(); });
-  });
-  host_.SetBittensorManualHandler([this](SdkHost::BittensorManualRequest request) {
-    ShowBittensorManualSheet(request);
   });
   host_.SetOnboardingLinkHandler([this](const std::string& url) {
     PostToMain([this, url] { HandleOnboardingLink(url); });
@@ -1337,8 +1335,7 @@ void MainWindow::ScheduleAppFocusSync() {
 // attempt stays armed, so a late return still lands in OnWalletAuth and a new
 // click supersedes it (BrowserSignInGate.hpp).
 void MainWindow::OnAppReturned(int64_t awayMillis) {
-  const bool manualSheetOpen = bittensorManualSheet_ && bittensorManualSheet_->get_visible();
-  if (!browserSignIn_.TakeOnReturn(awayMillis, manualSheetOpen)) return;
+  if (!browserSignIn_.TakeOnReturn(awayMillis)) return;
   SetLoginBusy(false);
   // the "Opening your wallet" progress notice is stale now; an error stays
   if (loginError_.has_css_class("dim-label")) loginError_.set_text("");
@@ -2318,10 +2315,9 @@ void MainWindow::OnSso(const std::string& provider) {
   host_.SignInWithSso(provider, [this](AuthResult r) { OnWalletAuth(r); });
 }
 
-// The Bittensor tile asks which wallet first: Talisman signs on the ur.io
-// bridge in the browser (its extension), TAO.com (or any wallet) on the manual
-// sheet (it documents no programmatic interface), WalletConnect on the bridge
-// page with a QR for Nova, Nightly and other WalletConnect wallets.
+// The Bittensor tile asks which wallet first, and every wallet signs on the
+// ur.io bridge in the browser: Talisman and TAO.com through their extensions,
+// WalletConnect with a QR for Nova, Nightly and other WalletConnect wallets.
 // BittensorWalletFlow.hpp.
 void MainWindow::OnBittensor() {
   loginError_.set_text("");
@@ -2338,29 +2334,16 @@ void MainWindow::OnBittensor() {
 }
 
 void MainWindow::OnBittensorWallet(const std::string& walletId) {
-  const std::string transport =
-      urnet::bittensorWalletTransportFor(walletId, std::string(bittensor::kPlatform));
-  if (transport == bittensor::kTransportBrowserBridge) {
-    const bittensor::ContinueText text = bittensor::ContinueTextFor(walletId);
-    const std::string key(text.key);
-    const std::string english(text.english);
-    const char* localized = g_dpgettext2(GETTEXT_PACKAGE, key.c_str(), english.c_str());
-    SetLoginNotice(text.takesWalletName
-                       ? Format(localized, urnet::bittensorWalletDisplayName(walletId))
-                       : std::string(localized));
-  }
+  const bittensor::ContinueText text = bittensor::ContinueTextFor(walletId);
+  const std::string key(text.key);
+  const std::string english(text.english);
+  const char* localized = g_dpgettext2(GETTEXT_PACKAGE, key.c_str(), english.c_str());
+  SetLoginNotice(text.takesWalletName
+                     ? Format(localized, urnet::bittensorWalletDisplayName(walletId))
+                     : std::string(localized));
   SetLoginBusy(true);
   browserSignIn_.Begin();
   host_.SignInWithBittensor(walletId, [this](AuthResult r) { OnWalletAuth(r); });
-}
-
-// The manual sheet (TAO.com) for any Bittensor flow: sign-in, the
-// create-network signature, or the Earnings coldkey. One at a time: a newer
-// request replaces the sheet (the older flow was superseded already).
-void MainWindow::ShowBittensorManualSheet(const SdkHost::BittensorManualRequest& request) {
-  if (bittensorManualSheet_) bittensorManualSheet_->set_visible(false);
-  bittensorManualSheet_ = std::make_unique<BittensorManualSheet>(*this, host_, request);
-  bittensorManualSheet_->present();
 }
 
 // Shared tail of both wallet sign-ins (the SDK callback thread lands here).
@@ -2368,11 +2351,6 @@ void MainWindow::OnWalletAuth(const AuthResult& result) {
   PostToMain([this, result] {
     browserSignIn_.Settle();
     SetLoginBusy(false);
-    if (!result.ok && bittensor::IsCancelled(result.error)) {
-      // the user closed the Bittensor manual sheet: nothing failed
-      loginError_.set_text("");
-      return;
-    }
     if (result.wallet_needs_network) {
       // wallet authenticated but has no network: the host kept the signed
       // wallet_auth; finish sign-up on the create page (name + terms)
@@ -2388,10 +2366,7 @@ void MainWindow::OnWalletAuth(const AuthResult& result) {
                            result.authAllowed));
     } else if (!result.ok) {
       if (!result.error.empty()) {
-        // a pasted signature from another account than the entered address
-        // names the wallet; any other refusal reads as sent
-        SetLoginError(
-            WalletProofRefusalText(result.errorCode, result.error, result.bittensorWalletId));
+        SetLoginError(result.error);
       } else if (result.sso) {
         SetLoginError(T_("there_was_an_error_logging_in", "There was an error logging in"));
       } else {

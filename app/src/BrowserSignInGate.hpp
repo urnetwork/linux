@@ -12,11 +12,10 @@
 // reliable "browser closed" signal, so cancelling here could only kill a flow
 // still open in another tab.
 //
-// Two things are not a return. The Bittensor manual sheet is the flow itself,
-// in the app: closing it answers the attempt, so the gate stays armed while it
-// is open. And closing one of the app's own dialogs (the Solana and Bittensor
-// choosers start these flows) can drop the app's focus for a moment before
-// the main window takes it back: only an absence of kMinAwayMillis counts.
+// One thing is not a return: closing one of the app's own dialogs (the Solana
+// and Bittensor choosers start these flows) can drop the app's focus for a
+// moment before the main window takes it back, so only an absence of
+// kMinAwayMillis counts.
 //
 // Header-only and free of GTK (tests/BrowserSignInGateTest.cpp). Not thread
 // safe: the window uses it on the GTK main loop only.
@@ -64,10 +63,10 @@ class BrowserFlowGate {
   bool InFlight() const { return inFlight_; }
 
   // The app came back after `awayMillis`. True, at most once per Begin, when
-  // the caller should enable the affordances again; an open in-app sheet or a
-  // short absence leaves the gate armed for a later return.
-  bool TakeOnReturn(int64_t awayMillis, bool inAppSheetOpen) {
-    if (!inFlight_ || inAppSheetOpen || awayMillis < kMinAwayMillis) return false;
+  // the caller should enable the affordances again; a short absence leaves the
+  // gate armed for a later return.
+  bool TakeOnReturn(int64_t awayMillis) {
+    if (!inFlight_ || awayMillis < kMinAwayMillis) return false;
     inFlight_ = false;
     return true;
   }

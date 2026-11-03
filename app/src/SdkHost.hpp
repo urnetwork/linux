@@ -78,11 +78,6 @@ struct AuthResult {
   // With verification_required: whether the server sent the code (its
   // send_error); the verify page must not say a code was sent otherwise.
   VerifySendNotice sendNotice = {};
-  // A wallet refusal's code (signature_mismatch: a pasted signature from
-  // another account than the entered address) and the Bittensor wallet that
-  // signed ("" for none); the page words it (WalletProofRefusalText).
-  std::string errorCode = {};
-  std::string bittensorWalletId = {};
 };
 
 // Outcome of the authLogin account discovery (macOS LoginInitialViewModel
@@ -570,34 +565,12 @@ class SdkHost {
   // urnetwork:// callback must be routed back in via HandleDeepLink.
   void SignInWithSolana(WalletConnect::Provider provider, std::function<void(AuthResult)> done);
 
-  // Sign in with a Bittensor wallet (bittensor::kWalletTalisman or
-  // kWalletTaoCom, BittensorWalletFlow.hpp) through an SDK
-  // BittensorWalletSession: Talisman signs on the ur.io bridge (one hop, the
-  // extension in the system browser), TAO.com on the manual sheet
-  // (SetBittensorManualHandler). The proof -> authLogin{wallet_auth} with
-  // blockchain urnet::TAO. Same deep-link routing as Solana (HandleDeepLink).
+  // Sign in with a Bittensor wallet (a bittensor::kChooserWallets id,
+  // BittensorWalletFlow.hpp) through an SDK BittensorWalletSession: the wallet
+  // signs on the ur.io bridge, one hop in the system browser. The proof ->
+  // authLogin{wallet_auth} with blockchain urnet::TAO. Same deep-link routing as
+  // Solana (HandleDeepLink).
   void SignInWithBittensor(const std::string& walletId, std::function<void(AuthResult)> done);
-
-  // The manual transport (TAO.com): the host asks the window to show the
-  // challenge and collect the address and signature. Runs on the GTK main loop.
-  struct BittensorManualRequest {
-    std::string walletId;
-    std::string purpose;
-    std::string message;
-    // the address the challenge is bound to ("" = any)
-    std::string expectedAddress;
-    // the wallet flow it belongs to (CancelBittensorManual)
-    uint64_t flow = 0;
-  };
-  void SetBittensorManualHandler(std::function<void(BittensorManualRequest)> handler);
-  // The sheet's Continue. A correctable refusal comes back for the sheet to
-  // show (bittensor::Classify == Retry); an accepted proof continues the flow,
-  // and any other refusal ends it.
-  urnet::BittensorWalletResult SubmitBittensorManual(const std::string& address,
-                                                     const std::string& signature);
-  // The sheet for `flow` was closed: that flow, if it is still the newest, is
-  // answered bittensor::kCancelled (a newer flow is left alone).
-  void CancelBittensorManual(uint64_t flow);
 
   // Sign in with Google or Apple through the provider's own web flow
   // (SsoBridge.hpp): the host mints a state + nonce for the attempt, the api's
@@ -629,7 +602,7 @@ class SdkHost {
   // CONSENT.md A1): a session with purpose "consent" takes `challenge`, the
   // SnNetworkConsentChallenge result, as it came, so `walletId` signs exactly
   // its message with its coldkey (the session binds the coldkey and the
-  // expiry), on the bridge or the manual sheet. `done` gets the session's proof
+  // expiry), on the bridge. `done` gets the session's proof
   // (address, signature and the issued message) or the refusal; an expired
   // challenge reads "challenge_expired: ...". Same deep-link routing, flow
   // numbering and superseding as SignBittensorConnect.
@@ -672,9 +645,6 @@ class SdkHost {
   struct AddSignInResult {
     bool ok = false;
     std::string error;
-    // the server's code for the refusal ("" for none): signature_mismatch for
-    // a pasted wallet signature from another account
-    std::string code = {};
   };
   void AddSignInWithSso(const std::string& provider, std::function<void(AddSignInResult)> done);
   void AddSignInWithSolana(WalletConnect::Provider provider,
@@ -1515,12 +1485,10 @@ class SdkHost {
   void FinishNetworkClientRegistration(const std::string& byClientJwt,
                                         std::function<void(AuthResult)> done, uint64_t authEpoch);
   // Shared routing for NetworkCreateResult (sign-up + wallet sign-up).
-  // `bittensorWalletId` is the Bittensor wallet that signed ("" for none).
   void HandleNetworkCreateResult(std::optional<urnet::NetworkCreateResult> result,
                                  std::optional<std::string> err,
                                  std::function<void(AuthResult)> done,
-                                 uint64_t authEpoch,
-                                 const std::string& bittensorWalletId = std::string());
+                                 uint64_t authEpoch);
   // The body of StartTunnel(). Requires mutex_, so the recovery inside
   // ConnectBestAvailable can rebuild a session it has just discovered is dead
   // without re-entering a non-recursive lock. Every outcome logs, and the
@@ -1581,9 +1549,8 @@ class SdkHost {
   // One Bittensor proof: a new SDK session for `walletId` and `purpose`, its
   // challenge (bound to `expectedAddress` when set), then -- on the main loop,
   // while `flow` is still the newest -- `prepare(message)` (false aborts; it
-  // answers the flow itself) and the wallet transport: the bridge tab, or the
-  // manual sheet. Failures before that answer the waiting flow
-  // (FailWalletOperation), or `fail` when given -- which also hears a
+  // answers the flow itself) and the bridge tab. Failures before that answer the
+  // waiting flow (FailWalletOperation), or `fail` when given -- which also hears a
   // superseded flow (the create-network flow, whose slot is set by `prepare`).
   // A consent (SignBittensorConsent) brings its challenge, the
   // SnNetworkConsentChallenge result, instead of /auth/wallet-challenge.
@@ -2048,8 +2015,6 @@ class SdkHost {
   // The Bittensor wallet the last sign-in used (guarded by mutex_): the
   // create-network signature asks the same wallet.
   std::string bittensorWalletId_;
-  // Set once on the UI thread before any flow (MainWindow).
-  std::function<void(BittensorManualRequest)> onBittensorManual_;
   // ConnectSolanaWallet (guarded by mutex_, like walletSignDone_): consumed by the
   // connect return (on_public_key) or a bridge error (on_error), or answered
   // "superseded by ..." by the next wallet flow.

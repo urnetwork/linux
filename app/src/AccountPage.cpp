@@ -17,7 +17,7 @@
 
 #include "AddSignInFlow.hpp"
 #include "AuthViews.hpp"
-#include "BittensorManualSheet.hpp"
+#include "BittensorWalletChooser.hpp"
 #include "BrandIcons.hpp"
 #include "BittensorWalletFlow.hpp"
 #include "WalletBridgeRoute.hpp"
@@ -757,7 +757,7 @@ class AccountAddAuthSheet : public Gtk::Window {
           providerButtons_.push_back(wallet);
         }
       } else {
-        // the shared chooser (Talisman, TAO.com and others, WalletConnect)
+        // the shared chooser (Talisman, TAO.com, WalletConnect)
         auto* choose = Gtk::make_managed<Gtk::Button>(
             T_("bittensor_choose_wallet", "Choose your Bittensor wallet"));
         choose->signal_clicked().connect([this] { ChooseBittensorWallet(); });
@@ -949,13 +949,11 @@ class AccountAddAuthSheet : public Gtk::Window {
 
   // The answer of an Apple, Google or wallet add, on whatever thread it
   // arrives: posted to the main loop and dropped once the sheet moved on.
-  // `bittensorWalletId` is the Bittensor wallet that signed ("" for none).
-  std::function<void(SdkHost::AddSignInResult)> Answer(addsignin::Method method,
-                                                       std::string bittensorWalletId = {}) {
+  std::function<void(SdkHost::AddSignInResult)> Answer(addsignin::Method method) {
     auto epoch = epoch_;
     const uint64_t seen = *epoch_;
-    return [this, epoch, seen, method, bittensorWalletId](SdkHost::AddSignInResult result) {
-      PostToMain([this, epoch, seen, method, bittensorWalletId, result] {
+    return [this, epoch, seen, method](SdkHost::AddSignInResult result) {
+      PostToMain([this, epoch, seen, method, result] {
         if (*epoch != seen) return;
         providerBusy_ = false;
         if (result.ok) {
@@ -964,15 +962,9 @@ class AccountAddAuthSheet : public Gtk::Window {
           if (on_changed) on_changed();  // the new method appears
           return;
         }
-        // the user closed the manual sheet, or started another method
-        if (bittensor::IsCancelled(result.error) || bridge::IsSuperseded(result.error)) {
+        // the user started another method
+        if (bridge::IsSuperseded(result.error)) {
           providerError_.clear();
-        } else if (const std::string words =
-                       WalletProofRefusalText(result.code, result.error, bittensorWalletId);
-                   words != result.error) {
-          // a pasted signature from another account than the entered address:
-          // the user's to fix in the wallet, not a failure to log
-          providerError_ = words;
         } else {
           g_warning("account: add sign-in failed: %s",
                     result.error.empty() ? "(no error text)" : result.error.c_str());
@@ -1023,7 +1015,7 @@ class AccountAddAuthSheet : public Gtk::Window {
 
   void StartBittensor(const std::string& walletId) {
     if (!BeginProvider()) return;
-    host_.AddSignInWithBittensor(walletId, Answer(addsignin::Method::Wallet, walletId));
+    host_.AddSignInWithBittensor(walletId, Answer(addsignin::Method::Wallet));
   }
 
   void Render() {

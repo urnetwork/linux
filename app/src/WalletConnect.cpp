@@ -184,7 +184,6 @@ void WalletConnect::SignWithBittensor(std::shared_ptr<urnet::BittensorWalletSess
     return;
   }
   lastMessage_ = bittensorSession_->message();
-  if (bittensorSession_->transport() != bittensor::kTransportBrowserBridge) return;
   std::string url;
   try {
     // https://ur.io/wallet-connect?provider=bittensor&method=signMessage
@@ -195,19 +194,6 @@ void WalletConnect::SignWithBittensor(std::shared_ptr<urnet::BittensorWalletSess
     return;
   }
   OpenUrl(url);
-}
-
-urnet::BittensorWalletResult WalletConnect::SubmitBittensorManual(const std::string& address,
-                                                                  const std::string& signature) {
-  urnet::BittensorWalletResult result;
-  if (!bittensorSession_) {
-    result.ErrorCode = "not_awaiting_wallet";
-    return result;
-  }
-  result = bittensorSession_->handleSignature(address, signature, g_get_real_time() / 1000)
-               .value_or(urnet::BittensorWalletResult{});
-  DeliverBittensorResult(result, /*manual=*/true);
-  return result;
 }
 
 void WalletConnect::SignInWithApple(const std::string& apiUrl, const std::string& state,
@@ -395,18 +381,15 @@ void WalletConnect::HandleBittensorReturn(const std::string& url) {
                  result.ErrorCode.c_str());
     return;
   }
-  DeliverBittensorResult(result, /*manual=*/false);
+  DeliverBittensorResult(result);
 }
 
-void WalletConnect::DeliverBittensorResult(const urnet::BittensorWalletResult& result,
-                                           bool manual) {
-  switch (bittensor::Classify(result.ErrorCode, manual)) {
+void WalletConnect::DeliverBittensorResult(const urnet::BittensorWalletResult& result) {
+  switch (bittensor::Classify(result.ErrorCode)) {
     case bittensor::Outcome::Ignore:
       std::fprintf(stderr, "[wallet] a Bittensor answer for another flow (%s), ignoring it\n",
                    result.ErrorCode.c_str());
       return;
-    case bittensor::Outcome::Retry:
-      return;  // the manual sheet shows it and stays open
     case bittensor::Outcome::Fail: {
       if (!on_error) return;
       const std::string purpose = bittensorSession_ ? bittensorSession_->purpose() : std::string();
