@@ -8936,6 +8936,11 @@ msgctxt "site_sub_cancel_keep"
 msgid "Keep it"
 msgstr "Giữ lại"
 
+#. Subscription: inline confirmation before cancelling a renewal whose payment is failing. The cancel takes effect now: Stripe stops retrying the failed payment, and the Pro plan ends. Retrying = Stripe trying to charge the card again.
+msgctxt "site_sub_cancel_past_due_confirm"
+msgid "Cancel now? We'll stop retrying your payment, and Pro ends."
+msgstr "Hủy ngay bây giờ? Chúng tôi sẽ ngừng thử thanh toán lại và Pro sẽ kết thúc."
+
 #. Subscription: confirm the cancellation.
 msgctxt "site_sub_cancel_yes"
 msgid "Yes, cancel"
