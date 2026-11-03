@@ -10996,6 +10996,11 @@ msgctxt "sn_claim_relay_claim_now_paid_each"
 msgid "Paid by URnetwork, once every {} days for each coldkey."
 msgstr "Paid by URnetwork, once every {} days for each coldkey."
 
+#. Earnings, the claim sheet and the settlement v2 tile, once URnetwork has claimed the balance and paid the gas (the claimed state, beside a link to the transaction). The first placeholder is the amount claimed, as 0.8420; the second is the user's Bittensor address, shortened (5F3s…kQ9v); keep both as they are.
+msgctxt "sn_claim_relay_claimed"
+msgid "Claimed by URnetwork. {0} SN25α is on your key, {1}."
+msgstr "Claimed by URnetwork. {0} SN25α is on your key, {1}."
+
 #. Earnings screen, the settlement v2 tile and the claim sheet: a line beside a relay icon. URnetwork sends the claim transaction and pays its gas; the SN25α goes to the user's own address.
 msgctxt "sn_claim_relay_for_you"
 msgid "URnetwork claims this for you"
