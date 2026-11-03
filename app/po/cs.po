@@ -9629,15 +9629,21 @@ msgctxt "sn_claim_relay_claim_now"
 msgid "Claim now"
 msgstr "Vyzvednout hned"
 
-#. Earnings, the settlement v2 tile, under the Claim now button: URnetwork pays the gas, and the button can be used once in this many days (30). Claim now is the button's label; keep it recognizable as that label.
+#. Earnings, the settlement v2 tile, under the Claim now button: URnetwork pays the gas, and the button can be used once in this many days (30 today; the count selects the plural form). Claim now is the button's label; keep it recognizable as that label.
 msgctxt "sn_claim_relay_claim_now_paid"
-msgid "Claim now is paid by URnetwork, once every {} days."
-msgstr "„Vyzvednout hned“ hradí URnetwork, jednou za {} dní."
+msgid "Claim now is paid by URnetwork, once a day."
+msgid_plural "Claim now is paid by URnetwork, once every {} days."
+msgstr[0] "„Vyzvednout hned“ hradí URnetwork, jednou denně."
+msgstr[1] "„Vyzvednout hned“ hradí URnetwork, jednou za {} dny."
+msgstr[2] "„Vyzvednout hned“ hradí URnetwork, jednou za {} dní."
 
-#. Earnings claim sheet, under the Claim now button: URnetwork pays the gas, once in this many days (30) for each Bittensor address (coldkey). Keep coldkey as the app writes it elsewhere.
+#. Earnings claim sheet, under the Claim now button: URnetwork pays the gas, once in this many days (30 today; the count selects the plural form) for each Bittensor address (coldkey). Keep coldkey as the app writes it elsewhere.
 msgctxt "sn_claim_relay_claim_now_paid_each"
-msgid "Paid by URnetwork, once every {} days for each coldkey."
-msgstr "Hradí URnetwork, jednou za {} dní pro každý coldkey."
+msgid "Paid by URnetwork, once a day for each coldkey."
+msgid_plural "Paid by URnetwork, once every {} days for each coldkey."
+msgstr[0] "Hradí URnetwork, jednou denně pro každý coldkey."
+msgstr[1] "Hradí URnetwork, jednou za {} dny pro každý coldkey."
+msgstr[2] "Hradí URnetwork, jednou za {} dní pro každý coldkey."
 
 #. Earnings, the claim sheet and the settlement v2 tile, once URnetwork has claimed the balance and paid the gas (the claimed state, beside a link to the transaction). The first placeholder is the amount claimed, as 0.8420; the second is the user's Bittensor address, shortened (5F3s…kQ9v); keep both as they are.
 msgctxt "sn_claim_relay_claimed"

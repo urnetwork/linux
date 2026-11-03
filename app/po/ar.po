@@ -11114,15 +11114,27 @@ msgctxt "sn_claim_relay_claim_now"
 msgid "Claim now"
 msgstr "المطالبة الآن"
 
-#. Earnings, the settlement v2 tile, under the Claim now button: URnetwork pays the gas, and the button can be used once in this many days (30). Claim now is the button's label; keep it recognizable as that label.
+#. Earnings, the settlement v2 tile, under the Claim now button: URnetwork pays the gas, and the button can be used once in this many days (30 today; the count selects the plural form). Claim now is the button's label; keep it recognizable as that label.
 msgctxt "sn_claim_relay_claim_now_paid"
-msgid "Claim now is paid by URnetwork, once every {} days."
-msgstr "«المطالبة الآن» على حساب URnetwork، مرة كل {} يومًا."
+msgid "Claim now is paid by URnetwork, once a day."
+msgid_plural "Claim now is paid by URnetwork, once every {} days."
+msgstr[0] "«المطالبة الآن» على حساب URnetwork، مرة كل {} يوم."
+msgstr[1] "«المطالبة الآن» على حساب URnetwork، مرة كل يوم."
+msgstr[2] "«المطالبة الآن» على حساب URnetwork، مرة كل يومين."
+msgstr[3] "«المطالبة الآن» على حساب URnetwork، مرة كل {} أيام."
+msgstr[4] "«المطالبة الآن» على حساب URnetwork، مرة كل {} يومًا."
+msgstr[5] "«المطالبة الآن» على حساب URnetwork، مرة كل {} يوم."
 
-#. Earnings claim sheet, under the Claim now button: URnetwork pays the gas, once in this many days (30) for each Bittensor address (coldkey). Keep coldkey as the app writes it elsewhere.
+#. Earnings claim sheet, under the Claim now button: URnetwork pays the gas, once in this many days (30 today; the count selects the plural form) for each Bittensor address (coldkey). Keep coldkey as the app writes it elsewhere.
 msgctxt "sn_claim_relay_claim_now_paid_each"
-msgid "Paid by URnetwork, once every {} days for each coldkey."
-msgstr "على حساب URnetwork، مرة كل {} يومًا لكل coldkey."
+msgid "Paid by URnetwork, once a day for each coldkey."
+msgid_plural "Paid by URnetwork, once every {} days for each coldkey."
+msgstr[0] "على حساب URnetwork، مرة كل {} يوم لكل coldkey."
+msgstr[1] "على حساب URnetwork، مرة كل يوم لكل coldkey."
+msgstr[2] "على حساب URnetwork، مرة كل يومين لكل coldkey."
+msgstr[3] "على حساب URnetwork، مرة كل {} أيام لكل coldkey."
+msgstr[4] "على حساب URnetwork، مرة كل {} يومًا لكل coldkey."
+msgstr[5] "على حساب URnetwork، مرة كل {} يوم لكل coldkey."
 
 #. Earnings, the claim sheet and the settlement v2 tile, once URnetwork has claimed the balance and paid the gas (the claimed state, beside a link to the transaction). The first placeholder is the amount claimed, as 0.8420; the second is the user's Bittensor address, shortened (5F3s…kQ9v); keep both as they are.
 msgctxt "sn_claim_relay_claimed"
