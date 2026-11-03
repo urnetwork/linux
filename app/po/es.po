@@ -1360,10 +1360,10 @@ msgctxt "bittensor_key_failure_generate"
 msgid "Couldn't make a key on this device. Try again."
 msgstr "No se pudo crear una clave en este dispositivo. Vuelve a intentarlo."
 
-#. Earnings screen, the payout card for the network's payouts. The device's secure storage (Apple's Keychain) did not answer, usually because the device is locked.
+#. Earnings screen, the payout card for the network's payouts. The device's secure storage did not answer, usually because the device is locked: Keychain on Apple, Keystore on Android, the credential store on a desktop. The same words on every platform, so name none of them.
 msgctxt "bittensor_key_failure_keychain"
-msgid "Couldn't read this device's keychain. Unlock your device and try again."
-msgstr "No se pudo leer el llavero de este dispositivo. Desbloquea tu dispositivo y vuelve a intentarlo."
+msgid "Couldn't read this device's secure storage. Unlock your device and try again."
+msgstr "No se pudo leer el almacenamiento seguro de este dispositivo. Desbloquea tu dispositivo y vuelve a intentarlo."
 
 #. Earnings screen, the payout card for the network's payouts. An error under the Set up payouts button: the new key could not be written to the device's secure storage.
 msgctxt "bittensor_key_failure_store"
