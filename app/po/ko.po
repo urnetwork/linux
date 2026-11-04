@@ -7899,12 +7899,12 @@ msgctxt "purchase_could_not_be_verified"
 msgid "This purchase could not be verified with Google Play, so it can't be applied to your account. If you were charged and your plan doesn't update, please contact support."
 msgstr "Google Play에서 이 구매를 확인할 수 없어 계정에 적용할 수 없습니다. 요금이 청구되었는데 요금제가 업데이트되지 않으면 지원팀에 문의하세요."
 
-#. macOS alert body under purchase_disconnect_notice_title. The app reconnects the VPN by itself after the purchase; "it" is the VPN. Until then the user's internet traffic does not go through the VPN.
+#. Mac App Store alert body under purchase_disconnect_notice_title. The app reconnects the VPN by itself after the purchase; "it" is the VPN. Until then the user's internet traffic does not go through the VPN: the kill switch is off whenever this alert shows.
 msgctxt "purchase_disconnect_notice_message"
 msgid "URnetwork reconnects it afterward. Until it does, your internet traffic won't go through the VPN."
 msgstr "URnetwork가 이후 다시 연결합니다. 그때까지 인터넷 트래픽은 VPN을 거치지 않습니다."
 
-#. macOS alert title, shown when the user starts a purchase while a VPN connection is requested, before the app disconnects the VPN for the purchase. The alert's buttons are Disconnect and Cancel.
+#. Mac App Store build's alert title, shown when the user starts a purchase while a VPN connection is requested and the kill switch is off, before the app disconnects the VPN for the purchase. The alert's buttons are Disconnect and Cancel. With the kill switch on, purchase_kill_switch_notice_title shows instead.
 msgctxt "purchase_disconnect_notice_title"
 msgid "Disconnect the VPN for this purchase?"
 msgstr "이 구매를 위해 VPN 연결을 해제할까요?"
@@ -7913,6 +7913,16 @@ msgstr "이 구매를 위해 VPN 연결을 해제할까요?"
 msgctxt "purchase_found_confirming_your_plan"
 msgid "Purchase found. Confirming your plan — it will update automatically."
 msgstr "구매 내역을 찾았습니다. 요금제를 확인하는 중이며 자동으로 업데이트됩니다."
+
+#. Mac App Store alert body under purchase_kill_switch_notice_title. In "while it's disconnected", "it" is the VPN; in "turn it back on", "it" is the kill switch, which the user may turn back on after the purchase. Keep App Store and VPN as they are. Name the kill switch by the label of its setting (the kill_switch key).
+msgctxt "purchase_kill_switch_notice_message"
+msgid "App Store purchases need the VPN disconnected, and while it's disconnected, the kill switch blocks your internet traffic. Turn off the kill switch, then try again. You can turn it back on afterward."
+msgstr "App Store에서 구매하려면 VPN 연결을 해제해야 하며, 연결이 해제된 동안에는 킬 스위치가 인터넷 트래픽을 차단합니다. 킬 스위치를 끈 다음 다시 시도하세요. 이후에 다시 켤 수 있습니다."
+
+#. Mac App Store build's alert title, shown in place of purchase_disconnect_notice_title when the user starts a purchase while the kill switch is on. An App Store purchase there needs the VPN disconnected, and with the kill switch on the internet traffic is blocked while the VPN is disconnected, so nothing is bought until the user turns the kill switch off. The alert's one button is Got it. Name the kill switch by the label of its setting (the kill_switch key).
+msgctxt "purchase_kill_switch_notice_title"
+msgid "Turn off the kill switch to buy"
+msgstr "구매하려면 킬 스위치를 끄세요"
 
 #. Upgrade: the overlay shown while a store purchase waits for approval. Keep UR Pro (the plan's name) unchanged.
 msgctxt "purchase_pending_body"
