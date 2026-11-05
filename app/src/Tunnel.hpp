@@ -1152,6 +1152,13 @@ class Tunnel {
   bool InstallRoutes(TunnelError* err);
   bool InstallPolicyRules(TunnelError* err);
   void RemovePolicyRules();
+  // The routes through this tun in the main table, the one the daemon's marked
+  // sockets use (`family` "-4" or "-6"; MainRoutesIntoTunnel, TunnelPolicy.hpp).
+  // Empty when there are none or `ip` cannot be read.
+  std::vector<std::string> MainRoutesThroughTun(const std::string& ip,
+                                                const char* family) const;
+  // Best-effort removal of those routes, naming each one it removed.
+  void DropMainRoutesThroughTun(const std::string& ip, const char* family) const;
   // VerifyCaptureTook IS GONE, FOLDED IN AS LEG 1 OF THE WITNESS. It asked "did
   // the capture half take" with `ip route get`, and — fatally — it had exactly
   // one caller: the bring-up. So the live re-check thirty seconds later

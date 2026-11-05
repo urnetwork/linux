@@ -598,6 +598,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/RpcSessionStoreTest.cpp',
     'tests/TunnelPolicyTest.cpp',
     'tests/EgressWitnessIpv6Test.cpp',
+    'tests/TunPrefixRouteTest.cpp',
     'tests/KillSwitchExceptionCopyTest.cpp',
     'tests/FixedIpSubtitleCopyTest.cpp',
     'tests/IoLoopFdTest.cpp',
@@ -867,6 +868,8 @@ urnetwork_tests = executable('urnetwork-tests',
               # GlogFlushWiringTest reads the daemon's glog flushes the same way.
               # DeadTunnelWiringTest reads the dead-tunnel failsafe's daemon call sites the
               # same way, and FailsafeNoticeWiringTest its health poll and connect page.
+              # TunPrefixRouteTest reads Tunnel::Configure's address steps and the
+              # egress witness's tun-counter refusal the same way.
               # TeardownOrderWiringTest reads TunnelHost's teardowns the same way.
               # SelfRestartWiringTest reads the daemon's self-restart and the unit the same way.
               # StatusStripWiringTest reads the status strip's writers in MainWindow.cpp
@@ -978,6 +981,14 @@ test('exclude-launcher',
 # GUI and flatpak, emptied environment, nothing on the host touched.
 test('launcher-autostart',
      find_program('../packaging/urnetwork-launcher.test.sh'),
+     protocol : 'exitcode')
+
+# The tun's address carries no prefix route into main, the table the daemon's
+# own marked sockets use (TunnelPolicy.hpp, TunAddressArgv), measured on the
+# real kernel in a throwaway network namespace. Needs root and a tun device;
+# skips (exit 77) without them, and touches nothing outside the namespace.
+test('tun-prefix-route-netns',
+     find_program('tests/tun-prefix-route-netns.sh'),
      protocol : 'exitcode')
 
 # ABI floor gate (APPIMAGE.md R9/§10c): the daemon and the vendored SDK must
