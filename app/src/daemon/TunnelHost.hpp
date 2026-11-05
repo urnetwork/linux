@@ -538,6 +538,10 @@ class TunnelHost {
   // tunnel session's device — for every check below that reads it (the filter
   // teardown retry, adoption, the published identity). Guarded by opMutex_.
   std::optional<urnet::DeviceLocal> providerDevice_;
+  // The provider-only device's network peer counts RefreshProviderStatusLocked
+  // last logged (connected, and of those providing); -1 before its first.
+  int64_t providerPeersLogged_ = -1;
+  int64_t providerProvidingLogged_ = -1;
   ctl::StartProviderRequest providerConfig_;
   // Its view controllers, which the GUI reads through provider_stats because
   // it has no DeviceRemote for this device: the provider series behind the

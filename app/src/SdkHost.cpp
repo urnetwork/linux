@@ -34,6 +34,7 @@
 #include "CryptoInvoiceStorage.hpp"
 #include "LocationSelection.hpp"
 #include "NetworkSpaceConfig.hpp"
+#include "PeerLocation.hpp"
 // The Secret Service backend for the remembered rpc session. GUI-ONLY: this is
 // the one translation unit that links libsecret, and urnetworkd (which builds
 // in a container that has no libsecret at all) never sees this header.
@@ -4663,6 +4664,9 @@ std::string SdkHost::GetFilteredLocationState() {
 std::optional<urnet::NetworkPeerList> SdkHost::ConnectedProvidePeers() {
   return ReadOnMain<std::optional<urnet::NetworkPeerList>>("ConnectedProvidePeers", [&]() -> std::optional<urnet::NetworkPeerList> {
     if (peerVc_) return peerVc_->getPeers();
+    // No session: the provider-only device's, as the daemon's status last
+    // said (NoteDaemonProviderLocked), already filtered as getPeers filters.
+    if (!device_ && daemonProviderPeers_) return daemonProviderPeers_;
     return std::nullopt;
   });
 }
@@ -4673,6 +4677,12 @@ int64_t SdkHost::ConnectedPeerCount() {
     // other devices online" count (connecting still requires provide, which is
     // what ConnectedProvidePeers captures)
     if (peerVc_) return static_cast<int64_t>(peerVc_->getConnectedCount());
+    // No session: every device the provider-only device is connected to, from
+    // the same status reading as its peers.
+    if (!device_ && daemonProviderPeers_) {
+      const int64_t count = daemonProviderClientCount_.load();
+      return count < 0 ? 0 : count;
+    }
     return 0;
   });
 }
@@ -5874,11 +5884,36 @@ void SdkHost::NoteDaemonProviderLocked(const ctl::StatusReply& status) {
   const int64_t tier = running ? status.provider_mode : 0;
   const bool networkKey = running && status.provider_network_key;
   const int64_t clientCount = running ? status.provider_client_count : -1;
+  // The peers it discovers with no session, which a session's
+  // PeerViewController would list: filtered as that controller filters them
+  // (connected and providing). A daemon from before the field sends none, and
+  // an unreadable list reads as none: the peer lists then stay unavailable, as
+  // they were, and the count stands alone.
+  std::optional<urnet::NetworkPeerList> peers;
+  if (running && !status.provider_network_peers_json.empty()) {
+    try {
+      peers = ConnectablePeers(nlohmann::json::parse(status.provider_network_peers_json)
+                                   .get<urnet::NetworkPeerList>());
+    } catch (const std::exception& e) {
+      static std::atomic<bool> logged{false};
+      if (!logged.exchange(true)) {
+        g_warning("provide: the daemon's provider network peers could not be read: %s",
+                  e.what());
+      }
+    }
+  }
+  const bool peersChanged =
+      peers.has_value() != daemonProviderPeers_.has_value() ||
+      (peers && !SamePeerRows(*peers, *daemonProviderPeers_));
+  daemonProviderPeers_ = std::move(peers);
   bool changed = daemonProviderRunning_.exchange(running) != running;
   changed = daemonProviderMode_.exchange(tier) != tier || changed;
   changed = daemonProviderNetworkKey_.exchange(networkKey) != networkKey || changed;
-  changed = daemonProviderClientCount_.exchange(clientCount) != clientCount || changed;
+  const bool countChanged = daemonProviderClientCount_.exchange(clientCount) != clientCount;
+  changed = countChanged || changed;
   if (changed) PublishStats();
+  // the peers line and lists read both (ConnectedProvidePeers, ConnectedPeerCount)
+  if (peersChanged || countChanged) EmitDrawerEvent(DrawerEvent::Peers);
 }
 
 // DeviceRemote teardown without touching the stored auth or the daemon:
@@ -6018,6 +6053,7 @@ void SdkHost::Shutdown() {
   daemonProviderMode_.store(0);
   daemonProviderNetworkKey_.store(false);
   daemonProviderClientCount_.store(-1);
+  daemonProviderPeers_.reset();
   DropDaemonProviderStatsLocked();
 }
 
@@ -6263,6 +6299,7 @@ void SdkHost::LogoutNow() {
   daemonProviderMode_.store(0);
   daemonProviderNetworkKey_.store(false);
   daemonProviderClientCount_.store(-1);
+  daemonProviderPeers_.reset();
   DropDaemonProviderStatsLocked();
   providerStateKnown_ = false;
   providerBackoff_.NoteSuccess();

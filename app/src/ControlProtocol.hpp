@@ -1401,6 +1401,15 @@ struct StatusReply {
   // the read failed, or the daemon predates the field (absent parses -1). The
   // GUI then shows no count, never a 0 it did not read.
   int64_t provider_client_count = -1;
+  // Those peers themselves, as the sdk's NetworkPeerList json with each peer cut
+  // to what the GUI's peer rows show and connect with (client id, provide
+  // enabled, device name and spec): the network peers on the Connect page, in
+  // the location chooser and on the Network page, which a tunnel session's
+  // PeerViewController feeds while connected. Read with the count, in one
+  // reading. "" = not read, which is what a daemon predating the field sends:
+  // the GUI then leaves its peer lists as they are and the count stands alone.
+  // RedactStatusForForeignUid drops it like every field it does not list.
+  std::string provider_network_peers_json;
 
   // ---- the network country (P052) -----------------------------------------
   // The country of the mobile network this machine is on, as the daemon reads
@@ -1465,6 +1474,7 @@ inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["provider_mode"] = v.provider_mode;
   j["provider_network_key"] = v.provider_network_key;
   j["provider_client_count"] = v.provider_client_count;
+  j["provider_network_peers_json"] = v.provider_network_peers_json;
   j["network_country_code"] = v.network_country_code;
   j["log_upload_id"] = v.log_upload_id;
   j["log_upload_state"] = v.log_upload_state;
@@ -1502,6 +1512,7 @@ inline void from_json(const nlohmann::json& j, StatusReply& v) {
   detail::Get(j, "provider_mode", v.provider_mode);
   detail::Get(j, "provider_network_key", v.provider_network_key);
   detail::Get(j, "provider_client_count", v.provider_client_count);  // absent = not read
+  detail::Get(j, "provider_network_peers_json", v.provider_network_peers_json);  // absent = not read
   detail::Get(j, "network_country_code", v.network_country_code);  // absent = no country
   detail::Get(j, "log_upload_id", v.log_upload_id);        // absent = no upload
   detail::Get(j, "log_upload_state", v.log_upload_state);

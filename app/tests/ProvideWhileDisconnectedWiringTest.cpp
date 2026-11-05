@@ -191,10 +191,68 @@ UR_TEST(ProvideWiring_TheStatusCountsTheProviderClients) {
   const std::string refresh = FunctionBody(host, "void TunnelHost::RefreshProviderStatusLocked()");
   UR_EXPECT_TRUE(Before(refresh, "int64_t clientCount = -1;", "try {"));
   UR_EXPECT_TRUE(Before(refresh, "providerDevice_->getNetworkPeers()", "} catch ("));
-  UR_EXPECT_TRUE(Has(refresh, "peers && peers->Connected ? static_cast<int64_t>(peers->Connected->size()) : 0"));
+  // the connected peers, counted as the rows that go out with the count
+  UR_EXPECT_TRUE(Has(refresh, "if (peers && peers->Connected) {"));
+  UR_EXPECT_TRUE(Has(refresh, "clientCount = static_cast<int64_t>(rows.size());"));
   UR_EXPECT_TRUE(Has(refresh, "status_.provider_client_count = clientCount;"));
+  // a failed read is unread, the count and the list alike
+  UR_EXPECT_TRUE(Has(refresh, "clientCount = -1;\n    peersJson.clear();"));
   const std::string retire = FunctionBody(host, "void TunnelHost::RetireProviderDeviceLocked()");
   UR_EXPECT_TRUE(Has(retire, "status_.provider_client_count = -1;"));
+}
+
+// The peers the count counts go out in the same status, from the same reading,
+// each cut to the four fields the GUI's rows show and connect with: with no
+// tunnel the status is not redacted for another local user, so a peer's
+// principal and roles never leave the daemon.
+UR_TEST(ProvideWiring_TheStatusListsTheProviderPeersCutToTheRows) {
+  const std::string host = ReadProvideSource("daemon/TunnelHost.cpp");
+  const std::string refresh = FunctionBody(host, "void TunnelHost::RefreshProviderStatusLocked()");
+  UR_EXPECT_TRUE(Has(refresh, "row.ClientId = std::move(peer.ClientId);"));
+  UR_EXPECT_TRUE(Has(refresh, "row.ProvideEnabled = peer.ProvideEnabled;"));
+  UR_EXPECT_TRUE(Has(refresh, "row.DeviceName = std::move(peer.DeviceName);"));
+  UR_EXPECT_TRUE(Has(refresh, "row.DeviceSpec = std::move(peer.DeviceSpec);"));
+  UR_EXPECT_FALSE(Has(refresh, "Principal"));
+  UR_EXPECT_FALSE(Has(refresh, "Roles"));
+  UR_EXPECT_TRUE(Has(refresh, "peersJson = ctl::DumpForWire(nlohmann::json(rows));"));
+  UR_EXPECT_TRUE(Before(refresh, "status_.provider_client_count = clientCount;",
+                        "status_.provider_network_peers_json = std::move(peersJson);"));
+  // counts only, never names, in the log
+  UR_EXPECT_TRUE(Has(refresh, "connected network peer(s), %lld"));
+  const std::string retire = FunctionBody(host, "void TunnelHost::RetireProviderDeviceLocked()");
+  UR_EXPECT_TRUE(Has(retire, "status_.provider_network_peers_json.clear();"));
+}
+
+// With no session the GUI lists the provider-only device's peers where a
+// session's PeerViewController's would go, filtered as that controller filters
+// them, and pushes the peers feed only when the rows or the count moved.
+UR_TEST(ProvideWiring_TheGuiListsTheProviderPeersWithoutADevice) {
+  const std::string host = ReadProvideSource("SdkHost.cpp");
+  const std::string note = FunctionBody(host, "void SdkHost::NoteDaemonProviderLocked(");
+  UR_EXPECT_TRUE(Has(note, "if (running && !status.provider_network_peers_json.empty()) {"));
+  UR_EXPECT_TRUE(Has(note, "peers = ConnectablePeers("));
+  UR_EXPECT_TRUE(Has(note, "!SamePeerRows(*peers, *daemonProviderPeers_)"));
+  UR_EXPECT_TRUE(Has(note, "if (peersChanged || countChanged) EmitDrawerEvent(DrawerEvent::Peers);"));
+  const std::string peers = FunctionBody(host, "std::optional<urnet::NetworkPeerList> SdkHost::ConnectedProvidePeers()");
+  // a session's controller first; the daemon's list only with no device
+  UR_EXPECT_TRUE(Before(peers, "if (peerVc_) return peerVc_->getPeers();",
+                        "if (!device_ && daemonProviderPeers_) return daemonProviderPeers_;"));
+  const std::string count = FunctionBody(host, "int64_t SdkHost::ConnectedPeerCount()");
+  UR_EXPECT_TRUE(Before(count, "if (peerVc_)", "if (!device_ && daemonProviderPeers_) {"));
+  for (const char* signature : {"void SdkHost::Shutdown()", "void SdkHost::LogoutNow()"}) {
+    UR_EXPECT_TRUE_MSG(signature, Has(FunctionBody(host, signature),
+                                      "daemonProviderPeers_.reset();"));
+  }
+  // the Network destination hears the feed, and reads it with no device too
+  const std::string window = ReadProvideSource("MainWindow.cpp");
+  UR_EXPECT_TRUE(Has(window, "networkPage_->OnPeersEvent();"));
+  const std::string page = FunctionBody(ReadProvideSource("NetworkPage.cpp"),
+                                        "void NetworkPage::OnPeersEvent()");
+  UR_EXPECT_FALSE(Has(page, "hasDevice()"));
+  // the empty peers group says what the line says
+  const std::string list =
+      FunctionBody(ReadProvideSource("ConnectPage.cpp"), "void ConnectPage::ApplyPeersList()");
+  UR_EXPECT_TRUE(Has(list, "peers_ ? Glib::ustring(Format(TN_(\"network_peer_count\""));
 }
 
 // With no DeviceRemote the provide line's count is the provider-only device's,

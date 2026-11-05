@@ -2141,12 +2141,15 @@ void TunnelHost::RetireProviderDeviceLocked() {
     DaemonLogf("[provide] stopped providing without a tunnel\n");
   }
   providerConfig_ = ctl::StartProviderRequest();
+  providerPeersLogged_ = -1;
+  providerProvidingLogged_ = -1;
   std::scoped_lock lock(statusMutex_);
   status_.provider_running = false;
   status_.provider_control_mode.clear();
   status_.provider_mode = 0;
   status_.provider_network_key = false;
   status_.provider_client_count = -1;
+  status_.provider_network_peers_json.clear();
 }
 
 void TunnelHost::RefreshProviderStatusLocked() {
@@ -2155,6 +2158,8 @@ void TunnelHost::RefreshProviderStatusLocked() {
   bool networkKey = false;
   // unread until its read succeeds, so a failed read shows no count
   int64_t clientCount = -1;
+  int64_t providing = 0;
+  std::string peersJson;
   try {
     tier = providerDevice_->getProvideMode();
     if (auto keys = providerDevice_->getProvideSecretKeys()) {
@@ -2166,11 +2171,46 @@ void TunnelHost::RefreshProviderStatusLocked() {
       }
     }
     // the count a tunnel session's device gives the GUI over the device rpc:
-    // its connected network peers, none while its provider has no client yet
-    const auto peers = providerDevice_->getNetworkPeers();
-    clientCount = peers && peers->Connected ? static_cast<int64_t>(peers->Connected->size()) : 0;
+    // its connected network peers, none while its provider has no client yet.
+    // The peers themselves go with it, from the same reading, each cut to what
+    // the GUI's rows show and connect with: an unredacted status reaches every
+    // local user while no tunnel runs, unlike a session's mTLS device rpc, and
+    // a peer's principal and roles are not for them.
+    auto peers = providerDevice_->getNetworkPeers();
+    urnet::NetworkPeerList rows;
+    if (peers && peers->Connected) {
+      rows.reserve(peers->Connected->size());
+      for (auto& peer : *peers->Connected) {
+        urnet::NetworkPeer row;
+        row.ClientId = std::move(peer.ClientId);
+        row.ProvideEnabled = peer.ProvideEnabled;
+        row.DeviceName = std::move(peer.DeviceName);
+        row.DeviceSpec = std::move(peer.DeviceSpec);
+        rows.push_back(std::move(row));
+      }
+    }
+    clientCount = static_cast<int64_t>(rows.size());
+    providing = static_cast<int64_t>(
+        std::count_if(rows.begin(), rows.end(), [](const urnet::NetworkPeer& peer) {
+          return peer.ProvideEnabled;
+        }));
+    peersJson = ctl::DumpForWire(nlohmann::json(rows));
   } catch (const std::exception&) {
     // status must never throw across the wire; the next tick reads again
+    clientCount = -1;
+    peersJson.clear();
+  }
+  // What the device holds of its network peers, in the log, when its first
+  // reading lands and whenever the counts move: counts only, never names.
+  // Nothing else records what the platform delivered to a device with no
+  // DeviceRemote.
+  if (0 <= clientCount &&
+      (clientCount != providerPeersLogged_ || providing != providerProvidingLogged_)) {
+    DaemonLogf("[provide] the provider device holds %lld connected network peer(s), %lld "
+               "providing\n",
+               static_cast<long long>(clientCount), static_cast<long long>(providing));
+    providerPeersLogged_ = clientCount;
+    providerProvidingLogged_ = providing;
   }
   std::scoped_lock lock(statusMutex_);
   status_.provider_running = true;
@@ -2178,6 +2218,7 @@ void TunnelHost::RefreshProviderStatusLocked() {
   status_.provider_mode = tier;
   status_.provider_network_key = networkKey;
   status_.provider_client_count = clientCount;
+  status_.provider_network_peers_json = std::move(peersJson);
 }
 
 // ---- the log upload (upload_logs) -------------------------------------------

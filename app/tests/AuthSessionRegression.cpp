@@ -36,6 +36,7 @@ std::string UrDeviceDescription() { return "test"; }
 std::string UrDeviceSpec() { return "test"; }
 
 namespace urnet {
+struct NetworkPeerList {};
 inline const std::string TAO = "tao";
 inline constexpr int BittensorWalletStateSigned = 1;
 struct Error { std::string message; std::optional<std::string> code; };
@@ -137,6 +138,7 @@ struct SdkHost {
   Obligation signOut_;
   std::atomic<bool> daemonProviderRunning_{false},daemonProviderNetworkKey_{false};
   std::atomic<int> daemonProviderMode_{0},daemonProviderClientCount_{0};
+  std::optional<urnet::NetworkPeerList> daemonProviderPeers_;
   bool providerStateKnown_=false;
   bool AuthEpochCurrent(uint64_t epoch) const { return signInEpoch_.load()==epoch; }
   void SetAuthStateHandler(std::function<void(bool,uint64_t)> cb) { onAuth_=std::move(cb); }
