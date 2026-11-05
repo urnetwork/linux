@@ -1483,6 +1483,7 @@ class SdkHost {
   void RegisterNetworkClient(const std::string& byJwt, std::function<void(AuthResult)> done,
                              uint64_t authEpoch);
   void FinishNetworkClientRegistration(const std::string& byClientJwt,
+                                        const std::optional<std::string>& clientId,
                                         std::function<void(AuthResult)> done, uint64_t authEpoch);
   // Shared routing for NetworkCreateResult (sign-up + wallet sign-up).
   void HandleNetworkCreateResult(std::optional<urnet::NetworkCreateResult> result,
@@ -1704,6 +1705,16 @@ class SdkHost {
   std::atomic<unsigned int> rpcBindFiredId_{0};
   // Logout's device, daemon and credential teardown, on the worker.
   void LogoutNow();
+  // The server half of a sign-out, and of a sign-in abandoned after the server
+  // created its client, while api_ still holds the network credential. The
+  // server does not deactivate a client when its session is revoked, so a
+  // client left behind counts toward the network's active top-level clients
+  // until the idle reap. The Locked ones require mutex_, on the worker.
+  void ServerSignOutLocked();
+  void RemoveAbandonedClientLocked(const std::optional<std::string>& clientId);
+  // Records a client a sign-in abandoned on the main loop, which never takes
+  // mutex_, for the next sign-out tail to remove.
+  void NoteAbandonedClient(const std::optional<std::string>& clientId);
   // The worker. Stopped first in ~SdkHost: the work it runs holds `this`.
   ConnectCommandQueue commands_;
   // ShutdownOffMainLoop's thread, joined in ~SdkHost before the queue stops.
@@ -1721,6 +1732,9 @@ class SdkHost {
   // takes it on GTK's loop, so SDK calls, storage and callbacks stay outside.
   std::mutex authStateMutex_;
   bool authAttemptSinceLogout_ = false;  // guarded by authStateMutex_
+  // Clients NoteAbandonedClient recorded, the newest kept. Guarded by
+  // authStateMutex_; taken after mutex_ (FinishNetworkClientRegistration's order).
+  std::vector<std::string> abandonedClientIds_;
 
   std::mutex mutex_;
   std::string initializeError_;  // InitializeError(); the main thread's alone
