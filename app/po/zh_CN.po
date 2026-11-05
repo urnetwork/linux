@@ -10656,8 +10656,8 @@ msgstr "定期产品更新"
 
 #. Account panel: SOCKS credential note
 msgctxt "site_socks_cred_note"
-msgid "Username is the token in the URL; password is empty."
-msgstr "用户名为URL中的令牌；密码为空。"
+msgid "Username is the token in the URL; any password works."
+msgstr "用户名为URL中的令牌；任意密码均可。"
 
 #. Upgrade sheet: waiting state hint — a solana: deep link with no wallet installed silently does nothing
 msgctxt "site_solana_no_wallet_hint"
