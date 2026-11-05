@@ -13,10 +13,12 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <future>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -2492,6 +2494,9 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
             std::optional<urnet::AuthNetworkClientResult> result, std::optional<std::string> err) {
           PostToMain([this, done, authEpoch, result, err] {
             if (!AuthEpochCurrent(authEpoch)) {
+              // a client the server created for a sign-in signed out meanwhile:
+              // the next sign-out tail removes it (the main loop takes no mutex_)
+              if (result) NoteAbandonedClient(result->client_id);
               done({false, false, "superseded by signing out"});
               return;
             }
@@ -2503,7 +2508,8 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
               return;
             }
             if (!result->by_client_jwt) { done({false, false, "no client jwt"}); return; }
-            FinishNetworkClientRegistration(*result->by_client_jwt, done, authEpoch);
+            FinishNetworkClientRegistration(*result->by_client_jwt, result->client_id, done,
+                                            authEpoch);
           });
         });
       } catch (const std::exception&) {
@@ -2518,29 +2524,44 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
 }
 
 void SdkHost::FinishNetworkClientRegistration(const std::string& byClientJwt,
+                                               const std::optional<std::string>& clientId,
                                                std::function<void(AuthResult)> done,
                                                uint64_t authEpoch) {
   auto answer = std::make_shared<AuthResult>(AuthResult{false, false, "superseded by signing out"});
   auto publishedEpoch = std::make_shared<uint64_t>(authEpoch);
-  RunCommand(ConnectCommandQueue::Kind::Device, [this, byClientJwt, authEpoch, answer, publishedEpoch] {
+  RunCommand(ConnectCommandQueue::Kind::Device, [this, byClientJwt, clientId, authEpoch, answer,
+                                                 publishedEpoch] {
     std::scoped_lock lock(mutex_);
-    if (!AuthEpochCurrent(authEpoch)) return;
+    // A sign-in that does not publish leaves the client the server created for
+    // it. It goes under mutex_, which the tail clearing the credential it needs
+    // takes too, and outside authStateMutex_, which takes no sdk call.
+    if (!AuthEpochCurrent(authEpoch)) {
+      RemoveAbandonedClientLocked(clientId);
+      return;
+    }
     try {
       localState_->setByClientJwt(byClientJwt);
     } catch (const std::exception&) {
       *answer = AuthResult{false, false, "could not save session"};
+      RemoveAbandonedClientLocked(clientId);
       return;
     }
     // Logout's UI half takes only this short lock. A logout during the disk
     // write wins; its queued tail clears the old write before a new sign-in.
-    std::scoped_lock authLock(authStateMutex_);
-    if (!AuthEpochCurrent(authEpoch)) return;
-    *publishedEpoch = signInEpoch_.fetch_add(1) + 1;
-    authAttemptSinceLogout_ = false;
-    hasClientJwt_.store(true);
-    signedOut_.store(false);
-    authLogouts_.SignedIn();
-    *answer = AuthResult{true, false, ""};
+    bool published = false;
+    {
+      std::scoped_lock authLock(authStateMutex_);
+      if (AuthEpochCurrent(authEpoch)) {
+        *publishedEpoch = signInEpoch_.fetch_add(1) + 1;
+        authAttemptSinceLogout_ = false;
+        hasClientJwt_.store(true);
+        signedOut_.store(false);
+        authLogouts_.SignedIn();
+        *answer = AuthResult{true, false, ""};
+        published = true;
+      }
+    }
+    if (!published) RemoveAbandonedClientLocked(clientId);
   }, [this, done, answer, publishedEpoch] {
     if (!AuthEpochCurrent(*publishedEpoch)) {
       done({false, false, "superseded by signing out"});
@@ -6081,6 +6102,73 @@ void SdkHost::Logout() {
   if (onAuth_) onAuth_(false, authEpoch);
 }
 
+namespace {
+// Past the sdk's own 2 s bound for its sign-out: LogoutNow's local half runs at
+// the latest this long after it starts the server half.
+constexpr auto kServerSignOutWait = std::chrono::milliseconds(2500);
+// NoteAbandonedClient keeps this many, the newest.
+constexpr size_t kMaxAbandonedClientIds = 16;
+}  // namespace
+
+void SdkHost::NoteAbandonedClient(const std::optional<std::string>& clientId) {
+  if (!clientId || clientId->empty()) return;
+  std::scoped_lock authLock(authStateMutex_);
+  if (abandonedClientIds_.size() >= kMaxAbandonedClientIds) {
+    abandonedClientIds_.erase(abandonedClientIds_.begin());
+  }
+  abandonedClientIds_.push_back(*clientId);
+}
+
+void SdkHost::RemoveAbandonedClientLocked(const std::optional<std::string>& clientId) {
+  // requires mutex_. Best effort: the answer is only logged.
+  if (!api_ || !clientId || clientId->empty()) return;
+  try {
+    urnet::RemoveNetworkClientArgs args;
+    args.client_id = *clientId;
+    api_->removeNetworkClient(args, [id = *clientId](std::optional<urnet::RemoveNetworkClientResult> result,
+                                                     std::optional<std::string> err) {
+      if (err) {
+        g_message("sdkhost: sign-in: the abandoned client %s was not removed: %s", id.c_str(),
+                  err->c_str());
+      } else if (result && result->error) {
+        g_message("sdkhost: sign-in: the abandoned client %s was not removed: %s", id.c_str(),
+                  result->error->message.c_str());
+      }
+    });
+  } catch (const std::exception& e) {
+    g_warning("sdkhost: sign-in: removing the abandoned client failed: %s", e.what());
+  }
+}
+
+void SdkHost::ServerSignOutLocked() {
+  // requires mutex_, on the worker; the sdk answers on its own thread, which
+  // takes no lock of ours
+  if (!api_) return;
+  std::vector<std::string> abandoned;
+  {
+    std::scoped_lock authLock(authStateMutex_);
+    abandoned.swap(abandonedClientIds_);
+  }
+  for (const auto& clientId : abandoned) RemoveAbandonedClientLocked(clientId);
+  auto answered = std::make_shared<std::promise<void>>();
+  std::future<void> answer = answered->get_future();
+  auto once = std::make_shared<std::once_flag>();
+  try {
+    api_->signOut([answered, once](urnet::SessionSignOutResult, std::optional<std::string> err) {
+      if (err) g_message("sdkhost: sign-out: the server sign-out answered: %s", err->c_str());
+      std::call_once(*once, [&answered] { answered->set_value(); });
+    });
+  } catch (const std::exception& e) {
+    g_warning("sdkhost: sign-out: the server sign-out did not start: %s", e.what());
+    return;
+  }
+  if (answer.wait_for(kServerSignOutWait) != std::future_status::ready) {
+    g_warning("sdkhost: sign-out: the server sign-out did not answer within %lld ms; the local "
+              "sign-out goes on",
+              static_cast<long long>(kServerSignOutWait.count()));
+  }
+}
+
 void SdkHost::LogoutNow() {
   // A sign-in method being added belongs to the account that is leaving: its
   // return, if it still comes, must not add it to the next account signed in.
@@ -6135,7 +6223,12 @@ void SdkHost::LogoutNow() {
     pendingSsoJwt_.clear();
   }
   if (pendingInstantAuthEpoch_ < authEpoch) pendingInstantJwt_.reset();
-  // The local credentials first, because nothing can hold them up: the app is
+  // The server half before the local credentials, which clear the network
+  // credential it needs: the sdk removes this device's client and revokes the
+  // session, within its own 2 s bound, and the wait ends at kServerSignOutWait,
+  // so an offline sign-out still ends.
+  ServerSignOutLocked();
+  // The local credentials next, because nothing can hold them up: the app is
   // signed out on disk even if it is ended while the daemon is asked below.
   try {
     if (localState_) localState_->logout();
