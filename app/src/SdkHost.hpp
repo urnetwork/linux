@@ -1142,6 +1142,11 @@ class SdkHost {
   // peers pinned atop the chooser. Both live only while the tunnel runs; reads
   // return nullopt/empty otherwise.
   std::optional<urnet::FilteredLocations> GetFilteredLocations();
+  // The provider-list search, shared by the chooser and the Network page and
+  // kept across view controllers: a controller opened later runs it too. Each
+  // surface passes its own box when it shows, which also retries a failed load
+  // (LocationFilterRunNeeded). Never waits behind a device command on the main
+  // loop: the query then runs once the queue settles.
   void FilterLocations(const std::string& query);
   std::string GetFilteredLocationState();
   std::optional<urnet::NetworkPeerList> ConnectedProvidePeers();
@@ -1566,6 +1571,9 @@ class SdkHost {
                            const std::string& message, const std::string& blockchain);
   void SubscribeStats();   // caller holds mutex_; opens presentation controllers
   void SubscribeDrawer();  // caller holds mutex_; opens presentation controllers
+  // Runs the wanted search on the open locations view controller when it
+  // moved or the last answer failed. Requires mutex_.
+  void RunWantedLocationFilterLocked();
   void ClosePresentationLocked();
   // The provider status controller's two halves (P008). The open is a no-op
   // with no device, with one already open or with the mode never, and starts
@@ -1850,6 +1858,19 @@ class SdkHost {
   std::atomic<int64_t> daemonProviderMode_{0};
   std::atomic<bool> daemonProviderNetworkKey_{false};
   std::atomic<int64_t> daemonProviderClientCount_{-1};
+  // The provider-list search FilterLocations last asked for, trimmed, and
+  // whether it moved since the open view controller last ran it. Under their
+  // own mutex: written per keystroke on the main loop. locationsFilterOwed_:
+  // a run waits for the command queue to settle.
+  std::mutex locationsQueryMutex_;
+  std::string wantedLocationQuery_;
+  bool locationsQueryDirty_ = false;
+  std::atomic<bool> locationsFilterOwed_{false};
+  // The provider-only device's connected, providing network peers as that
+  // status last listed them (ConnectablePeers); nullopt while it lists none, a
+  // daemon predating the list included. What ConnectedProvidePeers answers
+  // with no session. Guarded by mutex_.
+  std::optional<urnet::NetworkPeerList> daemonProviderPeers_;
   // The network country last applied to this process (FollowDaemonNetworkCountry).
   // Main loop only.
   std::string followedNetworkCountry_;

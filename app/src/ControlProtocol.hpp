@@ -29,6 +29,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -1027,6 +1028,25 @@ inline void from_json(const nlohmann::json& j, LogoutRequest& v) {
   detail::Get(j, "network_space_json", v.network_space_json);
 }
 
+// stop_tunnel. `disconnect` says the owning user pressed Disconnect: the daemon
+// may keep the session's DeviceLocal running as the provider-only device when
+// one could start in its place (provide::KeepsSessionDevice), so its
+// transports, peers and contracts carry over. Every other stop (a quit, a
+// sign-out, a server change, a failed start, the tray's recovery item) leaves
+// it false and closes the device, retiring a provider-only device too, as
+// stop_tunnel always has. Additive within v1: absent parses false, which is
+// what a GUI predating it sends, and a daemon predating it ignores it.
+struct StopTunnelRequest {
+  bool disconnect = false;
+};
+inline void to_json(nlohmann::json& j, const StopTunnelRequest& v) {
+  j = nlohmann::json::object();
+  if (v.disconnect) j["disconnect"] = true;
+}
+inline void from_json(const nlohmann::json& j, StopTunnelRequest& v) {
+  detail::Get(j, "disconnect", v.disconnect);
+}
+
 // set_provide_extender: the connect page's Extender switch while no tunnel
 // session's device takes it (support inbox 1521, P008). The setting belongs to
 // the network space (`.provide_extender` in the daemon's storage), and every
@@ -1288,17 +1308,84 @@ inline std::optional<StartTunnelRejection> ValidateStartProviderRequest(
   return std::nullopt;
 }
 
-// The same provider device: one built from these credentials, in this network
-// space and with this provider policy keeps running and only takes the mode
-// (the idempotent start above); any other request replaces it. That is how a
-// saved network space value reaches a running provider: the bootstrap DoH
-// servers (P216), the VLESS server, the private extender and the server itself
-// all live in network_space_json, and the GUI sends start_provider again when
-// one is saved (SdkHost::ReconcileProvider with settingsChanged).
+namespace detail {
+// RFC 4648 §5 base64url, padding optional, as a jwt segment carries it. False
+// for any other character.
+inline bool DecodeBase64Url(std::string_view in, std::string& out) {
+  out.clear();
+  std::uint32_t buffer = 0;
+  int bits = 0;
+  for (const char c : in) {
+    int value;
+    if (c >= 'A' && c <= 'Z') value = c - 'A';
+    else if (c >= 'a' && c <= 'z') value = c - 'a' + 26;
+    else if (c >= '0' && c <= '9') value = c - '0' + 52;
+    else if (c == '-') value = 62;
+    else if (c == '_') value = 63;
+    else if (c == '=') break;
+    else return false;
+    buffer = (buffer << 6) | static_cast<std::uint32_t>(value);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push_back(static_cast<char>((buffer >> bits) & 0xFFu));
+    }
+  }
+  return true;
+}
+}  // namespace detail
+
+// The client a credential names: its network_id and client_id claims, read
+// without verifying the signature, as the sdk reads them (parseByJwtClientId)
+// and as this daemon already takes the token from the GUI over its socket. A
+// refreshed token names the same client. Anything that is not a jwt naming a
+// client is its own subject, compared whole, as every credential was before.
+inline std::string JwtSubject(std::string_view jwt) {
+  const std::size_t first = jwt.find('.');
+  const std::size_t second =
+      first == std::string_view::npos ? first : jwt.find('.', first + 1);
+  std::string payload;
+  if (second == std::string_view::npos ||
+      !detail::DecodeBase64Url(jwt.substr(first + 1, second - first - 1), payload)) {
+    return std::string(jwt);
+  }
+  const nlohmann::json claims = nlohmann::json::parse(payload, nullptr, false);
+  if (!claims.is_object()) return std::string(jwt);
+  const auto client = claims.find("client_id");
+  if (client == claims.end() || !client->is_string() ||
+      client->get_ref<const std::string&>().empty()) {
+    return std::string(jwt);
+  }
+  const auto network = claims.find("network_id");
+  const std::string networkId = network != claims.end() && network->is_string()
+                                    ? network->get<std::string>()
+                                    : std::string();
+  return "client:" + networkId + "/" + client->get<std::string>();
+}
+
+// The identity a DeviceLocal is built from (provide::DeviceIdentity), as each
+// request carries it: the client its credential names, and views into the
+// request for the rest, valid while the request lives.
+inline provide::DeviceIdentity IdentityOf(const StartProviderRequest& r) {
+  return {JwtSubject(r.by_jwt), r.network_space_json, r.instance_id, r.app_version};
+}
+inline provide::DeviceIdentity IdentityOf(const StartTunnelRequest& r) {
+  return {JwtSubject(r.by_jwt), r.network_space_json, r.instance_id, r.app_version};
+}
+
+// "A device built from `a` can keep running for `b`." The identity it was
+// built from must match: the client its credential names, its instance and
+// version and its network space. A refreshed credential for the same client is
+// the same device. The provide mode and the provider transport policy may
+// differ: the running device takes both in place, as the build applies them
+// right after construction. That is how a saved network space value still
+// reaches a running provider: the bootstrap DoH servers (P216), the VLESS
+// server, the private extender and the server itself all live in
+// network_space_json, so a saved one is another device, and the GUI sends
+// start_provider again when one is saved (SdkHost::ReconcileProvider with
+// settingsChanged).
 inline bool SameProviderDevice(const StartProviderRequest& a, const StartProviderRequest& b) {
-  return a.by_jwt == b.by_jwt && a.instance_id == b.instance_id &&
-         a.app_version == b.app_version && a.network_space_json == b.network_space_json &&
-         a.provider_transport_settings_json == b.provider_transport_settings_json;
+  return provide::SameIdentity(IdentityOf(a), IdentityOf(b));
 }
 
 // The daemon's whole feedback channel. Every field beyond the original four is
@@ -1401,6 +1488,15 @@ struct StatusReply {
   // the read failed, or the daemon predates the field (absent parses -1). The
   // GUI then shows no count, never a 0 it did not read.
   int64_t provider_client_count = -1;
+  // Those peers themselves, as the sdk's NetworkPeerList json with each peer cut
+  // to what the GUI's peer rows show and connect with (client id, provide
+  // enabled, device name and spec): the network peers on the Connect page, in
+  // the location chooser and on the Network page, which a tunnel session's
+  // PeerViewController feeds while connected. Read with the count, in one
+  // reading. "" = not read, which is what a daemon predating the field sends:
+  // the GUI then leaves its peer lists as they are and the count stands alone.
+  // RedactStatusForForeignUid drops it like every field it does not list.
+  std::string provider_network_peers_json;
 
   // ---- the network country (P052) -----------------------------------------
   // The country of the mobile network this machine is on, as the daemon reads
@@ -1465,6 +1561,7 @@ inline void to_json(nlohmann::json& j, const StatusReply& v) {
   j["provider_mode"] = v.provider_mode;
   j["provider_network_key"] = v.provider_network_key;
   j["provider_client_count"] = v.provider_client_count;
+  j["provider_network_peers_json"] = v.provider_network_peers_json;
   j["network_country_code"] = v.network_country_code;
   j["log_upload_id"] = v.log_upload_id;
   j["log_upload_state"] = v.log_upload_state;
@@ -1502,6 +1599,7 @@ inline void from_json(const nlohmann::json& j, StatusReply& v) {
   detail::Get(j, "provider_mode", v.provider_mode);
   detail::Get(j, "provider_network_key", v.provider_network_key);
   detail::Get(j, "provider_client_count", v.provider_client_count);  // absent = not read
+  detail::Get(j, "provider_network_peers_json", v.provider_network_peers_json);  // absent = not read
   detail::Get(j, "network_country_code", v.network_country_code);  // absent = no country
   detail::Get(j, "log_upload_id", v.log_upload_id);        // absent = no upload
   detail::Get(j, "log_upload_state", v.log_upload_state);

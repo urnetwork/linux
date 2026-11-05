@@ -45,6 +45,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace urnw::provide {
@@ -130,8 +131,9 @@ enum class DisconnectedStep {
 };
 
 // The step the GUI takes while it has no tunnel session. `settingsChanged`:
-// the provider transport policy was just edited, which only a new device
-// picks up (the daemon rebuilds when the request differs).
+// the provider transport policy or the network space was just edited, so the
+// request goes out again: the daemon applies a policy to the running device
+// in place, and rebuilds the device for another space.
 constexpr DisconnectedStep DisconnectedProviderStep(std::string_view controlMode,
                                                     const DaemonProviderFacts& facts,
                                                     bool settingsChanged = false) {
@@ -176,6 +178,89 @@ class ProviderStepBackoff {
   int64_t delayMillis_ = 0;
   int64_t notBeforeMillis_ = 0;
 };
+
+// ---- the daemon's half: one device across connect and disconnect ----------
+//
+// The provider-only device and a tunnel session's device carry one identity:
+// the persisted key material and the request's credential, space, instance
+// and version. A Connect used to retire the provider-only device and build the
+// session a new DeviceLocal, and a Disconnect closed that one for the GUI's
+// start_provider to build a new provider-only device. Every switch closed at
+// once everything the old device held: its platform transports, its network
+// peers and every contract, each close posted to the api by itself. On a busy
+// provider that is thousands of posts in a few seconds, drawing 429s whose
+// retries dial again. So the device now moves between the two roles whenever
+// the identity allows, and only what belongs to a session (the tun, the
+// routes, the rpc listener, the destination) comes and goes with it.
+
+// The request fields a DeviceLocal is built from, as start_provider and
+// start_tunnel both carry them. The credential counts by the client it names
+// (ctl::JwtSubject), never by the token: the GUI refreshes its token all the
+// time, so two requests for one device rarely carry the same one. The views
+// point into the request and are valid while it lives.
+struct DeviceIdentity {
+  std::string jwtSubject;
+  std::string_view networkSpaceJson;
+  std::string_view instanceId;
+  std::string_view appVersion;
+};
+
+inline bool SameIdentity(const DeviceIdentity& a, const DeviceIdentity& b) {
+  return a.jwtSubject == b.jwtSubject && a.networkSpaceJson == b.networkSpaceJson &&
+         a.instanceId == b.instanceId && a.appVersion == b.appVersion;
+}
+
+// The fields that tell two identities apart, by request field name only: the
+// values are credentials. Empty exactly when SameIdentity holds. The daemon
+// logs it when a device under this identity is rebuilt rather than kept.
+inline std::string DifferingIdentityFields(const DeviceIdentity& a, const DeviceIdentity& b) {
+  std::string names;
+  const auto note = [&names](bool differs, std::string_view name) {
+    if (!differs) return;
+    if (!names.empty()) names += ", ";
+    names += name;
+  };
+  note(a.jwtSubject != b.jwtSubject, "by_jwt");
+  note(a.networkSpaceJson != b.networkSpaceJson, "network_space_json");
+  note(a.instanceId != b.instanceId, "instance_id");
+  note(a.appVersion != b.appVersion, "app_version");
+  return names;
+}
+
+// Connect: the running provider-only device becomes the session's device when
+// it was built for the identity the start carries and every socket it ever
+// made carries the egress mark (`markedFromFirst`: the daemon's socket marker
+// was attached before the device was built and has stayed attached). A socket
+// made unmarked would follow the session's capture routes into the tun.
+// Otherwise it is retired and the session builds its own, as before.
+inline bool PromotesProviderDevice(bool providerDevice, bool markedFromFirst,
+                                   const DeviceIdentity& provider, const DeviceIdentity& start) {
+  return providerDevice && markedFromFirst && SameIdentity(provider, start);
+}
+
+// Disconnect: what the daemon knows when a session ends.
+struct SessionStopFacts {
+  // An up session holds a DeviceLocal.
+  bool sessionDevice = false;
+  // The owning user's Disconnect (stop_tunnel with disconnect). Not a quit, a
+  // sign-out, a failed or replaced start, the failsafe, another user's stop or
+  // the daemon's own: each of those closes the device, as before.
+  bool disconnect = false;
+  // The device's own provide control mode.
+  ControlMode mode = ControlMode::Unknown;
+  // After the machine is given back: the nftables policy still in force (the
+  // kill switch's floor, or a removal that failed). start_provider refuses
+  // under the armed floor; a kept device follows the same rule.
+  bool firewallInForce = false;
+};
+
+// The session's device stays, as the provider-only device, exactly when a
+// provider-only device could run in its place now: a mode that provides while
+// disconnected, with nothing of the firewall left in force.
+constexpr bool KeepsSessionDevice(const SessionStopFacts& facts) {
+  return facts.sessionDevice && facts.disconnect && !facts.firewallInForce &&
+         ProviderRuns(facts.mode, /*connected=*/false);
+}
 
 // ---- the provider-only device's statistics (provider_stats) ----------------
 // The provider-only device has no DeviceRemote, so the GUI's provider

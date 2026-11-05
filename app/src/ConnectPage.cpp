@@ -3389,7 +3389,8 @@ void ConnectPage::ApplyLocationRow() {
 }
 
 // §2.8 PeersLine: a stale zero is never presented as fact — with the peer feed
-// unavailable (no session / RPC down) the line says so, in gray.
+// unavailable (no session and no provider-only device listing peers, or the
+// RPC down) the line says so, in gray.
 void ConnectPage::ApplyPeerCount() {
   if (!peersText_ || !peersDot_ || !peersLine_) return;
   Glib::ustring text;
@@ -3418,10 +3419,19 @@ void ConnectPage::ApplyPeersList() {
   if (!peersHost_) return;
   RemoveAllChildren(*peersHost_);
   if (!peers_ || peers_->empty()) {
-    // a group is a list or a one-row sentence, never a hole (§8)
-    auto row = MakeEmptySentenceRow(
-        T_("peer_discovery_disabled", "Peer discovery disabled until connected"),
-        kPeerRowHeight);
+    // a group is a list or a one-row sentence, never a hole (§8). The sentence
+    // is the line's under the connect controls, so the two never disagree:
+    // discovery disabled, or how many devices are online (none of them
+    // provides, or this list would hold it). With no session the provider-only
+    // device discovers them (SdkHost::ConnectedProvidePeers).
+    const Glib::ustring empty =
+        peers_ ? Glib::ustring(Format(TN_("network_peer_count", "You have {} other device online",
+                                          "You have {} other devices online",
+                                          static_cast<unsigned long>(peerCount_)),
+                                      peerCount_))
+               : Glib::ustring(
+                     T_("peer_discovery_disabled", "Peer discovery disabled until connected"));
+    auto row = MakeEmptySentenceRow(empty, kPeerRowHeight);
     peersHost_->append(*row.root);
     return;
   }

@@ -11,6 +11,7 @@
 #include "ControlProtocol.hpp"
 
 namespace ctl = urnw::ctl;
+namespace provide = urnw::provide;
 
 // ---- framing ---------------------------------------------------------------
 
@@ -668,6 +669,32 @@ UR_TEST(controlStatusCarriesTheProviderClientCount) {
   UR_EXPECT_EQ(-1, ctl::RedactStatusForForeignUid(status).provider_client_count);
 }
 
+// The provider-only device's connected peers ride with the count. A daemon
+// that predates the field sends none (""), which the GUI reads as no list, and
+// another user's view carries none.
+UR_TEST(controlStatusCarriesTheProviderNetworkPeers) {
+  ctl::StatusReply status;
+  status.provider_running = true;
+  status.provider_client_count = 1;
+  status.provider_network_peers_json =
+      R"([{"ClientId":"a","ProvideEnabled":true,"DeviceName":"Desk","DeviceSpec":"Fedora"}])";
+  const nlohmann::json wire = nlohmann::json(status);
+  UR_EXPECT_TRUE(wire.contains("provider_network_peers_json"));
+  const auto back = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeReply(13, true, wire)))->get<ctl::StatusReply>();
+  UR_EXPECT_TRUE(back.provider_network_peers_json == status.provider_network_peers_json);
+
+  UR_EXPECT_TRUE(ctl::StatusReply().provider_network_peers_json.empty());
+  nlohmann::json older = wire;
+  older.erase("provider_network_peers_json");
+  const auto fromOlder = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeReply(14, true, older)))->get<ctl::StatusReply>();
+  UR_EXPECT_EQ(1, fromOlder.provider_client_count);
+  UR_EXPECT_TRUE(fromOlder.provider_network_peers_json.empty());
+
+  UR_EXPECT_TRUE(ctl::RedactStatusForForeignUid(status).provider_network_peers_json.empty());
+}
+
 // The network country the daemon read (P052) reaches the GUI; a daemon that
 // predates it reports none, and another user's view names none.
 UR_TEST(controlStatusCarriesTheNetworkCountry) {
@@ -775,9 +802,97 @@ UR_TEST(controlSameProviderDeviceReplacesOnAChangedSpace) {
   ctl::StartProviderRequest version = running;
   version.app_version = "2026.10.6";
   UR_EXPECT_FALSE(ctl::SameProviderDevice(running, version));
+  // the provider transport policy is applied to the running device in place
   ctl::StartProviderRequest policy = running;
   policy.provider_transport_settings_json.clear();
-  UR_EXPECT_FALSE(ctl::SameProviderDevice(running, policy));
+  UR_EXPECT_TRUE(ctl::SameProviderDevice(running, policy));
+}
+
+namespace {
+// A jwt with these claims, as the server signs one: header.payload.signature,
+// base64url without padding. The signature is never read.
+std::string JwtWith(const std::string& claims) {
+  static const char* kAlphabet =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  std::string out;
+  int value = 0;
+  int bits = -6;
+  for (const unsigned char c : claims) {
+    value = (value << 8) + c;
+    bits += 8;
+    while (bits >= 0) {
+      out.push_back(kAlphabet[(value >> bits) & 0x3F]);
+      bits -= 6;
+    }
+  }
+  if (bits > -6) out.push_back(kAlphabet[((value << 8) >> (bits + 8)) & 0x3F]);
+  return "eyJhbGciOiJFZERTQSJ9." + out + ".c2lnbmF0dXJl";
+}
+}  // namespace
+
+// The credential counts by the client it names, never by the token: the GUI
+// refreshes its token on every connect, and the disconnect that keeps the
+// session's device must not see the GUI's next start_provider as another
+// device. A token that names no client is compared whole, as before.
+UR_TEST(controlSameProviderDeviceCountsTheClientTheTokenNames) {
+  const std::string first =
+      JwtWith(R"({"network_id":"n1","client_id":"c1","create_time":"2026-11-04T00:00:00Z"})");
+  const std::string refreshed =
+      JwtWith(R"({"network_id":"n1","client_id":"c1","create_time":"2026-11-05T00:00:00Z"})");
+  UR_EXPECT_TRUE(first != refreshed);
+  UR_EXPECT_TRUE(ctl::JwtSubject(first) == "client:n1/c1");
+  UR_EXPECT_TRUE(ctl::JwtSubject(first) == ctl::JwtSubject(refreshed));
+
+  ctl::StartProviderRequest running = ProviderRequest("always");
+  running.by_jwt = first;
+  ctl::StartProviderRequest again = running;
+  again.by_jwt = refreshed;
+  UR_EXPECT_TRUE(ctl::SameProviderDevice(running, again));
+
+  ctl::StartProviderRequest otherClient = running;
+  otherClient.by_jwt = JwtWith(R"({"network_id":"n1","client_id":"c2"})");
+  UR_EXPECT_FALSE(ctl::SameProviderDevice(running, otherClient));
+  ctl::StartProviderRequest otherNetwork = running;
+  otherNetwork.by_jwt = JwtWith(R"({"network_id":"n2","client_id":"c1"})");
+  UR_EXPECT_FALSE(ctl::SameProviderDevice(running, otherNetwork));
+
+  // no client named: the token itself
+  for (const std::string& opaque :
+       {std::string("not a jwt"), std::string("a.b"), JwtWith(R"({"network_id":"n1"})"),
+        JwtWith(R"({"client_id":""})"), JwtWith("[1,2]"), std::string("a.!!!.c")}) {
+    UR_EXPECT_TRUE_MSG(opaque, ctl::JwtSubject(opaque) == opaque);
+  }
+
+  // a start_tunnel with the same identity is the same device
+  ctl::StartTunnelRequest start;
+  start.by_jwt = refreshed;
+  start.instance_id = running.instance_id;
+  start.app_version = running.app_version;
+  start.network_space_json = running.network_space_json;
+  UR_EXPECT_TRUE(provide::SameIdentity(ctl::IdentityOf(running), ctl::IdentityOf(start)));
+  UR_EXPECT_TRUE(provide::DifferingIdentityFields(ctl::IdentityOf(running), ctl::IdentityOf(start))
+                     .empty());
+  start.instance_id = "another instance";
+  start.network_space_json = R"({"values":{"x":1}})";
+  UR_EXPECT_TRUE(provide::DifferingIdentityFields(ctl::IdentityOf(running),
+                                                  ctl::IdentityOf(start)) ==
+                 "network_space_json, instance_id");
+}
+
+// stop_tunnel says when it is the owning user's Disconnect. Absent is every
+// other stop, which is what a GUI predating the field sends.
+UR_TEST(controlStopTunnelCarriesTheDisconnect) {
+  ctl::StopTunnelRequest disconnect;
+  disconnect.disconnect = true;
+  const auto back = ctl::DecodeFrame(ctl::EncodeFrame(ctl::MakeRequest(
+      ctl::Verb::StopTunnel, 15, nlohmann::json(disconnect))))->get<ctl::StopTunnelRequest>();
+  UR_EXPECT_TRUE(back.disconnect);
+  const nlohmann::json plain = nlohmann::json(ctl::StopTunnelRequest());
+  UR_EXPECT_TRUE(plain.is_object());
+  UR_EXPECT_FALSE(plain.contains("disconnect"));
+  const auto older = ctl::DecodeFrame(ctl::EncodeFrame(ctl::MakeRequest(
+      ctl::Verb::StopTunnel, 16, nlohmann::json::object())))->get<ctl::StopTunnelRequest>();
+  UR_EXPECT_FALSE(older.disconnect);
 }
 
 // ---- provider_stats: the provider-only device's statistics -----------------

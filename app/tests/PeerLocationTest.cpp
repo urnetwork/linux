@@ -10,6 +10,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "PeerLocation.hpp"
 #include "TestHarness.hpp"
@@ -134,6 +135,56 @@ UR_TEST(networkPagePeerRowsConnectThroughPeerConnectLocation) {
   UR_EXPECT_TRUE(
       body.find("host_.ConnectFromRow(PeerConnectLocation<urnet::ConnectLocation>(copy));") !=
       std::string::npos);
+}
+
+// The provider-only device's peers reach the GUI with no PeerViewController,
+// so the GUI filters them as the controller filters a session's: the ones that
+// provide, in the device's order.
+UR_TEST(connectablePeersKeepTheProvidingOnesInOrder) {
+  using List = std::vector<Peer>;
+  Peer office = MakePeer("Office laptop", "Ubuntu 24.04");
+  office.ClientId = std::string("a");
+  Peer phone = MakePeer("Phone", "Android 16");
+  phone.ClientId = std::string("b");
+  phone.ProvideEnabled = false;
+  Peer desk = MakePeer("Desk", "Fedora 43");
+  desk.ClientId = std::string("c");
+  const List connectable = urnw::ConnectablePeers(List{office, phone, desk});
+  UR_EXPECT_EQ(size_t(2), connectable.size());
+  if (connectable.size() != 2) return;
+  UR_EXPECT_TRUE(connectable[0].ClientId == std::optional<std::string>("a"));
+  UR_EXPECT_TRUE(connectable[1].ClientId == std::optional<std::string>("c"));
+  UR_EXPECT_TRUE(urnw::ConnectablePeers(List{phone}).empty());
+  UR_EXPECT_TRUE(urnw::ConnectablePeers(List{}).empty());
+}
+
+// Only a change in what a row shows or connects with is pushed again.
+UR_TEST(samePeerRowsComparesEveryFieldARowUses) {
+  using List = std::vector<Peer>;
+  const Peer office = MakePeer("Office laptop", "Ubuntu 24.04");
+  UR_EXPECT_TRUE(urnw::SamePeerRows(List{office}, List{office}));
+  UR_EXPECT_TRUE(urnw::SamePeerRows(List{}, List{}));
+  UR_EXPECT_FALSE(urnw::SamePeerRows(List{office}, List{}));
+  Peer renamed = office;
+  renamed.DeviceName = "Home laptop";
+  UR_EXPECT_FALSE(urnw::SamePeerRows(List{office}, List{renamed}));
+  Peer respecced = office;
+  respecced.DeviceSpec = "Ubuntu 26.04";
+  UR_EXPECT_FALSE(urnw::SamePeerRows(List{office}, List{respecced}));
+  Peer stopped = office;
+  stopped.ProvideEnabled = false;
+  UR_EXPECT_FALSE(urnw::SamePeerRows(List{office}, List{stopped}));
+  Peer other = office;
+  other.ClientId = std::string("another");
+  UR_EXPECT_FALSE(urnw::SamePeerRows(List{office}, List{other}));
+  // what a row never shows does not count
+  Peer principal = office;
+  principal.Principal = "someone";
+  UR_EXPECT_TRUE(urnw::SamePeerRows(List{office}, List{principal}));
+  // the order is the rows' order
+  Peer second = MakePeer("Desk", "Fedora 43");
+  second.ClientId = std::string("c");
+  UR_EXPECT_FALSE(urnw::SamePeerRows(List{office, second}, List{second, office}));
 }
 
 // a hand-built client id location is how the rows lost the flag

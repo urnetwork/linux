@@ -410,7 +410,10 @@ class ControlClient {
                                   const std::string& rpcSessionId,
                                   int expectedRpcPort);
 
-  bool StopTunnel(std::string* error = nullptr);
+  // stop_tunnel. `disconnect` only for the user's Disconnect: the daemon may
+  // then keep the session's device providing (ctl::StopTunnelRequest). Every
+  // other stop closes it, and retires a provider-only device as well.
+  bool StopTunnel(std::string* error = nullptr, bool disconnect = false);
   bool SetProvide(const std::string& mode, std::string* error = nullptr);
   // Runs the provider-only device while there is no tunnel session
   // (ControlProtocol.hpp start_provider). ctl::ValidateStartProviderRequest
@@ -531,7 +534,7 @@ class ControlClient {
   // StartTunnelEx can tear the daemon's session down without re-entering
   // mutex_ (std::mutex is not recursive: calling StopTunnel() there would
   // deadlock the GUI on its own control client).
-  bool StopTunnelLocked(std::string* error);
+  bool StopTunnelLocked(std::string* error, bool disconnect = false);
   // Records the authorization verdict carried by one completed reply and bumps
   // replySerial_. Called for EVERY verb reply, including the ones that carry no
   // verdict, because "this reply said nothing about authorization" has to

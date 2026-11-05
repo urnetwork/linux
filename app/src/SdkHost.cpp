@@ -32,8 +32,10 @@
 #include "Config.hpp"
 #include "CryptoInvoiceHost.hpp"
 #include "CryptoInvoiceStorage.hpp"
+#include "LocationFeed.hpp"
 #include "LocationSelection.hpp"
 #include "NetworkSpaceConfig.hpp"
+#include "PeerLocation.hpp"
 // The Secret Service backend for the remembered rpc session. GUI-ONLY: this is
 // the one translation unit that links libsecret, and urnetworkd (which builds
 // in a container that has no libsecret at all) never sees this header.
@@ -373,6 +375,11 @@ SdkHost::SdkHost()
   // read on the worker after the last command. A reading from before a
   // sign-out describes the account that left, so the default one goes instead.
   commands_.SetSettledHandler([this] {
+    // a search typed while a command held the device (FilterLocations)
+    if (locationsFilterOwed_.load()) {
+      std::scoped_lock lock(mutex_);
+      RunWantedLocationFilterLocked();
+    }
     if (!onCommandsSettled_) return;
     onCommandsSettled_(lastCommandReadingEpoch_ == signInEpoch_.load() ? lastCommandReading_
                                                                        : ConnectReading{});
@@ -3673,7 +3680,23 @@ void SdkHost::SubscribeDrawer() {
       [this](std::optional<urnet::FilteredLocations>, std::string) {
         EmitDrawerEvent(DrawerEvent::Locations);
       }));
-  locationsVc_->start();
+  // The query outlives a controller: a box that already holds a search (the
+  // chooser's, the Network page's) is what this one runs. start() is a
+  // goroutine running filterLocations(""), which could land after and replace
+  // that search, so a held query runs instead.
+  {
+    std::string wanted;
+    {
+      std::scoped_lock queryLock(locationsQueryMutex_);
+      locationsQueryDirty_ = false;
+      wanted = wantedLocationQuery_;
+    }
+    if (wanted.empty()) {
+      locationsVc_->start();
+    } else {
+      locationsVc_->filterLocations(wanted);
+    }
+  }
   peerVc_ = device_->openPeerViewController();
   presentationSubs_.push_back(peerVc_->addPeersListener(
       [this](std::optional<urnet::NetworkPeerList>) { EmitDrawerEvent(DrawerEvent::Peers); }));
@@ -4649,8 +4672,43 @@ std::optional<urnet::FilteredLocations> SdkHost::GetFilteredLocations() {
 }
 
 void SdkHost::FilterLocations(const std::string& query) {
+  // The filter is one, shared by the chooser and the Network page, and it
+  // outlives either: each says what its own box holds when it shows, and the
+  // controller runs it only when it moved or its last answer failed.
+  {
+    std::scoped_lock queryLock(locationsQueryMutex_);
+    std::string trimmed = TrimLocationQuery(query);
+    if (trimmed != wantedLocationQuery_) {
+      wantedLocationQuery_ = std::move(trimmed);
+      locationsQueryDirty_ = true;
+    }
+  }
+  // Called per keystroke on the main loop, and a device command holds mutex_
+  // through its whole rpc (a connect): the query waits for the queue to
+  // settle instead of freezing the window behind it (OnCommandsSettled).
+  // Owed before the busy check: a queue that settles between the two still
+  // finds it, and a run below clears it.
+  locationsFilterOwed_.store(true);
+  if (OnMainLoop() && CommandsBusy()) return;
   std::scoped_lock lock(mutex_);
-  if (locationsVc_) locationsVc_->filterLocations(query);
+  RunWantedLocationFilterLocked();
+}
+
+void SdkHost::RunWantedLocationFilterLocked() {
+  locationsFilterOwed_.store(false);
+  if (!locationsVc_) return;  // the next controller runs it (SubscribeDrawer)
+  bool changed = false;
+  std::string query;
+  {
+    std::scoped_lock queryLock(locationsQueryMutex_);
+    changed = locationsQueryDirty_;
+    locationsQueryDirty_ = false;
+    query = wantedLocationQuery_;
+  }
+  // The SDK schedules no retry after a failed load, so every arming is one.
+  if (LocationFilterRunNeeded(changed, locationsVc_->getFilteredLocationState())) {
+    locationsVc_->filterLocations(query);
+  }
 }
 
 std::string SdkHost::GetFilteredLocationState() {
@@ -4663,6 +4721,9 @@ std::string SdkHost::GetFilteredLocationState() {
 std::optional<urnet::NetworkPeerList> SdkHost::ConnectedProvidePeers() {
   return ReadOnMain<std::optional<urnet::NetworkPeerList>>("ConnectedProvidePeers", [&]() -> std::optional<urnet::NetworkPeerList> {
     if (peerVc_) return peerVc_->getPeers();
+    // No session: the provider-only device's, as the daemon's status last
+    // said (NoteDaemonProviderLocked), already filtered as getPeers filters.
+    if (!device_ && daemonProviderPeers_) return daemonProviderPeers_;
     return std::nullopt;
   });
 }
@@ -4673,6 +4734,12 @@ int64_t SdkHost::ConnectedPeerCount() {
     // other devices online" count (connecting still requires provide, which is
     // what ConnectedProvidePeers captures)
     if (peerVc_) return static_cast<int64_t>(peerVc_->getConnectedCount());
+    // No session: every device the provider-only device is connected to, from
+    // the same status reading as its peers.
+    if (!device_ && daemonProviderPeers_) {
+      const int64_t count = daemonProviderClientCount_.load();
+      return count < 0 ? 0 : count;
+    }
     return 0;
   });
 }
@@ -5545,7 +5612,13 @@ void SdkHost::DisconnectNow() {
     // machine's network. The disconnect below then finds the daemon's device
     // gone, and the DeviceRemote applies it locally (selection and connect
     // state).
-    control_.StopTunnel();
+    //
+    // The user's Disconnect, and only it, says so: the daemon may keep its
+    // DeviceLocal providing as the provider-only device (one device across
+    // connect and disconnect, ProvideLifecycle.hpp), so its transports, peers
+    // and contracts carry over. The provider reconcile after it adopts that
+    // device (ctl::SameProviderDevice).
+    control_.StopTunnel(nullptr, /*disconnect=*/true);
     if (connectVc_) {
       connectVc_->disconnect();
     } else if (device_) {
@@ -5874,11 +5947,36 @@ void SdkHost::NoteDaemonProviderLocked(const ctl::StatusReply& status) {
   const int64_t tier = running ? status.provider_mode : 0;
   const bool networkKey = running && status.provider_network_key;
   const int64_t clientCount = running ? status.provider_client_count : -1;
+  // The peers it discovers with no session, which a session's
+  // PeerViewController would list: filtered as that controller filters them
+  // (connected and providing). A daemon from before the field sends none, and
+  // an unreadable list reads as none: the peer lists then stay unavailable, as
+  // they were, and the count stands alone.
+  std::optional<urnet::NetworkPeerList> peers;
+  if (running && !status.provider_network_peers_json.empty()) {
+    try {
+      peers = ConnectablePeers(nlohmann::json::parse(status.provider_network_peers_json)
+                                   .get<urnet::NetworkPeerList>());
+    } catch (const std::exception& e) {
+      static std::atomic<bool> logged{false};
+      if (!logged.exchange(true)) {
+        g_warning("provide: the daemon's provider network peers could not be read: %s",
+                  e.what());
+      }
+    }
+  }
+  const bool peersChanged =
+      peers.has_value() != daemonProviderPeers_.has_value() ||
+      (peers && !SamePeerRows(*peers, *daemonProviderPeers_));
+  daemonProviderPeers_ = std::move(peers);
   bool changed = daemonProviderRunning_.exchange(running) != running;
   changed = daemonProviderMode_.exchange(tier) != tier || changed;
   changed = daemonProviderNetworkKey_.exchange(networkKey) != networkKey || changed;
-  changed = daemonProviderClientCount_.exchange(clientCount) != clientCount || changed;
+  const bool countChanged = daemonProviderClientCount_.exchange(clientCount) != clientCount;
+  changed = countChanged || changed;
   if (changed) PublishStats();
+  // the peers line and lists read both (ConnectedProvidePeers, ConnectedPeerCount)
+  if (peersChanged || countChanged) EmitDrawerEvent(DrawerEvent::Peers);
 }
 
 // DeviceRemote teardown without touching the stored auth or the daemon:
@@ -6018,6 +6116,7 @@ void SdkHost::Shutdown() {
   daemonProviderMode_.store(0);
   daemonProviderNetworkKey_.store(false);
   daemonProviderClientCount_.store(-1);
+  daemonProviderPeers_.reset();
   DropDaemonProviderStatsLocked();
 }
 
@@ -6263,6 +6362,7 @@ void SdkHost::LogoutNow() {
   daemonProviderMode_.store(0);
   daemonProviderNetworkKey_.store(false);
   daemonProviderClientCount_.store(-1);
+  daemonProviderPeers_.reset();
   DropDaemonProviderStatsLocked();
   providerStateKnown_ = false;
   providerBackoff_.NoteSuccess();

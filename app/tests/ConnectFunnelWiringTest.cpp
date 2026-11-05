@@ -171,7 +171,8 @@ UR_TEST(ConnectFunnelWiring_ARowClickStartsThroughTheWindow) {
 UR_TEST(ConnectFunnelWiring_DisconnectStopsTheTunnelFirst) {
   const std::string host = ReadFunnelSource("SdkHost.cpp");
   const std::string disconnect = FunnelBody(host, "void SdkHost::DisconnectNow() {");
-  UR_EXPECT_TRUE(FunnelInOrder(disconnect, {"control_.StopTunnel();", "connectVc_->disconnect();",
+  UR_EXPECT_TRUE(FunnelInOrder(disconnect, {"control_.StopTunnel(nullptr, /*disconnect=*/true);",
+                                            "connectVc_->disconnect();",
                                             "controller.disconnect();",
                                             "PublishConnectReading();"}));
   const std::string shutdown = FunnelBody(host, "void SdkHost::Shutdown() {");
