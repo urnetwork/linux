@@ -10933,6 +10933,91 @@ msgctxt "site_unexpected_error"
 msgid "Something unexpected happened."
 msgstr "Произошла непредвиденная ошибка."
 
+#. Create proxy: the option that gives each proxy its own exit IP
+msgctxt "site_unique_exit"
+msgid "Unique exit IP"
+msgstr "Уникальный IP выхода"
+
+#. Create proxy: how many unique exit IP proxies to create at once
+msgctxt "site_unique_exit_count"
+msgid "Number of proxies"
+msgstr "Количество прокси"
+
+#. Create proxy: the most unique exit IP proxies created at once (the Pro per-minute create limit)
+msgctxt "site_unique_exit_count_note"
+msgid "Up to {} at a time."
+msgstr "До {} за раз."
+
+#. Create proxy: a batch of unique exit IP proxies was created; count is how many
+msgctxt "site_unique_exit_created"
+msgid "Proxies with unique exit IPs ready: {}"
+msgstr "Готово прокси с уникальными IP выхода: {}"
+
+#. Create proxy: the server found no unused exit IP for this network in the chosen location
+msgctxt "site_unique_exit_no_supply"
+msgid "No unique exit IP is available in this location right now. Try another location."
+msgstr "Сейчас в этом месте нет свободного уникального IP выхода. Попробуйте другое место."
+
+#. Proxies list: no unused exit IP is available for this proxy right now
+msgctxt "site_unique_exit_no_supply_state"
+msgid "No unique exit available"
+msgstr "Нет свободного уникального выхода"
+
+#. Create proxy: a batch stopped early; how many of the requested proxies were created
+msgctxt "site_unique_exit_partial"
+msgid "Created {0} of {1}."
+msgstr "Создано {0} из {1}."
+
+#. Create proxy: why choosing a unique exit IP opens the Pro upgrade
+msgctxt "site_unique_exit_pro_note"
+msgid "Unique exit IPs are part of UR Pro."
+msgstr "Уникальные IP выхода входят в UR Pro."
+
+#. Proxies list: a unique exit proxy waits for a replacement because too many were replaced this hour (state_reason cap)
+msgctxt "site_unique_exit_reason_cap"
+msgid "Too many replacements this hour; it tries again later."
+msgstr "Слишком много замен за этот час; попытка повторится позже."
+
+#. Proxies list: a manual-mode unique exit proxy lost its exit and waits for the customer to rotate it (state_reason manual)
+msgctxt "site_unique_exit_reason_manual"
+msgid "Exit lost. Rotate exit to choose a new one."
+msgstr "Выход потерян. Нажмите «Сменить выход», чтобы выбрать новый."
+
+#. Proxies list: the proxy's exit failed and a new unique exit is being assigned
+msgctxt "site_unique_exit_replacing"
+msgid "Replacing exit…"
+msgstr "Замена выхода…"
+
+#. Proxies list: give this unique exit IP proxy a new unique exit
+msgctxt "site_unique_exit_rotate"
+msgid "Rotate exit"
+msgstr "Сменить выход"
+
+#. Proxies list: a rotate exit request failed
+msgctxt "site_unique_exit_rotate_error"
+msgid "Couldn't rotate the exit. Try again in a minute."
+msgstr "Не удалось сменить выход. Попробуйте снова через минуту."
+
+#. Proxies list: a rotate exit request was refused by the per-proxy rotate limit (once a minute, 60 a day)
+msgctxt "site_unique_exit_rotate_limited"
+msgid "A proxy's exit can be rotated once a minute and up to 60 times a day. Try again later."
+msgstr "Выход прокси можно менять раз в минуту и до 60 раз в день. Попробуйте позже."
+
+#. Proxies list: a rotate exit request found no other unused exit IP in the location; the proxy keeps its current exit
+msgctxt "site_unique_exit_rotate_no_supply"
+msgid "No other unique exit IP is available in this location right now. The proxy keeps its current exit."
+msgstr "Сейчас в этом месте нет другого свободного уникального IP выхода. Прокси сохраняет текущий выход."
+
+#. Proxies list: when a unique exit IP proxy got its current exit; time is a formatted date and time
+msgctxt "site_unique_exit_since"
+msgid "since {}"
+msgstr "с {}"
+
+#. Create proxy: what the unique exit IP option does
+msgctxt "site_unique_exit_sub"
+msgid "Each proxy gets its own exit IP that your other proxies don't use."
+msgstr "Каждый прокси получает свой IP выхода, который не используют другие ваши прокси."
+
 #. USDC panel: the term the welcome-offer payment buys.
 msgctxt "site_usdc_offer_term"
 msgid "{1} months plus {0} days of Pro"
