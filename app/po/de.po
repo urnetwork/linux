@@ -10688,8 +10688,8 @@ msgstr "Regelmäßige Produktneuigkeiten"
 
 #. Account panel: SOCKS credential note
 msgctxt "site_socks_cred_note"
-msgid "Username is the token in the URL; password is empty."
-msgstr "Der Benutzername ist das Token in der URL; das Passwort ist leer."
+msgid "Username is the token in the URL; any password works."
+msgstr "Der Benutzername ist das Token in der URL; jedes Passwort funktioniert."
 
 #. Upgrade sheet: waiting state hint — a solana: deep link with no wallet installed silently does nothing
 msgctxt "site_solana_no_wallet_hint"
