@@ -210,7 +210,10 @@ void NetworkPage::ReconcileFeeds() {
         // Device path: SdkHost opens the locations/peer view controllers with
         // the presentation (SubscribeDrawer); seed from the current snapshot.
         // The seed is EMPTY by construction right after arming — it settles
-        // the "loading" state, it does not fetch.
+        // the "loading" state, it does not fetch. The location chooser shares
+        // the SDK filter, so the box here says what it holds; the arming also
+        // retries a failed load (SdkHost::FilterLocations).
+        host_.FilterLocations(query_);
         locations_ = host_.GetFilteredLocations();
         locationsState_ = host_.GetFilteredLocationState();
         peers_ = host_.ConnectedProvidePeers();
@@ -298,6 +301,8 @@ NetworkPage::FeedState NetworkPage::CurrentFeedState() const {
 void NetworkPage::OnLocationsEvent() {
   if (samplePinned_) return;  // real pushes must not blank the pinned sample
   if (!host_.hasDevice()) return;  // the api fallback publishes for itself
+  // re-read on selection (ReconcileFeeds) when it is not on screen
+  if (!navSelected_) return;
   // store BOTH — the state is the only separator of the three empty screens
   locations_ = host_.GetFilteredLocations();
   locationsState_ = host_.GetFilteredLocationState();

@@ -32,6 +32,7 @@
 #include "Config.hpp"
 #include "CryptoInvoiceHost.hpp"
 #include "CryptoInvoiceStorage.hpp"
+#include "LocationFeed.hpp"
 #include "LocationSelection.hpp"
 #include "NetworkSpaceConfig.hpp"
 #include "PeerLocation.hpp"
@@ -374,6 +375,11 @@ SdkHost::SdkHost()
   // read on the worker after the last command. A reading from before a
   // sign-out describes the account that left, so the default one goes instead.
   commands_.SetSettledHandler([this] {
+    // a search typed while a command held the device (FilterLocations)
+    if (locationsFilterOwed_.load()) {
+      std::scoped_lock lock(mutex_);
+      RunWantedLocationFilterLocked();
+    }
     if (!onCommandsSettled_) return;
     onCommandsSettled_(lastCommandReadingEpoch_ == signInEpoch_.load() ? lastCommandReading_
                                                                        : ConnectReading{});
@@ -3674,7 +3680,23 @@ void SdkHost::SubscribeDrawer() {
       [this](std::optional<urnet::FilteredLocations>, std::string) {
         EmitDrawerEvent(DrawerEvent::Locations);
       }));
-  locationsVc_->start();
+  // The query outlives a controller: a box that already holds a search (the
+  // chooser's, the Network page's) is what this one runs. start() is a
+  // goroutine running filterLocations(""), which could land after and replace
+  // that search, so a held query runs instead.
+  {
+    std::string wanted;
+    {
+      std::scoped_lock queryLock(locationsQueryMutex_);
+      locationsQueryDirty_ = false;
+      wanted = wantedLocationQuery_;
+    }
+    if (wanted.empty()) {
+      locationsVc_->start();
+    } else {
+      locationsVc_->filterLocations(wanted);
+    }
+  }
   peerVc_ = device_->openPeerViewController();
   presentationSubs_.push_back(peerVc_->addPeersListener(
       [this](std::optional<urnet::NetworkPeerList>) { EmitDrawerEvent(DrawerEvent::Peers); }));
@@ -4650,8 +4672,43 @@ std::optional<urnet::FilteredLocations> SdkHost::GetFilteredLocations() {
 }
 
 void SdkHost::FilterLocations(const std::string& query) {
+  // The filter is one, shared by the chooser and the Network page, and it
+  // outlives either: each says what its own box holds when it shows, and the
+  // controller runs it only when it moved or its last answer failed.
+  {
+    std::scoped_lock queryLock(locationsQueryMutex_);
+    std::string trimmed = TrimLocationQuery(query);
+    if (trimmed != wantedLocationQuery_) {
+      wantedLocationQuery_ = std::move(trimmed);
+      locationsQueryDirty_ = true;
+    }
+  }
+  // Called per keystroke on the main loop, and a device command holds mutex_
+  // through its whole rpc (a connect): the query waits for the queue to
+  // settle instead of freezing the window behind it (OnCommandsSettled).
+  // Owed before the busy check: a queue that settles between the two still
+  // finds it, and a run below clears it.
+  locationsFilterOwed_.store(true);
+  if (OnMainLoop() && CommandsBusy()) return;
   std::scoped_lock lock(mutex_);
-  if (locationsVc_) locationsVc_->filterLocations(query);
+  RunWantedLocationFilterLocked();
+}
+
+void SdkHost::RunWantedLocationFilterLocked() {
+  locationsFilterOwed_.store(false);
+  if (!locationsVc_) return;  // the next controller runs it (SubscribeDrawer)
+  bool changed = false;
+  std::string query;
+  {
+    std::scoped_lock queryLock(locationsQueryMutex_);
+    changed = locationsQueryDirty_;
+    locationsQueryDirty_ = false;
+    query = wantedLocationQuery_;
+  }
+  // The SDK schedules no retry after a failed load, so every arming is one.
+  if (LocationFilterRunNeeded(changed, locationsVc_->getFilteredLocationState())) {
+    locationsVc_->filterLocations(query);
+  }
 }
 
 std::string SdkHost::GetFilteredLocationState() {
