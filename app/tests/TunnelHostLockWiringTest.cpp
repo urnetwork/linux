@@ -56,8 +56,8 @@ std::string EnclosingMember(const std::string& source, size_t at) {
 }  // namespace
 
 // A blocking lock of opMutex_ only where nothing can hold it on another thread
-// (AdoptArmedFloor runs before the loop, Stop after joining the worker) or in
-// the bring-up itself.
+// (AdoptArmedFloor runs before the loop, Stop and Disconnect after joining the
+// worker) or in the bring-up itself.
 UR_TEST(TunnelHostLock_OnlyTheBringUpAndTheJoinedStopWait) {
   const std::string host = ReadLockSource("daemon/TunnelHost.cpp");
   UR_EXPECT_TRUE(!host.empty());
@@ -66,9 +66,10 @@ UR_TEST(TunnelHostLock_OnlyTheBringUpAndTheJoinedStopWait) {
        at = host.find("lock(opMutex_)", at + 1)) {
     waiting.push_back(EnclosingMember(host, at));
   }
-  UR_EXPECT_EQ(3u, waiting.size());
+  UR_EXPECT_EQ(4u, waiting.size());
   for (const std::string& member : waiting) {
-    if (member != "AdoptArmedFloor" && member != "RunStart" && member != "Stop") {
+    if (member != "AdoptArmedFloor" && member != "RunStart" && member != "Stop" &&
+        member != "Disconnect") {
       UR_FAIL("opMutex_ is waited for in TunnelHost::" + member);
     }
   }
