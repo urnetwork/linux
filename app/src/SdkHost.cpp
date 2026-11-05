@@ -4665,10 +4665,10 @@ void SdkHost::FilterLocations(const std::string& query) {
   // Called per keystroke on the main loop, and a device command holds mutex_
   // through its whole rpc (a connect): the query waits for the queue to
   // settle instead of freezing the window behind it (OnCommandsSettled).
-  if (OnMainLoop() && CommandsBusy()) {
-    locationsFilterOwed_.store(true);
-    return;
-  }
+  // Owed before the busy check: a queue that settles between the two still
+  // finds it, and a run below clears it.
+  locationsFilterOwed_.store(true);
+  if (OnMainLoop() && CommandsBusy()) return;
   std::scoped_lock lock(mutex_);
   RunWantedLocationFilterLocked();
 }

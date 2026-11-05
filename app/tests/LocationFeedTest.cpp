@@ -123,11 +123,14 @@ UR_TEST(LocationFeedWiring_TheNetworkPageReappliesItsQueryAndHearsTheFeed) {
 UR_TEST(LocationFeedWiring_TheHostHoldsTheQueryAndRetries) {
   const std::string host = ReadFeedSource("SdkHost.cpp");
   const std::string filter = FeedBody(host, "void SdkHost::FilterLocations(");
-  UR_EXPECT_TRUE(FeedHas(filter, "TrimLocationQuery(query)"));
-  UR_EXPECT_TRUE(FeedBefore(filter, "if (OnMainLoop() && CommandsBusy()) {",
-                            "std::scoped_lock lock(mutex_);"));
-  UR_EXPECT_TRUE(FeedHas(filter, "locationsFilterOwed_.store(true);"));
   const std::string run = FeedBody(host, "void SdkHost::RunWantedLocationFilterLocked() {");
+  UR_EXPECT_TRUE(FeedHas(filter, "TrimLocationQuery(query)"));
+  // owed before the busy check, or a queue settling in between loses the run
+  UR_EXPECT_TRUE(FeedBefore(filter, "locationsFilterOwed_.store(true);",
+                            "if (OnMainLoop() && CommandsBusy()) return;"));
+  UR_EXPECT_TRUE(FeedBefore(filter, "if (OnMainLoop() && CommandsBusy()) return;",
+                            "std::scoped_lock lock(mutex_);"));
+  UR_EXPECT_TRUE(FeedHas(run, "locationsFilterOwed_.store(false);"));
   UR_EXPECT_TRUE(FeedHas(run, "LocationFilterRunNeeded(changed, "
                               "locationsVc_->getFilteredLocationState())"));
   const std::string subscribe = FeedBody(host, "void SdkHost::SubscribeDrawer() {");
