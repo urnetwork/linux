@@ -61,7 +61,10 @@ ip -4 address replace 10.0.0.89/24 dev urnet0 noprefixroute
 ip -4 route flush table main dev urnet0
 ip link set urnet0 down; ip link set urnet0 up
 ip route replace 0.0.0.0/1 dev urnet0 table 51821
-check "replace in place, after a link bounce" urnet0 10.0.0.5 mark $MARK
+# Information, not a pass condition: a kernel that honours the new flag on
+# replace would be fine too, and Configure flushes first either way.
+info=$(ip -4 route get 10.0.0.5 mark $MARK 2>&1 | head -n 1)
+echo "info: replace in place, after a link bounce: $info"
 
 # 3. the fix: flush, then add with noprefixroute (Tunnel::Configure's steps).
 ip link set urnet0 down

@@ -898,6 +898,14 @@ inline std::string CapturedV4RefusalReason(bool marked, const std::string& sourc
 // delivery either way; and 10/8 is outside the capture set, so the rest of the
 // /24 belongs to the host's own routes like every other RFC1918 destination.
 //
+// Two things it does not change, both measured in a network namespace: the
+// kernel still keeps the subnet's BROADCAST route in the local table (marked
+// traffic to 10.x.y.255 would still enter the tun; nothing the daemon sends
+// goes there), and a strict rp_filter now drops a packet the SDK writes into
+// the tun with a source inside the tun's own /24 other than the tun's address
+// (nothing in connect does; internet sources and the DNS mask are captured,
+// so their reverse path is the tun as before).
+//
 // `ip address replace` on an address that already exists keeps its old flags
 // (measured: the prefix route came back on the next link up), so Configure
 // flushes a stale address first and this always creates the address afresh.

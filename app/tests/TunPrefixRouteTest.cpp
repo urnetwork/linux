@@ -146,6 +146,9 @@ UR_TEST(TunPrefixRoute_ConfigureAddsTheAddressWithoutAPrefixRoute) {
                   "DropMainRoutesThroughTun(ip, \"-6\");", "InstallPolicyRules(err)"}));
   // No other address step, so nothing adds the tun's address with a prefix route.
   UR_EXPECT_TRUE(tunnel.find("\"address\", \"replace\"") == std::string::npos);
+  UR_EXPECT_TRUE(tunnel.find("\"address\", \"add\"") == std::string::npos);
+  UR_EXPECT_TRUE(tunnel.find("\"addr\", \"add\"") == std::string::npos);
+  UR_EXPECT_TRUE(tunnel.find("\"addr\", \"replace\"") == std::string::npos);
 }
 
 // The re-check names the routes that explain a nonzero tun counter.
