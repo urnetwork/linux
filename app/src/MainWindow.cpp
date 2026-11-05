@@ -431,6 +431,11 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       if (windowVisible_ && networkPage_ && event == DrawerEvent::Peers) {
         networkPage_->OnPeersEvent();
       }
+      // ...and its provider list, which a session's LocationsViewController
+      // feeds (the api fallback publishes for itself with no session)
+      if (windowVisible_ && networkPage_ && event == DrawerEvent::Locations) {
+        networkPage_->OnLocationsEvent();
+      }
       // the location chooser's pinned peers and its sections, while it is open
       if (windowVisible_ && (event == DrawerEvent::Peers || event == DrawerEvent::Locations) &&
           locationsSheet_ && locationsSheet_->is_visible()) {

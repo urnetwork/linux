@@ -4,6 +4,7 @@
 #include "DisplayText.hpp"
 #include "I18n.hpp"
 #include "LocationRowName.hpp"
+#include "LocationFeed.hpp"
 #include "LocationSelection.hpp"
 #include "PaneKit.hpp"
 #include "Ui.hpp"
@@ -140,6 +141,11 @@ LocationsSheet::LocationsSheet(Gtk::Window& parent, SdkHost& host) : host_(host)
 }
 
 void LocationsSheet::Open() {
+  // The SDK filter is shared with the Network destination and outlives the
+  // sheet: a search left in it there would fill this sheet with that search's
+  // buckets under this box. Reapplying the box's query also opens the feeds
+  // and retries a failed load.
+  host_.FilterLocations(currentQuery_);
   Refresh();
   present();
 }
@@ -151,6 +157,8 @@ void LocationsSheet::OnSearchChanged() {
   // The SDK debounces stale responses; it re-emits FilteredLocations (-> a
   // Locations drawer event -> Refresh) with the new results.
   host_.FilterLocations(currentQuery_);
+  // The first push can wait behind a connect; the sections follow the box now.
+  Refresh();
 }
 
 void LocationsSheet::AppendLocationSection(
@@ -241,7 +249,7 @@ void LocationsSheet::RebuildSections() {
   RemoveAllChildren(sectionsBox_);
 
   const auto selected = host_.SelectedLocation();
-  const bool searching = !currentQuery_.empty();
+  const bool searching = !TrimLocationQuery(currentQuery_).empty();
 
   // 1. network peers (pinned first; self-hides when there are none)
   const auto peers = host_.ConnectedProvidePeers();
@@ -276,21 +284,39 @@ void LocationsSheet::RebuildSections() {
     AppendLocationSection(T_("devices", "Devices"), filtered->Devices, selected);
   }
 
-  // no-results text: only while searching and with nothing at all to show
-  // (peers are included in the check, unlike the android original)
+  // The feed's state, when the sections do not answer the query. BestMatches
+  // only renders while searching, so it only counts then.
   auto nonEmpty = [](const std::optional<urnet::ConnectLocationList>& list) {
     return list && !list->empty();
   };
   const bool anyLocation =
-      filtered && (nonEmpty(filtered->BestMatches) || nonEmpty(filtered->Countries) ||
-                   nonEmpty(filtered->Regions) || nonEmpty(filtered->Cities) ||
-                   nonEmpty(filtered->Devices));
-  if (searching && !anyLocation && peerCount == 0) {
-    statusLabel_.set_text(T_("no_providers_found", "We could not find any providers."));
-    statusLabel_.set_visible(true);
-  } else {
-    statusLabel_.set_visible(false);
+      filtered && ((searching && nonEmpty(filtered->BestMatches)) ||
+                   nonEmpty(filtered->Countries) || nonEmpty(filtered->Regions) ||
+                   nonEmpty(filtered->Cities) || nonEmpty(filtered->Devices));
+  LocationFeedNotice notice = LocationFeedNotice::None;
+  if (host_.hasDevice()) {
+    notice = ChooserFeedNotice(host_.GetFilteredLocationState(), filtered.has_value(),
+                               anyLocation || 0 < peerCount, searching);
+  } else if (searching && !anyLocation && peerCount == 0) {
+    // no feed without a device: only the search can come up empty
+    notice = LocationFeedNotice::NoResults;
   }
+  std::string text;
+  switch (notice) {
+    case LocationFeedNotice::None:
+      break;
+    case LocationFeedNotice::Loading:
+      text = T_("loading", "Loading...");
+      break;
+    case LocationFeedNotice::Failed:
+      text = T_("adv_providers_load_failed", "Could not load the provider list.");
+      break;
+    case LocationFeedNotice::NoResults:
+      text = T_("no_providers_found", "We could not find any providers.");
+      break;
+  }
+  statusLabel_.set_text(text);
+  statusLabel_.set_visible(!text.empty());
 }
 
 }  // namespace urnw
