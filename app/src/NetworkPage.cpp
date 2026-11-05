@@ -215,9 +215,10 @@ void NetworkPage::ReconcileFeeds() {
         locationsState_ = host_.GetFilteredLocationState();
         peers_ = host_.ConnectedProvidePeers();
       } else {
-        // No device: peers genuinely need a session (nullopt), but the
-        // provider list is public — arm the api fallback. A LOCATIONS_ERROR
-        // cache is deliberately not "good": this arming IS the retry.
+        // No device: the peers are the provider-only device's while one runs
+        // and lists them (nullopt otherwise), and the provider list is public —
+        // arm the api fallback. A LOCATIONS_ERROR cache is deliberately not
+        // "good": this arming IS the retry.
         peers_ = host_.ConnectedProvidePeers();
         EnsureApiLocations();
       }
@@ -305,7 +306,10 @@ void NetworkPage::OnLocationsEvent() {
 
 void NetworkPage::OnPeersEvent() {
   if (samplePinned_) return;
-  if (!host_.hasDevice()) return;
+  // re-read on selection (ReconcileFeeds) when it is not on screen
+  if (!navSelected_) return;
+  // With no session the provider-only device's peers come through the same
+  // read (SdkHost::ConnectedProvidePeers), so the event is read either way.
   peers_ = host_.ConnectedProvidePeers();
   Render();
 }

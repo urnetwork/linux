@@ -426,6 +426,11 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       // ...and so do the earnings page's provider and extender statistics and
       // its read-only extender row (EXTENDER.md N7, O5), under the same gate
       if (windowVisible_ && earningsPage_) earningsPage_->OnHostEvent(event);
+      // the Network destination's peers group: a session's PeerViewController,
+      // or with no session the provider-only device's peers (the daemon's status)
+      if (windowVisible_ && networkPage_ && event == DrawerEvent::Peers) {
+        networkPage_->OnPeersEvent();
+      }
       // the location chooser's pinned peers and its sections, while it is open
       if (windowVisible_ && (event == DrawerEvent::Peers || event == DrawerEvent::Locations) &&
           locationsSheet_ && locationsSheet_->is_visible()) {

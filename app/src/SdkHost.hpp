@@ -1836,6 +1836,11 @@ class SdkHost {
   std::atomic<int64_t> daemonProviderMode_{0};
   std::atomic<bool> daemonProviderNetworkKey_{false};
   std::atomic<int64_t> daemonProviderClientCount_{-1};
+  // The provider-only device's connected, providing network peers as that
+  // status last listed them (ConnectablePeers); nullopt while it lists none, a
+  // daemon predating the list included. What ConnectedProvidePeers answers
+  // with no session. Guarded by mutex_.
+  std::optional<urnet::NetworkPeerList> daemonProviderPeers_;
   // The network country last applied to this process (FollowDaemonNetworkCountry).
   // Main loop only.
   std::string followedNetworkCountry_;

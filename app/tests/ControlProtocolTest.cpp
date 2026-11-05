@@ -668,6 +668,32 @@ UR_TEST(controlStatusCarriesTheProviderClientCount) {
   UR_EXPECT_EQ(-1, ctl::RedactStatusForForeignUid(status).provider_client_count);
 }
 
+// The provider-only device's connected peers ride with the count. A daemon
+// that predates the field sends none (""), which the GUI reads as no list, and
+// another user's view carries none.
+UR_TEST(controlStatusCarriesTheProviderNetworkPeers) {
+  ctl::StatusReply status;
+  status.provider_running = true;
+  status.provider_client_count = 1;
+  status.provider_network_peers_json =
+      R"([{"ClientId":"a","ProvideEnabled":true,"DeviceName":"Desk","DeviceSpec":"Fedora"}])";
+  const nlohmann::json wire = nlohmann::json(status);
+  UR_EXPECT_TRUE(wire.contains("provider_network_peers_json"));
+  const auto back = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeReply(13, true, wire)))->get<ctl::StatusReply>();
+  UR_EXPECT_TRUE(back.provider_network_peers_json == status.provider_network_peers_json);
+
+  UR_EXPECT_TRUE(ctl::StatusReply().provider_network_peers_json.empty());
+  nlohmann::json older = wire;
+  older.erase("provider_network_peers_json");
+  const auto fromOlder = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeReply(14, true, older)))->get<ctl::StatusReply>();
+  UR_EXPECT_EQ(1, fromOlder.provider_client_count);
+  UR_EXPECT_TRUE(fromOlder.provider_network_peers_json.empty());
+
+  UR_EXPECT_TRUE(ctl::RedactStatusForForeignUid(status).provider_network_peers_json.empty());
+}
+
 // The network country the daemon read (P052) reaches the GUI; a daemon that
 // predates it reports none, and another user's view names none.
 UR_TEST(controlStatusCarriesTheNetworkCountry) {
