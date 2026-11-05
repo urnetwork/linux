@@ -10941,6 +10941,16 @@ msgctxt "site_unique_exit_pro_note"
 msgid "Unique exit IPs are part of UR Pro."
 msgstr "Eindeutige Ausgangs-IPs sind Teil von UR Pro."
 
+#. Proxies list: a unique exit proxy waits for a replacement because too many were replaced this hour (state_reason cap)
+msgctxt "site_unique_exit_reason_cap"
+msgid "Too many replacements this hour; it tries again later."
+msgstr "Zu viele Ersetzungen in dieser Stunde; es wird später erneut versucht."
+
+#. Proxies list: a manual-mode unique exit proxy lost its exit and waits for the customer to rotate it (state_reason manual)
+msgctxt "site_unique_exit_reason_manual"
+msgid "Exit lost. Rotate exit to choose a new one."
+msgstr "Ausgang verloren. Wähle „Ausgang wechseln“, um einen neuen zu bekommen."
+
 #. Proxies list: the proxy's exit failed and a new unique exit is being assigned
 msgctxt "site_unique_exit_replacing"
 msgid "Replacing exit…"
@@ -10955,6 +10965,16 @@ msgstr "Ausgang wechseln"
 msgctxt "site_unique_exit_rotate_error"
 msgid "Couldn't rotate the exit. Try again in a minute."
 msgstr "Der Ausgang konnte nicht gewechselt werden. Versuche es in einer Minute erneut."
+
+#. Proxies list: a rotate exit request was refused by the per-proxy rotate limit (once a minute, 60 a day)
+msgctxt "site_unique_exit_rotate_limited"
+msgid "A proxy's exit can be rotated once a minute and up to 60 times a day. Try again later."
+msgstr "Der Ausgang eines Proxys kann einmal pro Minute und bis zu 60-mal am Tag gewechselt werden. Versuche es später erneut."
+
+#. Proxies list: a rotate exit request found no other unused exit IP in the location; the proxy keeps its current exit
+msgctxt "site_unique_exit_rotate_no_supply"
+msgid "No other unique exit IP is available in this location right now. The proxy keeps its current exit."
+msgstr "An diesem Standort ist gerade keine weitere eindeutige Ausgangs-IP verfügbar. Der Proxy behält seinen aktuellen Ausgang."
 
 #. Proxies list: when a unique exit IP proxy got its current exit; time is a formatted date and time
 msgctxt "site_unique_exit_since"
