@@ -112,7 +112,8 @@ UR_TEST(ConnectionHealthWiring_EveryGestureStartsANewAttempt) {
                                                        "std::scoped_lock lock(mutex_);"}));
   }
   UR_EXPECT_TRUE(HealthWiringInOrder(HealthWiringBody(host, "void SdkHost::DisconnectNow() {"),
-                                     {"NoteNewConnectAttempt();", "control_.StopTunnel();"}));
+                                     {"NoteNewConnectAttempt();",
+                                      "control_.StopTunnel(nullptr, /*disconnect=*/true);"}));
   UR_EXPECT_TRUE(HealthWiringHas(HealthWiringBody(host, "void SdkHost::NoteNewConnectAttempt() {"),
                                  "degradeHold_.NoteNewAttempt();"));
 }

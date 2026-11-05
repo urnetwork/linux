@@ -1736,7 +1736,16 @@ void ControlServer::DispatchAuthorized(uint64_t connId, int64_t id, ctl::Verb ve
         }
         // An explicit stop is the one path that also lifts the kill-switch
         // policy (windows semantics: only an unexpected drop keeps it armed).
-        tunnel_.Stop("user");
+        // The owning user's Disconnect may keep the session's device providing
+        // (TunnelHost::Disconnect). Another user's stop never does: the device
+        // would go on providing under an identity that is not theirs.
+        const bool disconnect =
+            !crossUid && request.is_object() && request.get<ctl::StopTunnelRequest>().disconnect;
+        if (disconnect) {
+          tunnel_.Disconnect();
+        } else {
+          tunnel_.Stop("user");
+        }
         if (tunnelOwner_ == conn) {
           tunnelOwner_ = nullptr;
           tunnel_.SetOwnerConnected(false);

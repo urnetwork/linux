@@ -190,7 +190,7 @@ UR_TEST(LogUploadWiring_TheUploadsThreadAndCallbackTouchOnlyTheFlight) {
 UR_TEST(LogUploadWiring_EveryOtherDeviceRetiresTheStandaloneOneFirst) {
   const std::string host = ReadUploadSource("daemon/TunnelHost.cpp");
   const std::string stop =
-      UploadFunctionBody(host, "void TunnelHost::StopInternalLocked(const std::string& reason)");
+      UploadFunctionBody(host, "void TunnelHost::StopInternalLocked(const std::string& reason, bool disconnect)");
   UR_EXPECT_TRUE(Ahead(stop, "RetireUploadDeviceLocked();", "ReleaseDeviceLocked(device_);"));
   const std::string provider = UploadFunctionBody(
       host, "TunnelHost::ProviderStartResult TunnelHost::StartProvider(");
@@ -215,7 +215,7 @@ UR_TEST(LogUploadWiring_TheCallsDeviceStaysAliveUntilTheCallReturns) {
                           "std::make_shared<urnet::DeviceLocal>(std::move(*device)));"));
   UR_EXPECT_TRUE(Ahead(release, "KeepUntilReturned(", "device.reset();"));
   const std::string stop =
-      UploadFunctionBody(host, "void TunnelHost::StopInternalLocked(const std::string& reason)");
+      UploadFunctionBody(host, "void TunnelHost::StopInternalLocked(const std::string& reason, bool disconnect)");
   UR_EXPECT_TRUE(Ahead(stop, "device_->close();", "ReleaseDeviceLocked(device_);"));
   UR_EXPECT_FALSE(Contains(stop, "device_.reset();"));
   const std::string retireProvider =

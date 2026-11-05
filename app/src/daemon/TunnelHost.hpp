@@ -151,6 +151,14 @@ class TunnelHost {
   // Blocks until a running bring-up has finished (bounded by the SDK call it
   // is inside). Main loop only.
   void Stop(const std::string& reason = "user");
+  // The owning user's Disconnect (stop_tunnel with disconnect): Stop("user"),
+  // with one difference. When a provider-only device could run in its place
+  // (provide::KeepsSessionDevice), the session's DeviceLocal is not closed:
+  // what belongs to the session (the tun, its routes, DNS and policy, the
+  // IoLoop, the destination and the rpc listener) goes, and the device keeps
+  // providing as the provider-only device, its transports, peers and
+  // contracts intact. Main loop only.
+  void Disconnect();
 
   // Applies the provide control mode to the live device, or stashes it for
   // the next Start when the tunnel is down. With no tunnel session it also
@@ -167,8 +175,13 @@ class TunnelHost {
   // without URnetwork, and no client can drive the device.
   //
   // Refused while a tunnel session exists or is being built (its device is
-  // the provider) and while the kill-switch floor is armed. The same request
-  // again keeps the running device and only applies the mode. Main loop only.
+  // the provider) and while the kill-switch floor is armed. The same device
+  // again (ctl::SameProviderDevice: the same identity) keeps the running
+  // device and applies the mode and the provider transport policy in place.
+  // Its sockets carry the egress mark from the first (the socket marker is
+  // attached before it is built), so a Connect with the same identity can take
+  // it as the session's device (RunStart); a Disconnect may hand the session's
+  // device back (Disconnect). Main loop only.
   struct ProviderStartResult {
     bool ok = false;
     std::string error;
@@ -366,7 +379,24 @@ class TunnelHost {
   // status_.error/error_code with the reason. An EMPTY reason means "the caller
   // owns what happens next": the firewall is left exactly as it is and the
   // published error is left exactly as it is, for the caller to set.
-  void StopInternalLocked(const std::string& reason);
+  //
+  // `disconnect` is Disconnect()'s: the session's device stays as the
+  // provider-only device when provide::KeepsSessionDevice says it may.
+  void StopInternalLocked(const std::string& reason, bool disconnect = false);
+  // One device across connect and disconnect (ProvideLifecycle.hpp). A start
+  // whose identity is the provider-only device's takes that device out of its
+  // role into promotedDevice_ (its view controllers close, its published
+  // provider status clears), for step 3 to make it the session's device. A
+  // start that ends before step 3 closes it as the retire would have
+  // (ClosePromotedDeviceLocked). Both require opMutex_.
+  void TakeProviderDeviceLocked(const ctl::StartTunnelRequest& config);
+  void ClosePromotedDeviceLocked();
+  // A disconnect kept the session's device (StopInternalLocked): it becomes
+  // the provider-only device, serving the session's identity under the
+  // device's own provide mode. Requires opMutex_.
+  void ResumeProvidingLocked(const ctl::StartTunnelRequest& session, bool markedFromFirst);
+  // The provider-only device's published status, cleared. Requires opMutex_.
+  void ClearProviderStatusLocked();
   // The machine half of every teardown, and its first half: the session
   // published as stopping, the failsafe's watch ended, the DNS undo while the
   // tun still exists, the IoLoop cancelled and retired, and the tun closed with
@@ -538,6 +568,15 @@ class TunnelHost {
   // tunnel session's device — for every check below that reads it (the filter
   // teardown retry, adoption, the published identity). Guarded by opMutex_.
   std::optional<urnet::DeviceLocal> providerDevice_;
+  // Every socket providerDevice_ ever made carries the egress mark: the
+  // socket marker was attached before it was built (or, for a session's device
+  // a disconnect kept, before that session built it) and has stayed attached.
+  // Only such a device may become a session's (provide::PromotesProviderDevice).
+  bool providerMarkedFromFirst_ = false;
+  // The provider-only device a starting session took (TakeProviderDeviceLocked),
+  // between its role and step 3. While it is held the egress marker stays
+  // attached: its sockets keep being made marked.
+  std::optional<urnet::DeviceLocal> promotedDevice_;
   // The provider-only device's network peer counts RefreshProviderStatusLocked
   // last logged (connected, and of those providing); -1 before its first.
   int64_t providerPeersLogged_ = -1;

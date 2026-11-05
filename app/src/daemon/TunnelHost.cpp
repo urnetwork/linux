@@ -782,6 +782,18 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
     // with an empty reason deliberately does not touch the filter, so this
     // stays true across the line below.)
     const bool entryFloor = filter_.floorInstalled();
+    // ONE DEVICE ACROSS CONNECT AND DISCONNECT (ProvideLifecycle.hpp). A
+    // provider-only device built for this start's identity becomes the
+    // session's device at step 3, so it leaves its role HERE, before the
+    // teardown below would retire it. A start that ends before step 3 closes
+    // it as that retire would have: the guard, which runs under opMutex_.
+    TakeProviderDeviceLocked(config);
+    struct PromotedGuard {
+      TunnelHost* self;
+      ~PromotedGuard() {
+        if (self->promotedDevice_) self->ClosePromotedDeviceLocked();
+      }
+    } promotedGuard{this};
     // Idempotent restart, but NOT a "stop": no stop_reason is recorded for a
     // teardown that exists only to make room for this start.
     StopInternalLocked(std::string());
@@ -903,7 +915,13 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       // The GUI's active space rides in on start_tunnel (windows parity): the
       // DeviceLocal must live in the SAME network as the jwt it registers, or
       // a custom-server session would sync against production.
-      LoadNetworkSpaceLocked(config.network_space_json);
+      if (promotedDevice_ && networkSpace_) {
+        // The provider-only device's space: the same json (the identity
+        // matched), and the one its device runs in.
+        DaemonLogf("[tunnel] keeping the provider-only device's network space\n");
+      } else {
+        LoadNetworkSpaceLocked(config.network_space_json);
+      }
       if (stopRequested_.load()) throw std::runtime_error("start cancelled");
 
       // --- 3) DeviceLocal, with NO listener of its own -----------------------
@@ -924,7 +942,19 @@ void TunnelHost::RunStart(ctl::StartTunnelRequest config) {
       // installed at step 4. The single other thing enable_rpc=false changes is
       // newSecurityPolicyMonitor(ctx, device, settings.Verbose), which returns
       // nil immediately because DefaultDeviceLocalSettings sets Verbose=false.
-      device_ = NewDeviceLocked(config.by_jwt, config.instance_id, config.app_version);
+      //
+      // The provider-only device this start took is the same: it never had a
+      // listener, and every socket it made carries the egress mark
+      // (provide::PromotesProviderDevice), so none follows step 5's routes
+      // into the tun. Its transports, peers and contracts carry over.
+      if (promotedDevice_) {
+        device_ = std::move(*promotedDevice_);
+        promotedDevice_.reset();
+        DaemonLogf("[tunnel] the provider-only device becomes this session's device (its "
+                   "transports, peers and contracts carry over; nothing was rebuilt)\n");
+      } else {
+        device_ = NewDeviceLocked(config.by_jwt, config.instance_id, config.app_version);
+      }
       // The network this device's first dials go out on, so the reaper's first
       // tick after the bring-up kicks it only for a path that has moved since
       // — a switch during the bring-up included, which a baseline taken on that
@@ -1325,6 +1355,16 @@ void TunnelHost::Stop(const std::string& reason) {
   glogflush::Request();
 }
 
+void TunnelHost::Disconnect() {
+  stopRequested_.store(true);
+  JoinWorker();
+  {
+    std::scoped_lock lock(opMutex_);
+    StopInternalLocked("user", /*disconnect=*/true);
+  }
+  glogflush::Request();
+}
+
 // Release retired IoLoops whose done callback has actually fired. Called from
 // the stop path and from the reaper tick, so a loop that takes a moment to wind
 // down is collected shortly after rather than held for the life of the process.
@@ -1392,7 +1432,7 @@ void TunnelHost::RevertSessionMachineLocked() {
   tunnel_.reset();  // closes the fd: the tun, its routes and the policy rules go
 }
 
-void TunnelHost::StopInternalLocked(const std::string& reason) {
+void TunnelHost::StopInternalLocked(const std::string& reason, bool disconnect) {
   // First, and in every teardown: the provider-only device never shares a
   // moment with a tunnel session's device. RunStart opens with this function,
   // so a Connect retires the provider before the egress marker, the capture
@@ -1419,22 +1459,68 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
     ApplyFilterLocked(FilterState::Off, &ignored);
   }
 
+  // ONE DEVICE ACROSS CONNECT AND DISCONNECT. The owning user's Disconnect
+  // keeps the session's device providing, as the provider-only device, when one
+  // could run in its place now (provide::KeepsSessionDevice). Asked after the
+  // machine is given back, so the firewall fact is the one start_provider
+  // would read. Only an up session's device: activeConfig_ is its identity.
+  bool keepDevice = false;
+  if (disconnect && device_ && !activeConfig_.by_jwt.empty()) {
+    provide::SessionStopFacts facts;
+    facts.sessionDevice = true;
+    facts.disconnect = true;
+    try {
+      facts.mode = provide::ControlModeFrom(device_->getProvideControlMode());
+    } catch (const std::exception&) {
+      facts.mode = provide::ControlMode::Unknown;
+    }
+    facts.firewallInForce = filter_.state() != FilterState::Off;
+    keepDevice = provide::KeepsSessionDevice(facts);
+    DaemonLogf("[provide] the disconnect %s the session's device (mode=%s "
+               "firewall_in_force=%d)\n",
+               keepDevice ? "keeps" : "closes", provide::ToString(facts.mode),
+               facts.firewallInForce ? 1 : 0);
+  }
+
   // ...and the SDK last. Every call on the device takes its state lock, and a
   // wedged one (the dead-tunnel failsafe's SdkUnresponsive) stops the teardown
   // here, with the machine already given back. close() itself only cancels:
   // the SDK hands its joins to its own lifecycle workers.
   if (device_) {
     device_->setTunnelStarted(false);
-    device_->close();
-    ReleaseDeviceLocked(device_);
+    if (keepDevice) {
+      // The device stays: take off it only what the session put on it. The
+      // destination first, so the window it carried ends with the session (an
+      // auto device leaves the public tier with it), then the rpc listener, so
+      // nothing reaches the device until the next session's.
+      try {
+        device_->removeDestination();
+        device_->closeRpcServer();
+      } catch (const std::exception& e) {
+        keepDevice = false;
+        DaemonLogf("[provide] the session could not be taken off the device (%s); it is "
+                   "closed instead\n",
+                   e.what());
+      }
+    }
+    if (!keepDevice) {
+      device_->close();
+      ReleaseDeviceLocked(device_);
+    }
   }
   networkQualityTracker_.Reset();
+  // Whether every socket the kept device made carries the mark: the marker
+  // was proven at step 1a, before step 3 built (or took) it.
+  const bool keptMarkedFromFirst = keepDevice && socketMarkerProven_;
   // AFTER the device is gone, so no SDK socket is ever created unmarked while
   // the capture routes could still be up. The mark is inert once the `ip rule`
   // is removed (nothing consults it), so the ordering costs nothing and the
-  // detach keeps the blast radius to the session that asked for it.
-  egressMarker_.Detach();
+  // detach keeps the blast radius to the session that asked for it. A device
+  // that stays keeps it, and so does one a starting session took: their
+  // sockets keep being made marked, for a session they may serve next.
+  if (!keepDevice && !promotedDevice_) egressMarker_.Detach();
   socketMarkerProven_ = false;
+  const ctl::StartTunnelRequest endedSession = keepDevice ? activeConfig_ : ctl::StartTunnelRequest();
   egressWitnessTicks_ = 0;
   egressWitnessFailures_ = 0;
   // spaceManager_/networkSpace_ persist across sessions (Windows parity).
@@ -1470,6 +1556,12 @@ void TunnelHost::StopInternalLocked(const std::string& reason) {
       status_.error.clear();
       status_.error_code.clear();
     }
+  }
+  if (keepDevice && device_) {
+    // The same object, by handle: a log upload's call on it (the flight)
+    // carries on, and the device is never closed.
+    providerDevice_ = std::exchange(device_, std::nullopt);
+    ResumeProvidingLocked(endedSession, keptMarkedFromFirst);
   }
 }
 
@@ -1696,8 +1788,8 @@ namespace {
 
 // How long a retired provider device may take to close its sockets before it
 // is released anyway. close() returns first; the wait keeps a late packet from
-// the provider's sockets (unmarked, because no egress marker runs without a
-// tunnel) out of the capture routes a Connect installs moments later.
+// the provider's sockets (unmarked when the egress marker could not be
+// attached for it) out of the capture routes a Connect installs moments later.
 constexpr int64_t kProviderCloseWaitMillis = 2000;
 
 }  // namespace
@@ -1739,18 +1831,31 @@ TunnelHost::ProviderStartResult TunnelHost::StartProvider(
     return result;
   }
 
-  // The same request again (a relaunched GUI adopting the provider, or a
-  // retried frame): keep the device, apply the mode. A changed network space
-  // (a saved DoH server list, say) is a different device.
+  // The same device again (a relaunched GUI adopting the provider, the
+  // reconcile after a disconnect that kept the session's device, a retried
+  // frame, or a provider transport policy edit): keep the device and apply the
+  // mode and the provider transport policy in place, as the build applies
+  // them. A changed network space (a saved DoH server list, say) is a
+  // different device.
   if (providerDevice_ && ctl::SameProviderDevice(providerConfig_, request)) {
+    const char* applying = "provider transport policy";
     try {
+      if (!request.provider_transport_settings_json.empty() &&
+          request.provider_transport_settings_json !=
+              providerConfig_.provider_transport_settings_json) {
+        providerDevice_->setProviderTransportSettings(
+            nlohmann::json::parse(request.provider_transport_settings_json)
+                .get<urnet::TransportSettings>());
+      }
+      applying = "provide mode";
       providerDevice_->setProvideControlMode(request.provide_mode);
     } catch (const std::exception& e) {
-      result.error = std::string("the provide mode could not be applied: ") + e.what();
+      result.error = std::string("the ") + applying + " could not be applied: " + e.what();
       result.code = ctl::kCodeProviderStartFailed;
       return result;
     }
-    providerConfig_.provide_mode = request.provide_mode;
+    // The request it now serves, its refreshed credential included.
+    providerConfig_ = request;
     {
       std::scoped_lock statusLock(statusMutex_);
       pendingProvideMode_ = request.provide_mode;
@@ -1760,14 +1865,40 @@ TunnelHost::ProviderStartResult TunnelHost::StartProvider(
     return result;
   }
 
+  // Which fields made this another device, by name: rebuilding the running
+  // one closes every transport, peer and contract it holds.
+  if (providerDevice_) {
+    DaemonLogf("[provide] start_provider is for another device (%s differ); the running "
+               "provider-only device is replaced\n",
+               provide::DifferingIdentityFields(ctl::IdentityOf(providerConfig_),
+                                                ctl::IdentityOf(request))
+                   .c_str());
+  }
   RetireProviderDeviceLocked();
   // A standalone log upload device runs under the same identity; its upload
   // goes on without it (StopInternalLocked says why).
   RetireUploadDeviceLocked();
   try {
-    // RunStart's steps 2 and 3 and nothing after them: no egress marker, no
-    // nftables transaction, no setRpcServer, no tun, no IoLoop, no DNS. The
-    // device's sockets follow the main routing table like any process's.
+    // RunStart's steps 1a, 2 and 3 and nothing after them: no nftables
+    // transaction, no setRpcServer, no tun, no IoLoop, no DNS. The device's
+    // sockets follow the main routing table like any process's.
+    //
+    // The egress marker first, as a session's step 1a: this device may become
+    // the next session's (RunStart), and a socket made unmarked now would
+    // follow that session's capture routes into the tun. The mark is inert
+    // with no session (no `ip rule` consults it). Without the marker the
+    // device runs as before and a Connect builds its own.
+    providerMarkedFromFirst_ = false;
+    if (cgroup_.valid) {
+      std::string markerError;
+      if (egressMarker_.Attach(cgroup_, kEgressMark, &markerError)) {
+        providerMarkedFromFirst_ = true;
+      } else {
+        DaemonLogf("[provide] the egress marker could not be attached (%s); a Connect builds "
+                   "its own device rather than take this one\n",
+                   markerError.c_str());
+      }
+    }
     LoadNetworkSpaceLocked(request.network_space_json);
     providerDevice_ = NewDeviceLocked(request.by_jwt, request.instance_id, request.app_version);
     // Its own baseline, not whatever the tracker last saw: a provider retired
@@ -2140,6 +2271,15 @@ void TunnelHost::RetireProviderDeviceLocked() {
     ReleaseDeviceLocked(providerDevice_);
     DaemonLogf("[provide] stopped providing without a tunnel\n");
   }
+  // Its marker (StartProvider, or the session it was kept from), unless a
+  // session's device or one a starting session took still makes sockets. A
+  // start that attached it and then failed to build the device lands here too.
+  if (!device_ && !promotedDevice_) egressMarker_.Detach();
+  providerMarkedFromFirst_ = false;
+  ClearProviderStatusLocked();
+}
+
+void TunnelHost::ClearProviderStatusLocked() {
   providerConfig_ = ctl::StartProviderRequest();
   providerPeersLogged_ = -1;
   providerProvidingLogged_ = -1;
@@ -2150,6 +2290,85 @@ void TunnelHost::RetireProviderDeviceLocked() {
   status_.provider_network_key = false;
   status_.provider_client_count = -1;
   status_.provider_network_peers_json.clear();
+}
+
+void TunnelHost::TakeProviderDeviceLocked(const ctl::StartTunnelRequest& config) {
+  if (!providerDevice_) return;
+  const provide::DeviceIdentity provider = ctl::IdentityOf(providerConfig_);
+  const provide::DeviceIdentity start = ctl::IdentityOf(config);
+  const bool marked = providerMarkedFromFirst_ && egressMarker_.attached();
+  if (!provide::PromotesProviderDevice(true, marked, provider, start)) {
+    // retired by the start's opening teardown, as before
+    if (!marked) {
+      DaemonLogf("[provide] the provider-only device made sockets without the egress mark; "
+                 "the session builds its own device\n");
+    } else {
+      DaemonLogf("[provide] the start is for another device (%s differ); the provider-only "
+                 "device is retired\n",
+                 provide::DifferingIdentityFields(provider, start).c_str());
+    }
+    return;
+  }
+  // The controllers read the device, so they close before it changes hands.
+  CloseProviderViewControllersLocked();
+  const provide::ControlMode mode = provide::ControlModeFrom(providerConfig_.provide_mode);
+  promotedDevice_ = std::move(*providerDevice_);
+  providerDevice_.reset();
+  providerMarkedFromFirst_ = false;
+  ClearProviderStatusLocked();
+  DaemonLogf("[provide] the provider-only device (mode %s) becomes the tunnel session's "
+             "device: nothing is closed or rebuilt\n",
+             provide::ToString(mode));
+}
+
+void TunnelHost::ClosePromotedDeviceLocked() {
+  if (!promotedDevice_) return;
+  DaemonLogf("[provide] the start ended before its device step; closing the provider-only "
+             "device it took, as the retire would have\n");
+  try {
+    promotedDevice_->close();
+    if (!promotedDevice_->waitForClose(kProviderCloseWaitMillis)) {
+      DaemonLogf("[provide] the provider device had not finished closing after %lld ms; "
+                 "releasing it\n",
+                 static_cast<long long>(kProviderCloseWaitMillis));
+    }
+  } catch (const std::exception& e) {
+    DaemonLogf("[provide] closing the provider device failed: %s\n", e.what());
+  }
+  ReleaseDeviceLocked(promotedDevice_);
+  if (!device_ && !providerDevice_) egressMarker_.Detach();
+}
+
+void TunnelHost::ResumeProvidingLocked(const ctl::StartTunnelRequest& session,
+                                       bool markedFromFirst) {
+  // What this device now serves, in start_provider's shape: the session's
+  // identity and the device's own mode. The provider transport policy is the
+  // one the device runs; the GUI's next start_provider for this identity keeps
+  // the device and applies its own in place (ctl::SameProviderDevice). The
+  // credential is the one the session started with: the GUI's next request
+  // carries one refreshed since, for the same client, and the identity counts
+  // the client (ctl::JwtSubject).
+  providerConfig_ = ctl::StartProviderRequest();
+  providerConfig_.by_jwt = session.by_jwt;
+  providerConfig_.instance_id = session.instance_id;
+  providerConfig_.app_version = session.app_version;
+  providerConfig_.network_space_json = session.network_space_json;
+  try {
+    providerConfig_.provide_mode = providerDevice_->getProvideControlMode();
+  } catch (const std::exception&) {
+    providerConfig_.provide_mode.clear();
+  }
+  providerMarkedFromFirst_ = markedFromFirst && egressMarker_.attached();
+  // Its own baseline, as StartProvider takes one: the network the provider
+  // dials on from here, with no tun.
+  networkQualityTracker_.Rebase(ReadNetworkPath(std::string()));
+  OpenProviderViewControllersLocked();
+  RefreshProviderStatusLocked();
+  DaemonLogf("[provide] the session's device keeps PROVIDING WITHOUT A TUNNEL (mode %s, tier "
+             "%lld): its transports, peers and contracts carry over. The tun, its routes, "
+             "DNS and policy, the destination and the rpc listener went with the session.\n",
+             provide::ToString(provide::ControlModeFrom(providerConfig_.provide_mode)),
+             static_cast<long long>(Status().provider_mode));
 }
 
 void TunnelHost::RefreshProviderStatusLocked() {

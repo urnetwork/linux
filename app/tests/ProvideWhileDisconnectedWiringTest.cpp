@@ -46,10 +46,12 @@ bool Before(const std::string& text, const std::string& first, const std::string
 
 }  // namespace
 
-// The provider-only device is RunStart's network space and DeviceLocal steps
-// and nothing after them: no egress marker, no nftables transaction, no device
+// The provider-only device is RunStart's egress marker, network space and
+// DeviceLocal steps and nothing after them: no nftables transaction, no device
 // RPC listener, no tun, no IoLoop. Providing must not change this machine's
-// own routing while disconnected.
+// own routing while disconnected; the mark is inert with no session's `ip
+// rule`, and it is there from the device's first socket so a Connect may take
+// the device (TakeProviderDeviceLocked).
 UR_TEST(ProvideWiring_TheProviderDeviceTouchesNoRoutingAndNoListener) {
   const std::string host = ReadProvideSource("daemon/TunnelHost.cpp");
   const std::string start = FunctionBody(host, "TunnelHost::ProviderStartResult TunnelHost::StartProvider(");
@@ -58,13 +60,15 @@ UR_TEST(ProvideWiring_TheProviderDeviceTouchesNoRoutingAndNoListener) {
   UR_EXPECT_TRUE(Has(start, "setProvideControlMode(request.provide_mode)"));
   // call forms, so the comment that names them does not count
   for (const char* forbidden :
-       {"Tunnel::Open(", "egressMarker_.", "ApplyFilterLocked(", "InstallFilterLocked(",
+       {"Tunnel::Open(", "ApplyFilterLocked(", "InstallFilterLocked(",
         "setRpcServer(", "newIoLoop(", "setTunnelStarted(", " device_ = "}) {
     UR_EXPECT_TRUE_MSG(forbidden, !Has(start, forbidden));
   }
   // and the device has its own slot, so device_ keeps meaning "the tunnel
   // session's device" everywhere else
   UR_EXPECT_TRUE(Has(start, "providerDevice_ = NewDeviceLocked("));
+  UR_EXPECT_TRUE(Before(start, "egressMarker_.Attach(", "providerDevice_ = NewDeviceLocked("));
+  UR_EXPECT_TRUE(Has(start, "providerMarkedFromFirst_ = true;"));
 }
 
 // Never beside a tunnel session (two devices under one identity) and never
@@ -95,7 +99,9 @@ UR_TEST(ProvideWiring_EveryTeardownRetiresTheProviderFirst) {
   UR_EXPECT_TRUE(!Has(run, "newDeviceLocalWithMemoryTarget"));
   const std::string retire = FunctionBody(host, "void TunnelHost::RetireProviderDeviceLocked()");
   UR_EXPECT_TRUE(Before(retire, "providerDevice_->close();", "providerDevice_->waitForClose("));
-  UR_EXPECT_TRUE(Has(retire, "status_.provider_running = false;"));
+  UR_EXPECT_TRUE(Has(retire, "ClearProviderStatusLocked();"));
+  UR_EXPECT_TRUE(Has(FunctionBody(host, "void TunnelHost::ClearProviderStatusLocked()"),
+                     "status_.provider_running = false;"));
 }
 
 // Never stops it: a set_provide whose mode does not provide while disconnected
@@ -139,7 +145,8 @@ UR_TEST(ProvideWiring_TheGuiReconcilesAfterDisconnectAndModeChanges) {
   const std::string host = ReadProvideSource("SdkHost.cpp");
   // the disconnect (stop_tunnel first), then the reconcile it queues once applied
   const std::string disconnect = FunctionBody(host, "void SdkHost::Disconnect()");
-  UR_EXPECT_TRUE(Has(FunctionBody(host, "void SdkHost::DisconnectNow()"), "control_.StopTunnel();"));
+  UR_EXPECT_TRUE(Has(FunctionBody(host, "void SdkHost::DisconnectNow()"),
+                     "control_.StopTunnel(nullptr, /*disconnect=*/true);"));
   UR_EXPECT_TRUE(Before(disconnect, "DisconnectNow();",
                         "ReconcileProvider(\"disconnect\", /*userInitiated=*/true)"));
   UR_EXPECT_TRUE(Has(FunctionBody(host, "void SdkHost::SetProvideControlMode("),
@@ -197,7 +204,7 @@ UR_TEST(ProvideWiring_TheStatusCountsTheProviderClients) {
   UR_EXPECT_TRUE(Has(refresh, "status_.provider_client_count = clientCount;"));
   // a failed read is unread, the count and the list alike
   UR_EXPECT_TRUE(Has(refresh, "clientCount = -1;\n    peersJson.clear();"));
-  const std::string retire = FunctionBody(host, "void TunnelHost::RetireProviderDeviceLocked()");
+  const std::string retire = FunctionBody(host, "void TunnelHost::ClearProviderStatusLocked()");
   UR_EXPECT_TRUE(Has(retire, "status_.provider_client_count = -1;"));
 }
 
@@ -219,7 +226,7 @@ UR_TEST(ProvideWiring_TheStatusListsTheProviderPeersCutToTheRows) {
                         "status_.provider_network_peers_json = std::move(peersJson);"));
   // counts only, never names, in the log
   UR_EXPECT_TRUE(Has(refresh, "connected network peer(s), %lld"));
-  const std::string retire = FunctionBody(host, "void TunnelHost::RetireProviderDeviceLocked()");
+  const std::string retire = FunctionBody(host, "void TunnelHost::ClearProviderStatusLocked()");
   UR_EXPECT_TRUE(Has(retire, "status_.provider_network_peers_json.clear();"));
 }
 
@@ -278,4 +285,80 @@ UR_TEST(ProvideWiring_TheStatsCountTheProviderClientsWithoutADevice) {
     UR_EXPECT_TRUE_MSG(signature, Has(FunctionBody(host, signature),
                                       "daemonProviderClientCount_.store(-1);"));
   }
+}
+
+// ---- one device across connect and disconnect -------------------------------
+
+// A Connect with the provider-only device's identity takes it before its
+// opening teardown would retire it, keeps its space at step 2 and makes it the
+// session's device at step 3; a start that ends before then closes it.
+UR_TEST(ProvideWiring_AConnectTakesTheProviderDevice) {
+  const std::string host = ReadProvideSource("daemon/TunnelHost.cpp");
+  const std::string run = FunctionBody(host, "void TunnelHost::RunStart(");
+  UR_EXPECT_TRUE(Before(run, "TakeProviderDeviceLocked(config);", "StopInternalLocked(std::string());"));
+  UR_EXPECT_TRUE(Before(run, "if (self->promotedDevice_) self->ClosePromotedDeviceLocked();",
+                        "StopInternalLocked(std::string());"));
+  UR_EXPECT_TRUE(Before(run, "egressMarker_.Attach(", "device_ = std::move(*promotedDevice_);"));
+  UR_EXPECT_TRUE(Before(run, "if (promotedDevice_ && networkSpace_) {",
+                        "LoadNetworkSpaceLocked(config.network_space_json);"));
+  UR_EXPECT_TRUE(Before(run, "device_ = std::move(*promotedDevice_);",
+                        "device_->setRpcServer("));
+  const std::string take = FunctionBody(host, "void TunnelHost::TakeProviderDeviceLocked(");
+  UR_EXPECT_TRUE(Has(take, "provide::PromotesProviderDevice(true, marked, provider, start)"));
+  UR_EXPECT_TRUE(Has(take, "providerMarkedFromFirst_ && egressMarker_.attached()"));
+  // the controllers read the device, so they close before it changes hands
+  UR_EXPECT_TRUE(Before(take, "CloseProviderViewControllersLocked();",
+                        "promotedDevice_ = std::move(*providerDevice_);"));
+  UR_EXPECT_FALSE(Has(take, "->close()"));
+  const std::string close = FunctionBody(host, "void TunnelHost::ClosePromotedDeviceLocked()");
+  UR_EXPECT_TRUE(Before(close, "promotedDevice_->close();", "ReleaseDeviceLocked(promotedDevice_);"));
+  // the marker stays while a taken device can still make sockets
+  const std::string stop = FunctionBody(host, "void TunnelHost::StopInternalLocked(");
+  UR_EXPECT_TRUE(Has(stop, "if (!keepDevice && !promotedDevice_) egressMarker_.Detach();"));
+}
+
+// The owning user's Disconnect keeps the session's device providing when a
+// provider-only device could run in its place, decided after the machine and
+// the firewall are given back. Only the session comes off it.
+UR_TEST(ProvideWiring_TheDisconnectKeepsTheSessionDevice) {
+  const std::string host = ReadProvideSource("daemon/TunnelHost.cpp");
+  const std::string disconnect = FunctionBody(host, "void TunnelHost::Disconnect()");
+  UR_EXPECT_TRUE(Before(disconnect, "JoinWorker();",
+                        "StopInternalLocked(\"user\", /*disconnect=*/true);"));
+  const std::string plain = FunctionBody(host, "void TunnelHost::Stop(");
+  UR_EXPECT_TRUE(Has(plain, "StopInternalLocked(reason);"));
+  const std::string stop = FunctionBody(host, "void TunnelHost::StopInternalLocked(");
+  UR_EXPECT_TRUE(Has(stop, "if (disconnect && device_ && !activeConfig_.by_jwt.empty()) {"));
+  UR_EXPECT_TRUE(Before(stop, "RevertSessionMachineLocked();", "provide::KeepsSessionDevice(facts)"));
+  UR_EXPECT_TRUE(Before(stop, "ApplyFilterLocked(FilterState::Off, &ignored);",
+                        "facts.firewallInForce = filter_.state() != FilterState::Off;"));
+  UR_EXPECT_TRUE(Before(stop, "device_->removeDestination();", "device_->closeRpcServer();"));
+  UR_EXPECT_TRUE(Before(stop, "if (!keepDevice) {\n      device_->close();",
+                        "ResumeProvidingLocked(endedSession, keptMarkedFromFirst);"));
+  const std::string resume = FunctionBody(host, "void TunnelHost::ResumeProvidingLocked(");
+  UR_EXPECT_TRUE(Has(resume, "providerConfig_.provide_mode = providerDevice_->getProvideControlMode();"));
+  UR_EXPECT_TRUE(Before(resume, "OpenProviderViewControllersLocked();", "RefreshProviderStatusLocked();"));
+  // the same device again applies the policy in place rather than rebuild
+  const std::string start = FunctionBody(host, "TunnelHost::ProviderStartResult TunnelHost::StartProvider(");
+  UR_EXPECT_TRUE(Before(start, "ctl::SameProviderDevice(providerConfig_, request)",
+                        "providerDevice_->setProviderTransportSettings("));
+}
+
+// Only the owning user's Disconnect asks for it: the server passes it on for
+// the owner alone, and every other stop the GUI sends (a quit, a sign-out, a
+// server change, a failed start, the tray's recovery) closes the device.
+UR_TEST(ProvideWiring_OnlyTheOwnersDisconnectKeepsTheDevice) {
+  const std::string server = ReadProvideSource("daemon/ControlServer.cpp");
+  UR_EXPECT_TRUE(Has(server, "!crossUid && request.is_object() && request.get<ctl::StopTunnelRequest>().disconnect;"));
+  UR_EXPECT_TRUE(Before(server, "tunnel_.Disconnect();", "tunnel_.Stop(\"user\");"));
+  const std::string host = ReadProvideSource("SdkHost.cpp");
+  size_t disconnects = 0;
+  for (size_t at = host.find("/*disconnect=*/true"); at != std::string::npos;
+       at = host.find("/*disconnect=*/true", at + 1)) {
+    ++disconnects;
+  }
+  UR_EXPECT_EQ(1u, disconnects);
+  UR_EXPECT_TRUE(Has(FunctionBody(host, "void SdkHost::DisconnectNow()"),
+                     "control_.StopTunnel(nullptr, /*disconnect=*/true);"));
+  UR_EXPECT_TRUE(Has(FunctionBody(host, "void SdkHost::Shutdown()"), "control_.StopTunnel();"));
 }

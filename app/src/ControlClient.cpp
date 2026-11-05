@@ -781,8 +781,10 @@ bool ControlClient::SetKillSwitch(bool enabled, ctl::StatusReply* out, std::stri
   return true;
 }
 
-bool ControlClient::StopTunnelLocked(std::string* error) {
-  const auto reply = CallLocked(ctl::Verb::StopTunnel, nlohmann::json::object(), error,
+bool ControlClient::StopTunnelLocked(std::string* error, bool disconnect) {
+  ctl::StopTunnelRequest request;
+  request.disconnect = disconnect;
+  const auto reply = CallLocked(ctl::Verb::StopTunnel, nlohmann::json(request), error,
                                 /*allowRetry=*/true, PolkitAwareTimeoutLocked());
   if (!reply) return false;
   if (!ctl::ReplyOk(*reply)) {
@@ -792,9 +794,9 @@ bool ControlClient::StopTunnelLocked(std::string* error) {
   return true;
 }
 
-bool ControlClient::StopTunnel(std::string* error) {
+bool ControlClient::StopTunnel(std::string* error, bool disconnect) {
   std::scoped_lock lock(mutex_);
-  return StopTunnelLocked(error);
+  return StopTunnelLocked(error, disconnect);
 }
 
 bool ControlClient::SetProvide(const std::string& mode, std::string* error) {

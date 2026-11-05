@@ -5534,7 +5534,13 @@ void SdkHost::DisconnectNow() {
     // machine's network. The disconnect below then finds the daemon's device
     // gone, and the DeviceRemote applies it locally (selection and connect
     // state).
-    control_.StopTunnel();
+    //
+    // The user's Disconnect, and only it, says so: the daemon may keep its
+    // DeviceLocal providing as the provider-only device (one device across
+    // connect and disconnect, ProvideLifecycle.hpp), so its transports, peers
+    // and contracts carry over. The provider reconcile after it adopts that
+    // device (ctl::SameProviderDevice).
+    control_.StopTunnel(nullptr, /*disconnect=*/true);
     if (connectVc_) {
       connectVc_->disconnect();
     } else if (device_) {

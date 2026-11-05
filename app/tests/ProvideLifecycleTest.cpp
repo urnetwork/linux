@@ -301,3 +301,60 @@ UR_TEST(provideMeasurementsSwitchShowsOnlyWhereItsWriteIsTaken) {
     }
   }
 }
+
+// ---- one device across connect and disconnect -------------------------------
+
+// A Connect takes the provider-only device only when it was built for the
+// start's identity and every socket it made carries the egress mark.
+UR_TEST(provideConnectPromotesOnlyAMarkedDeviceOfTheSameIdentity) {
+  const provide::DeviceIdentity provider{"client:n/c", "{}", "instance", "2026.11.4"};
+  provide::DeviceIdentity start = provider;
+  UR_EXPECT_TRUE(provide::PromotesProviderDevice(true, true, provider, start));
+  UR_EXPECT_FALSE(provide::PromotesProviderDevice(false, true, provider, start));
+  // a socket made unmarked would follow the session's routes into the tun
+  UR_EXPECT_FALSE(provide::PromotesProviderDevice(true, false, provider, start));
+  start.jwtSubject = "client:n/other";
+  UR_EXPECT_FALSE(provide::PromotesProviderDevice(true, true, provider, start));
+  start = provider;
+  start.networkSpaceJson = R"({"values":{}})";
+  UR_EXPECT_FALSE(provide::PromotesProviderDevice(true, true, provider, start));
+  start = provider;
+  start.instanceId = "another";
+  UR_EXPECT_FALSE(provide::PromotesProviderDevice(true, true, provider, start));
+  start = provider;
+  start.appVersion = "2026.11.5";
+  UR_EXPECT_FALSE(provide::PromotesProviderDevice(true, true, provider, start));
+  UR_EXPECT_TRUE(provide::DifferingIdentityFields(provider, start) == "app_version");
+  UR_EXPECT_TRUE(provide::DifferingIdentityFields(provider, provider).empty());
+}
+
+// A Disconnect keeps the session's device exactly when a provider-only device
+// could run in its place: the user's own Disconnect, a mode that provides while
+// disconnected, and nothing of the firewall left in force.
+UR_TEST(provideDisconnectKeepsTheDeviceOnlyWhereAProviderWouldRun) {
+  provide::SessionStopFacts facts;
+  facts.sessionDevice = true;
+  facts.disconnect = true;
+  facts.mode = provide::ControlMode::Always;
+  UR_EXPECT_TRUE(provide::KeepsSessionDevice(facts));
+  facts.mode = provide::ControlMode::Network;
+  UR_EXPECT_TRUE(provide::KeepsSessionDevice(facts));
+  facts.mode = provide::ControlMode::Auto;
+  UR_EXPECT_TRUE(provide::KeepsSessionDevice(facts) ==
+                 provide::ProviderRuns(provide::ControlMode::Auto, /*connected=*/false));
+  facts.mode = provide::ControlMode::Never;
+  UR_EXPECT_FALSE(provide::KeepsSessionDevice(facts));
+  facts.mode = provide::ControlMode::Unknown;
+  UR_EXPECT_FALSE(provide::KeepsSessionDevice(facts));
+
+  facts.mode = provide::ControlMode::Always;
+  provide::SessionStopFacts other = facts;
+  other.disconnect = false;  // a quit, a sign-out, the failsafe, another user
+  UR_EXPECT_FALSE(provide::KeepsSessionDevice(other));
+  other = facts;
+  other.sessionDevice = false;
+  UR_EXPECT_FALSE(provide::KeepsSessionDevice(other));
+  other = facts;
+  other.firewallInForce = true;  // start_provider refuses under the floor
+  UR_EXPECT_FALSE(provide::KeepsSessionDevice(other));
+}
