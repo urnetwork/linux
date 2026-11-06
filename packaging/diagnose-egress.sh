@@ -302,6 +302,16 @@ if [ -n "$CAPTURE" ]; then
 else
   say "   (empty -- no tunnel is up)"
 fi
+# The daemon's marked sockets are routed by MAIN, so a route through the tun in
+# main (an older build's 10.x.y.0/24 prefix route, or anything else's) carries
+# their traffic to that destination straight into the tunnel.
+MAINTUN="$( (ip -4 route show table main dev "$TUN_NAME"; ip -6 route show table main dev "$TUN_NAME") 2>/dev/null | grep -v '^fe80::/64')"
+if [ -n "$MAINTUN" ]; then
+  printf '%s\n' "$MAINTUN" | sed "s/^/   main via $TUN_NAME: /"
+  warn "the main table routes the destinations above through $TUN_NAME: the daemon's own traffic to them enters its own tunnel"
+elif ip link show dev "$TUN_NAME" >/dev/null 2>&1; then
+  ok "the main table routes nothing through $TUN_NAME"
+fi
 note "deliberately NO 'ip route get' here. It answers a question about a packet"
 note "     nobody sent, from a shell that is not the daemon; step 7 asks the kernel"
 note "     the real one instead."

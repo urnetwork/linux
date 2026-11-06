@@ -879,6 +879,73 @@ inline std::string CapturedV4RefusalReason(bool marked, const std::string& sourc
          "connect() can undo it";
 }
 
+// ---- the tun's own subnet stays out of the main table -----------------------
+//
+// An address added the ordinary way brings a kernel prefix route with it, and
+// that route lands in MAIN: `10.0.0.0/24 dev urnet0 proto kernel scope link`.
+// Main is exactly the table the egress mark sends the daemon's own sockets to,
+// so every marked packet for that /24 left through the tun, the storm
+// signature, which leg 3 of the witness counts. The SDK picks the /24 avoiding
+// only the subnets of interfaces on this host (connect RandomLocalIpv4), not
+// destinations reached through a gateway, so on a host whose network has
+// services in 10.0.0.0/24 behind a router (a cloud VPC, a sandbox's egress
+// tunnel) the daemon's own traffic to them was captured a few seconds into
+// every session and the re-check stopped it a minute later.
+//
+// Nothing needs the route. The capture table sends what it captures to the tun
+// by its own routes and the kernel picks the tun's address as their source
+// without one; the /24 holds no host but this one, whose address is local
+// delivery either way; and 10/8 is outside the capture set, so the rest of the
+// /24 belongs to the host's own routes like every other RFC1918 destination.
+//
+// Two things it does not change, both measured in a network namespace: the
+// kernel still keeps the subnet's BROADCAST route in the local table (marked
+// traffic to 10.x.y.255 would still enter the tun; nothing the daemon sends
+// goes there), and a strict rp_filter now drops a packet the SDK writes into
+// the tun with a source inside the tun's own /24 other than the tun's address
+// (nothing in connect does; internet sources and the DNS mask are captured,
+// so their reverse path is the tun as before).
+//
+// `ip address replace` on an address that already exists keeps its old flags
+// (measured: the prefix route came back on the next link up), so Configure
+// flushes a stale address first and this always creates the address afresh.
+inline std::vector<std::string> TunAddressArgv(const std::string& ip, bool ipv6,
+                                               const std::string& addressWithPrefix,
+                                               const std::string& tunName) {
+  std::vector<std::string> argv = {ip,  ipv6 ? "-6" : "-4", "address", "replace",
+                                   addressWithPrefix, "dev", tunName, "noprefixroute"};
+  // `nodad`: a tun has no link to run duplicate address detection on, and a
+  // tentative address is skipped by source selection, so the witness's v6
+  // control leg would bind nothing and fail a working tunnel.
+  if (ipv6) argv.push_back("nodad");
+  return argv;
+}
+
+// The routes in `listing` (`ip <family> route show table main dev <tun>`, one
+// route a line) that would carry a marked socket into the tun, each trimmed.
+// fe80::/64 is not one: a link-local destination needs the socket bound to the
+// interface, which no daemon socket is, and addrgenmode none normally keeps the
+// tun from having one at all.
+inline std::vector<std::string> MainRoutesIntoTunnel(std::string_view listing) {
+  std::vector<std::string> routes;
+  std::size_t at = 0;
+  while (at < listing.size()) {
+    std::size_t end = listing.find('\n', at);
+    if (end == std::string_view::npos) end = listing.size();
+    const std::vector<std::string_view> words =
+        tunnelpolicy_detail::SplitWords(listing.substr(at, end - at));
+    at = end + 1;
+    if (words.empty() || words[0] == "fe80::/64") continue;
+    std::string route;
+    for (const std::string_view word : words) {
+      if (!route.empty()) route += ' ';
+      route += word;
+    }
+    routes.push_back(route);
+  }
+  return routes;
+}
+
 // THE R4 REFUSAL'S TEXT, for every leg of the witness: what failed, and the
 // command that reports the host state behind it. `self` is the running
 // binary's own path (daemon/SelfPath.hpp). No package puts urnetworkd on
