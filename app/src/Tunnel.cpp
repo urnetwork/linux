@@ -2506,17 +2506,24 @@ bool Tunnel::Configure(const TunnelConfig& cfg, TunnelError* err) {
   // (APPIMAGE.md §10c), so do every link-down configuration before `up`. The
   // authoritative guard is the installed [keyfile] unmanaged-devices marking
   // + udev rule; this ordering just avoids ever showing NM a bare up link.
+  //
+  // NO PREFIX ROUTE (TunAddressArgv, TunnelPolicy.hpp): the kernel would put
+  // the tun's subnet in MAIN, the table the daemon's own marked sockets use,
+  // and their traffic to it would enter the tun. A stale address from an
+  // unclean previous run is flushed first, because `replace` keeps an existing
+  // address's flags and its prefix route would come back with the link.
+  // Best-effort: the `replace` below is what fails the bring-up if the address
+  // cannot be set.
+  RunCommand({ip, "-4", "address", "flush", "dev", name_});
+  if (ipv6Captured_) RunCommand({ip, "-6", "address", "flush", "dev", name_, "scope", "global"});
   std::vector<std::vector<std::string>> steps = {
       {ip, "link", "set", "dev", name_, "mtu", std::to_string(cfg.mtu)},
-      // `replace`, not `add`: a stale address from an unclean previous run
-      // answers EEXIST and would abort the whole bring-up.
-      {ip, "-4", "address", "replace", addr, "dev", name_},
+      // `replace`, not `add`: belt for an address the flush above missed,
+      // which would answer EEXIST and abort the whole bring-up.
+      TunAddressArgv(ip, /*ipv6=*/false, addr, name_),
   };
   if (ipv6Captured_) {
-    // `nodad`: a tun has no link to run duplicate address detection on, and a
-    // tentative address is skipped by source selection — the witness's v6
-    // control leg would then bind nothing and fail a working tunnel.
-    steps.push_back({ip, "-6", "address", "replace", addr6, "dev", name_, "nodad"});
+    steps.push_back(TunAddressArgv(ip, /*ipv6=*/true, addr6, name_));
   }
   steps.push_back({ip, "link", "set", "dev", name_, "up"});
 
@@ -2562,6 +2569,14 @@ bool Tunnel::Configure(const TunnelConfig& cfg, TunnelError* err) {
       return false;
     }
   }
+  // The belt under noprefixroute, after `up` because that is when the kernel
+  // installs an address's prefix route: a kernel or iproute2 that dropped the
+  // flag, or anything else that put a route through the tun into main, would
+  // hand the daemon's own traffic to it. Removing them is the safe direction
+  // (main's routes through our own tun serve nothing), and leg 3 of the
+  // witness names any that come back.
+  DropMainRoutesThroughTun(ip, "-4");
+  if (ipv6Captured_) DropMainRoutesThroughTun(ip, "-6");
 
   if (!InstallPolicyRules(err)) return false;
   if (!InstallRoutes(err)) return false;
@@ -2675,6 +2690,25 @@ bool Tunnel::Configure(const TunnelConfig& cfg, TunnelError* err) {
                  kAllowUnprotectedDnsEnv, report_.dns_detail.c_str());
   }
   return true;
+}
+
+std::vector<std::string> Tunnel::MainRoutesThroughTun(const std::string& ip,
+                                                      const char* family) const {
+  if (ip.empty() || name_.empty()) return {};
+  const CommandResult r = RunCommand({ip, family, "route", "show", "table", "main", "dev", name_});
+  if (!r.ok()) return {};
+  return MainRoutesIntoTunnel(r.output);
+}
+
+void Tunnel::DropMainRoutesThroughTun(const std::string& ip, const char* family) const {
+  const std::vector<std::string> routes = MainRoutesThroughTun(ip, family);
+  if (routes.empty()) return;
+  const CommandResult r = RunCommand({ip, family, "route", "flush", "table", "main", "dev", name_});
+  for (const auto& route : routes) {
+    std::fprintf(stderr, "[tun] %s the main-table route %s via %s: the daemon's own sockets use "
+                         "that table, so it would carry their traffic into the tunnel\n",
+                 r.ok() ? "removed" : "could NOT remove", route.c_str(), name_.c_str());
+  }
 }
 
 bool Tunnel::InstallPolicyRules(TunnelError* err) {
@@ -3335,7 +3369,23 @@ bool Tunnel::VerifyEgressWitness(const char* when, bool requireOffTunnelRoute,
                   "(%s). That is the amplification loop: every one of them is read back out of "
                   "the tun by the SDK's io loop, re-sent, and captured again",
                   static_cast<unsigned long long>(counters.tun), name_.c_str());
-    return fail(kCodeEgressUnprotected, buf);
+    // Legs 1 and 2 measure one destination; this counter covers all of them. A
+    // route through the tun in main (where the mark sends the daemon's sockets)
+    // is how a destination legs 1 and 2 never try is captured, so name any.
+    const std::string ip = FindTool("ip");
+    std::vector<std::string> routes = MainRoutesThroughTun(ip, "-4");
+    if (ipv6Captured_) {
+      for (auto& route : MainRoutesThroughTun(ip, "-6")) routes.push_back(std::move(route));
+    }
+    std::string message = buf;
+    if (!routes.empty()) {
+      message += ". The main table, which this daemon's own sockets use, routes";
+      for (size_t i = 0; i < routes.size(); ++i) {
+        message += (i == 0 ? " " : "; ") + routes[i];
+      }
+      message += " through " + name_;
+    }
+    return fail(kCodeEgressUnprotected, message);
   }
 
   // ---- AND SOMEWHERE TO GO, AT BRING-UP ONLY -------------------------------
