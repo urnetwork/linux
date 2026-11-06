@@ -262,10 +262,8 @@ constexpr std::int64_t EffectiveHostMemoryByteCount(std::int64_t physicalByteCou
 // Mirrors sdk.GetDefaultTunnelMtu / connect.DefaultTunnelMtu: the INTERFACE
 // MTU. It is the IPv6 minimum link MTU, because Linux disables IPv6 on an
 // interface whose MTU is below 1280, and the v6 half of the tunnel needs the
-// link to exist. The packet-size contract is separate and smaller
-// (connect.DefaultMtu = 1100, the largest packet a provider builds), so one
-// full encrypted tunnel packet plus the UR envelope still fits one initial H3
-// QUIC DATAGRAM.
+// link to exist. The provider packetizer also uses 1280 bytes. H3 uses its
+// stream lane when framing prevents a complete packet fitting a DATAGRAM.
 inline constexpr int kIpv6MinimumMtu = 1280;
 inline constexpr int kTunnelMtu = kIpv6MinimumMtu;
 
