@@ -885,6 +885,16 @@ login_verify_check_phone
 login_verify_header
 longest_streak
 manage_apps
+manage_devices
+manage_devices_connecting
+manage_devices_help
+manage_devices_last_seen
+manage_devices_load_failed
+manage_devices_proxy
+manage_devices_remove_failed
+manage_devices_remove_title
+manage_devices_sign_in_required
+manage_devices_this_device
 method
 minutes_ago_abbrev
 mock_location_active

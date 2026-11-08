@@ -32,6 +32,7 @@
 #include "LocationOverride.hpp"
 #include "LocationsSheet.hpp"
 #include "LoginCarousel.hpp"
+#include "ManageDevicesSheet.hpp"
 #include "NetworkServerSheet.hpp"
 #include "ConnectionRegion.hpp"
 #include "ConnectionRegionSheet.hpp"
@@ -456,6 +457,18 @@ class MainWindow : public Gtk::ApplicationWindow {
   // Sends, replaces quietly or withdraws the notification for the tracker's
   // action (ClientLimitNoticeTracker update or reset).
   void ApplyClientLimitNotification(const std::string& trackerAction);
+
+  // ---- the device list (ManageDevicesSheet) ---------------------------------
+  std::unique_ptr<ManageDevicesSheet> manageDevicesSheet_;
+  // The account's list (the notice's Manage devices, Settings > Device), or
+  // the list of the sign-in the client limit refused, with `message` above it.
+  void ShowManageDevicesSheet(bool forSignIn, const Glib::ustring& message);
+  // The network's client limit refused a sign-in (SdkHost's refusal handler):
+  // the sign-in's device list, where a removal frees a slot and runs the
+  // sign-in again; while it is open, what the retry's refusal said.
+  void OfferSignInManageDevices(client_limit::Prompt prompt);
+  // What the device list's retry of the refused sign-in answered.
+  void OnRefusedSignInRetry(const AuthResult& result);
 
   // ---- the slow-internet indicator (SlowInternet.hpp) -----------------------
   // The device's transport delay as SdkHost last published it. Its feed is

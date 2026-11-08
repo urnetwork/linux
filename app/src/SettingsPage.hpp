@@ -142,6 +142,9 @@ class SettingsPage : public Gtk::Box {
   // "Notify me when my internet is slow" changed (already saved): the window
   // applies it to the notification at once.
   std::function<void(bool on)> on_slow_internet_notify;
+  // Device > Manage devices: the window's device list (ManageDevicesSheet),
+  // where a removal frees a slot of the network's concurrent client limit.
+  std::function<void()> on_open_manage_devices;
 
  private:
   // ---- construction --------------------------------------------------------

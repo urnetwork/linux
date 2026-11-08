@@ -1002,6 +1002,55 @@ class SdkHost {
   // log and must outlive the call (a literal). Main loop.
   void RetryClientLimit(const char* reason);
 
+  // ---- the device list (ManageDevicesSheet; client limit SDK-API.md) --------
+  // What the sheet renders: every snapshot of the list it has open.
+  struct ManageDevicesUpdate {
+    urnet::ManageDevicesSnapshot snapshot;
+    // the list holds a network credential to list and remove devices with
+    bool canManage = false;
+  };
+  using ManageDevicesHandler = std::function<void(ManageDevicesUpdate)>;
+  // Opens the sdk's device list for the sheet, one at a time (a second replaces
+  // the first): on the bound device while there is one, so a removal that frees
+  // a slot ends the device's client limit hold at once (the sdk retries it);
+  // else on the in-process Api with the stored sign-in token, where there is no
+  // device to add again. `forSignIn`: the list of the sign-in the network's
+  // client limit refused last (HasRefusedSignIn), on the Api with that
+  // sign-in's token, whose removal runs its registration again; nothing without
+  // one. Every snapshot goes to `handler` on an sdk thread or the command
+  // queue's worker (it only marshals), the first as soon as the list is open,
+  // with canManage false when there is nothing to open it with. A teardown of
+  // the device a list was opened on opens it again on the Api, so the sheet
+  // keeps a list. Opened on the command queue's worker: the device is read under
+  // mutex_. Main loop.
+  void OpenManageDevices(bool forSignIn, ManageDevicesHandler handler);
+  // The open list's Refresh and RemoveDevice: the sdk runs each on a goroutine
+  // of its own, so both return at once.
+  void RefreshManageDevices();
+  void RemoveManagedDevice(const std::string& clientId);
+  // The sheet closed: the open list is closed, and its handler hears nothing
+  // more. Main loop.
+  void CloseManageDevices();
+  // A sign-in the network's client limit refused is kept, so its device list
+  // can run its registration again after a removal (RegisterNetworkClient):
+  // true while there is one. A sign-in that goes through, another refused
+  // sign-in and a sign-out end or replace it.
+  bool HasRefusedSignIn() const;
+  // The network's client limit refused a sign-in's client (any sign-in screen,
+  // or the device list's retry of it), on the main loop: the window offers the
+  // sign-in's device list. Set once, before any sign-in.
+  using ClientLimitRefusalHandler = std::function<void(client_limit::Prompt prompt)>;
+  void SetClientLimitRefusalHandler(ClientLimitRefusalHandler h) {
+    onClientLimitRefusal_ = std::move(h);
+  }
+  // What the device list's retry of the refused sign-in answered, on the main
+  // loop: signed in (the auth handler has flipped the view), refused again (the
+  // refusal handler has said so too), or another failure. Set once.
+  using RefusedSignInRetryHandler = std::function<void(AuthResult result)>;
+  void SetRefusedSignInRetryHandler(RefusedSignInRetryHandler h) {
+    onRefusedSignInRetry_ = std::move(h);
+  }
+
   // ---- connect drawer accessors (all locked; graceful with no device) ------
   // The device (remote) exists only while a tunnel session runs. Reads fall
   // back to the persisted LocalState where one exists so the drawer shows the
@@ -2074,6 +2123,58 @@ class SdkHost {
   void ClearClientLimit();
   // Hands on the feed's reading when it changed. Requires clientLimitMutex_.
   void PublishClientLimitLocked();
+  // ---- the device list (OpenManageDevices) -----------------------------------
+  // What the open list was opened on.
+  enum class ManageDevicesOwner { None, Device, Api, SignIn };
+  // The open list, behind its own leaf lock (order: mutex_, then this one).
+  // Every call on the list returns at once (the sdk works on goroutines), and
+  // its listener takes no lock of this host's, so the lock is never held across
+  // a wait, and a listener the list calls from inside start, refresh or
+  // removeDevice cannot deadlock against it.
+  mutable std::mutex manageDevicesMutex_;
+  urnet::ManageDevicesViewController manageDevicesVc_;
+  ManageDevicesOwner manageDevicesOwner_ = ManageDevicesOwner::None;
+  urnet::Sub manageDevicesSub_;
+  // the sheet's, shared with the listener, which copies it
+  std::shared_ptr<ManageDevicesHandler> manageDevicesHandler_;
+  bool manageDevicesForSignIn_ = false;
+  // Moved by every open and close, outside any lock: a list opened, or a
+  // snapshot sent, for an older open is dropped.
+  std::atomic<uint64_t> manageDevicesGeneration_{0};
+  // Opens the list of open `generation` (on the worker, mutex_ held).
+  void OpenManageDevicesLocked(uint64_t generation);
+  // Closes the open list: through the device it was opened on while it is
+  // still bound (every device change goes through TeardownDeviceLocked, which
+  // moves the list off it first), else by itself. Caller holds mutex_ and
+  // manageDevicesMutex_.
+  void CloseManageDevicesVcLocked();
+  // Opens the list on the Api (no device): with the refused sign-in's token
+  // and its retry, or the stored sign-in token and none. Caller holds mutex_
+  // and manageDevicesMutex_; false when there is no token to open it with.
+  bool OpenManageDevicesOnApiLocked(bool forSignIn);
+  // Subscribes the open list's listener and starts it, which hands the sheet
+  // its first snapshot. Caller holds manageDevicesMutex_.
+  void StartManageDevicesLocked(uint64_t generation);
+  // The device a list was opened on is being torn down: open it again on the
+  // Api. Caller holds mutex_; device_ is still the bound one.
+  void ReopenManageDevicesOffDeviceLocked();
+  // ---- the refused sign-in (RegisterNetworkClient) ---------------------------
+  // The sign-in token and auth epoch of the sign-in the network's client limit
+  // refused last, behind its own leaf lock. In memory only: the Api already
+  // holds the token.
+  struct RefusedSignIn {
+    std::string byJwt;
+    uint64_t epoch = 0;
+  };
+  mutable std::mutex refusedSignInMutex_;
+  std::optional<RefusedSignIn> refusedSignIn_;
+  ClientLimitRefusalHandler onClientLimitRefusal_;
+  RefusedSignInRetryHandler onRefusedSignInRetry_;
+  // The device list freed a slot for it (ManageDevicesSignInRetry, on a
+  // goroutine of the sdk's): its registration again, with the same token and
+  // epoch. Its outcome reaches the window through the auth handler and
+  // onRefusedSignInRetry_.
+  void RetryRefusedSignIn();
   std::vector<urnet::Sub> subs_;
   std::vector<urnet::Sub> presentationSubs_;
 

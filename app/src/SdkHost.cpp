@@ -2523,9 +2523,9 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
         urnet::AuthNetworkClientArgs args;
         args.description = UrDeviceDescription();
         args.device_spec = UrDeviceSpec();
-        AuthNetworkClientWithLocale(args, [this, done, authEpoch](
+        AuthNetworkClientWithLocale(args, [this, byJwt, done, authEpoch](
             std::optional<urnet::AuthNetworkClientResult> result, std::optional<std::string> err) {
-          PostToMain([this, done, authEpoch, result, err] {
+          PostToMain([this, byJwt, done, authEpoch, result, err] {
             if (!AuthEpochCurrent(authEpoch)) {
               // a client the server created for a sign-in signed out meanwhile:
               // the next sign-out tail removes it (the main loop takes no mutex_)
@@ -2544,6 +2544,16 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
               AuthResult refused{false, false, result->error->message};
               refused.clientLimitPrompt = ToClientLimitPrompt(result->error->client_limit_prompt);
               if (refused.clientLimitPrompt != client_limit::Prompt::None) {
+                g_message("sign-in: refused by the network's client limit");
+                // Kept, so the device list the window offers can register it
+                // again once a removal frees a slot (OpenManageDevices,
+                // forSignIn); the window offers it from here, whichever screen
+                // signed in.
+                {
+                  std::scoped_lock lock(refusedSignInMutex_);
+                  refusedSignIn_ = RefusedSignIn{byJwt, authEpoch};
+                }
+                if (onClientLimitRefusal_) onClientLimitRefusal_(refused.clientLimitPrompt);
                 done(refused);
                 return;
               }
@@ -2607,6 +2617,11 @@ void SdkHost::FinishNetworkClientRegistration(const std::string& byClientJwt,
       }
     }
     if (!published) RemoveAbandonedClientLocked(clientId);
+    // A sign-in the client limit refused earlier has nothing left to retry.
+    if (published) {
+      std::scoped_lock refusedLock(refusedSignInMutex_);
+      refusedSignIn_.reset();
+    }
   }, [this, done, answer, publishedEpoch] {
     if (!AuthEpochCurrent(*publishedEpoch)) {
       done({false, false, "superseded by signing out"});
@@ -3453,6 +3468,178 @@ void SdkHost::RetryClientLimit(const char* reason) {
               ended ? "the hold ended; the device dials the platform again"
                     : "no hold ended (none in force, or one ended in the last 30 s)");
   });
+}
+
+// ---- the device list (ManageDevicesSheet) -------------------------------------
+//
+// See OpenManageDevices in the header. The decisions are the sdk's
+// (ManageDevicesViewController): what is listed and in what order, what can be
+// removed, and the retry that adds this device again after a removal. This only
+// opens it on the right thing, hands its snapshots to the sheet, and closes it.
+
+void SdkHost::OpenManageDevices(bool forSignIn, ManageDevicesHandler handler) {
+  const uint64_t generation = manageDevicesGeneration_.fetch_add(1) + 1;
+  {
+    std::scoped_lock lock(manageDevicesMutex_);
+    manageDevicesHandler_ = std::make_shared<ManageDevicesHandler>(std::move(handler));
+    manageDevicesForSignIn_ = forSignIn;
+  }
+  RunCommand(ConnectCommandQueue::Kind::Device, [this, generation] {
+    std::scoped_lock lock(mutex_);
+    OpenManageDevicesLocked(generation);
+  });
+}
+
+void SdkHost::OpenManageDevicesLocked(uint64_t generation) {
+  std::scoped_lock lock(manageDevicesMutex_);
+  // closed, or opened again, since this open was asked for
+  if (generation != manageDevicesGeneration_.load()) return;
+  CloseManageDevicesVcLocked();
+  bool opened = false;
+  try {
+    if (!manageDevicesForSignIn_ && device_) {
+      // on the bound device: a removal ends its client limit hold
+      manageDevicesVc_ = device_->openManageDevicesViewController();
+      manageDevicesOwner_ = ManageDevicesOwner::Device;
+      opened = static_cast<bool>(manageDevicesVc_);
+    } else {
+      opened = OpenManageDevicesOnApiLocked(manageDevicesForSignIn_);
+    }
+  } catch (const std::exception& e) {
+    g_warning("sdkhost: opening the device list failed: %s", e.what());
+  }
+  if (!opened) {
+    // signed out, or the refused sign-in is gone: the sheet says to sign in
+    g_message("sdkhost: the device list has no sign-in to open with");
+    manageDevicesOwner_ = ManageDevicesOwner::None;
+    if (manageDevicesHandler_ && *manageDevicesHandler_) {
+      (*manageDevicesHandler_)(ManageDevicesUpdate{urnet::ManageDevicesSnapshot{}, false});
+    }
+    return;
+  }
+  g_message("sdkhost: the device list is open (on %s)",
+            manageDevicesOwner_ == ManageDevicesOwner::Device   ? "the bound device"
+            : manageDevicesOwner_ == ManageDevicesOwner::SignIn ? "the refused sign-in"
+                                                                : "the api");
+  StartManageDevicesLocked(generation);
+}
+
+bool SdkHost::OpenManageDevicesOnApiLocked(bool forSignIn) {
+  if (!api_) return false;
+  std::string byJwt;
+  urnet::ManageDevicesSignInRetry retry;
+  if (forSignIn) {
+    std::scoped_lock lock(refusedSignInMutex_);
+    if (!refusedSignIn_) return false;
+    byJwt = refusedSignIn_->byJwt;
+    // a removal freed a slot: the refused sign-in registers again
+    retry = [this] { RetryRefusedSignIn(); };
+  } else {
+    // no device to add again: the stored sign-in token, and no retry
+    if (signedOut_.load() || !localState_) return false;
+    byJwt = localState_->getByJwt();
+  }
+  if (byJwt.empty()) return false;
+  manageDevicesVc_ = urnet::newSignInManageDevicesViewController(*api_, byJwt, std::move(retry));
+  manageDevicesOwner_ = forSignIn ? ManageDevicesOwner::SignIn : ManageDevicesOwner::Api;
+  return static_cast<bool>(manageDevicesVc_);
+}
+
+void SdkHost::StartManageDevicesLocked(uint64_t generation) {
+  const bool canManage = ReadGuarded<bool>(
+      "getCanManage", [&] { return manageDevicesVc_.getCanManage(); }, false);
+  // Copies the handler and takes no lock of this host's: the list calls it on
+  // its goroutines, and from inside start, refresh and removeDevice too, while
+  // manageDevicesMutex_ is held. A snapshot of an older open is dropped.
+  const auto handler = manageDevicesHandler_;
+  manageDevicesSub_ = manageDevicesVc_.addManageDevicesListener(
+      [this, generation, handler, canManage](std::optional<urnet::ManageDevicesSnapshot> snapshot) {
+        if (!snapshot || !handler || !*handler) return;
+        if (generation != manageDevicesGeneration_.load()) return;
+        (*handler)(ManageDevicesUpdate{std::move(*snapshot), canManage});
+      });
+  // loads the list; its first snapshot (loading) reaches the sheet from here
+  manageDevicesVc_.start();
+}
+
+void SdkHost::CloseManageDevicesVcLocked() {
+  manageDevicesSub_ = urnet::Sub{};
+  if (manageDevicesVc_) {
+    try {
+      if (manageDevicesOwner_ == ManageDevicesOwner::Device && device_) {
+        device_->closeManageDevicesViewController(manageDevicesVc_);
+      } else {
+        manageDevicesVc_.close();
+      }
+    } catch (const std::exception& e) {
+      g_warning("sdkhost: closing the device list failed: %s", e.what());
+    }
+  }
+  manageDevicesVc_ = urnet::ManageDevicesViewController{};
+  manageDevicesOwner_ = ManageDevicesOwner::None;
+}
+
+void SdkHost::ReopenManageDevicesOffDeviceLocked() {
+  std::scoped_lock lock(manageDevicesMutex_);
+  if (manageDevicesOwner_ != ManageDevicesOwner::Device) return;
+  CloseManageDevicesVcLocked();
+  const uint64_t generation = manageDevicesGeneration_.load();
+  if (OpenManageDevicesOnApiLocked(/*forSignIn=*/false)) {
+    g_message("sdkhost: the device went under the device list: it is open on the api now");
+    StartManageDevicesLocked(generation);
+  }
+}
+
+void SdkHost::RefreshManageDevices() {
+  std::scoped_lock lock(manageDevicesMutex_);
+  if (manageDevicesVc_) manageDevicesVc_.refresh();
+}
+
+void SdkHost::RemoveManagedDevice(const std::string& clientId) {
+  std::scoped_lock lock(manageDevicesMutex_);
+  if (!manageDevicesVc_) return;
+  g_message("sdkhost: the device list removes a device");
+  manageDevicesVc_.removeDevice(clientId);
+}
+
+void SdkHost::CloseManageDevices() {
+  manageDevicesGeneration_.fetch_add(1);
+  {
+    std::scoped_lock lock(manageDevicesMutex_);
+    manageDevicesHandler_.reset();
+  }
+  RunCommand(ConnectCommandQueue::Kind::Device, [this] {
+    std::scoped_lock lock(mutex_);
+    std::scoped_lock vcLock(manageDevicesMutex_);
+    CloseManageDevicesVcLocked();
+  });
+}
+
+bool SdkHost::HasRefusedSignIn() const {
+  std::scoped_lock lock(refusedSignInMutex_);
+  return refusedSignIn_.has_value();
+}
+
+void SdkHost::RetryRefusedSignIn() {
+  std::optional<RefusedSignIn> refused;
+  {
+    std::scoped_lock lock(refusedSignInMutex_);
+    refused = refusedSignIn_;
+  }
+  if (!refused) return;
+  g_message("sdkhost: the device list freed a slot: the refused sign-in registers again");
+  // The first attempt's own callback has had its answer and is not called
+  // twice: this one's outcome reaches the window through the auth handler
+  // (signed in), the refusal handler (refused again) and onRefusedSignInRetry_.
+  // RegisterNetworkClient posts to the main loop first, so this sdk goroutine
+  // may call it.
+  RegisterNetworkClient(
+      refused->byJwt,
+      [this](AuthResult r) {
+        g_message("sdkhost: the refused sign-in's retry %s", r.ok ? "signed in" : "did not sign in");
+        if (onRefusedSignInRetry_) onRefusedSignInRetry_(r);
+      },
+      refused->epoch);
 }
 
 // ---- live stats (macOS parity: listener-push, not polling) ----------------
@@ -6208,6 +6395,9 @@ void SdkHost::TeardownDeviceLocked() {
   ClearTransportDelay();
   // and so does the client limit hold, with its notice
   ClearClientLimit();
+  // a device list opened on this device moves to the Api while the device is
+  // still the one it was opened on, so the sheet keeps a list
+  ReopenManageDevicesOffDeviceLocked();
   // close() actually stops the remote's rpc connection, sync loop and view
   // controllers; reset() alone only releases the handle (urnet_release),
   // leaking them on every logout. The daemon's DeviceLocal, tun and IoLoop
@@ -6289,6 +6479,12 @@ bool SdkHost::LogoutIfStill(const auth_logout::Report& signIn) {
 // first, and the main loop never waits on the device's lock or the daemon
 // (apple 9e5468cb; APPLE_FIXES.md, the device close at sign-out).
 void SdkHost::Logout() {
+  // A sign-in the client limit refused belongs to whoever is leaving: its
+  // device list has nothing left to register again.
+  {
+    std::scoped_lock refusedLock(refusedSignInMutex_);
+    refusedSignIn_.reset();
+  }
   // A sign-out already under way, or done, is this one: nothing is torn down
   // twice, and a second one never reaches the account signed in next.
   uint64_t authEpoch = 0;

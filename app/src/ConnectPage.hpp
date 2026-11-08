@@ -197,6 +197,8 @@ class ConnectPage : public Gtk::Box {
   // RetryClientLimit)
   std::function<void()> on_client_limit_upgrade;
   std::function<void()> on_client_limit_retry;
+  // its Manage devices on a Pro plan (the window's device list)
+  std::function<void()> on_client_limit_manage_devices;
   // The window's status strip, which shows on every destination what this page
   // says: the status row's word and dot after each render (the word the hero is
   // named by, "Disconnecting…" included), and the provider row's text.
@@ -579,10 +581,11 @@ class ConnectPage : public Gtk::Box {
   Gtk::Box* balanceRecoveryRow_ = nullptr;
   Gtk::Button* balanceRecoveryCancel_ = nullptr;
   // the client limit notice (ApplyClientLimitNotice): its body follows the
-  // plan's prompt, and Get Pro shows only on a free plan
+  // plan's prompt, Get Pro shows only on a free plan, Manage devices only on Pro
   Gtk::Box* clientLimitAlert_ = nullptr;
   Gtk::Label* clientLimitBody_ = nullptr;
   Gtk::Button* clientLimitUpgrade_ = nullptr;
+  Gtk::Button* clientLimitManage_ = nullptr;
   Gtk::Button* hero_ = nullptr;
   ConnectCanvas* canvas_ = nullptr;
   Gtk::Label* locationText_ = nullptr;

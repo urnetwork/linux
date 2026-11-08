@@ -429,6 +429,14 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   host_.SetClientLimitHandler([this](client_limit::Reading reading) {
     PostToMain([this, reading] { ApplyClientLimit(reading); });
   });
+  // A sign-in the client limit refused, whichever screen signed in, offers its
+  // device list; the list's retry of it says how it went.
+  host_.SetClientLimitRefusalHandler([this](client_limit::Prompt prompt) {
+    PostToMain([this, prompt] { OfferSignInManageDevices(prompt); });
+  });
+  host_.SetRefusedSignInRetryHandler([this](AuthResult result) {
+    PostToMain([this, result] { OnRefusedSignInRetry(result); });
+  });
   // The command queue settled: a tap's held state ends with the device's own
   // reading, taken on the worker after the last command (already on the main
   // loop).
@@ -1877,6 +1885,8 @@ void MainWindow::BuildHome() {
   // guest adds a sign-in first), and Retry dials again at once
   connectPage_->on_client_limit_upgrade = [this] { OpenUpgrade(); };
   connectPage_->on_client_limit_retry = [this] { host_.RetryClientLimit("the notice's Retry"); };
+  // and on a Pro plan, the device list, where a removal frees a slot
+  connectPage_->on_client_limit_manage_devices = [this] { ShowManageDevicesSheet(false, {}); };
   // The strip's state and provider are the page's own render, as on Windows,
   // so the strip and the Connect page cannot disagree.
   connectPage_->on_status_rendered = [this](const Glib::ustring& text, const std::string& dot) {
@@ -2023,6 +2033,8 @@ void MainWindow::BuildHome() {
     }
   };
   settingsPage_->on_slow_internet_notify = [this](bool on) { SetSlowInternetNotify(on); };
+  // Settings > Device: the account's device list
+  settingsPage_->on_open_manage_devices = [this] { ShowManageDevicesSheet(false, {}); };
   shell_->SetPage("settings", *settingsPage_);
   // the windows tag->load mapping: each destination loads on selection (and
   // again on auth change, through ApplyAuthState)
@@ -2561,6 +2573,12 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
                              motion::ShouldAnimate() &&
                              stack_.get_visible_child_name() != "home";
   if (loggedIn) homeRevealed_ = true;
+  // The device list's account is gone: the sign-in it was opened for went
+  // through, or the account it lists signed out.
+  if (manageDevicesSheet_ && manageDevicesSheet_->IsOpen() &&
+      manageDevicesSheet_->ForSignIn() == loggedIn) {
+    manageDevicesSheet_->Dismiss();
+  }
   // the login control reads the stored region again (Custom DNS or a network
   // switch may have changed it); a prompt from the login screen ends with it
   if (loggedIn) cantReach_.Dismiss();
@@ -3030,6 +3048,43 @@ void MainWindow::ApplyClientLimitNotification(const std::string& trackerAction) 
       return;
     case client_limit::NotificationStep::None:
       return;
+  }
+}
+
+// ---- the device list (ManageDevicesSheet) ---------------------------------------
+
+void MainWindow::ShowManageDevicesSheet(bool forSignIn, const Glib::ustring& message) {
+  if (!manageDevicesSheet_) manageDevicesSheet_ = std::make_unique<ManageDevicesSheet>(*this, host_);
+  manageDevicesSheet_->Open(forSignIn, message);
+}
+
+void MainWindow::OfferSignInManageDevices(client_limit::Prompt prompt) {
+  const client_limit::Text* body = client_limit::SignInRefusalBody(prompt);
+  if (!body) return;
+  if (manageDevicesSheet_ && manageDevicesSheet_->IsOpen() && manageDevicesSheet_->ForSignIn()) {
+    // a retry of the refused sign-in answered: what it said, above the list
+    manageDevicesSheet_->SetMessage(T_(body->key, body->english));
+    return;
+  }
+  // The network's client limit refused the sign-in: its device list, where a
+  // removal frees a slot and runs the sign-in again (SdkHost keeps it). No Get
+  // Pro here: a purchase needs a signed-in account, and the server signs the
+  // apps in and holds a free plan at connect, where the notice offers it.
+  if (host_.HasRefusedSignIn()) ShowManageDevicesSheet(true, T_(body->key, body->english));
+}
+
+void MainWindow::OnRefusedSignInRetry(const AuthResult& result) {
+  if (result.ok) {
+    // Signed in: the auth handler has flipped the view and taken the sheet
+    // down. The rest is every sign-in screen's success: the connect.
+    StartTunnelUi("sign-in after the device list freed a slot");
+    return;
+  }
+  // refused again: OfferSignInManageDevices has said so already
+  if (result.clientLimitPrompt != client_limit::Prompt::None) return;
+  if (manageDevicesSheet_ && manageDevicesSheet_->IsOpen() && manageDevicesSheet_->ForSignIn()) {
+    manageDevicesSheet_->SetMessage(SignInFailureText(
+        result, T_("there_was_an_error_logging_in", "There was an error logging in")));
   }
 }
 

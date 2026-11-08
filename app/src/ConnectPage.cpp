@@ -22,6 +22,7 @@
 #include "KillSwitchCopy.hpp"
 #include "LocationSelection.hpp"
 #include "LocationsSheet.hpp"  // PeerDisplayName — shared with the chooser
+#include "ManageDevicesPresentation.hpp"  // the notice's Manage devices
 #include "ProvideLine.hpp"
 #include "ProvideModeGlyph.hpp"
 #include "SlowInternetPill.hpp"
@@ -787,6 +788,17 @@ void ConnectPage::BuildPaneA() {
       if (on_client_limit_upgrade) on_client_limit_upgrade();
     });
     actions->append(*clientLimitUpgrade_);
+    // a Pro plan frees a slot: the device list, where a removal adds this
+    // device again
+    clientLimitManage_ =
+        Gtk::make_managed<Gtk::Button>(T_(manage_devices::kTitleText.key,
+                                          manage_devices::kTitleText.english));
+    clientLimitManage_->add_css_class("ur-pane-primary");
+    clientLimitManage_->set_visible(false);
+    clientLimitManage_->signal_clicked().connect([this] {
+      if (on_client_limit_manage_devices) on_client_limit_manage_devices();
+    });
+    actions->append(*clientLimitManage_);
     auto* retry = Gtk::make_managed<Gtk::Button>(T_("retry", "Retry"));
     retry->add_css_class("ur-pane-secondary");
     retry->signal_clicked().connect([this] {
@@ -1949,6 +1961,7 @@ void ConnectPage::ApplyClientLimitNotice(const client_limit::Notice& notice) {
   clientLimitAlert_->set_visible(notice.shows);
   clientLimitBody_->set_text(T_(notice.body.key, notice.body.english));
   clientLimitUpgrade_->set_visible(notice.offersUpgrade);
+  clientLimitManage_->set_visible(!notice.offersUpgrade);
 }
 
 void ConnectPage::ApplyBalanceRecovery(const balance_notice::RecoveryLines& lines,
