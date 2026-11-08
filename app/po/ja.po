@@ -6455,7 +6455,7 @@ msgctxt "manage_devices_sign_in_required"
 msgid "Sign in again to manage devices."
 msgstr "デバイスを管理するには、もう一度サインインしてください。"
 
-#. Device list: the label of the row for the device the app runs on. It cannot be removed here (the user signs out instead). On apple the same source text resolves to top200_sign_this_device.
+#. Device list: the label of the row for the device the app runs on. It cannot be removed here (the user signs out instead). On apple the same source text resolves to top200_sign_this_device, so the translations must stay the same as that key's.
 msgctxt "manage_devices_this_device"
 msgid "This device"
 msgstr "このデバイス"
