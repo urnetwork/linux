@@ -398,6 +398,8 @@ UR_TEST(BittensorWalletFlow_ChoosersAndSessionCarryWalletConnect) {
 // account than the address comes back in the server's words rather than as a
 // 401, and each page shows them as sent. The bridge page's manual form checks a
 // paste before it hands it back, so this is what is left when it could not.
+// (The one refusal shown in other words is the client limit's, which says what
+// to do instead: ClientLimitWiringTest.cpp.)
 UR_TEST(BittensorWalletFlow_ARefusedProofReadsInTheServersWords) {
   const std::string host = ReadFile("SdkHost.cpp");
   for (const char* signature : {"void SdkHost::AuthLoginWithWallet(",
@@ -407,8 +409,12 @@ UR_TEST(BittensorWalletFlow_ARefusedProofReadsInTheServersWords) {
   }
   const std::string window = ReadFile("MainWindow.cpp");
   UR_EXPECT_TRUE_MSG("sign-in", FunctionBody(window, "void MainWindow::OnWalletAuth(")
-                                        .find("SetLoginError(result.error);") != std::string::npos);
-  UR_EXPECT_TRUE_MSG("create", ReadFile("AuthViews.cpp").find(": r.error);") != std::string::npos);
+                                        .find("SetLoginError(SignInFailureText(") != std::string::npos);
+  UR_EXPECT_TRUE_MSG("sign-in words",
+                     window.find("return error.empty() ? Glib::ustring(screenLine) : "
+                                 "Glib::ustring(error);") != std::string::npos);
+  UR_EXPECT_TRUE_MSG("create",
+                     ReadFile("AuthViews.cpp").find(": Glib::ustring(r.error));") != std::string::npos);
   UR_EXPECT_TRUE_MSG("add", ReadFile("AccountPage.cpp")
                                 .find("providerError_ = result.error.empty()") != std::string::npos);
 }

@@ -50,6 +50,19 @@
 // balance can bring back: a wedged device answers nothing, the balance included,
 // and a Disconnect would only wait on the same lock.
 //
+// NOR IS A DEVICE THE CLIENT LIMIT HOLDS OFF (owner, 2026-11-08: Linux and
+// Windows at parity with the apple health audit). The platform closed the
+// session's device for its network's concurrent client limit, and the sdk holds
+// it off the platform for 15 to 20 minutes (ClientLimitStatus), so its window
+// cannot form either. A stop there let the traffic out in the clear and handed
+// the session to a device that dialed the platform at once, past the hold the
+// sdk keeps per device: the provider-only device the app's health poll brings
+// back after the drop, or the user's next Connect. Each was another refusal, a
+// retry storm against the limit. So while the device is held (ClientLimitHold,
+// below) NoInbound and NoExit hold as out of balance, the app's notice says what
+// to do (upgrade, or free a slot), and Disconnect is the user's. When the hold
+// ends every window starts again; a refusal holds it again within seconds.
+//
 // Pure, so every rule is a table test: TunnelHost reads the tun's packet
 // counters and the exit sampler's last readings once a second on its reaper,
 // hands them to DeadTunnelWatch with one clock, and acts on the verdict. The
@@ -276,6 +289,49 @@ class OutOfBalanceHold {
   int64_t refusedGeneration_ = 0;
 };
 
+// ---- the client limit hold ---------------------------------------------------
+
+// What one sample of the SDK says about the client limit: Device.
+// GetClientLimitStatus, the same reading the app's notice takes from this device.
+struct ClientLimitReading {
+  // The status was read. False says nothing about the limit, and the hold stays
+  // as it is.
+  bool sampled = false;
+  // ClientLimitStatus::Status is ClientLimitStatusExceeded: the platform closed
+  // this device for its network's concurrent client limit, and the device holds
+  // every platform transport of its client off until the hold's retry time (15
+  // to 20 minutes) or the app's Retry (Device.RetryClientLimit).
+  bool exceeded = false;
+};
+
+// What one reading did to the hold.
+enum class ClientLimitStep {
+  None,
+  // First seen held: the no-exit rules hold from here.
+  Entered,
+  // The device's hold ended: every window starts again.
+  Released,
+};
+
+// Whether the platform holds this session's device off for its network's
+// concurrent client limit (see the file comment). Unlike the balance, the sdk
+// reports the hold itself, so a reading says it either way: exceeded holds, not
+// exceeded ends it, and only no reading leaves it as it is. Pinned by
+// FailsafeClientLimitTest.cpp.
+class ClientLimitHold {
+ public:
+  ClientLimitStep Observe(const ClientLimitReading& reading) {
+    if (!reading.sampled || reading.exceeded == held_) return ClientLimitStep::None;
+    held_ = reading.exceeded;
+    return held_ ? ClientLimitStep::Entered : ClientLimitStep::Released;
+  }
+
+  bool held() const { return held_; }
+
+ private:
+  bool held_ = false;
+};
+
 // ---- the verdict ------------------------------------------------------------
 
 enum class DeadTunnelReason {
@@ -342,6 +398,10 @@ struct DeadTunnelSignals {
 
   // The account is out of balance (OutOfBalanceHold): the no-exit rules hold.
   bool outOfBalance = false;
+
+  // The platform holds this device off for its network's concurrent client
+  // limit (ClientLimitHold): the no-exit rules hold.
+  bool clientLimitHeld = false;
 };
 
 struct DeadTunnelVerdict {
@@ -405,12 +465,13 @@ inline DeadTunnelVerdict Evaluate(const DeadTunnelSignals& s, int64_t nowMillis,
   // The two no-exit rules measure online time only, and hold while offline:
   // with no physical path nothing could prove an exit or answer a packet. The
   // veto above and SdkUnresponsive read the raw ages, so being offline neither
-  // extends the veto nor hides a wedged SDK. They hold while out of balance too:
-  // that session is meant to carry nothing until the user acts.
+  // extends the veto nor hides a wedged SDK. They hold while out of balance or
+  // under a client limit hold too: that session is meant to carry nothing until
+  // the user acts.
   const int64_t provenOnlineAge = detail::OnlineAge(provenAge, s.provenOfflineMillis);
   const int64_t inboundOnlineAge = detail::OnlineAge(inboundAge, s.inboundOfflineMillis);
   const bool fastApplies = settings.deadFastMillis > 0 && !s.offline && !s.outOfBalance &&
-                           s.providerWindowReady && s.provenCount == 0 &&
+                           !s.clientLimitHeld && s.providerWindowReady && s.provenCount == 0 &&
                            s.outboundSinceInbound >= settings.deadFastOutboundPackets;
   if (fastApplies && inboundOnlineAge >= settings.deadFastMillis &&
       provenOnlineAge >= settings.deadFastMillis) {
@@ -421,7 +482,7 @@ inline DeadTunnelVerdict Evaluate(const DeadTunnelSignals& s, int64_t nowMillis,
   // Only once the sampler has answered: never having a reading is
   // SdkUnresponsive's question, not this rule's.
   const bool slowApplies = settings.deadSlowMillis > 0 && !s.offline && !s.outOfBalance &&
-                           s.provenCount == 0 && s.lastSampleMillis >= 0;
+                           !s.clientLimitHeld && s.provenCount == 0 && s.lastSampleMillis >= 0;
   if (slowApplies && provenOnlineAge >= settings.deadSlowMillis) {
     v.reason = DeadTunnelReason::NoExit;
     return v;
@@ -429,7 +490,8 @@ inline DeadTunnelVerdict Evaluate(const DeadTunnelSignals& s, int64_t nowMillis,
 
   // Nothing fired: is a countdown accumulating, and how close is it? The
   // unresponsive one counts only once overdue, the fast one only while its
-  // traffic holds, and neither no-exit one while offline or out of balance.
+  // traffic holds, and neither no-exit one while offline, out of balance or
+  // held by the client limit.
   int64_t soonest = -1;
   auto consider = [&soonest](int64_t remaining) {
     if (remaining < 0) remaining = 0;
@@ -563,6 +625,8 @@ struct WatchInputs {
   bool offline = false;
   // The sampler's last reading of the balance.
   BalanceReading balance;
+  // The sampler's last reading of the device's client limit hold.
+  ClientLimitReading clientLimit;
 };
 
 struct WatchTick {
@@ -585,14 +649,19 @@ struct WatchTick {
   // that tick.
   BalanceStep balanceStep = BalanceStep::None;
   bool outOfBalance = false;
+  // What this tick's reading did to the client limit hold, and whether it holds
+  // now. Released rebases every window, like a freeze, and reaches no verdict on
+  // that tick.
+  ClientLimitStep clientLimitStep = ClientLimitStep::None;
+  bool clientLimitHeld = false;
   // The verdict's inputs, for the log line of a teardown.
   DeadTunnelSignals signals;
 };
 
 // The evaluator of one Up session: the freeze rebase, the destination clocks,
-// the offline and balance holds and the traffic edges around Evaluate, ticked
-// every evaluateIntervalMillis, every timing read from the settings it was built
-// with.
+// the offline, balance and client limit holds and the traffic edges around
+// Evaluate, ticked every evaluateIntervalMillis, every timing read from the
+// settings it was built with.
 class DeadTunnelWatch {
  public:
   DeadTunnelWatch() = default;
@@ -605,6 +674,7 @@ class DeadTunnelWatch {
     lastTickMillis_ = in.nowMillis;
     epoch_ = ConnectionEpochTracker();
     outOfBalance_ = OutOfBalanceHold();
+    clientLimit_ = ClientLimitHold();
     Rebase(in);
   }
 
@@ -614,9 +684,11 @@ class DeadTunnelWatch {
     tick.tickGapMillis = now - lastTickMillis_;
     lastTickMillis_ = now;
     // Ahead of the rebases: a suspend or a return to a network restarts the
-    // windows, and tells nothing about the balance.
+    // windows, and tells nothing about the balance or the client limit.
     tick.balanceStep = outOfBalance_.Observe(in.balance);
     tick.outOfBalance = outOfBalance_.held();
+    tick.clientLimitStep = clientLimit_.Observe(in.clientLimit);
+    tick.clientLimitHeld = clientLimit_.held();
     if (EvaluatorFroze(tick.tickGapMillis, settings_)) {
       // Nothing watched the session in that gap: every age would be the length
       // of the gap, not of a failure. Rebase, and take the current readings as
@@ -643,6 +715,12 @@ class DeadTunnelWatch {
     if (tick.balanceStep == BalanceStep::Released) {
       // Everything measured while held was a session meant to carry nothing:
       // a fresh grace, or the rule the hold kept back would fire on this tick.
+      Rebase(in);
+      return tick;
+    }
+    if (tick.clientLimitStep == ClientLimitStep::Released) {
+      // The device dials the platform again: the same fresh grace, for the same
+      // reason, and a refusal holds it again within seconds, inside it.
       Rebase(in);
       return tick;
     }
@@ -689,6 +767,7 @@ class DeadTunnelWatch {
     s.provenOfflineMillis = provenOfflineMillis_;
     s.inboundOfflineMillis = inboundOfflineMillis_;
     s.outOfBalance = outOfBalance_.held();
+    s.clientLimitHeld = clientLimit_.held();
     tick.verdict = Evaluate(s, now, settings_);
     return tick;
   }
@@ -698,8 +777,8 @@ class DeadTunnelWatch {
 
  private:
   // Every window starts again from `in`: the up edge, a freeze, a return from a
-  // long offline stretch, and the balance coming back. Nothing measured before
-  // it is evidence now.
+  // long offline stretch, the balance coming back and the end of a client limit
+  // hold. Nothing measured before it is evidence now.
   void Rebase(const WatchInputs& in) {
     sessionStartMillis_ = in.nowMillis;
     trafficStartMillis_ = in.nowMillis;
@@ -728,8 +807,9 @@ class DeadTunnelWatch {
   int64_t inboundOfflineMillis_ = 0;
   int64_t provenSeenMillis_ = -1;
   int64_t inboundSeenMillis_ = -1;
-  // Kept across every rebase; a new session starts it again.
+  // Kept across every rebase; a new session starts them again.
   OutOfBalanceHold outOfBalance_;
+  ClientLimitHold clientLimit_;
 };
 
 }  // namespace urnw::watchdog

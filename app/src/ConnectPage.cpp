@@ -22,6 +22,7 @@
 #include "KillSwitchCopy.hpp"
 #include "LocationSelection.hpp"
 #include "LocationsSheet.hpp"  // PeerDisplayName — shared with the chooser
+#include "ManageDevicesPresentation.hpp"  // the notice's Manage devices
 #include "ProvideLine.hpp"
 #include "ProvideModeGlyph.hpp"
 #include "SlowInternetPill.hpp"
@@ -757,6 +758,57 @@ void ConnectPage::BuildPaneA() {
   }
   balanceRecoveryRow_->set_visible(false);
   paneAContent_->append(*balanceRecoveryRow_);
+
+  // 2.4d the platform holds this device off for its network's concurrent client
+  // limit while a connection is requested (ClientLimitNotice.hpp): the traffic
+  // goes nowhere until the user acts, so say what to do. A free plan is offered
+  // Get Pro, the window's upgrade path; Retry dials again at once once a slot is
+  // free or the plan is Pro. The connect action's Disconnect stays the way out.
+  clientLimitAlert_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+  clientLimitAlert_->set_margin_top(8);
+  {
+    auto* title = Gtk::make_managed<Gtk::Label>(
+        T_(client_limit::kTitle.key, client_limit::kTitle.english));
+    title->add_css_class("ur-row-title");
+    title->set_xalign(0);
+    title->set_wrap(true);
+    CapNatural(title, 20);
+    clientLimitAlert_->append(*title);
+    clientLimitBody_ = Gtk::make_managed<Gtk::Label>(
+        T_(client_limit::kUpgradeBody.key, client_limit::kUpgradeBody.english));
+    clientLimitBody_->set_xalign(0);
+    clientLimitBody_->set_wrap(true);
+    CapNatural(clientLimitBody_, 20);
+    clientLimitAlert_->append(*clientLimitBody_);
+    auto* actions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    actions->set_homogeneous(true);
+    clientLimitUpgrade_ = Gtk::make_managed<Gtk::Button>(T_("get_pro", "Get Pro"));
+    clientLimitUpgrade_->add_css_class("ur-pane-primary");
+    clientLimitUpgrade_->signal_clicked().connect([this] {
+      if (on_client_limit_upgrade) on_client_limit_upgrade();
+    });
+    actions->append(*clientLimitUpgrade_);
+    // a Pro plan frees a slot: the device list, where a removal adds this
+    // device again
+    clientLimitManage_ =
+        Gtk::make_managed<Gtk::Button>(T_(manage_devices::kTitleText.key,
+                                          manage_devices::kTitleText.english));
+    clientLimitManage_->add_css_class("ur-pane-primary");
+    clientLimitManage_->set_visible(false);
+    clientLimitManage_->signal_clicked().connect([this] {
+      if (on_client_limit_manage_devices) on_client_limit_manage_devices();
+    });
+    actions->append(*clientLimitManage_);
+    auto* retry = Gtk::make_managed<Gtk::Button>(T_("retry", "Retry"));
+    retry->add_css_class("ur-pane-secondary");
+    retry->signal_clicked().connect([this] {
+      if (on_client_limit_retry) on_client_limit_retry();
+    });
+    actions->append(*retry);
+    clientLimitAlert_->append(*actions);
+  }
+  clientLimitAlert_->set_visible(false);
+  paneAContent_->append(*clientLimitAlert_);
 
   // "More options" disclosure (Simple only) gating provide/options/peers
   moreOptionsToggle_ = Gtk::make_managed<Gtk::Button>(
@@ -1903,6 +1955,13 @@ void ConnectPage::ApplyBalanceNotice(const balance_notice::Signals& signals) {
   } else {
     freeRefreshTicker_.Stop();
   }
+}
+
+void ConnectPage::ApplyClientLimitNotice(const client_limit::Notice& notice) {
+  clientLimitAlert_->set_visible(notice.shows);
+  clientLimitBody_->set_text(T_(notice.body.key, notice.body.english));
+  clientLimitUpgrade_->set_visible(notice.offersUpgrade);
+  clientLimitManage_->set_visible(!notice.offersUpgrade);
 }
 
 void ConnectPage::ApplyBalanceRecovery(const balance_notice::RecoveryLines& lines,

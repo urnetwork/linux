@@ -143,6 +143,42 @@ UR_TEST(DeadTunnelWiring_TheHoldReadsTheBalanceOffTheSessionsDevice) {
                                  "tick.balanceStep == watchdog::BalanceStep::Released"}));
 }
 
+// The client limit hold reads the device's own ClientLimitStatus, the reading the
+// app's notice takes, off the session's device on the sampler's thread like every
+// other call on it, published whole under the channel's lock before the stamp
+// that says a sample completed, and handed to the watch on every tick. Before it,
+// nothing read the hold, and NoExit stopped a held session at its window
+// (FailsafeClientLimitTest.cpp).
+UR_TEST(DeadTunnelWiring_TheHoldReadsTheClientLimitOffTheSessionsDevice) {
+  const std::string sampler = ReadDeadTunnelSource("daemon/ExitSampler.cpp");
+  const std::string run = DeadTunnelBody(sampler, "void ExitSampler::Run(");
+  UR_EXPECT_TRUE(InOrder(run, {"urnet_device_get_client_limit_status(channel->deviceHandle)",
+                               "if (clientLimit) {", "std::scoped_lock lock(channel->mutex);",
+                               "channel->clientLimit.sampled = true;",
+                               "channel->clientLimit.exceeded = clientLimit->Status == "
+                               "urnet::ClientLimitStatusExceeded;",
+                               "channel->lastSampleMillis.store(now);"}));
+  // no sdk call under that lock
+  const size_t from = run.find("if (clientLimit) {");
+  const size_t to = run.find("channel->clientLimit.exceeded");
+  UR_EXPECT_TRUE(from != std::string::npos && to != std::string::npos && from < to);
+  if (from != std::string::npos && to != std::string::npos && from < to) {
+    UR_EXPECT_FALSE(DeadTunnelHas(run.substr(from, to - from), "urnet_"));
+  }
+  const std::string read = DeadTunnelBody(sampler, "ExitSampler::Reading ExitSampler::Read() const {");
+  UR_EXPECT_TRUE(InOrder(read, {"std::scoped_lock lock(channel_->mutex);",
+                                "reading.clientLimit = channel_->clientLimit;"}));
+
+  const std::string host = ReadDeadTunnelSource("daemon/TunnelHost.cpp");
+  const std::string check = DeadTunnelBody(host, "bool TunnelHost::CheckDeadTunnelLocked() {");
+  UR_EXPECT_TRUE(InOrder(check, {"exitSampler_.Read()", "inputs.clientLimit = sample.clientLimit;",
+                                 "deadTunnelWatch_.Tick(inputs)"}));
+  UR_EXPECT_FALSE(DeadTunnelHas(check, "getClientLimitStatus"));
+  UR_EXPECT_FALSE(DeadTunnelHas(check, "urnet_device_get_client_limit_status"));
+  UR_EXPECT_TRUE(InOrder(check, {"tick.clientLimitStep == watchdog::ClientLimitStep::Entered",
+                                 "tick.clientLimitStep == watchdog::ClientLimitStep::Released"}));
+}
+
 // The tun's counters in the right directions, the sampler's readings, and a
 // dead verdict ended through the protective teardown with the failsafe's
 // reason and code: the armed floor or no table, the outcome checked, published

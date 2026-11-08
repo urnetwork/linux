@@ -36,6 +36,7 @@
 
 #include <gtkmm.h>
 
+#include "ClientLimitNotice.hpp"
 #include "ConnectCanvas.hpp"
 #include "ConnectionFilter.hpp"
 #include "ContractsSheet.hpp"
@@ -96,6 +97,11 @@ class ConnectPage : public Gtk::Box {
   // The out-of-balance held alert under the connect action (urnetwork/android#483):
   // shown when balance_notice::HeldAlert holds, with Upgrade and Disconnect.
   void ApplyBalanceNotice(const balance_notice::Signals& signals);
+  // The client limit notice under the connect action (ClientLimitNotice.hpp):
+  // while the platform holds the device off and a connection is requested,
+  // what to do, with Get Pro on a free plan and Retry. The connect action's
+  // Disconnect stays the way out; nothing here disconnects.
+  void ApplyClientLimitNotice(const client_limit::Notice& notice);
   // The plan's say over the status row (health::WithPlan). Asked before the
   // reading it goes with, so the row never paints the wrong word in between.
   void SetBalancePlan(bool pro, bool dataLimit);
@@ -186,6 +192,13 @@ class ConnectPage : public Gtk::Box {
   std::function<void()> on_open_data_info;
   // the recovery row's Cancel: a refused start is not run by itself any more
   std::function<void()> on_cancel_balance_recovery;
+  // the client limit notice's Get Pro (the window's upgrade path, the guest
+  // fork included) and Retry (the device dials again at once: SdkHost::
+  // RetryClientLimit)
+  std::function<void()> on_client_limit_upgrade;
+  std::function<void()> on_client_limit_retry;
+  // its Manage devices on a Pro plan (the window's device list)
+  std::function<void()> on_client_limit_manage_devices;
   // The window's status strip, which shows on every destination what this page
   // says: the status row's word and dot after each render (the word the hero is
   // named by, "Disconnecting…" included), and the provider row's text.
@@ -567,6 +580,12 @@ class ConnectPage : public Gtk::Box {
   // "You'll be reconnected when data is available again." and its Cancel
   Gtk::Box* balanceRecoveryRow_ = nullptr;
   Gtk::Button* balanceRecoveryCancel_ = nullptr;
+  // the client limit notice (ApplyClientLimitNotice): its body follows the
+  // plan's prompt, Get Pro shows only on a free plan, Manage devices only on Pro
+  Gtk::Box* clientLimitAlert_ = nullptr;
+  Gtk::Label* clientLimitBody_ = nullptr;
+  Gtk::Button* clientLimitUpgrade_ = nullptr;
+  Gtk::Button* clientLimitManage_ = nullptr;
   Gtk::Button* hero_ = nullptr;
   ConnectCanvas* canvas_ = nullptr;
   Gtk::Label* locationText_ = nullptr;

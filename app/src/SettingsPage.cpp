@@ -21,6 +21,7 @@
 #include "KillSwitchCopy.hpp"
 #include "LaunchAtStartup.hpp"
 #include "LicensesSheet.hpp"
+#include "ManageDevicesPresentation.hpp"  // the Device pane's Manage devices row
 #include "PaneKit.hpp"
 #include "PostQuantumIdentity.hpp"  // ProviderIdentitiesSheet (reused as-is)
 #include "SettingsFold.hpp"
@@ -1497,6 +1498,16 @@ void SettingsPage::BuildDeviceSection(Gtk::Box& host) {
 
   // Server-assigned, read-only: a spec is reported, never chosen.
   deviceSpecValue_ = AddValueRow(host, T_("device_spec_label", "Spec"));
+
+  // The network's devices and hosted proxies, each a slot of the concurrent
+  // client limit: the window's device list (ManageDevicesSheet), where a
+  // removal frees one. It says itself when there is no sign-in to list with.
+  auto manageDevicesRow = kit::MakePaneTwoLineRowButton(
+      T_(manage_devices::kTitleText.key, manage_devices::kTitleText.english), {}, kRowTall);
+  manageDevicesRow.root->signal_clicked().connect([this] {
+    if (on_open_manage_devices) on_open_manage_devices();
+  });
+  host.append(*manageDevicesRow.root);
 
   // Both start at NoSession — the state the app OPENS in.
   ApplyFieldState(*deviceNameRow_.value, SettingsFieldState::NoSession);

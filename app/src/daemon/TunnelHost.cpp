@@ -3130,8 +3130,9 @@ void TunnelHost::StartDeadTunnelWatchLocked() {
   deadTunnelWatching_ = true;
   DaemonLogf("[tunnel] failsafe: watching this tunnel. It is stopped if it carries nothing: no "
              "proven exit for %llds, %llds of sending with nothing coming back, or %llds of "
-             "sdk silence. An account out of balance is stopped for the sdk's silence only. "
-             "Nothing reconnects afterwards.\n",
+             "sdk silence. An account out of balance, or a device the platform holds off for "
+             "its network's client limit, is stopped for the sdk's silence only. Nothing "
+             "reconnects afterwards.\n",
              static_cast<long long>(deadTunnelWatch_.settings().deadSlowMillis / 1000),
              static_cast<long long>(deadTunnelWatch_.settings().deadFastMillis / 1000),
              static_cast<long long>(deadTunnelWatch_.settings().sdkUnresponsiveMillis / 1000));
@@ -3173,6 +3174,9 @@ bool TunnelHost::CheckDeadTunnelLocked() {
   inputs.offline = networkQualityTracker_.offline();
   // Out of balance the no-exit rules hold and the traffic stays captured.
   inputs.balance = sample.balance;
+  // So they do while the platform holds the device off for its network's client
+  // limit: a stop would hand the session to a device that dials past the hold.
+  inputs.clientLimit = sample.clientLimit;
 
   const watchdog::WatchTick tick = deadTunnelWatch_.Tick(inputs);
   if (tick.balanceStep == watchdog::BalanceStep::Entered) {
@@ -3181,6 +3185,15 @@ bool TunnelHost::CheckDeadTunnelLocked() {
                "disconnects\n");
   } else if (tick.balanceStep == watchdog::BalanceStep::Released) {
     DaemonLogf("[tunnel] failsafe: contracts are going through again, so every window starts "
+               "again from now\n");
+  }
+  if (tick.clientLimitStep == watchdog::ClientLimitStep::Entered) {
+    DaemonLogf("[tunnel] failsafe: the platform holds this device off for its network's client "
+               "limit. Its traffic stays in the tunnel, and the no-exit rules wait until the "
+               "hold ends or the user disconnects: the device that replaced this one would dial "
+               "the platform at once, past the hold\n");
+  } else if (tick.clientLimitStep == watchdog::ClientLimitStep::Released) {
+    DaemonLogf("[tunnel] failsafe: the device's client limit hold ended, so every window starts "
                "again from now\n");
   }
   if (tick.wentOffline) {
@@ -3234,6 +3247,11 @@ bool TunnelHost::CheckDeadTunnelLocked() {
     DaemonLogf("[tunnel] failsafe: the balance coming back reset the countdown\n");
   } else if (armedChanged && tick.outOfBalance) {
     DaemonLogf("[tunnel] failsafe: the countdown waits while this account is out of balance\n");
+  } else if (armedChanged && tick.clientLimitStep == watchdog::ClientLimitStep::Released) {
+    DaemonLogf("[tunnel] failsafe: the end of the client limit hold reset the countdown\n");
+  } else if (armedChanged && tick.clientLimitHeld) {
+    DaemonLogf("[tunnel] failsafe: the countdown waits while the platform holds this device off "
+               "for its network's client limit\n");
   } else if (armedChanged && (tick.verdictClockReset || tick.trafficClockReset)) {
     DaemonLogf("[tunnel] failsafe: the new destination's clocks reset the countdown\n");
   } else if (armedChanged && tick.verdict.reason == watchdog::DeadTunnelReason::None) {
