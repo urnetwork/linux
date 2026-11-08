@@ -31,6 +31,7 @@ struct ExitSampler::Channel {
   // Guarded by mutex.
   Kick kick = Kick::None;
   watchdog::BalanceReading balance;
+  watchdog::ClientLimitReading clientLimit;
 
   std::atomic<int64_t> provenCount{0};
   std::atomic<int64_t> lastProvenMillis{-1};
@@ -121,6 +122,7 @@ ExitSampler::Reading ExitSampler::Read() const {
   {
     std::scoped_lock lock(channel_->mutex);
     reading.balance = channel_->balance;
+    reading.clientLimit = channel_->clientLimit;
   }
   return reading;
 }
@@ -177,6 +179,17 @@ void ExitSampler::Run(const std::shared_ptr<Channel>& channel) {
         NoteSampleFailure("window status", e.what());
       }
       if (channel->cancelled.load()) return;
+      // The client limit hold (watchdog::ClientLimitHold), off the device the
+      // app's notice reads it from: whether the platform closed it for its
+      // network's concurrent client limit and the sdk holds it off the platform.
+      std::optional<urnet::ClientLimitStatus> clientLimit;
+      try {
+        clientLimit = ReadSdkJson<urnet::ClientLimitStatus>(
+            urnet_device_get_client_limit_status(channel->deviceHandle));
+      } catch (const std::exception& e) {
+        NoteSampleFailure("client limit status", e.what());
+      }
+      if (channel->cancelled.load()) return;
       int64_t proven = 0;
       try {
         if (const auto exits = ReadSdkJson<urnet::ExitList>(
@@ -203,6 +216,11 @@ void ExitSampler::Run(const std::shared_ptr<Channel>& channel) {
         channel->balance.noPermission = contract->NoPermission;
         channel->balance.connectionGeneration = window->ConnectionGeneration;
         channel->balance.providerAddedCount = window->ProviderStateAdded;
+      }
+      if (clientLimit) {
+        std::scoped_lock lock(channel->mutex);
+        channel->clientLimit.sampled = true;
+        channel->clientLimit.exceeded = clientLimit->Status == urnet::ClientLimitStatusExceeded;
       }
       channel->provenCount.store(proven);
       if (proven >= 1) channel->lastProvenMillis.store(now);

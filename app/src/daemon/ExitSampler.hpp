@@ -1,6 +1,6 @@
 // The dead-tunnel failsafe's view of the SDK (TunnelWatchdog.hpp): a thread of
 // its own that asks a session's device for its contract status, its window
-// status and its exits every sample interval
+// status, its client limit status and its exits every sample interval
 // (DeadTunnelSettings::sdkSampleIntervalMillis, handed to Start), publishes what
 // the last completed sample said, and tells the device when the physical network
 // changed.
@@ -51,6 +51,9 @@ class ExitSampler {
     // The balance as the last sample that could read it found it. One copy, so
     // a status is never paired with another sample's generation.
     watchdog::BalanceReading balance;
+    // The device's client limit hold as the last sample that could read it
+    // found it.
+    watchdog::ClientLimitReading clientLimit;
   };
   using Clock = int64_t (*)();
 
