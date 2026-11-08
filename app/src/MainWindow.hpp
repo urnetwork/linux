@@ -433,6 +433,30 @@ class MainWindow : public Gtk::ApplicationWindow {
   balance_notice::Tracker balanceNotice_;
   void UpdateBalanceNotice();
 
+  // ---- the client limit hold (ClientLimitNotice.hpp) -------------------------
+  // The device's hold as SdkHost last published it. Its feed is NOT gated on
+  // visibility: the notification follows it while the window is hidden.
+  client_limit::Reading clientLimitReading_;
+  // The sdk's notice policy (ClientLimitNoticeTracker): when the notification
+  // posts, alerts once per connection request, re-shows quietly and goes. Main
+  // loop only.
+  urnet::ClientLimitNoticeTracker clientLimitNotice_ = urnet::newClientLimitNoticeTracker();
+  // A toplevel of this process is active (ScheduleAppFocusSync): with the
+  // window shown, the app is in front of the user and the notification is not
+  // sent.
+  bool appFocused_ = false;
+  // The balance store's plan as the window last read it: an upgrade observed
+  // in this run (loaded and free, then Pro) ends a hold that offered it.
+  bool clientLimitPlanLoaded_ = false;
+  bool clientLimitPlanPro_ = false;
+  void ApplyClientLimit(const client_limit::Reading& reading);
+  // The Connect page's notice, and the notification as the sdk's tracker
+  // decides it, from the hold and this window's connect request.
+  void ObserveClientLimit();
+  // Sends, replaces quietly or withdraws the notification for the tracker's
+  // action (ClientLimitNoticeTracker update or reset).
+  void ApplyClientLimitNotification(const std::string& trackerAction);
+
   // ---- the slow-internet indicator (SlowInternet.hpp) -----------------------
   // The device's transport delay as SdkHost last published it. Its feed is
   // NOT gated on visibility: the tray and the notification follow it while

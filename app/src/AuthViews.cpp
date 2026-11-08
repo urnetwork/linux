@@ -51,6 +51,14 @@ Gtk::Label* MakeStepHeading(const Glib::ustring& text) {
   return heading;
 }
 
+// What the network's concurrent client limit says when it refused this
+// device's client at the end of the step (client_limit::SignInRefusalBody, the
+// sdk's prompt): an upgrade or a freed slot. Empty for any other refusal.
+Glib::ustring ClientLimitRefusalText(const AuthResult& r) {
+  const client_limit::Text* body = client_limit::SignInRefusalBody(r.clientLimitPrompt);
+  return body ? Glib::ustring(T_(body->key, body->english)) : Glib::ustring();
+}
+
 }  // namespace
 
 // ---- CreateNetworkPage -------------------------------------------------------
@@ -325,11 +333,14 @@ void CreateNetworkPage::OnContinue() {
         return;
       }
       if (!r.ok) {
+        const Glib::ustring clientLimit = ClientLimitRefusalText(r);
         errorLabel_->set_text(
-            r.error.empty()
-                ? std::string(T_("error_creating_network",
-                                 "There was an error creating your network. Please try again later."))
-                : r.error);
+            !clientLimit.empty()
+                ? clientLimit
+                : r.error.empty()
+                      ? Glib::ustring(T_("error_creating_network",
+                                         "There was an error creating your network. Please try again later."))
+                      : Glib::ustring(r.error));
         return;
       }
       if (on_success) on_success();
@@ -551,8 +562,14 @@ void VerifyPage::Submit() {
         // clear the code so retyping re-triggers the auto-submit (mac parity;
         // the changed handler clears the error, so set the message after)
         code_->set_text("");
-        errorLabel_->set_text(T_("verify_input_invalid",
-                                 "There was a problem authenticating your verification code."));
+        // A code that verified, whose device the client limit then refused, is
+        // not a bad code: say what to do about the limit instead.
+        const Glib::ustring clientLimit = ClientLimitRefusalText(r);
+        errorLabel_->set_text(
+            !clientLimit.empty()
+                ? clientLimit
+                : Glib::ustring(T_("verify_input_invalid",
+                                   "There was a problem authenticating your verification code.")));
         return;
       }
       if (on_success) on_success();

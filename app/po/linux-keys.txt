@@ -299,6 +299,9 @@ client_contracts
 client_id
 client_id_copied
 client_id_copied_to_clipboard
+client_limit_reached
+client_limit_remove_client_message
+client_limit_upgrade_message
 client_statistics
 close
 code

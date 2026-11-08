@@ -79,6 +79,31 @@ T ReadGuarded(const char* what, Fn&& fn, T fallback) {
   return fallback;
 }
 
+// ---- the client limit, out of the sdk's types (ClientLimitNotice.hpp) -------
+
+// The sdk's prompt (ClientLimitStatus.Prompt, AuthNetworkClientError.
+// ClientLimitPrompt), by its exported values. Anything else, or none, is no
+// prompt: a device process too old to send one included.
+client_limit::Prompt ToClientLimitPrompt(const std::string& prompt) {
+  if (prompt == urnet::ClientLimitPromptUpgrade) return client_limit::Prompt::Upgrade;
+  if (prompt == urnet::ClientLimitPromptRemoveClient) return client_limit::Prompt::RemoveClient;
+  return client_limit::Prompt::None;
+}
+
+client_limit::Prompt ToClientLimitPrompt(const std::optional<std::string>& prompt) {
+  return prompt ? ToClientLimitPrompt(*prompt) : client_limit::Prompt::None;
+}
+
+// The device's ClientLimitStatus; none reads as no hold.
+client_limit::Status ToClientLimitStatus(const std::optional<urnet::ClientLimitStatus>& status) {
+  client_limit::Status out;
+  if (!status) return out;
+  out.exceeded = status->Status == urnet::ClientLimitStatusExceeded;
+  out.retryTimeMillis = out.exceeded ? status->RetryTime : 0;
+  out.prompt = out.exceeded ? ToClientLimitPrompt(status->Prompt) : client_limit::Prompt::None;
+  return out;
+}
+
 // ---- the remembered device-rpc session -------------------------------------
 // UPSTREAM'S MODEL, ADOPTED. What is kept, and where:
 //
@@ -656,6 +681,7 @@ void SdkHost::StartLogin(const std::string& userAuth, std::function<void(LoginRo
         LoginRouting routed;
         routed.route = r.ok ? LoginRoute::Login : LoginRoute::Error;
         routed.error = r.error;
+        routed.clientLimitPrompt = r.clientLimitPrompt;
         done(routed);
       }, authEpoch);
       return;
@@ -2510,6 +2536,18 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
             NoteApiError(err);
             if (err) { done({false, false, *err}); return; }
             if (!result) { done({false, false, "no result"}); return; }
+            // The network's concurrent client limit refused this device: the
+            // sdk decided what it offers (an upgrade, or a freed slot), and the
+            // sign-in screens say that instead of the server's words, the 402's
+            // payment terms included (client_limit::SignInRefusalBody).
+            if (result->error) {
+              AuthResult refused{false, false, result->error->message};
+              refused.clientLimitPrompt = ToClientLimitPrompt(result->error->client_limit_prompt);
+              if (refused.clientLimitPrompt != client_limit::Prompt::None) {
+                done(refused);
+                return;
+              }
+            }
             if (result->error && !result->error->message.empty()) {
               done({false, false, result->error->message});
               return;
@@ -3141,6 +3179,9 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
     // The slow-internet feed, kept alive for the tray and the desktop
     // notification the same way: they follow it while the window is hidden.
     BindTransportDelayLocked();
+    // The client limit hold, for the same reason: the Connect page's notice
+    // and the desktop notification while the window sits in the tray.
+    BindClientLimitLocked();
     if (presentationActive_) {
       SubscribeStats();
       SubscribeDrawer();
@@ -3334,6 +3375,86 @@ void SdkHost::PublishTransportDelayLocked() {
   if (onTransportDelay_) onTransportDelay_(delayPublished_);
 }
 
+// ---- the client limit feed (ClientLimitNotice.hpp) ---------------------------
+// The platform closed the device for its network's concurrent client limit and
+// the sdk holds it off (Device.GetClientLimitStatus). Before this, nothing in the
+// GUI read the hold: a held Connect sat on "Connecting" with no word of why. The
+// feed follows the slow-internet feed's rules: stamped with the device's
+// generation, shown only over a connected remote, and read once after the
+// listeners register. The listeners take only clientLimitMutex_, never mutex_.
+
+void SdkHost::BindClientLimitLocked() {
+  uint64_t generation = 0;
+  uint64_t statusRevision = 0;
+  uint64_t remoteRevision = 0;
+  {
+    std::scoped_lock lock(clientLimitMutex_);
+    generation = clientLimitFeed_.Bind();
+    statusRevision = clientLimitFeed_.StatusRevision();
+    remoteRevision = clientLimitFeed_.RemoteRevision();
+    PublishClientLimitLocked();
+  }
+  // The notice is never a reason to fail the start it rides on: a throw leaves
+  // the feed unavailable, which is what it shows without one anyway.
+  try {
+    subs_.push_back(device_->addRemoteChangeListener([this, generation](bool connected) {
+      std::scoped_lock lock(clientLimitMutex_);
+      if (clientLimitFeed_.NoteRemote(generation, connected)) PublishClientLimitLocked();
+    }));
+    subs_.push_back(device_->addClientLimitStatusChangeListener(
+        [this, generation](std::optional<urnet::ClientLimitStatus> status) {
+          std::scoped_lock lock(clientLimitMutex_);
+          if (clientLimitFeed_.NoteStatus(generation, ToClientLimitStatus(status))) {
+            PublishClientLimitLocked();
+          }
+        }));
+  } catch (const std::exception& e) {
+    g_warning("sdkhost: the client limit listeners could not be added: %s", e.what());
+    return;
+  }
+  // Registration replays nothing, so both are read once, AFTER registering, on
+  // this worker (a bind never runs on the main loop): a push that lands
+  // meanwhile is newer than the read and wins (Feed::Seed*).
+  const bool connected = ReadGuarded<bool>(
+      "getRemoteConnected", [&] { return device_->getRemoteConnected(); }, false);
+  const client_limit::Status status =
+      ToClientLimitStatus(ReadGuarded<std::optional<urnet::ClientLimitStatus>>(
+          "getClientLimitStatus", [&] { return device_->getClientLimitStatus(); }, std::nullopt));
+  std::scoped_lock lock(clientLimitMutex_);
+  bool changed = clientLimitFeed_.SeedRemote(generation, remoteRevision, connected);
+  changed = clientLimitFeed_.SeedStatus(generation, statusRevision, status) || changed;
+  if (changed) PublishClientLimitLocked();
+}
+
+void SdkHost::ClearClientLimit() {
+  std::scoped_lock lock(clientLimitMutex_);
+  clientLimitFeed_.Clear();
+  PublishClientLimitLocked();
+}
+
+void SdkHost::PublishClientLimitLocked() {
+  const client_limit::Reading reading = clientLimitFeed_.Current();
+  if (clientLimitSerial_ != 0 && reading.SameAs(clientLimitPublished_)) return;
+  clientLimitPublished_ = reading;
+  clientLimitPublished_.serial = ++clientLimitSerial_;
+  if (onClientLimit_) onClientLimit_(clientLimitPublished_);
+}
+
+void SdkHost::RetryClientLimit(const char* reason) {
+  RunCommand(ConnectCommandQueue::Kind::Device, [this, reason] {
+    std::scoped_lock lock(mutex_);
+    if (!device_) {
+      g_message("client limit: retry (%s): no device is bound", reason);
+      return;
+    }
+    const bool ended = ReadGuarded<bool>(
+        "retryClientLimit", [&] { return device_->retryClientLimit(); }, false);
+    g_message("client limit: retry (%s): %s", reason,
+              ended ? "the hold ended; the device dials the platform again"
+                    : "no hold ended (none in force, or one ended in the last 30 s)");
+  });
+}
+
 // ---- live stats (macOS parity: listener-push, not polling) ----------------
 // SubscribeStats runs under StartTunnel's lock; the callbacks (like the existing
 // connection-status listener) read the SDK getters without taking the lock — the
@@ -3466,6 +3587,9 @@ void SdkHost::NoteDaemonTunnelGone() {
   daemonTunnelGone_.store(true);
   // the delay the gone tunnel measured is no one's any more
   ClearTransportDelay();
+  // nor is a hold of the device it ran: the DeviceRemote would keep its last
+  // readout
+  ClearClientLimit();
   PublishConnectReading();
 }
 
@@ -6082,6 +6206,8 @@ void SdkHost::TeardownDeviceLocked() {
   subs_.clear();
   // the slow-internet feed goes with its device: nothing shows until another binds
   ClearTransportDelay();
+  // and so does the client limit hold, with its notice
+  ClearClientLimit();
   // close() actually stops the remote's rpc connection, sync loop and view
   // controllers; reset() alone only releases the handle (urnet_release),
   // leaking them on every logout. The daemon's DeviceLocal, tun and IoLoop

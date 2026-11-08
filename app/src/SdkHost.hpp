@@ -36,6 +36,7 @@
 #include <urnetwork_sdk.hpp>
 
 #include "ClientEvents.hpp"
+#include "ClientLimitNotice.hpp"
 #include "ConnectCommandQueue.hpp"
 #include "MainRead.hpp"
 #include "ControlClient.hpp"
@@ -78,6 +79,10 @@ struct AuthResult {
   // With verification_required: whether the server sent the code (its
   // send_error); the verify page must not say a code was sent otherwise.
   VerifySendNotice sendNotice = {};
+  // The network's concurrent client limit refused this device's client (the
+  // sdk's AuthNetworkClientError.ClientLimitPrompt): the sign-in screens say
+  // what to do (client_limit::SignInRefusalBody) instead of the server's words.
+  client_limit::Prompt clientLimitPrompt = client_limit::Prompt::None;
 };
 
 // Outcome of the authLogin account discovery (macOS LoginInitialViewModel
@@ -98,6 +103,8 @@ struct LoginRouting {
   std::string userAuth;     // echoed user auth (password / create / verify)
   std::string authAllowed;  // comma-joined methods (IncorrectAuth)
   std::string error;
+  // Error, from the client limit (AuthResult::clientLimitPrompt)
+  client_limit::Prompt clientLimitPrompt = client_limit::Prompt::None;
 };
 
 // Change notifications for the connect drawer (charts, block actions, dns,
@@ -416,6 +423,9 @@ class SdkHost {
   // The slow-internet feed (SlowInternet.hpp): the device's transport delay,
   // available only while its remote is connected.
   using TransportDelayHandler = std::function<void(slow_internet::Reading reading)>;
+  // The client limit feed (ClientLimitNotice.hpp): the device's client limit
+  // hold, available only while its remote is connected.
+  using ClientLimitHandler = std::function<void(client_limit::Reading reading)>;
 
   bool Initialize(const std::string& storageDir, const std::string& logDir);
   // Why the last Initialize failed, as the SDK said it; empty after a success.
@@ -972,6 +982,25 @@ class SdkHost {
   // move within a level. A changed reading goes out through the handler. A
   // push since the read wins, and a read that fails changes nothing. Main loop.
   void RefreshTransportDelay();
+  // The client limit feed (ClientLimitNotice.hpp). Device-lifetime, like the
+  // slow-internet feed: the desktop notification follows it while the window
+  // is hidden, so its consumer must not gate it on visibility. Every reading is
+  // whole; unavailable while no device is bound, its remote is disconnected (a
+  // DeviceRemote whose daemon is gone answers with its last readout), or the
+  // daemon reported its tunnel gone. Fired on SDK threads and on the command
+  // queue's worker, under the feed's own lock and in the order the readings
+  // were taken (each carries its serial): the handler must only marshal, never
+  // call back into SdkHost.
+  void SetClientLimitHandler(ClientLimitHandler h) { onClientLimit_ = std::move(h); }
+  // Ends the bound device's client limit hold, so it dials the platform again
+  // at once instead of waiting out the hold (Device.RetryClientLimit): the
+  // notice's Retry, and the plan turning Pro under a hold. On the command
+  // queue's worker, since the device answers over its rpc. The sdk ends at most
+  // one hold per ClientLimitRetryMinInterval (30 s) and none with no hold in
+  // force, so a repeated press cannot become a retry storm; a refused redial
+  // starts a new hold, which the feed reports. `reason` names the press in the
+  // log and must outlive the call (a literal). Main loop.
+  void RetryClientLimit(const char* reason);
 
   // ---- connect drawer accessors (all locked; graceful with no device) ------
   // The device (remote) exists only while a tunnel session runs. Reads fall
@@ -2029,6 +2058,22 @@ class SdkHost {
   void ClearTransportDelay();
   // Hands on the feed's reading when it changed. Requires delayMutex_.
   void PublishTransportDelayLocked();
+  // ---- the client limit feed (ClientLimitNotice.hpp) -------------------------
+  // Its own lock, for the slow-internet feed's reason; declared before subs_
+  // the same way.
+  std::mutex clientLimitMutex_;
+  client_limit::Feed clientLimitFeed_;          // guarded by clientLimitMutex_
+  client_limit::Reading clientLimitPublished_;  // guarded by clientLimitMutex_
+  uint64_t clientLimitSerial_ = 0;              // guarded by clientLimitMutex_
+  ClientLimitHandler onClientLimit_;
+  // Registers the device's client limit and remote listeners in subs_ (a
+  // device-lifetime feed) and reads both values once after registering.
+  // Requires mutex_ and a device.
+  void BindClientLimitLocked();
+  // The bound device is gone, or its daemon's tunnel is: unavailable.
+  void ClearClientLimit();
+  // Hands on the feed's reading when it changed. Requires clientLimitMutex_.
+  void PublishClientLimitLocked();
   std::vector<urnet::Sub> subs_;
   std::vector<urnet::Sub> presentationSubs_;
 
