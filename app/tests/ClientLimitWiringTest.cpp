@@ -100,6 +100,13 @@ UR_TEST(ClientLimitWiring_RetryRunsOnTheCommandQueue) {
                                             "std::scoped_lock lock(mutex_);", "if (!device_)",
                                             "device_->retryClientLimit();"}));
   UR_EXPECT_EQ(1u, wiring::CountOf(host, "retryClientLimit()"));
+  // the retry after a change (a purchase), on the same queue
+  const std::string changeRetry =
+      wiring::FunctionBody(host, "void SdkHost::RetryClientLimitAfterChange(const char* reason) {");
+  UR_EXPECT_TRUE(ClientLimitInOrder(changeRetry, {"RunCommand(ConnectCommandQueue::Kind::Device,",
+                                                  "std::scoped_lock lock(mutex_);", "if (!device_)",
+                                                  "device_->retryClientLimitAfterChange();"}));
+  UR_EXPECT_EQ(1u, wiring::CountOf(host, "retryClientLimitAfterChange()"));
 }
 
 // A refused registration carries the sdk's prompt beside the server's words,
@@ -215,8 +222,10 @@ UR_TEST(ClientLimitWiring_AnUpgradeSeenInThisRunRetries) {
       window, {"const bool upgraded = clientLimitPlanLoaded_ && !clientLimitPlanPro_ && planLoaded && planPro;",
                "clientLimitPlanLoaded_ = planLoaded;", "clientLimitPlanPro_ = planPro;",
                "if (upgraded && client_limit::Held(clientLimitReading_)) {",
-               "host_.RetryClientLimit(\"the plan turned Pro\");"}));
-  UR_EXPECT_EQ(2u, wiring::CountOf(window, "host_.RetryClientLimit("));
+               "host_.RetryClientLimitAfterChange(\"the plan turned Pro\");"}));
+  // the purchase's retry is the change retry; only the notice's Retry is plain
+  UR_EXPECT_EQ(1u, wiring::CountOf(window, "host_.RetryClientLimit("));
+  UR_EXPECT_EQ(1u, wiring::CountOf(window, "host_.RetryClientLimitAfterChange("));
 }
 
 // The Connect page's notice: Get Pro is the window's upgrade path (a guest adds a

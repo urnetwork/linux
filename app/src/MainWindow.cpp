@@ -361,8 +361,10 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     const bool upgraded = clientLimitPlanLoaded_ && !clientLimitPlanPro_ && planLoaded && planPro;
     clientLimitPlanLoaded_ = planLoaded;
     clientLimitPlanPro_ = planPro;
+    // a purchase is a change the server confirmed: the change retry, past the
+    // backoff of any retries refused before it
     if (upgraded && client_limit::Held(clientLimitReading_)) {
-      host_.RetryClientLimit("the plan turned Pro");
+      host_.RetryClientLimitAfterChange("the plan turned Pro");
     }
   });
 

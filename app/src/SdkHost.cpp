@@ -3470,6 +3470,23 @@ void SdkHost::RetryClientLimit(const char* reason) {
   });
 }
 
+void SdkHost::RetryClientLimitAfterChange(const char* reason) {
+  RunCommand(ConnectCommandQueue::Kind::Device, [this, reason] {
+    std::scoped_lock lock(mutex_);
+    if (!device_) {
+      g_message("client limit: retry after a change (%s): no device is bound", reason);
+      return;
+    }
+    // a daemon on an older sdk gets RetryClientLimit: the sdk's remote device
+    // falls back when the daemon doesn't know the call
+    const bool ended = ReadGuarded<bool>(
+        "retryClientLimitAfterChange", [&] { return device_->retryClientLimitAfterChange(); }, false);
+    g_message("client limit: retry after a change (%s): %s", reason,
+              ended ? "the hold ended; the device dials the platform again"
+                    : "no hold ended (none in force, or a change retry ended one in the last 30 s)");
+  });
+}
+
 // ---- the device list (ManageDevicesSheet) -------------------------------------
 //
 // See OpenManageDevices in the header. The decisions are the sdk's

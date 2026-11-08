@@ -1001,6 +1001,14 @@ class SdkHost {
   // starts a new hold, which the feed reports. `reason` names the press in the
   // log and must outlive the call (a literal). Main loop.
   void RetryClientLimit(const char* reason);
+  // Ends the hold at once after a change that raised the limit: the plan
+  // turning Pro under a hold (Device.RetryClientLimitAfterChange). Unlike
+  // RetryClientLimit the sdk starts its retry floor over, so retries refused
+  // before the purchase never keep a paid plan waiting out the hold; it allows
+  // one such retry per 30 s. A daemon on an older sdk gets RetryClientLimit
+  // instead (the sdk's remote device falls back). On the command queue's
+  // worker; `reason` as for RetryClientLimit. Main loop.
+  void RetryClientLimitAfterChange(const char* reason);
 
   // ---- the device list (ManageDevicesSheet; client limit SDK-API.md) --------
   // What the sheet renders: every snapshot of the list it has open.
