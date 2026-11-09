@@ -448,6 +448,15 @@ std::string DnsKeyLine(const dns_presets::Text& text, const std::string& value) 
                 value);
 }
 
+// A preset's name (the summary's and the status's NameKey with NameProvider):
+// its key's words with the adblock provider's short name, as it is, "AdGuard
+// Family" (owner, 2026-11-09). A key this build does not know shows the
+// adblock provider's name alone.
+std::string DnsPresetName(const std::string& nameKey, const std::string& nameProvider) {
+  const std::string name = DnsKeyLine(dns_presets::KeyText(nameKey), nameProvider);
+  return name.empty() ? nameProvider : name;
+}
+
 // Whether two dns resolver status readings say the same, so a poll applies only
 // a change. The blocked count is not part of it: the card does not show it.
 bool DnsStatusSame(const std::optional<urnet::DnsResolverStatus>& a,
@@ -2890,7 +2899,8 @@ void ConnectPage::ApplyDnsSummary() {
   }
   const auto summary = urnet::describeDnsResolverSettings(dnsSettings_, countryCode_);
   const std::string text =
-      summary ? DnsKeyLine(dns_presets::KeyText(summary->SummaryKey), summary->ProviderName)
+      summary ? DnsKeyLine(dns_presets::KeyText(summary->SummaryKey),
+                           DnsPresetName(summary->NameKey, summary->NameProvider))
               : std::string();
   dnsSummaryText_->set_text(text);
   kit::SetAccessibleLabel(*dnsSummaryText_, text);
@@ -2899,19 +2909,20 @@ void ConnectPage::ApplyDnsSummary() {
 
   std::string notice;
   if (summary && summary->Dropped) {
-    // the dropped preset's provider (A7); an id this release never knew has
-    // no name to give
-    notice = summary->DroppedProviderName.empty()
+    // the dropped preset, named as it showed (A7); an id this release never
+    // knew has no name to give
+    notice = summary->DroppedNameKey.empty()
                  ? DnsKeyLine(dns_presets::ErrorText(dns_presets::kErrorUnknown), std::string())
                  : Format(T_("dns_preset_dropped",
                              "{} is no longer available. You're using URnetwork DNS, so lookups "
                              "aren't filtered."),
-                          summary->DroppedProviderName);
+                          DnsPresetName(summary->DroppedNameKey, summary->DroppedNameProvider));
   } else if (const auto status = urnet::describeDnsResolverStatus(dnsSettings_, dnsStatus_);
              status && status->ShowUseDefault) {
-    // the provider is failing (C8): ad blocking paused, or lookups failing
+    // the preset is failing (C8): ad blocking paused, or lookups failing
     // closed for a filter that must not fall back
-    notice = DnsKeyLine(dns_presets::KeyText(status->StatusKey), status->ProviderName);
+    notice = DnsKeyLine(dns_presets::KeyText(status->StatusKey),
+                        DnsPresetName(status->NameKey, status->NameProvider));
   }
   dnsNoticeLine_->set_visible(!notice.empty());
   if (notice.empty()) return;

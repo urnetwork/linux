@@ -4640,7 +4640,7 @@ msgctxt "dns_apple_profiles_note"
 msgid "DNS profiles installed on this device don't apply while connected. The DNS chosen here is used instead."
 msgstr "연결되어 있는 동안에는 이 기기에 설치된 DNS 프로필이 적용되지 않습니다. 대신 여기서 선택한 DNS가 사용됩니다."
 
-#. DNS settings: how many DNS lookups the selected adblock provider has blocked since the device connected. Counted on the device only and reset at each connect. {count} is the number, {provider} the adblock provider's name, inserted as is.
+#. DNS settings: how many DNS lookups the selected adblock provider has blocked since the device connected. Counted on the device only and reset at each connect. {count} is the number, {provider} the selected preset's name (dns_preset_name_*, for example AdGuard Ad Blocking), inserted as is.
 msgctxt "dns_blocked_count"
 msgid "{0} lookup blocked by {1} this connection"
 msgid_plural "{0} lookups blocked by {1} this connection"
@@ -4846,7 +4846,7 @@ msgctxt "dns_preset_disclosure"
 msgid "Your DNS lookups go to {} through the tunnel, so it never sees your IP address. Its privacy policy applies."
 msgstr "DNS 조회는 터널을 통해 {}에 전달되므로 사용자의 IP 주소는 절대 노출되지 않습니다. 해당 업체의 개인정보 처리방침이 적용됩니다."
 
-#. DNS settings and connect drawer: notice after an app update removed the adblock provider the person had selected. The app switched to URnetwork's own DNS, which doesn't filter. {provider} is the removed adblock provider's name, inserted as is.
+#. DNS settings and connect drawer: notice after an app update removed the preset the person had selected. The app switched to URnetwork's own DNS, which doesn't filter. {provider} is the removed preset's name (dns_preset_name_*, for example AdGuard Family), inserted as is.
 msgctxt "dns_preset_dropped"
 msgid "{} is no longer available. You're using URnetwork DNS, so lookups aren't filtered."
 msgstr "{} 서비스를 더 이상 사용할 수 없습니다. URnetwork DNS를 사용 중이므로 조회가 필터링되지 않습니다."
@@ -4886,7 +4886,7 @@ msgctxt "dns_preset_error_unknown"
 msgid "This preset isn't available. Choose another one."
 msgstr "이 프리셋은 사용할 수 없습니다. 다른 프리셋을 선택하세요."
 
-#. DNS settings: note beside the "Fast DNS on connect" toggle while an adblock provider is selected. While the tunnel connects, lookups go to URnetwork's own DNS, so the adblock provider never sees the person's own address, but those lookups aren't filtered. {provider} is the adblock provider's name, inserted as is.
+#. DNS settings: note beside the "Fast DNS on connect" toggle while an adblock provider is selected. While the tunnel connects, lookups go to URnetwork's own DNS, so the adblock provider never sees the person's own address, but those lookups aren't filtered. {provider} is the selected preset's name (dns_preset_name_*, for example AdGuard Family), inserted as is.
 msgctxt "dns_preset_fast_dns_note"
 msgid "While connecting, lookups use URnetwork DNS, so {} doesn't filter them."
 msgstr "연결 중에는 조회에 URnetwork DNS를 사용하므로 {}에서 필터링하지 않습니다."
@@ -4901,12 +4901,47 @@ msgctxt "dns_preset_jurisdiction"
 msgid "Jurisdiction: {}"
 msgstr "관할권: {}"
 
+#. DNS settings: the name of an adblock provider's preset in "Block ads and trackers", which blocks ads and trackers. Shown alone as the preset's label on the DNS screen, and inserted as is wherever the selected preset is named, as in "DNS: AdGuard Ad Blocking" and "AdGuard Ad Blocking isn't answering", so it reads as a short name that works on its own and inside a sentence. {provider} is the adblock provider's short name, inserted as is (for example AdGuard); keep it first, so the presets of a group stay in alphabetical order.
+msgctxt "dns_preset_name_ad_blocking"
+msgid "{} Ad Blocking"
+msgstr "{} 광고 차단"
+
+#. DNS settings: the name of DNS4EU's child protection preset in "Family", which blocks malware, adult sites, gambling, drugs and violence and doesn't block ads. Next to it is the same protection with ads blocked (dns_preset_name_child_ads). Shown alone as the preset's label on the DNS screen, and inserted as is wherever the selected preset is named, as in "DNS: DNS4EU Child" and "DNS4EU Child isn't answering", so it reads as a short name that works on its own and inside a sentence. {provider} is the adblock provider's short name, inserted as is (for example DNS4EU); keep it first, so the presets of a group stay in alphabetical order.
+msgctxt "dns_preset_name_child"
+msgid "{} Child"
+msgstr "{} 어린이"
+
+#. DNS settings: the name of DNS4EU's child protection preset that also blocks ads and trackers, in "Family". "no ads" means the person sees no ads, because they are blocked. Next to it is the same protection without ad blocking (dns_preset_name_child). Shown alone as the preset's label on the DNS screen, and inserted as is wherever the selected preset is named, as in "DNS: DNS4EU Child, no ads" and "DNS4EU Child, no ads isn't answering", so it reads as a short name that works on its own and inside a sentence. {provider} is the adblock provider's short name, inserted as is (for example DNS4EU); keep it first, so the presets of a group stay in alphabetical order.
+msgctxt "dns_preset_name_child_ads"
+msgid "{} Child, no ads"
+msgstr "{} 어린이, 광고 없음"
+
+#. DNS settings: the name of an adblock provider's preset in "Family", which blocks adult sites and, for some adblock providers, ads. Shown alone as the preset's label on the DNS screen, and inserted as is wherever the selected preset is named, as in "DNS: AdGuard Family" and "AdGuard Family isn't answering", so it reads as a short name that works on its own and inside a sentence. {provider} is the adblock provider's short name, inserted as is (for example AdGuard); keep it first, so the presets of a group stay in alphabetical order.
+msgctxt "dns_preset_name_family"
+msgid "{} Family"
+msgstr "{} 가족"
+
+#. DNS settings: the name of an adblock provider's preset in "Block malware", which blocks malware and doesn't block ads. Shown alone as the preset's label on the DNS screen, and inserted as is wherever the selected preset is named, as in "DNS: Quad9 Malware Blocking" and "Quad9 Malware Blocking isn't answering", so it reads as a short name that works on its own and inside a sentence. {provider} is the adblock provider's short name, inserted as is (for example Quad9); keep it first, so the presets of a group stay in alphabetical order.
+msgctxt "dns_preset_name_malware_blocking"
+msgid "{} Malware Blocking"
+msgstr "{} 악성코드 차단"
+
+#. DNS settings: the name of an adblock provider's preset in "No filtering", which blocks nothing. Shown alone as the preset's label on the DNS screen, and inserted as is wherever the selected preset is named, as in "DNS: Cloudflare No Filtering" and "Cloudflare No Filtering isn't answering", so it reads as a short name that works on its own and inside a sentence. {provider} is the adblock provider's short name, inserted as is (for example Cloudflare); keep it first, so the presets of a group stay in alphabetical order.
+msgctxt "dns_preset_name_no_filtering"
+msgid "{} No Filtering"
+msgstr "{} 필터링 없음"
+
+#. DNS settings: the name of an adblock provider's preset in "Use my account", which uses the filters the person set up in their own account there. It never includes the account's ID. Shown alone as the preset's label on the DNS screen, and inserted as is wherever the selected preset is named, as in "DNS: NextDNS Personal" and "NextDNS Personal isn't answering", so it reads as a short name that works on its own and inside a sentence. {provider} is the adblock provider's short name, inserted as is (for example NextDNS); keep it first, so the presets of a group stay in alphabetical order.
+msgctxt "dns_preset_name_personal"
+msgid "{} Personal"
+msgstr "{} 개인용"
+
 #. DNS settings: link under the selected adblock provider that opens the adblock provider's privacy policy.
 msgctxt "dns_preset_privacy_link"
 msgid "Privacy policy"
 msgstr "개인정보 처리방침"
 
-#. Android connect screen: line added to the strict Private DNS notice while an adblock provider is selected, since Android's Private DNS sends lookups to its own server instead. {provider} is the selected adblock provider's name, inserted as is. Private DNS is Android's own setting, named as in Android.
+#. Android connect screen: line added to the strict Private DNS notice while an adblock provider is selected, since Android's Private DNS sends lookups to its own server instead. {provider} is the selected preset's name (dns_preset_name_*, for example AdGuard Family), inserted as is. Private DNS is Android's own setting, named as in Android.
 msgctxt "dns_private_dns_overrides_preset"
 msgid "Private DNS overrides your DNS choice ({})."
 msgstr "비공개 DNS가 선택한 DNS({})보다 우선 적용됩니다."
@@ -4951,12 +4986,12 @@ msgctxt "dns_status_change_location"
 msgid "Change location"
 msgstr "위치 변경"
 
-#. DNS settings and connect drawer: status line when an adblock provider from "No filtering" isn't answering, so URnetwork's own DNS answers until it does. {provider} is the adblock provider's name, inserted as is.
+#. DNS settings and connect drawer: status line when an adblock provider from "No filtering" isn't answering, so URnetwork's own DNS answers until it does. {provider} is the selected preset's name (dns_preset_name_*, for example Cloudflare No Filtering), inserted as is.
 msgctxt "dns_status_fallback"
 msgid "{} isn't answering. Using URnetwork DNS."
 msgstr "{} 응답 없음. URnetwork DNS를 사용 중입니다."
 
-#. DNS settings and connect drawer: status line when an adblock provider that blocks ads isn't answering from the current exit, so URnetwork's own DNS answers for now and ads aren't blocked. It switches back on its own when the adblock provider answers. {provider} is the adblock provider's name, inserted as is.
+#. DNS settings and connect drawer: status line when an adblock provider that blocks ads isn't answering from the current exit, so URnetwork's own DNS answers for now and ads aren't blocked. It switches back on its own when the adblock provider answers. {provider} is the selected preset's name (dns_preset_name_*, for example AdGuard Ad Blocking), inserted as is.
 msgctxt "dns_status_paused"
 msgid "Ad blocking paused: {} isn't answering"
 msgstr "광고 차단 일시 중지됨: {} 응답 없음"
@@ -4966,12 +5001,12 @@ msgctxt "dns_status_paused_detail"
 msgid "Using URnetwork DNS until it answers. Ad blocking comes back on its own."
 msgstr "광고 차단 서비스가 응답할 때까지 URnetwork DNS를 사용합니다. 광고 차단은 자동으로 다시 시작됩니다."
 
-#. DNS settings: status line while the selected adblock provider answers normally. {provider} is the adblock provider's name (for example AdGuard DNS), inserted as is.
+#. DNS settings and connect drawer: status line while the selected preset answers normally, and the summary row of a selected preset. {provider} is the preset's name (dns_preset_name_*, for example AdGuard Family), inserted as is; the name already says what the preset does.
 msgctxt "dns_status_provider"
 msgid "DNS: {}"
 msgstr "DNS: {}"
 
-#. DNS settings and connect drawer: status line when an adblock provider's family, malware-blocking or personal pick isn't answering. To keep its filtering, URnetwork doesn't switch to other DNS, so sites may not load until the adblock provider answers or the person picks "Use URnetwork DNS". {provider} is the adblock provider's name, inserted as is.
+#. DNS settings and connect drawer: status line when an adblock provider's family, malware-blocking or personal pick isn't answering. To keep its filtering, URnetwork doesn't switch to other DNS, so sites may not load until the adblock provider answers or the person picks "Use URnetwork DNS". {provider} is the selected preset's name (dns_preset_name_*, for example AdGuard Family), inserted as is.
 msgctxt "dns_status_unreachable"
 msgid "{} isn't answering"
 msgstr "{} 응답 없음"
@@ -4985,11 +5020,6 @@ msgstr "필터링을 유지하기 위해 URnetwork는 DNS를 자동으로 바꾸
 msgctxt "dns_status_use_default"
 msgid "Use URnetwork DNS"
 msgstr "URnetwork DNS 사용"
-
-#. Connect drawer, DNS card: summary row while an adblock provider from "Block ads and trackers" is selected. {provider} is the adblock provider's name, inserted as is.
-msgctxt "dns_summary_ad_blocking"
-msgid "DNS: {} · Ad blocking"
-msgstr "DNS: {} · 광고 차단"
 
 #. Connect drawer, DNS card: summary row while the person's own servers are selected under "Custom", all of them encrypted.
 msgctxt "dns_summary_custom"
@@ -5005,26 +5035,6 @@ msgstr "DNS: 사용자 지정(암호화되지 않음)"
 msgctxt "dns_summary_default"
 msgid "DNS: URnetwork"
 msgstr "DNS: URnetwork"
-
-#. Connect drawer, DNS card: summary row while an adblock provider from "Family" is selected. {provider} is the adblock provider's name, inserted as is.
-msgctxt "dns_summary_family"
-msgid "DNS: {} · Family filter"
-msgstr "DNS: {} · 가족 필터"
-
-#. Connect drawer, DNS card: summary row while an adblock provider from "Block malware" is selected. {provider} is the adblock provider's name, inserted as is.
-msgctxt "dns_summary_malware_blocking"
-msgid "DNS: {} · Malware blocking"
-msgstr "DNS: {} · 악성코드 차단"
-
-#. Connect drawer, DNS card: summary row while an adblock provider from "No filtering" is selected. {provider} is the adblock provider's name, inserted as is.
-msgctxt "dns_summary_no_filtering"
-msgid "DNS: {} · No filtering"
-msgstr "DNS: {} · 필터링 없음"
-
-#. Connect drawer, DNS card: summary row while an adblock provider from "Use my account" is selected. The profile ID itself is never shown. {provider} is the adblock provider's name, inserted as is.
-msgctxt "dns_summary_personal"
-msgid "DNS: {} · your profile"
-msgstr "DNS: {} · 내 프로필"
 
 #. Connect drawer, DNS card: summary row while the regional pick is selected: plain DNS servers recommended for the exit's country, which send lookups without encryption.
 msgctxt "dns_summary_regional"

@@ -43,9 +43,10 @@ std::string CatalogEnglish(const std::string& catalog, const std::string& key) {
 }
 
 // Every key id the sdk returns to the DNS screens (sdk dns_presets_ui.go and
-// the catalog in dns_presets.go, 9a0f19ae): group headings, the labels and
-// lines of the picks, the summary rows, the status and verification lines, and
-// a personal preset's notes.
+// the catalog in dns_presets.go, 9a0f19ae, and the presets' names of
+// feature/dns-preset-names): group headings, the presets' names, the labels
+// and lines of the picks, the summary rows, the status and verification lines,
+// and a personal preset's notes.
 const char* const kSdkKeys[] = {
     "block_ads_and_trackers",
     "dns_group_block_malware",
@@ -58,6 +59,13 @@ const char* const kSdkKeys[] = {
     "dns_provider_custom_copy",
     "dns_provider_regional",
     "dns_recommendation_message",
+    "dns_preset_name_ad_blocking",
+    "dns_preset_name_malware_blocking",
+    "dns_preset_name_family",
+    "dns_preset_name_child",
+    "dns_preset_name_child_ads",
+    "dns_preset_name_no_filtering",
+    "dns_preset_name_personal",
     "dns_preset_copy_ads_phishing",
     "dns_preset_copy_ads_malware",
     "dns_preset_copy_ads_malware_phishing",
@@ -72,11 +80,6 @@ const char* const kSdkKeys[] = {
     "dns_preset_copy_court_orders",
     "dns_preset_copy_personal",
     "dns_summary_default",
-    "dns_summary_ad_blocking",
-    "dns_summary_malware_blocking",
-    "dns_summary_family",
-    "dns_summary_no_filtering",
-    "dns_summary_personal",
     "dns_summary_custom",
     "dns_summary_custom_unencrypted",
     "dns_summary_regional",
@@ -144,6 +147,18 @@ UR_TEST(DnsPresets_AnUnknownKeyShowsNothing) {
   UR_EXPECT_TRUE(presets::KeyText("").key.empty());
 }
 
+// A preset's summary row is "DNS: <name>", the status line's dns_status_provider
+// (owner, 2026-11-09): the per-group rows it replaced, which the sdk no longer
+// returns, show nothing.
+UR_TEST(DnsPresets_APresetsSummaryRowIsItsName) {
+  UR_EXPECT_TRUE(presets::KeyText("dns_status_provider").english == "DNS: {}");
+  for (const char* key : {"dns_summary_ad_blocking", "dns_summary_malware_blocking",
+                          "dns_summary_family", "dns_summary_no_filtering",
+                          "dns_summary_personal"}) {
+    UR_EXPECT_TRUE_MSG(key, presets::KeyText(key).key.empty());
+  }
+}
+
 UR_TEST(DnsPresets_EachErrorIdHasItsMessage) {
   for (const char* id : kErrorIds) {
     UR_EXPECT_TRUE_MSG(id, presets::ErrorText(id).key == id);
@@ -168,7 +183,7 @@ UR_TEST(DnsPresets_ThePillsReadFromThisAppsKeys) {
 // translations cannot change them; a personal id's format message takes the
 // provider and its example in order.
 UR_TEST(DnsPresets_TheProviderIsAPlaceholder) {
-  for (const char* key : {"dns_summary_ad_blocking", "dns_status_paused", "dns_status_provider",
+  for (const char* key : {"dns_preset_name_ad_blocking", "dns_status_paused", "dns_status_provider",
                           "dns_verify_unconfirmed", "dns_preset_copy_personal",
                           "dns_personal_id_where_nextdns", "dns_personal_id_quota_adguard"}) {
     UR_EXPECT_TRUE_MSG(key, presets::KeyText(key).english.find("{}") != std::string::npos);
