@@ -42,6 +42,11 @@ class ReferralPanel : public Gtk::Box {
 
  private:
   void Draw(const Cairo::RefPtr<Cairo::Context>& cr, double w, double h);
+  // The breath ticks only while the panel is on screen, from map to unmap (a
+  // page switch, the window hidden to the tray). A tick left running kept its
+  // window's frame clock busy for the life of the process.
+  void StartBreath();
+  void StopBreath();
 
   Gtk::Label heading_;
   Gtk::Label detail_;
@@ -60,6 +65,8 @@ class ReferralPanel : public Gtk::Box {
   double breath_ = 0.5;
   double start_ = 0;
   guint tick_ = 0;
+  sigc::connection mapped_;
+  sigc::connection unmapped_;
 };
 
 }  // namespace urnw

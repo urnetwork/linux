@@ -173,18 +173,15 @@ class GoldPlanCard : public Gtk::Overlay {
 
     if (motion::ShouldAnimate()) {
       start_ = Now();
-      tick_ = add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>&) {
-        const double elapsed = Now() - start_;
-        sweep_ = std::fmod(elapsed, 3600.0) / 3600.0;
-        breath_ = 0.5 + 0.5 * std::sin(elapsed / 2200.0 * kPi);
-        queue_draw();
-        return true;
-      });
+      mapped_ = signal_map().connect([this] { StartTick(); });
+      unmapped_ = signal_unmap().connect([this] { StopTick(); });
     }
     SetSelected(true);
   }
   ~GoldPlanCard() override {
-    if (tick_) remove_tick_callback(tick_);
+    mapped_.disconnect();
+    unmapped_.disconnect();
+    StopTick();
   }
 
   // `savingRenews`: the line under the price is the offer's renewal price
@@ -226,6 +223,26 @@ class GoldPlanCard : public Gtk::Overlay {
   }
 
  private:
+  // The halo and the running light tick only while the card is on screen,
+  // from map to unmap (the sheet or the page closed, the window hidden). A
+  // tick left running kept its window's frame clock busy for the life of the
+  // process.
+  void StartTick() {
+    if (tick_) return;
+    tick_ = add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>&) {
+      const double elapsed = Now() - start_;
+      sweep_ = std::fmod(elapsed, 3600.0) / 3600.0;
+      breath_ = 0.5 + 0.5 * std::sin(elapsed / 2200.0 * kPi);
+      queue_draw();
+      return true;
+    });
+  }
+  void StopTick() {
+    if (!tick_) return;
+    remove_tick_callback(tick_);
+    tick_ = 0;
+  }
+
   // The lines under the price for the selected method
   // (crypto_pay::YearlyCardLines), filled into the card's rows from the top.
   // A row left with nothing to say keeps its card text, transparent, as the
@@ -339,6 +356,8 @@ class GoldPlanCard : public Gtk::Overlay {
   double breath_ = 0.5;
   double start_ = 0;
   guint tick_ = 0;
+  sigc::connection mapped_;
+  sigc::connection unmapped_;
 };
 
 
