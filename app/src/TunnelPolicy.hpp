@@ -1132,4 +1132,46 @@ inline std::vector<std::string> BypassRuleSelector() {
           "pref",   std::to_string(kBypassRulePriority)};
 }
 
+// ---- the egress witness's kernel log ----------------------------------------
+//
+// Leg 3 of Tunnel::VerifyEgressWitness stops a session on urnw_probe_tun, the
+// count of this daemon's marked packets that left through its own tun. A count
+// says how many and never which, so a stop could not say where those packets
+// were going. The rule that feeds the counter therefore also writes the packets
+// to the kernel log, rate-limited, under a fixed tag, and `journalctl -k` shows
+// their addresses, protocol and ports. That puts destination addresses in the
+// user's own kernel log, which the owner approved on 2026-11-09.
+
+// The tag every line starts with, and what the refusal tells the user to grep.
+inline constexpr const char* kWitnessLogTag = "urnetwork-egress-witness";
+
+// urnw_probe's rule for the tun. The counter is the first statement after the
+// match, so it counts every matching packet, exactly as the rule without the
+// log does; `limit` gates only the `log` after it, at most 6 lines at once and
+// then 6 a minute, at nft's default level, spelled out. Neither is a verdict,
+// so the chain still decides nothing. `log` false is the rule without the log,
+// for a kernel that refuses it (NetFilter::Apply).
+inline std::string ProbeTunRule(std::uint32_t mark, std::string_view tunName,
+                                std::string_view counter, bool log) {
+  std::string rule = "meta mark " + MarkText(mark) + " oifname \"" + std::string(tunName) +
+                     "\" counter name \"" + std::string(counter) + "\"";
+  if (log) {
+    rule += " limit rate 6/minute burst 6 packets log prefix \"" + std::string(kWitnessLogTag) +
+            ": \" level warn";
+  }
+  return rule;
+}
+
+// The command that lists the logged packets.
+inline std::string WitnessLogCommand() {
+  return std::string("sudo journalctl -k | grep ") + kWitnessLogTag;
+}
+
+// What a leg-3 refusal adds to its reason while the log is in force. No closing
+// period: EgressRefusalMessage puts one after the reason.
+inline std::string WitnessLogHint() {
+  return ". The kernel log names these packets, up to 6 a minute: `" + WitnessLogCommand() +
+         "` shows each one's destination address and port";
+}
+
 }  // namespace urnw

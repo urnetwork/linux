@@ -425,10 +425,11 @@ inline constexpr const char* kNftOutChainName = "urnw_out";
 inline constexpr const char* kNftInChainName = "urnw_in";
 inline constexpr const char* kNftFwdChainName = "urnw_fwd";
 // The FIFTH chain, and the only one that decides nothing: every rule in it is
-// a bare `counter name`, its policy is accept and it carries no verdict, so it
-// cannot change the fate of any packet. It exists to answer, over the daemon's
-// REAL traffic, the question `ip route get` cannot ask — did a packet this
-// daemon actually sent leave through the tunnel or around it.
+// a `counter name`, its policy is accept and it carries no verdict, so it
+// cannot change the fate of any packet. The tun rule also logs, rate-limited,
+// after its counter (TunnelPolicy.hpp, ProbeTunRule). It exists to answer, over
+// the daemon's REAL traffic, the question `ip route get` cannot ask — did a
+// packet this daemon actually sent leave through the tunnel or around it.
 //
 // IT MATCHES kEgressMark, NOT A PROBE DESTINATION, AND THAT IS WHY THE FLOOR
 // HAS NO HOLE IN IT. Matching a synthetic probe's destination forced the
@@ -600,6 +601,10 @@ struct FilterConfig {
   // TunnelPolicy.hpp). Emitted only with the socket-cgroup match
   // (CgroupAndMark), and NetFilter::Apply drops a path that does not exist.
   std::vector<CgroupRef> exclude_cgroups;
+  // The kernel log on urnw_probe_tun's rule (TunnelPolicy.hpp, ProbeTunRule),
+  // so a leg-3 refusal can say where the packets were going. A diagnostic:
+  // NetFilter::Apply loads the ruleset without it when the kernel refuses it.
+  bool witness_log = true;
 };
 
 // PURE: the exact `nft -f` script for a state, so the ruleset can be reviewed
@@ -618,6 +623,7 @@ bool RulesetBlocksIpv6(const FilterConfig& cfg);
 bool RulesetPinsDns(const FilterConfig& cfg);
 bool RulesetOpensHelperDns(const FilterConfig& cfg);  // log at BOTH edges
 bool RulesetExcludesApps(const FilterConfig& cfg);
+bool RulesetLogsWitness(const FilterConfig& cfg);
 
 // Read-only probe (`ip route show default table all`, both families): TRUE
 // only when there is an IPv6 default route and NO IPv4 one. Arming the v6

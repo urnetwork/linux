@@ -167,7 +167,11 @@ the IPv4 and IPv6 policy rules, routes and address counts the daemon's own
 sockets meet) and `sudo /usr/lib/urnetwork/urnetworkd --selftest-egress`.
 `sudo /usr/lib/urnetwork/urnetworkd --revert` lifts the firewall and routes if
 a machine is left blocked. The daemon's own messages name the path it runs
-from.
+from. When the daemon stops a session because its own packets left through
+its own tunnel ("left through this daemon's own tunnel"), the kernel log
+names those packets, up to 6 a minute:
+`sudo journalctl -k | grep urnetwork-egress-witness` shows each one's
+addresses, protocol and ports (add `-b -1` after a reboot).
 
 ## Release artifacts
 
