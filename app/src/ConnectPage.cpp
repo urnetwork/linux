@@ -13,6 +13,7 @@
 #include <gtk/gtk.h>
 
 #include "DisplayText.hpp"
+#include "DnsPresetsPresentation.hpp"
 #include "ExtenderProvideRowPaint.hpp"
 #include "FailsafeNotice.hpp"
 #include "FastDnsCopy.hpp"
@@ -435,6 +436,26 @@ uint64_t LocationSig(const std::optional<urnet::ConnectLocation>& location) {
     h = HashMix(h, location->connect_location_id->best_available.value_or(false) ? 1u : 0u);
   }
   return h;
+}
+
+// The words of a key id the sdk's dns summaries carry (DnsPresetsPresentation.hpp),
+// with the value its text takes (the provider's name or the country's); "" for
+// a key this build does not know.
+std::string DnsKeyLine(const dns_presets::Text& text, const std::string& value) {
+  if (text.key.empty()) return std::string();
+  return Format(g_dpgettext2(GETTEXT_PACKAGE, std::string(text.key).c_str(),
+                             std::string(text.english).c_str()),
+                value);
+}
+
+// Whether two dns resolver status readings say the same, so a poll applies only
+// a change. The blocked count is not part of it: the card does not show it.
+bool DnsStatusSame(const std::optional<urnet::DnsResolverStatus>& a,
+                   const std::optional<urnet::DnsResolverStatus>& b) {
+  if (a.has_value() != b.has_value()) return false;
+  if (!a) return true;
+  return a->State == b->State && a->Verification == b->Verification &&
+         a->PresetId == b->PresetId;
 }
 
 }  // namespace
@@ -1055,9 +1076,14 @@ void ConnectPage::BuildPaneA() {
                              [this](bool) { PushPerformanceProfile(); });
   pqeToggle_ = addToggleRow(T_("post_quantum_encryption", "Post Quantum Encryption"), false,
                             [this](bool) { PushPerformanceProfile(); });
-  blockerToggle_ = addToggleRow(T_("block_ads_and_trackers", "Block ads and trackers"),
+  // URnetwork's own blocker, named apart from the DNS providers that block ads
+  // (connect ADBLOCK3RD.md F1 item 6): both can be on, and it answers first
+  blockerToggle_ = addToggleRow(T_("dns_builtin_blocker_label", "URnetwork ad blocker"),
                                 host_.GetBlockerEnabled(),
-                                [this](bool on) { host_.SetBlockerEnabled(on); });
+                                [this](bool on) { host_.SetBlockerEnabled(on); },
+                                T_("dns_builtin_blocker_note",
+                                   "URnetwork's own blocker. It works with any DNS choice and "
+                                   "checks each name first."));
   // The kill switch. THREE legs behind this one control
   // (SdkHost::SetKillSwitch): the persisted preference, the device's
   // routeLocal, and — the leg that makes it a kill switch rather than a
@@ -1648,8 +1674,9 @@ ConnectPage::DnsStatusRow ConnectPage::MakeDnsStatusRow(const Glib::ustring& tit
   return row;
 }
 
-// 4.6 custom DNS: the unapplied-recommendation pill, the four resolver
-// readings, and the "unavailable" ROW they swap with.
+// 4.6 custom DNS: the unapplied-recommendation pill, the selection's summary
+// row and its notice, the four resolver readings, and the "unavailable" row
+// they swap with.
 void ConnectPage::BuildDnsGroup() {
   auto header = kit::MakePaneGroupHeader(T_("custom_dns", "Custom DNS"));
   dnsEditButton_ = Gtk::make_managed<Gtk::Button>();
@@ -1685,6 +1712,28 @@ void ConnectPage::BuildDnsGroup() {
   }
   dnsPillRow_->set_visible(false);
   paneC_.content->append(*dnsPillRow_);
+
+  // the selection, as the sdk sums it up (connect ADBLOCK3RD.md F1): "DNS:
+  // URnetwork", "DNS: AdGuard DNS · Ad blocking", "DNS: NextDNS · your profile"
+  {
+    auto row = MakeEmptySentenceRow(Glib::ustring(), kKeyValueRowHeight);
+    dnsSummaryRow_ = row.root;
+    dnsSummaryText_ = row.key;
+  }
+  dnsSummaryRow_->set_visible(false);
+  paneC_.content->append(*dnsSummaryRow_);
+  // under it, what needs the user: a selection a release dropped (A7), or a
+  // provider that is not answering (C8). Its own wrapped line, as the kill
+  // switch's: a row would trim it to one ellipsized line.
+  dnsNoticeLine_ = Gtk::make_managed<Gtk::Label>();
+  dnsNoticeLine_->set_xalign(0);
+  dnsNoticeLine_->set_wrap(true);
+  dnsNoticeLine_->set_margin_start(12);
+  dnsNoticeLine_->set_margin_end(12);
+  dnsNoticeLine_->set_margin_top(4);
+  dnsNoticeLine_->set_margin_bottom(4);
+  dnsNoticeLine_->set_visible(false);
+  paneC_.content->append(*dnsNoticeLine_);
 
   dnsRowsPanel_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
   dnsDohRow_ = MakeDnsStatusRow(T_("dns_over_https", "DNS over HTTPS"));
@@ -2752,6 +2801,7 @@ void ConnectPage::ApplyDnsCard() {
   if (dnsEditButton_) dnsEditButton_->set_sensitive(present);
   if (foldDoorDns_) foldDoorDns_->set_sensitive(present);
   ApplyDnsRecommendationPill();  // collapses with the rows
+  ApplyDnsSummary();             // so does the summary
   if (loading) {
     const Glib::ustring loadingText = T_("loading", "Loading...");
     auto placeholder = [&loadingText](DnsStatusRow& row, const Glib::ustring& label) {
@@ -2794,50 +2844,79 @@ void ConnectPage::ApplyDnsCard() {
         dnsSettings_->EnableFallback);
 }
 
-// iOS DnsRecommendationPill parity, with §6's pill keys: a regional
-// recommendation NEVER falls through to the safe-defaults nudge.
+// The pill the sdk asks for (DnsSelectionSummary.PillKey, connect ADBLOCK3RD.md
+// F2): the regional recommendation's while the exit's country has one the
+// settings do not apply -- never falling through to the defaults' nudge --
+// else the defaults' while the settings differ from them, and none while a
+// preset is selected, an explicit and encrypted choice whose problems show as
+// its status.
 void ConnectPage::ApplyDnsRecommendationPill() {
   if (!dnsPillRow_ || !dnsPillDot_ || !dnsPillText_) return;
-  auto show = [this](const std::string& text, const std::string& countryCode) {
-    if (countryCode.empty()) {
-      dnsPillDot_->set_visible(false);
-    } else {
-      Rgba dot{0.5, 0.5, 0.5, 1.0};
-      dot = ParseHexColor(urnet::getColorHex(countryCode), dot);
-      dnsPillDot_->set_markup("<span foreground='" + HexForMarkup(dot) + "'>●</span>");
-      dnsPillDot_->set_visible(true);
-    }
-    dnsPillText_->set_text(text);
-    dnsPillRow_->set_visible(true);
-  };
-
   // nothing to compare against: the rows already read "unavailable"
-  if (!dnsSettings_) {
+  const auto summary =
+      dnsSettings_ ? urnet::describeDnsResolverSettings(dnsSettings_, countryCode_) : std::nullopt;
+  const dns_presets::Text pill =
+      summary ? dns_presets::PillText(summary->PillKey) : dns_presets::Text{};
+  if (pill.key.empty()) {
     dnsPillRow_->set_visible(false);
     return;
   }
-  if (!countryCode_.empty()) {
-    if (const auto recommended = urnet::getRecommendedDnsResolverSettings(countryCode_)) {
-      if (!DnsSheet::SettingsEqual(*dnsSettings_, *recommended)) {
-        const std::string country =
-            !countryName_.empty() ? countryName_ : UpperCopy(countryCode_);
-        show(Format(T_("dns_pill_recommended",
-                       "There are unapplied recommended settings for {}"),
-                    country),
-             countryCode_);
-      } else {
-        dnsPillRow_->set_visible(false);  // already on the regional recommendation
-      }
-      return;  // never fall through to the default nudge
-    }
+  const std::string countryCode = summary->PillCountryCode;
+  if (countryCode.empty()) {
+    dnsPillDot_->set_visible(false);
+  } else {
+    Rgba dot{0.5, 0.5, 0.5, 1.0};
+    dot = ParseHexColor(urnet::getColorHex(countryCode), dot);
+    dnsPillDot_->set_markup("<span foreground='" + HexForMarkup(dot) + "'>●</span>");
+    dnsPillDot_->set_visible(true);
   }
-  if (const auto defaults = urnet::getDefaultDnsResolverSettings()) {
-    if (!DnsSheet::SettingsEqual(*dnsSettings_, *defaults)) {
-      show(T_("dns_pill_default", "The default safe settings are not applied"), "");
-      return;
-    }
+  const std::string country =
+      countryCode == countryCode_ && !countryName_.empty() ? countryName_ : UpperCopy(countryCode);
+  dnsPillText_->set_text(DnsKeyLine(pill, country));
+  dnsPillRow_->set_visible(true);
+}
+
+// The summary row and the notice under it: what the settings select (the
+// sdk's DescribeDnsResolverSettings), then a selection a release dropped, or a
+// provider that is not answering (DescribeDnsResolverStatus), which the DNS
+// sheet says what to do about. Both collapse with the rows while there is no
+// reading.
+void ConnectPage::ApplyDnsSummary() {
+  if (!dnsSummaryRow_ || !dnsSummaryText_ || !dnsNoticeLine_) return;
+  if (!dnsSettings_) {
+    dnsSummaryRow_->set_visible(false);
+    dnsNoticeLine_->set_visible(false);
+    return;
   }
-  dnsPillRow_->set_visible(false);
+  const auto summary = urnet::describeDnsResolverSettings(dnsSettings_, countryCode_);
+  const std::string text =
+      summary ? DnsKeyLine(dns_presets::KeyText(summary->SummaryKey), summary->ProviderName)
+              : std::string();
+  dnsSummaryText_->set_text(text);
+  kit::SetAccessibleLabel(*dnsSummaryText_, text);
+  kit::SetAccessibleLabel(*dnsSummaryRow_, text);
+  dnsSummaryRow_->set_visible(!text.empty());
+
+  std::string notice;
+  if (summary && summary->Dropped) {
+    // the dropped preset's provider (A7); an id this release never knew has
+    // no name to give
+    notice = summary->DroppedProviderName.empty()
+                 ? DnsKeyLine(dns_presets::ErrorText(dns_presets::kErrorUnknown), std::string())
+                 : Format(T_("dns_preset_dropped",
+                             "{} is no longer available. You're using URnetwork DNS, so lookups "
+                             "aren't filtered."),
+                          summary->DroppedProviderName);
+  } else if (const auto status = urnet::describeDnsResolverStatus(dnsSettings_, dnsStatus_);
+             status && status->ShowUseDefault) {
+    // the provider is failing (C8): ad blocking paused, or lookups failing
+    // closed for a filter that must not fall back
+    notice = DnsKeyLine(dns_presets::KeyText(status->StatusKey), status->ProviderName);
+  }
+  dnsNoticeLine_->set_visible(!notice.empty());
+  if (notice.empty()) return;
+  dnsNoticeLine_->set_markup("<span size='small' foreground='" + HexForMarkup(kUrDanger) + "'>" +
+                             Glib::Markup::escape_text(notice) + "</span>");
 }
 
 // ---- pane C: the connection inspector -------------------------------------------
@@ -3584,11 +3663,14 @@ void ConnectPage::RefreshFeeds(bool force) {
   ApplyOverrides(host_.BlockActionOverrides(), force);
   {
     auto settings = host_.GetDnsResolverSettings();
+    auto status = host_.GetDnsResolverStatus();
     const bool changed =
         settings.has_value() != dnsSettings_.has_value() ||
-        (settings && dnsSettings_ && !DnsSheet::SettingsEqual(*settings, *dnsSettings_));
+        (settings && dnsSettings_ && !DnsSheet::SettingsEqual(*settings, *dnsSettings_)) ||
+        !DnsStatusSame(status, dnsStatus_);
     if (force || changed) {
       dnsSettings_ = std::move(settings);
+      dnsStatus_ = std::move(status);
       ApplyDnsCard();
     }
   }
@@ -3761,6 +3843,13 @@ void ConnectPage::OnHostEvent(DrawerEvent event) {
         dnsSettled_ = true;
         ApplyDnsCard();
       }
+      // An open DNS sheet re-reads both: the status belonged to the device that
+      // came or went, and a change the queue held back (a sync's apply of the
+      // mirror, SdkHost::ReconcileDnsMirrorLocked) arrives as this event.
+      if (dnsSheet_ && dnsSheet_->is_visible()) {
+        dnsSheet_->RefreshSettings();
+        dnsSheet_->RefreshStatus();
+      }
       if (transportBar_) transportBar_->SetDistribution(host_.ClientTransportDistribution());
       if (advanced_) RefreshExitRouting();
       break;
@@ -3787,6 +3876,15 @@ void ConnectPage::OnHostEvent(DrawerEvent event) {
       dnsSettled_ = true;
       dnsSettings_ = host_.GetDnsResolverSettings();
       ApplyDnsCard();
+      // an open sheet follows, unless it holds an edit (DnsSheet::RefreshSettings)
+      if (dnsSheet_ && dnsSheet_->is_visible()) dnsSheet_->RefreshSettings();
+      break;
+    case DrawerEvent::DnsStatus:
+      // the provider's state and verification: the card's notice, and the
+      // open sheet's status lines
+      dnsStatus_ = host_.GetDnsResolverStatus();
+      ApplyDnsCard();
+      if (dnsSheet_ && dnsSheet_->is_visible()) dnsSheet_->RefreshStatus();
       break;
     case DrawerEvent::TransportSettings:
       // the enabled flags behind the bar's unused footer follow the policy;
@@ -3897,6 +3995,11 @@ void ConnectPage::OpenDnsSheet() {
   if (!parent) return;
   if (!dnsSheet_) {
     dnsSheet_ = std::make_unique<DnsSheet>(*parent, host_);
+    // "Change location" under a provider that is not answering: the window's
+    // chooser, as the provider row opens it
+    dnsSheet_->on_change_location = [this] {
+      if (on_open_locations) on_open_locations();
+    };
   }
   // Open() returns false and does NOT present when there are no settings — the
   // group's own "DNS settings unavailable" row is the honest reading, and the

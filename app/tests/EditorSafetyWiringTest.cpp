@@ -1,12 +1,14 @@
 // The DNS and transport editors never overwrite settings they did not see
-// (apple's editor safety, APPLE_FIXES.md "Added 2026-10-16"). Each Update is a
+// (apple's editor safety, APPLE_FIXES.md "Added 2026-10-16"). Each save is a
 // compare-and-set through SdkHost (SetDnsResolverSettingsIf,
 // SetTransportSettingsIf): written only while the settings still read what the
 // editor was seeded from, checked and written under one hold of SdkHost's
-// lock, and otherwise the form re-seeds from what they read now. An editor
-// whose settings are unknown does not apply: the DNS editor does not open, and
-// the transport editor keeps Update off while a bound device's policy cannot
-// be read (it drafts from the default, which is not the daemon's policy).
+// lock, and otherwise the form re-seeds from what they read now. The DNS
+// sheet's saves (a pick, a profile id, Fast DNS on connect, Custom's Update)
+// all take its one Write. An editor whose settings are unknown does not apply:
+// the DNS editor does not open, and the transport editor keeps Update off
+// while a bound device's policy cannot be read (it drafts from the default,
+// which is not the daemon's policy).
 //
 // Before, both Updates wrote their draft unconditionally, so an editor opened
 // over settings that changed since (another surface, the daemon's sync) or
@@ -27,17 +29,21 @@ namespace wiring = urnw::testing::wiring;
 
 UR_TEST(EditorSafety_TheDnsUpdateIsACompareAndSet) {
   const std::string sheet = wiring::ReadCode("DnsSheet.cpp");
-  // no unconditional write is left in the editor
+  // no unconditional write is left in the editor, and its one compare-and-set
+  // is the Write every save takes
   UR_EXPECT_FALSE(wiring::Contains(sheet, "host_.SetDnsResolverSettings("));
-  UR_EXPECT_TRUE(wiring::Contains(sheet, "host_.SetDnsResolverSettingsIf("));
+  UR_EXPECT_EQ(1, int(wiring::CountOf(sheet, "host_.SetDnsResolverSettingsIf(")));
   // compared with what the editor was seeded from, and re-seeded when moved
-  const std::string build = wiring::FunctionBody(sheet, "void DnsSheet::BuildUi() {");
-  UR_EXPECT_TRUE(wiring::Before(build, "const urnet::DnsResolverSettings shown = original_;",
+  const std::string write = wiring::FunctionBody(sheet, "void DnsSheet::Write(");
+  UR_EXPECT_TRUE(wiring::Before(write, "const urnet::DnsResolverSettings shown = original_;",
                                 "host_.SetDnsResolverSettingsIf("));
-  UR_EXPECT_TRUE(wiring::Before(build, "return SettingsEqual(normalized, shown);", "Seed(*current);"));
+  UR_EXPECT_TRUE(wiring::Before(write, "return SettingsEqual(normalized, shown);",
+                                "Seed(*current, written ? edits : Edits::Drop);"));
+  UR_EXPECT_TRUE(wiring::Contains(wiring::FunctionBody(sheet, "void DnsSheet::BuildUi() {"),
+                                  "Write(draft_, AfterWrite::Close, Edits::Drop);"));
   // unknown settings open no editor
   const std::string open = wiring::FunctionBody(sheet, "bool DnsSheet::Open() {");
-  UR_EXPECT_TRUE(wiring::Before(open, "if (!settings) return false;", "Seed(*settings);"));
+  UR_EXPECT_TRUE(wiring::Before(open, "if (!settings) return false;", "Seed(*settings, Edits::Drop);"));
 }
 
 UR_TEST(EditorSafety_TheTransportUpdateIsACompareAndSet) {

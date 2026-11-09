@@ -31,7 +31,8 @@ const std::vector<std::string>& MainReadGetters() {
       "ParseByJwt", "HasPendingSsoAuth", "LastTunnelError", "RpcHostPort", "CurrentConnectReading",
       "ProviderStatusNow", "SelectedLocation", "ConnectedLocation", "GetPerformanceProfile",
       "GetBlockerEnabled", "GetRouteLocal", "CurrentKillSwitch", "CurrentKillSwitchStatus",
-      "GetDnsResolverSettings", "ThroughputPoints", "ThroughputWindowSeconds",
+      "GetDnsResolverSettings", "GetDnsResolverStatus", "GetDnsBlockedCount",
+      "ThroughputPoints", "ThroughputWindowSeconds",
       "ClientTransportDistribution", "ProviderTransportDistribution", "ProviderThroughputPoints",
       "ExtenderThroughputPoints", "HasProviderStats", "DeviceHasProviderStats",
       "GetTransportSettings", "GetProviderTransportSettings", "GetTransportStatus",
@@ -108,7 +109,9 @@ UR_TEST(MainReadWiring_ASynchronousSaveKeepsWhatItSaved) {
       {"std::optional<std::string> SdkHost::SetVlessSettings(", "(\"GetVlessSettings\","},
       {"std::optional<std::string> SdkHost::SetControlDohUrls(", "\"GetControlDohUrls\","},
       {"std::optional<urnet::ExtenderSettings> SdkHost::SetExtenderSettings(", "(\"GetExtenderSettings\","},
-      {"bool SdkHost::SetPrivateExtender(", "(\"GetPrivateExtender\","}};
+      {"bool SdkHost::SetPrivateExtender(", "(\"GetPrivateExtender\","},
+      // the DNS sheet's saves: what the device took, so a pick shows at once
+      {"bool SdkHost::SetDnsResolverSettingsIf(", "(\"GetDnsResolverSettings\","}};
   for (const auto& [signature, key] : saves) {
     const std::string body = wiring::FunctionBody(host, signature);
     UR_EXPECT_TRUE_MSG(signature, wiring::Before(body, "KeepOnMain<", key));

@@ -1633,7 +1633,7 @@ msgctxt "bittensor_walletconnect_hint"
 msgid "Nova, Nightly and other WalletConnect wallets"
 msgstr "Nova, Nightly та інші гаманці WalletConnect"
 
-#. dns settings
+#. DNS settings: heading of the group of DNS providers that block ads and trackers (AdGuard DNS, Control D, DNS4EU), beside "Block malware" and "Family". Screens that haven't moved to dns_builtin_blocker_label also label URnetwork's own blocker's toggle with it, so it reads both as a heading and as an action.
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
 msgstr "Блокувати рекламу та трекери"
@@ -4647,15 +4647,128 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "Показувати мережу в таблиці лідерів"
 
+#. iOS and macOS DNS settings: note that DNS configuration profiles installed on the device don't apply inside the VPN tunnel; the DNS chosen on this screen does.
+msgctxt "dns_apple_profiles_note"
+msgid "DNS profiles installed on this device don't apply while connected. The DNS chosen here is used instead."
+msgstr "Профілі DNS, установлені на цьому пристрої, не діють під час підключення. Натомість використовується DNS, вибраний тут."
+
+#. DNS settings: how many DNS lookups the selected filtering provider has blocked since the device connected. Counted on the device only and reset at each connect. {count} is the number, {provider} the provider's name, inserted as is.
+msgctxt "dns_blocked_count"
+msgid "{0} lookup blocked by {1} this connection"
+msgid_plural "{0} lookups blocked by {1} this connection"
+msgstr[0] "{0} запит заблоковано сервісом {1} за це підключення"
+msgstr[1] "{0} запити заблоковано сервісом {1} за це підключення"
+msgstr[2] "{0} запитів заблоковано сервісом {1} за це підключення"
+
+#. DNS settings: note under the blocked lookups count. Some ways a provider answers a block can't be recognized, so the count is a minimum.
+msgctxt "dns_blocked_count_floor_note"
+msgid "Some blocks aren't counted, so the real number may be higher."
+msgstr "Деякі блокування не враховуються, тож реальне число може бути більшим."
+
+#. Connect drawer and DNS settings: label of the toggle for URnetwork's own ad and tracker blocker, which works on the device beside any DNS choice. It is named as URnetwork's own so it isn't mistaken for the DNS providers in "Block ads and trackers".
+msgctxt "dns_builtin_blocker_label"
+msgid "URnetwork ad blocker"
+msgstr "Блокувальник реклами URnetwork"
+
+#. Connect drawer and DNS settings: line under the URnetwork ad blocker toggle. It can stay on with any DNS choice, a provider that blocks ads included, and it checks each name before the DNS provider is asked.
+msgctxt "dns_builtin_blocker_note"
+msgid "URnetwork's own blocker. It works with any DNS choice and checks each name first."
+msgstr "Власний блокувальник URnetwork. Працює з будь-яким вибраним DNS і перевіряє кожне ім'я першим."
+
+#. DNS settings, Custom: note that a filtering DNS server added beside URnetwork's default servers doesn't filter, because each lookup takes the fastest answer, usually an unfiltered one.
+msgctxt "dns_custom_mix_note"
+msgid "Mixing a filtering server with the default servers doesn't filter: the fastest answer wins."
+msgstr "Поєднання фільтрувального сервера із серверами за замовчуванням не фільтрує: перемагає найшвидша відповідь."
+
 #. dns settings
 msgctxt "dns_default_not_applied"
 msgid "The default safe settings are not applied"
 msgstr "Безпечні налаштування за замовчуванням не застосовані"
 
+#. DNS settings, provider picker: heading of the group of DNS providers that block malware and phishing but not ads (Cloudflare, DNS4EU, Quad9). It sits below "Block ads and trackers" and reads like it.
+msgctxt "dns_group_block_malware"
+msgid "Block malware"
+msgstr "Блокувати шкідливе ПЗ"
+
+#. DNS settings, provider picker: heading of the group of family DNS providers, which block adult sites and similar content (some of them also block ads).
+msgctxt "dns_group_family"
+msgid "Family"
+msgstr "Сім'я"
+
+#. DNS settings, provider picker: heading of the group for people with their own account at a DNS provider (AdGuard DNS, Control D, NextDNS). Choosing one asks for the account's profile ID, so the provider applies the person's own filters.
+msgctxt "dns_group_my_account"
+msgid "Use my account"
+msgstr "Використати мій обліковий запис"
+
+#. DNS settings, provider picker: heading of the group of other DNS providers that resolve every name and block nothing.
+msgctxt "dns_group_no_filtering"
+msgid "No filtering"
+msgstr "Без фільтрування"
+
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS через HTTPS"
+
+#. DNS settings, Use my account: help about the provider's block response setting. URnetwork treats a REFUSED answer as a failing provider, so blocks must be answered with zero IP (0.0.0.0, the providers' default) or NXDOMAIN. 0.0.0.0, NXDOMAIN and REFUSED are technical values: keep them as they are. {provider} is the provider's name, inserted as is.
+msgctxt "dns_personal_id_block_response"
+msgid "In {}, keep the block response at zero IP (0.0.0.0, the default) or NXDOMAIN. REFUSED and other responses look like an outage."
+msgstr "У {} залиште відповідь на блокування «нульова IP» (0.0.0.0, за замовчуванням) або NXDOMAIN. REFUSED та інші відповіді виглядають як збій."
+
+#. DNS settings, Use my account: link that opens the provider's dashboard, for example under "Saved, but we can't confirm this profile". {provider} is the provider's name, inserted as is.
+msgctxt "dns_personal_id_dashboard_link"
+msgid "Open your {} dashboard"
+msgstr "Відкрити панель керування {}"
+
+#. DNS settings, Use my account: shown under the profile ID field when the AdGuard DNS device ID has the wrong format. {provider} is AdGuard DNS and {example} an example ID such as 1a2b3c4d, both inserted as is.
+msgctxt "dns_personal_id_format_adguard"
+msgid "{0} device IDs are 8 characters: digits and the letters a to f, like {1}."
+msgstr "ID пристроїв {0} мають 8 символів: цифри та літери від a до f, наприклад {1}."
+
+#. DNS settings, Use my account: shown under the profile ID field when the Control D resolver ID has the wrong format. {provider} is Control D and {example} an example ID such as abcd1234, both inserted as is.
+msgctxt "dns_personal_id_format_controld"
+msgid "{0} resolver IDs use only letters and digits, like {1}."
+msgstr "ID резолвера {0} містять лише літери та цифри, наприклад {1}."
+
+#. DNS settings, Use my account: shown under the profile ID field when the NextDNS ID has the wrong format. {provider} is NextDNS and {example} an example ID such as abc123, both inserted as is.
+msgctxt "dns_personal_id_format_nextdns"
+msgid "{0} IDs are 6 characters: digits and the letters a to f, like {1}."
+msgstr "ID {0} мають 6 символів: цифри та літери від a до f, наприклад {1}."
+
+#. DNS settings, Use my account: label of the field where the person enters the ID of their profile at the DNS provider, or pastes the DNS address the provider's dashboard shows (a DNS over HTTPS URL or a Private DNS hostname).
+msgctxt "dns_personal_id_label"
+msgid "Profile ID or DNS address"
+msgstr "ID профілю або адреса DNS"
+
+#. DNS settings, Use my account: provider dashboards suggest linking your IP address to your account. Through URnetwork, lookups come from the VPN exit's address, which belongs to someone else, so the app uses only the ID and doesn't offer linking.
+msgctxt "dns_personal_id_linked_ip_note"
+msgid "No need to link an IP address in your dashboard: through URnetwork, your lookups come from an address that isn't yours. Your ID is enough."
+msgstr "Прив'язувати IP-адресу на панелі керування не потрібно: через URnetwork ваші запити йдуть з чужої адреси. Достатньо вашого ID."
+
+#. DNS settings, Use my account: free-plan note under the profile ID field for AdGuard DNS. What happens at the limit is not documented, so the note states only the limit. {provider} is AdGuard DNS, inserted as is. The sdk names this key for the preset.
+msgctxt "dns_personal_id_quota_adguard"
+msgid "{}'s free plan is limited to 300,000 requests a month."
+msgstr "Безкоштовний тариф {} обмежено 300 000 запитів на місяць."
+
+#. DNS settings, Use my account: free-plan note under the profile ID field for NextDNS, which answers without filtering once the free monthly queries are used up. {provider} is NextDNS, inserted as is. The sdk names this key for the preset.
+msgctxt "dns_personal_id_quota_nextdns"
+msgid "{}'s free plan stops filtering after 300,000 queries a month."
+msgstr "Безкоштовний тариф {} припиняє фільтрувати після 300 000 запитів на місяць."
+
+#. DNS settings, Use my account: help under the profile ID field for AdGuard DNS. {provider} is AdGuard DNS, inserted as is. Each device's page in the AdGuard DNS dashboard shows its device ID and DNS addresses.
+msgctxt "dns_personal_id_where_adguard"
+msgid "Find it on your device's page in your {} dashboard."
+msgstr "Його можна знайти на сторінці вашого пристрою на панелі керування {}."
+
+#. DNS settings, Use my account: help under the profile ID field for Control D. {provider} is Control D, inserted as is. "Show Resolvers" is the button's name in Control D's English dashboard, so it stays in English; an endpoint is what Control D calls a device or profile you connect.
+msgctxt "dns_personal_id_where_controld"
+msgid "In your {} dashboard, choose Show Resolvers on your endpoint."
+msgstr "На панелі керування {} виберіть Show Resolvers для своєї кінцевої точки."
+
+#. DNS settings, Use my account: help under the profile ID field for NextDNS. {provider} is NextDNS, inserted as is. "Setup" is the name of the page in the NextDNS dashboard, so it stays in English.
+msgctxt "dns_personal_id_where_nextdns"
+msgid "Find it on the Setup page of your {} account."
+msgstr "Його можна знайти на сторінці Setup у вашому обліковому записі {}."
 
 #. dns settings
 msgctxt "dns_pill_default"
@@ -4672,35 +4785,290 @@ msgctxt "dns_pill_recommended"
 msgid "There are unapplied recommended settings for {}"
 msgstr "Є незастосовані рекомендовані налаштування для {}"
 
+#. DNS settings: footnote. A new DNS choice applies to new lookups at once, but apps keep answers they already have for up to about a minute.
+msgctxt "dns_preset_apply_note"
+msgid "Changes apply to new lookups right away. Apps may keep earlier answers for about a minute."
+msgstr "Зміни одразу застосовуються до нових запитів. Застосунки можуть зберігати попередні відповіді приблизно хвилину."
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for AdGuard DNS Family in "Family": it also forces safe search on search engines. The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_adult_safe_search"
+msgid "Blocks ads, trackers and adult sites, and turns on safe search"
+msgstr "Блокує рекламу, трекери та сайти для дорослих і вмикає безпечний пошук"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for Control D in "Block ads and trackers". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_malware"
+msgid "Blocks ads, trackers and malware"
+msgstr "Блокує рекламу, трекери та шкідливе ПЗ"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for Control D Family in "Family". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_malware_adult_drugs"
+msgid "Blocks ads, trackers, malware, adult sites and drugs"
+msgstr "Блокує рекламу, трекери, шкідливе ПЗ, сайти для дорослих і наркотики"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for DNS4EU in "Block ads and trackers". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_malware_phishing"
+msgid "Blocks ads, trackers, malware and phishing"
+msgstr "Блокує рекламу, трекери, шкідливе ПЗ та фішинг"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for AdGuard DNS in "Block ads and trackers". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_phishing"
+msgid "Blocks ads, trackers and phishing"
+msgstr "Блокує рекламу, трекери та фішинг"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for DNS4EU's child protection in "Family". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_child"
+msgid "Blocks malware, adult sites, gambling, drugs and violence, not ads"
+msgstr "Блокує шкідливе ПЗ, сайти для дорослих, азартні ігри, наркотики та насильство, але не рекламу"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for DNS4EU's child protection with ad blocking in "Family". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_child_ads"
+msgid "Blocks ads, trackers, malware, adult sites, gambling, drugs and violence"
+msgstr "Блокує рекламу, трекери, шкідливе ПЗ, сайти для дорослих, азартні ігри, наркотики та насильство"
+
+#. DNS settings, provider picker: the line under DNS4EU in "No filtering". It does no protective filtering, but the domains courts order blocked stay blocked on every DNS4EU resolver. The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_court_orders"
+msgid "Blocks only what courts order it to block"
+msgstr "Блокує лише те, що наказують суди"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for Cloudflare in "Block malware". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_malware"
+msgid "Blocks malware, not ads"
+msgstr "Блокує шкідливе ПЗ, але не рекламу"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for Cloudflare Family in "Family". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_malware_adult"
+msgid "Blocks malware and adult sites, not ads"
+msgstr "Блокує шкідливе ПЗ і сайти для дорослих, але не рекламу"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for DNS4EU and Quad9 in "Block malware". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_malware_phishing"
+msgid "Blocks malware and phishing, not ads"
+msgstr "Блокує шкідливе ПЗ і фішинг, але не рекламу"
+
+#. DNS settings, provider picker: the line under a DNS provider's name in "No filtering" (AdGuard DNS, Cloudflare, Control D): the provider resolves every name and blocks nothing. The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_nothing"
+msgid "Blocks nothing"
+msgstr "Нічого не блокує"
+
+#. DNS settings, provider picker: the line under each provider in "Use my account". {provider} is the provider's name (AdGuard DNS, Control D or NextDNS), inserted as is.
+msgctxt "dns_preset_copy_personal"
+msgid "Uses the filters you set up in your {} account"
+msgstr "Використовує фільтри з вашого облікового запису {}"
+
+#. DNS settings: disclosure under the selected DNS provider, above the Privacy policy and Help links. The provider receives the names looked up while connected, from the VPN exit's address, never the person's own IP address. {provider} is the provider's name (for example AdGuard DNS), inserted as is.
+msgctxt "dns_preset_disclosure"
+msgid "Your DNS lookups go to {} through the tunnel, so it never sees your IP address. Its privacy policy applies."
+msgstr "Ваші DNS-запити йдуть через тунель до {}, тож сервіс ніколи не бачить вашої IP-адреси. Діє його політика конфіденційності."
+
+#. DNS settings and connect drawer: notice after an app update removed the DNS provider the person had selected. The app switched to URnetwork's own DNS, which doesn't filter. {provider} is the removed provider's name, inserted as is.
+msgctxt "dns_preset_dropped"
+msgid "{} is no longer available. You're using URnetwork DNS, so lookups aren't filtered."
+msgstr "Сервіс {} більше недоступний. Ви використовуєте DNS URnetwork, тож запити не фільтруються."
+
+#. DNS settings: button on the notice of a removed DNS provider that opens the provider list. "Preset" means one of the DNS providers listed on the screen.
+msgctxt "dns_preset_dropped_choose"
+msgid "Choose another preset"
+msgstr "Вибрати інше готове налаштування"
+
+#. DNS settings: button on the notice of a removed DNS provider that opens the Custom editor, where the person can enter the provider's addresses themselves. It names the "Custom" pick, so it uses that pick's exact word.
+msgctxt "dns_preset_dropped_custom"
+msgid "Enter it yourself under Custom"
+msgstr "Ввести вручну в розділі «Власний»"
+
+#. DNS settings, Use my account: error id the sdk returns when the profile ID doesn't have the provider's format. The provider's own format line is shown with it.
+msgctxt "dns_preset_error_personal_id_invalid"
+msgid "This ID isn't in the right format."
+msgstr "Неправильний формат ID."
+
+#. DNS settings: error id the sdk returns when a profile ID is given for a DNS preset that doesn't take one. "Preset" means one of the DNS providers listed on the screen.
+msgctxt "dns_preset_error_personal_id_not_accepted"
+msgid "This preset doesn't use a profile ID."
+msgstr "Це готове налаштування не використовує ID профілю."
+
+#. DNS settings, Use my account: error id the sdk returns when the pasted DNS address or hostname belongs to another DNS provider in the list.
+msgctxt "dns_preset_error_personal_id_other_provider"
+msgid "This address belongs to another provider. Choose that provider instead."
+msgstr "Ця адреса належить іншому DNS-провайдеру. Виберіть цього провайдера."
+
+#. DNS settings, Use my account: error id the sdk returns when the profile ID field is empty.
+msgctxt "dns_preset_error_personal_id_required"
+msgid "Enter your profile ID."
+msgstr "Введіть ID профілю."
+
+#. DNS settings: error id the sdk returns when a DNS preset is no longer in the app's catalog. "Preset" means one of the DNS providers listed on the screen.
+msgctxt "dns_preset_error_unknown"
+msgid "This preset isn't available. Choose another one."
+msgstr "Це готове налаштування недоступне. Виберіть інше."
+
+#. DNS settings: note beside the "Fast DNS on connect" toggle while a DNS provider is selected. While the tunnel connects, lookups go to URnetwork's own DNS, so the provider never sees the person's own address, but those lookups aren't filtered. {provider} is the provider's name, inserted as is.
+msgctxt "dns_preset_fast_dns_note"
+msgid "While connecting, lookups use URnetwork DNS, so {} doesn't filter them."
+msgstr "Під час підключення запити йдуть через DNS URnetwork, тож {} їх не фільтрує."
+
+#. DNS settings: link under the selected DNS provider, beside "Privacy policy", that opens the provider's help page.
+msgctxt "dns_preset_help_link"
+msgid "Help"
+msgstr "Довідка"
+
+#. DNS settings, provider picker: which country's law the DNS provider operates under. {jurisdiction} comes from the app's provider catalog in English (for example Cyprus or Switzerland) and is inserted as is.
+msgctxt "dns_preset_jurisdiction"
+msgid "Jurisdiction: {}"
+msgstr "Юрисдикція: {}"
+
+#. DNS settings: link under the selected DNS provider that opens the provider's privacy policy.
+msgctxt "dns_preset_privacy_link"
+msgid "Privacy policy"
+msgstr "Політика конфіденційності"
+
+#. Android connect screen: line added to the strict Private DNS notice while a DNS provider is selected, since Android's Private DNS sends lookups to its own server instead. {provider} is the selected DNS provider's name, inserted as is. Private DNS is Android's own setting, named as in Android.
+msgctxt "dns_private_dns_overrides_preset"
+msgid "Private DNS overrides your DNS choice ({})."
+msgstr "Приватний DNS замінює вибраний вами DNS ({})."
+
+#. DNS settings, provider picker: the pick that opens the advanced editor, where the person enters their own DNS over HTTPS URLs and DNS servers. Other strings send the reader to this pick by name ("Enter it yourself under Custom"), so they use the same word.
+msgctxt "dns_provider_custom"
+msgid "Custom"
+msgstr "Власний"
+
+#. DNS settings, provider picker: the line under "Custom" that says what it holds.
+msgctxt "dns_provider_custom_copy"
+msgid "Your own DNS over HTTPS URLs and DNS servers"
+msgstr "Власні URL-адреси DNS через HTTPS і DNS-сервери"
+
+#. DNS settings, provider picker: the first pick, URnetwork's own encrypted DNS through the tunnel, which every app uses by default. URnetwork is the product name.
+msgctxt "dns_provider_default"
+msgid "URnetwork (default)"
+msgstr "URnetwork (за замовчуванням)"
+
+#. DNS settings, provider picker: the line under "URnetwork (default)" that says what it does: names are resolved over encrypted DNS inside the VPN tunnel, and nothing is blocked.
+msgctxt "dns_provider_default_copy"
+msgid "Encrypted DNS through the tunnel, with no filtering"
+msgstr "Зашифрований DNS через тунель, без фільтрування"
+
+#. DNS settings, provider picker: the last pick, shown only while the exit's country has a recommended set of plain DNS servers that work better there. It is never selected automatically. {country} is the exit country's name, inserted as is. Unencrypted means the DNS lookups are sent without encryption.
+msgctxt "dns_provider_regional"
+msgid "Regional ({}), unencrypted"
+msgstr "Регіональний ({}), без шифрування"
+
 #. dns settings
 msgctxt "dns_recommendation_message"
 msgid "The strongest security rules are known not to work in {}. There are less secure recommended DNS settings that work better."
 msgstr "Відомо, що найсуворіші правила безпеки не працюють у {}. Є менш безпечні рекомендовані налаштування DNS, які працюють краще."
-
-#. dns settings
-msgctxt "dns_restore_secure_message"
-msgid "Restore the most secure settings: encrypted DNS over HTTPS through the tunnel."
-msgstr "Відновіть найбезпечніші налаштування: шифрований DNS через HTTPS у тунелі."
 
 #. A message displayed when the dns settings are unavailable.
 msgctxt "dns_settings_unavailable"
 msgid "DNS settings unavailable"
 msgstr "Налаштування DNS недоступні"
 
+#. DNS settings and connect drawer: button beside a DNS provider status that opens the location picker, since a provider can be blocked or unreachable from some exit locations.
+msgctxt "dns_status_change_location"
+msgid "Change location"
+msgstr "Змінити локацію"
+
+#. DNS settings and connect drawer: status line when a DNS provider from "No filtering" isn't answering, so URnetwork's own DNS answers until it does. {provider} is the provider's name, inserted as is.
+msgctxt "dns_status_fallback"
+msgid "{} isn't answering. Using URnetwork DNS."
+msgstr "{} не відповідає. Використовується DNS URnetwork."
+
+#. DNS settings and connect drawer: status line when an ad-blocking DNS provider isn't answering from the current exit, so URnetwork's own DNS answers for now and ads aren't blocked. It switches back on its own when the provider answers. {provider} is the provider's name, inserted as is.
+msgctxt "dns_status_paused"
+msgid "Ad blocking paused: {} isn't answering"
+msgstr "Блокування реклами призупинено: {} не відповідає"
+
+#. DNS settings: line under "Ad blocking paused: … isn't answering". "it" is the ad-blocking DNS provider named in that line.
+msgctxt "dns_status_paused_detail"
+msgid "Using URnetwork DNS until it answers. Ad blocking comes back on its own."
+msgstr "Поки сервіс не відповість, використовується DNS URnetwork. Блокування реклами відновиться саме."
+
+#. DNS settings: status line while the selected DNS provider answers normally. {provider} is the provider's name (for example AdGuard DNS), inserted as is.
+msgctxt "dns_status_provider"
+msgid "DNS: {}"
+msgstr "DNS: {}"
+
+#. DNS settings and connect drawer: status line when a family, malware-blocking or personal DNS provider isn't answering. To keep its filtering, URnetwork doesn't switch to other DNS, so sites may not load until the provider answers or the person picks "Use URnetwork DNS". {provider} is the provider's name, inserted as is.
+msgctxt "dns_status_unreachable"
+msgid "{} isn't answering"
+msgstr "{} не відповідає"
+
+#. DNS settings: line under "… isn't answering" for a family, malware-blocking or personal DNS provider. "it" is the DNS provider named in that line.
+msgctxt "dns_status_unreachable_detail"
+msgid "To keep filtering on, URnetwork doesn't switch DNS for you. Sites may not load until it answers."
+msgstr "Щоб фільтрування залишалося ввімкненим, URnetwork не перемикає DNS самостійно. Поки сервіс не відповість, сайти можуть не завантажуватися."
+
+#. DNS settings and connect drawer: button beside a DNS provider status that isn't answering. It switches back to URnetwork's own DNS, the default, in one tap.
+msgctxt "dns_status_use_default"
+msgid "Use URnetwork DNS"
+msgstr "Використовувати DNS URnetwork"
+
+#. Connect drawer, DNS card: summary row while a DNS provider from "Block ads and trackers" is selected. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_ad_blocking"
+msgid "DNS: {} · Ad blocking"
+msgstr "DNS: {} · Блокування реклами"
+
+#. Connect drawer, DNS card: summary row while the person's own servers are selected under "Custom", all of them encrypted.
+msgctxt "dns_summary_custom"
+msgid "DNS: Custom"
+msgstr "DNS: Власний"
+
+#. Connect drawer, DNS card: summary row while the person's own servers are selected under "Custom" and some lookups are sent without encryption (plain DNS is on).
+msgctxt "dns_summary_custom_unencrypted"
+msgid "DNS: Custom (unencrypted)"
+msgstr "DNS: Власний (без шифрування)"
+
+#. Connect drawer, DNS card: summary row while URnetwork's own DNS, the default, is selected. URnetwork is the product name.
+msgctxt "dns_summary_default"
+msgid "DNS: URnetwork"
+msgstr "DNS: URnetwork"
+
+#. Connect drawer, DNS card: summary row while a DNS provider from "Family" is selected. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_family"
+msgid "DNS: {} · Family filter"
+msgstr "DNS: {} · Сімейний фільтр"
+
+#. Connect drawer, DNS card: summary row while a DNS provider from "Block malware" is selected. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_malware_blocking"
+msgid "DNS: {} · Malware blocking"
+msgstr "DNS: {} · Блокування шкідливого ПЗ"
+
+#. Connect drawer, DNS card: summary row while a DNS provider from "No filtering" is selected. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_no_filtering"
+msgid "DNS: {} · No filtering"
+msgstr "DNS: {} · Без фільтрування"
+
+#. Connect drawer, DNS card: summary row while a provider from "Use my account" is selected. The profile ID itself is never shown. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_personal"
+msgid "DNS: {} · your profile"
+msgstr "DNS: {} · ваш профіль"
+
+#. Connect drawer, DNS card: summary row while the regional pick is selected: plain DNS servers recommended for the exit's country, which send lookups without encryption.
+msgctxt "dns_summary_regional"
+msgid "DNS: Regional (unencrypted)"
+msgstr "DNS: Регіональний (без шифрування)"
+
 #. dns settings
 msgctxt "dns_unapplied_recommended"
 msgid "There are unapplied recommended settings for {}"
 msgstr "Є незастосовані рекомендовані налаштування для {}"
 
-#. dns settings
-msgctxt "dns_using_recommended"
-msgid "Using recommended regional settings"
-msgstr "Використовуються рекомендовані регіональні налаштування"
+#. DNS settings, Use my account: AdGuard DNS fails every lookup for a device ID it can't read. {provider} is AdGuard DNS, inserted as is. "Device ID" is AdGuard DNS's name for the ID.
+msgctxt "dns_verify_malformed_adguard"
+msgid "{} rejected this device ID"
+msgstr "{}: цей ID пристрою відхилено"
 
-#. dns settings
-msgctxt "dns_using_secure"
-msgid "Using most secure default settings"
-msgstr "Використовуються найбезпечніші налаштування за замовчуванням"
+#. DNS settings: result of the check the app runs after a filtering DNS provider is chosen: the provider answered a name it normally blocks with a real address, so it isn't filtering from the current exit location. {provider} is the provider's name, inserted as is.
+msgctxt "dns_verify_not_filtering"
+msgid "{} isn't filtering from this location"
+msgstr "{} не фільтрує з цієї локації"
+
+#. DNS settings, Use my account: Control D refuses every lookup for a resolver ID it doesn't know. {provider} is Control D, inserted as is. "Resolver ID" is Control D's name for the ID.
+msgctxt "dns_verify_rejected_controld"
+msgid "{} doesn't recognize this resolver ID"
+msgstr "{} не розпізнає цей ID резолвера"
+
+#. DNS settings, Use my account: shown after a profile ID is saved and the provider answers normally. A wrong ID or a used-up free plan also answers normally, just without filtering, so the app can't confirm the profile. {provider} is the provider's name, inserted as is.
+msgctxt "dns_verify_unconfirmed"
+msgid "Saved, but we can't confirm this profile. If the ID is wrong, {} answers without filtering."
+msgstr "Збережено, але ми не можемо підтвердити цей профіль. Якщо ID неправильний, {} відповідає без фільтрування."
 
 #. Placeholder in the DNS-over-HTTPS URL inputs: the required URL scheme. Not prose; never translated.
 msgctxt "doh_url_placeholder"
@@ -8455,11 +8823,6 @@ msgctxt "restore_default_transports"
 msgid "Restore default transports"
 msgstr "Відновити стандартні транспорти"
 
-#. dns settings
-msgctxt "restore_most_secure_settings"
-msgid "Restore to most secure settings"
-msgstr "Повернути найбезпечніші налаштування"
-
 #. Action label that resyncs App Store purchases (AppStore.sync + entitlement scan). Shown in Settings and in the upgrade flow's failure states (Main/Account/Settings/SettingsForm-iOS.swift, SettingsForm-macOS.swift, Shared/Views/UpgradeSubscriptionSheet.swift, Shared/Views/PurchaseSuccessView.swift, Shared/Views/Introduction/IntroductionView.swift).
 msgctxt "restore_purchases"
 msgid "Restore purchases"
@@ -11149,11 +11512,6 @@ msgstr "Використати налаштування екстендера"
 msgctxt "use_most_stable_provider"
 msgid "Use most stable provider"
 msgstr "Використовується найстабільніший провайдер"
-
-#. dns settings
-msgctxt "use_recommended_settings"
-msgid "Use recommended settings"
-msgstr "Використати рекомендовані налаштування"
 
 #. Settings row that opens the cloud proxies page on ur.io (https://ur.io/app/proxies), where the user can create a WireGuard, SOCKS or HTTPS proxy. The app itself has no protocol switch.
 msgctxt "use_wireguard_socks_https_proxy"

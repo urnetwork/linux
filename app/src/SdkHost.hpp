@@ -120,6 +120,7 @@ enum class DrawerEvent {
   BlockStats,       // allowed/blocked counts changed
   Overrides,        // block action overrides ("split rules") changed
   DnsSettings,      // dns resolver settings changed
+  DnsStatus,        // dns resolver status changed (state, verification, selection)
   TransportSettings,          // client transport policy changed (transport bar footer + editor)
   ProviderTransportSettings,  // provider transport policy changed
   Blocker,          // block-ads-and-trackers toggle changed
@@ -1121,8 +1122,23 @@ class SdkHost {
   // tunnel state change (the floor moves between Armed and Connected on its
   // own) and when a surface comes back on screen.
   void RefreshKillSwitchStatus(KillSwitchDone done = {});
+  // The traffic dns settings. Reads come from the device when present, else
+  // the GUI's mirror. Writes apply over the device rpc and mirror what the
+  // device took into the GUI's LocalState, as the transport policies do: the
+  // daemon's DeviceLocal persists its own copy, but the two processes do not
+  // share local state, so a bound device's sync takes the mirror when it
+  // differs, and a pick made with the tunnel down reaches the tunnel (connect
+  // ADBLOCK3RD.md F2, DnsMirror.hpp). Changes arrive as DrawerEvent::DnsSettings.
   std::optional<urnet::DnsResolverSettings> GetDnsResolverSettings();
   void SetDnsResolverSettings(const urnet::DnsResolverSettings& settings);
+  // The device's dns resolver status (sdk dns_resolver_status.go): whether the
+  // selected resolver answers, has failed over to URnetwork's dns or fails
+  // closed, the selected preset's verification, and this connection's blocked
+  // lookups. nullopt with no device (tunnel down). Changes arrive as
+  // DrawerEvent::DnsStatus, but for the blocked count, which changes with no
+  // callback: GetDnsBlockedCount reads it, 0 with no device.
+  std::optional<urnet::DnsResolverStatus> GetDnsResolverStatus();
+  int64_t GetDnsBlockedCount();
   // Compare-and-set, for the editors (apple's editor safety): the write goes
   // ahead only while `stillShown` holds for the settings as they read now,
   // checked and written under one hold of mutex_. Otherwise nothing is
@@ -1758,7 +1774,16 @@ class SdkHost {
   // The editors' settings, read and written with mutex_ held (the public
   // accessors and the compare-and-set writes share them).
   std::optional<urnet::DnsResolverSettings> GetDnsResolverSettingsLocked();
-  void SetDnsResolverSettingsLocked(const urnet::DnsResolverSettings& settings);
+  // Returns what the device took (it refuses a selection it cannot apply
+  // without a word), or with no device what the mirror took.
+  std::optional<urnet::DnsResolverSettings> SetDnsResolverSettingsLocked(
+      const urnet::DnsResolverSettings& settings);
+  // The GUI's mirror of the dns settings meets the daemon's at a sync of the
+  // pinned pair (DnsMirror.hpp), and the mark of this network space's mirror.
+  void ReconcileDnsMirrorLocked();
+  std::string DnsMirrorMarkKeyLocked();
+  bool DnsMirrorMarkedLocked();
+  void SetDnsMirrorMarkedLocked(bool marked);
   std::optional<urnet::TransportSettings> GetTransportSettingsLocked();
   void SetTransportSettingsLocked(const urnet::TransportSettings& settings);
   std::optional<urnet::TransportSettings> GetProviderTransportSettingsLocked();

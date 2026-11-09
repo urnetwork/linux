@@ -1627,7 +1627,7 @@ msgctxt "bittensor_walletconnect_hint"
 msgid "Nova, Nightly and other WalletConnect wallets"
 msgstr "Nova, Nightly 및 기타 WalletConnect 지갑"
 
-#. dns settings
+#. DNS settings: heading of the group of DNS providers that block ads and trackers (AdGuard DNS, Control D, DNS4EU), beside "Block malware" and "Family". Screens that haven't moved to dns_builtin_blocker_label also label URnetwork's own blocker's toggle with it, so it reads both as a heading and as an action.
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
 msgstr "광고 및 트래커 차단"
@@ -4635,15 +4635,126 @@ msgctxt "display_network_on_leaderboard"
 msgid "Display network on leaderboard"
 msgstr "리더보드에 네트워크 표시"
 
+#. iOS and macOS DNS settings: note that DNS configuration profiles installed on the device don't apply inside the VPN tunnel; the DNS chosen on this screen does.
+msgctxt "dns_apple_profiles_note"
+msgid "DNS profiles installed on this device don't apply while connected. The DNS chosen here is used instead."
+msgstr "연결되어 있는 동안에는 이 기기에 설치된 DNS 프로필이 적용되지 않습니다. 대신 여기서 선택한 DNS가 사용됩니다."
+
+#. DNS settings: how many DNS lookups the selected filtering provider has blocked since the device connected. Counted on the device only and reset at each connect. {count} is the number, {provider} the provider's name, inserted as is.
+msgctxt "dns_blocked_count"
+msgid "{0} lookup blocked by {1} this connection"
+msgid_plural "{0} lookups blocked by {1} this connection"
+msgstr[0] "이번 연결 중 {1}에서 차단한 조회: {0}건"
+
+#. DNS settings: note under the blocked lookups count. Some ways a provider answers a block can't be recognized, so the count is a minimum.
+msgctxt "dns_blocked_count_floor_note"
+msgid "Some blocks aren't counted, so the real number may be higher."
+msgstr "일부 차단은 집계되지 않으므로 실제 수는 더 많을 수 있습니다."
+
+#. Connect drawer and DNS settings: label of the toggle for URnetwork's own ad and tracker blocker, which works on the device beside any DNS choice. It is named as URnetwork's own so it isn't mistaken for the DNS providers in "Block ads and trackers".
+msgctxt "dns_builtin_blocker_label"
+msgid "URnetwork ad blocker"
+msgstr "URnetwork 광고 차단기"
+
+#. Connect drawer and DNS settings: line under the URnetwork ad blocker toggle. It can stay on with any DNS choice, a provider that blocks ads included, and it checks each name before the DNS provider is asked.
+msgctxt "dns_builtin_blocker_note"
+msgid "URnetwork's own blocker. It works with any DNS choice and checks each name first."
+msgstr "URnetwork 자체 차단기입니다. 어떤 DNS를 선택해도 작동하며 각 이름을 가장 먼저 확인합니다."
+
+#. DNS settings, Custom: note that a filtering DNS server added beside URnetwork's default servers doesn't filter, because each lookup takes the fastest answer, usually an unfiltered one.
+msgctxt "dns_custom_mix_note"
+msgid "Mixing a filtering server with the default servers doesn't filter: the fastest answer wins."
+msgstr "필터링 서버를 기본 서버와 함께 쓰면 필터링되지 않습니다. 가장 빠른 응답이 사용되기 때문입니다."
+
 #. dns settings
 msgctxt "dns_default_not_applied"
 msgid "The default safe settings are not applied"
 msgstr "기본 안전 설정이 적용되어 있지 않습니다"
 
+#. DNS settings, provider picker: heading of the group of DNS providers that block malware and phishing but not ads (Cloudflare, DNS4EU, Quad9). It sits below "Block ads and trackers" and reads like it.
+msgctxt "dns_group_block_malware"
+msgid "Block malware"
+msgstr "악성코드 차단"
+
+#. DNS settings, provider picker: heading of the group of family DNS providers, which block adult sites and similar content (some of them also block ads).
+msgctxt "dns_group_family"
+msgid "Family"
+msgstr "가족"
+
+#. DNS settings, provider picker: heading of the group for people with their own account at a DNS provider (AdGuard DNS, Control D, NextDNS). Choosing one asks for the account's profile ID, so the provider applies the person's own filters.
+msgctxt "dns_group_my_account"
+msgid "Use my account"
+msgstr "내 계정 사용"
+
+#. DNS settings, provider picker: heading of the group of other DNS providers that resolve every name and block nothing.
+msgctxt "dns_group_no_filtering"
+msgid "No filtering"
+msgstr "필터링 없음"
+
 #. A label displayed in a row of a custom dns settings.
 msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS over HTTPS"
+
+#. DNS settings, Use my account: help about the provider's block response setting. URnetwork treats a REFUSED answer as a failing provider, so blocks must be answered with zero IP (0.0.0.0, the providers' default) or NXDOMAIN. 0.0.0.0, NXDOMAIN and REFUSED are technical values: keep them as they are. {provider} is the provider's name, inserted as is.
+msgctxt "dns_personal_id_block_response"
+msgid "In {}, keep the block response at zero IP (0.0.0.0, the default) or NXDOMAIN. REFUSED and other responses look like an outage."
+msgstr "{}에서 차단 응답을 제로 IP(0.0.0.0, 기본값) 또는 NXDOMAIN으로 유지하세요. REFUSED 등 다른 응답은 장애처럼 보입니다."
+
+#. DNS settings, Use my account: link that opens the provider's dashboard, for example under "Saved, but we can't confirm this profile". {provider} is the provider's name, inserted as is.
+msgctxt "dns_personal_id_dashboard_link"
+msgid "Open your {} dashboard"
+msgstr "{} 대시보드 열기"
+
+#. DNS settings, Use my account: shown under the profile ID field when the AdGuard DNS device ID has the wrong format. {provider} is AdGuard DNS and {example} an example ID such as 1a2b3c4d, both inserted as is.
+msgctxt "dns_personal_id_format_adguard"
+msgid "{0} device IDs are 8 characters: digits and the letters a to f, like {1}."
+msgstr "{0} 기기 ID는 숫자와 a~f 문자로 된 8자입니다(예: {1})."
+
+#. DNS settings, Use my account: shown under the profile ID field when the Control D resolver ID has the wrong format. {provider} is Control D and {example} an example ID such as abcd1234, both inserted as is.
+msgctxt "dns_personal_id_format_controld"
+msgid "{0} resolver IDs use only letters and digits, like {1}."
+msgstr "{0} 리졸버 ID는 문자와 숫자로만 이루어집니다(예: {1})."
+
+#. DNS settings, Use my account: shown under the profile ID field when the NextDNS ID has the wrong format. {provider} is NextDNS and {example} an example ID such as abc123, both inserted as is.
+msgctxt "dns_personal_id_format_nextdns"
+msgid "{0} IDs are 6 characters: digits and the letters a to f, like {1}."
+msgstr "{0} ID는 숫자와 a~f 문자로 된 6자입니다(예: {1})."
+
+#. DNS settings, Use my account: label of the field where the person enters the ID of their profile at the DNS provider, or pastes the DNS address the provider's dashboard shows (a DNS over HTTPS URL or a Private DNS hostname).
+msgctxt "dns_personal_id_label"
+msgid "Profile ID or DNS address"
+msgstr "프로필 ID 또는 DNS 주소"
+
+#. DNS settings, Use my account: provider dashboards suggest linking your IP address to your account. Through URnetwork, lookups come from the VPN exit's address, which belongs to someone else, so the app uses only the ID and doesn't offer linking.
+msgctxt "dns_personal_id_linked_ip_note"
+msgid "No need to link an IP address in your dashboard: through URnetwork, your lookups come from an address that isn't yours. Your ID is enough."
+msgstr "대시보드에서 IP 주소를 연결할 필요가 없습니다. URnetwork를 거친 조회는 내 것이 아닌 주소에서 나옵니다. ID만 있으면 됩니다."
+
+#. DNS settings, Use my account: free-plan note under the profile ID field for AdGuard DNS. What happens at the limit is not documented, so the note states only the limit. {provider} is AdGuard DNS, inserted as is. The sdk names this key for the preset.
+msgctxt "dns_personal_id_quota_adguard"
+msgid "{}'s free plan is limited to 300,000 requests a month."
+msgstr "{} 무료 요금제는 월 30만 요청으로 제한됩니다."
+
+#. DNS settings, Use my account: free-plan note under the profile ID field for NextDNS, which answers without filtering once the free monthly queries are used up. {provider} is NextDNS, inserted as is. The sdk names this key for the preset.
+msgctxt "dns_personal_id_quota_nextdns"
+msgid "{}'s free plan stops filtering after 300,000 queries a month."
+msgstr "{} 무료 요금제는 월 30만 쿼리를 넘으면 필터링을 멈춥니다."
+
+#. DNS settings, Use my account: help under the profile ID field for AdGuard DNS. {provider} is AdGuard DNS, inserted as is. Each device's page in the AdGuard DNS dashboard shows its device ID and DNS addresses.
+msgctxt "dns_personal_id_where_adguard"
+msgid "Find it on your device's page in your {} dashboard."
+msgstr "{} 대시보드의 기기 페이지에서 찾을 수 있습니다."
+
+#. DNS settings, Use my account: help under the profile ID field for Control D. {provider} is Control D, inserted as is. "Show Resolvers" is the button's name in Control D's English dashboard, so it stays in English; an endpoint is what Control D calls a device or profile you connect.
+msgctxt "dns_personal_id_where_controld"
+msgid "In your {} dashboard, choose Show Resolvers on your endpoint."
+msgstr "{} 대시보드에서 엔드포인트의 Show Resolvers를 선택하세요."
+
+#. DNS settings, Use my account: help under the profile ID field for NextDNS. {provider} is NextDNS, inserted as is. "Setup" is the name of the page in the NextDNS dashboard, so it stays in English.
+msgctxt "dns_personal_id_where_nextdns"
+msgid "Find it on the Setup page of your {} account."
+msgstr "{} 계정의 Setup 페이지에서 찾을 수 있습니다."
 
 #. dns settings
 msgctxt "dns_pill_default"
@@ -4660,35 +4771,290 @@ msgctxt "dns_pill_recommended"
 msgid "There are unapplied recommended settings for {}"
 msgstr "{}에 대한 권장 설정이 적용되지 않았습니다"
 
+#. DNS settings: footnote. A new DNS choice applies to new lookups at once, but apps keep answers they already have for up to about a minute.
+msgctxt "dns_preset_apply_note"
+msgid "Changes apply to new lookups right away. Apps may keep earlier answers for about a minute."
+msgstr "변경 사항은 새 조회에 바로 적용됩니다. 앱에서 이전 응답을 1분 정도 유지할 수 있습니다."
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for AdGuard DNS Family in "Family": it also forces safe search on search engines. The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_adult_safe_search"
+msgid "Blocks ads, trackers and adult sites, and turns on safe search"
+msgstr "광고, 트래커, 성인 사이트를 차단하고 세이프서치를 켭니다"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for Control D in "Block ads and trackers". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_malware"
+msgid "Blocks ads, trackers and malware"
+msgstr "광고, 트래커, 악성코드 차단"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for Control D Family in "Family". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_malware_adult_drugs"
+msgid "Blocks ads, trackers, malware, adult sites and drugs"
+msgstr "광고, 트래커, 악성코드, 성인 사이트, 마약 차단"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for DNS4EU in "Block ads and trackers". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_malware_phishing"
+msgid "Blocks ads, trackers, malware and phishing"
+msgstr "광고, 트래커, 악성코드, 피싱 차단"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for AdGuard DNS in "Block ads and trackers". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_ads_phishing"
+msgid "Blocks ads, trackers and phishing"
+msgstr "광고, 트래커, 피싱 차단"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for DNS4EU's child protection in "Family". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_child"
+msgid "Blocks malware, adult sites, gambling, drugs and violence, not ads"
+msgstr "악성코드, 성인 사이트, 도박, 마약, 폭력 차단(광고는 차단 안 함)"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for DNS4EU's child protection with ad blocking in "Family". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_child_ads"
+msgid "Blocks ads, trackers, malware, adult sites, gambling, drugs and violence"
+msgstr "광고, 트래커, 악성코드, 성인 사이트, 도박, 마약, 폭력 차단"
+
+#. DNS settings, provider picker: the line under DNS4EU in "No filtering". It does no protective filtering, but the domains courts order blocked stay blocked on every DNS4EU resolver. The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_court_orders"
+msgid "Blocks only what courts order it to block"
+msgstr "법원이 명령한 것만 차단"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for Cloudflare in "Block malware". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_malware"
+msgid "Blocks malware, not ads"
+msgstr "악성코드 차단(광고는 차단 안 함)"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for Cloudflare Family in "Family". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_malware_adult"
+msgid "Blocks malware and adult sites, not ads"
+msgstr "악성코드와 성인 사이트 차단(광고는 차단 안 함)"
+
+#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for DNS4EU and Quad9 in "Block malware". The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_malware_phishing"
+msgid "Blocks malware and phishing, not ads"
+msgstr "악성코드와 피싱 차단(광고는 차단 안 함)"
+
+#. DNS settings, provider picker: the line under a DNS provider's name in "No filtering" (AdGuard DNS, Cloudflare, Control D): the provider resolves every name and blocks nothing. The provider's name is shown above it, not in this string.
+msgctxt "dns_preset_copy_nothing"
+msgid "Blocks nothing"
+msgstr "아무것도 차단하지 않음"
+
+#. DNS settings, provider picker: the line under each provider in "Use my account". {provider} is the provider's name (AdGuard DNS, Control D or NextDNS), inserted as is.
+msgctxt "dns_preset_copy_personal"
+msgid "Uses the filters you set up in your {} account"
+msgstr "{} 계정에서 설정한 필터를 사용"
+
+#. DNS settings: disclosure under the selected DNS provider, above the Privacy policy and Help links. The provider receives the names looked up while connected, from the VPN exit's address, never the person's own IP address. {provider} is the provider's name (for example AdGuard DNS), inserted as is.
+msgctxt "dns_preset_disclosure"
+msgid "Your DNS lookups go to {} through the tunnel, so it never sees your IP address. Its privacy policy applies."
+msgstr "DNS 조회는 터널을 통해 {}에 전달되므로 사용자의 IP 주소는 절대 노출되지 않습니다. 해당 업체의 개인정보 처리방침이 적용됩니다."
+
+#. DNS settings and connect drawer: notice after an app update removed the DNS provider the person had selected. The app switched to URnetwork's own DNS, which doesn't filter. {provider} is the removed provider's name, inserted as is.
+msgctxt "dns_preset_dropped"
+msgid "{} is no longer available. You're using URnetwork DNS, so lookups aren't filtered."
+msgstr "{} 서비스를 더 이상 사용할 수 없습니다. URnetwork DNS를 사용 중이므로 조회가 필터링되지 않습니다."
+
+#. DNS settings: button on the notice of a removed DNS provider that opens the provider list. "Preset" means one of the DNS providers listed on the screen.
+msgctxt "dns_preset_dropped_choose"
+msgid "Choose another preset"
+msgstr "다른 프리셋 선택"
+
+#. DNS settings: button on the notice of a removed DNS provider that opens the Custom editor, where the person can enter the provider's addresses themselves. It names the "Custom" pick, so it uses that pick's exact word.
+msgctxt "dns_preset_dropped_custom"
+msgid "Enter it yourself under Custom"
+msgstr "사용자 지정에서 직접 입력"
+
+#. DNS settings, Use my account: error id the sdk returns when the profile ID doesn't have the provider's format. The provider's own format line is shown with it.
+msgctxt "dns_preset_error_personal_id_invalid"
+msgid "This ID isn't in the right format."
+msgstr "이 ID의 형식이 올바르지 않습니다."
+
+#. DNS settings: error id the sdk returns when a profile ID is given for a DNS preset that doesn't take one. "Preset" means one of the DNS providers listed on the screen.
+msgctxt "dns_preset_error_personal_id_not_accepted"
+msgid "This preset doesn't use a profile ID."
+msgstr "이 프리셋은 프로필 ID를 사용하지 않습니다."
+
+#. DNS settings, Use my account: error id the sdk returns when the pasted DNS address or hostname belongs to another DNS provider in the list.
+msgctxt "dns_preset_error_personal_id_other_provider"
+msgid "This address belongs to another provider. Choose that provider instead."
+msgstr "이 주소는 다른 DNS 제공업체의 것입니다. 해당 제공업체를 선택하세요."
+
+#. DNS settings, Use my account: error id the sdk returns when the profile ID field is empty.
+msgctxt "dns_preset_error_personal_id_required"
+msgid "Enter your profile ID."
+msgstr "프로필 ID를 입력하세요."
+
+#. DNS settings: error id the sdk returns when a DNS preset is no longer in the app's catalog. "Preset" means one of the DNS providers listed on the screen.
+msgctxt "dns_preset_error_unknown"
+msgid "This preset isn't available. Choose another one."
+msgstr "이 프리셋은 사용할 수 없습니다. 다른 프리셋을 선택하세요."
+
+#. DNS settings: note beside the "Fast DNS on connect" toggle while a DNS provider is selected. While the tunnel connects, lookups go to URnetwork's own DNS, so the provider never sees the person's own address, but those lookups aren't filtered. {provider} is the provider's name, inserted as is.
+msgctxt "dns_preset_fast_dns_note"
+msgid "While connecting, lookups use URnetwork DNS, so {} doesn't filter them."
+msgstr "연결 중에는 조회에 URnetwork DNS를 사용하므로 {}에서 필터링하지 않습니다."
+
+#. DNS settings: link under the selected DNS provider, beside "Privacy policy", that opens the provider's help page.
+msgctxt "dns_preset_help_link"
+msgid "Help"
+msgstr "도움말"
+
+#. DNS settings, provider picker: which country's law the DNS provider operates under. {jurisdiction} comes from the app's provider catalog in English (for example Cyprus or Switzerland) and is inserted as is.
+msgctxt "dns_preset_jurisdiction"
+msgid "Jurisdiction: {}"
+msgstr "관할권: {}"
+
+#. DNS settings: link under the selected DNS provider that opens the provider's privacy policy.
+msgctxt "dns_preset_privacy_link"
+msgid "Privacy policy"
+msgstr "개인정보 처리방침"
+
+#. Android connect screen: line added to the strict Private DNS notice while a DNS provider is selected, since Android's Private DNS sends lookups to its own server instead. {provider} is the selected DNS provider's name, inserted as is. Private DNS is Android's own setting, named as in Android.
+msgctxt "dns_private_dns_overrides_preset"
+msgid "Private DNS overrides your DNS choice ({})."
+msgstr "비공개 DNS가 선택한 DNS({})보다 우선 적용됩니다."
+
+#. DNS settings, provider picker: the pick that opens the advanced editor, where the person enters their own DNS over HTTPS URLs and DNS servers. Other strings send the reader to this pick by name ("Enter it yourself under Custom"), so they use the same word.
+msgctxt "dns_provider_custom"
+msgid "Custom"
+msgstr "사용자 지정"
+
+#. DNS settings, provider picker: the line under "Custom" that says what it holds.
+msgctxt "dns_provider_custom_copy"
+msgid "Your own DNS over HTTPS URLs and DNS servers"
+msgstr "직접 지정하는 DNS over HTTPS URL 및 DNS 서버"
+
+#. DNS settings, provider picker: the first pick, URnetwork's own encrypted DNS through the tunnel, which every app uses by default. URnetwork is the product name.
+msgctxt "dns_provider_default"
+msgid "URnetwork (default)"
+msgstr "URnetwork(기본값)"
+
+#. DNS settings, provider picker: the line under "URnetwork (default)" that says what it does: names are resolved over encrypted DNS inside the VPN tunnel, and nothing is blocked.
+msgctxt "dns_provider_default_copy"
+msgid "Encrypted DNS through the tunnel, with no filtering"
+msgstr "터널을 통한 암호화 DNS, 필터링 없음"
+
+#. DNS settings, provider picker: the last pick, shown only while the exit's country has a recommended set of plain DNS servers that work better there. It is never selected automatically. {country} is the exit country's name, inserted as is. Unencrypted means the DNS lookups are sent without encryption.
+msgctxt "dns_provider_regional"
+msgid "Regional ({}), unencrypted"
+msgstr "지역({}), 암호화되지 않음"
+
 #. dns settings
 msgctxt "dns_recommendation_message"
 msgid "The strongest security rules are known not to work in {}. There are less secure recommended DNS settings that work better."
 msgstr "가장 강력한 보안 규칙은 {}에서 작동하지 않는 것으로 알려져 있습니다. 보안 수준은 낮지만 더 잘 작동하는 권장 DNS 설정이 있습니다."
-
-#. dns settings
-msgctxt "dns_restore_secure_message"
-msgid "Restore the most secure settings: encrypted DNS over HTTPS through the tunnel."
-msgstr "가장 안전한 설정으로 복원합니다: 터널을 통한 암호화된 DNS over HTTPS."
 
 #. A message displayed when the dns settings are unavailable.
 msgctxt "dns_settings_unavailable"
 msgid "DNS settings unavailable"
 msgstr "DNS 설정을 사용할 수 없습니다"
 
+#. DNS settings and connect drawer: button beside a DNS provider status that opens the location picker, since a provider can be blocked or unreachable from some exit locations.
+msgctxt "dns_status_change_location"
+msgid "Change location"
+msgstr "위치 변경"
+
+#. DNS settings and connect drawer: status line when a DNS provider from "No filtering" isn't answering, so URnetwork's own DNS answers until it does. {provider} is the provider's name, inserted as is.
+msgctxt "dns_status_fallback"
+msgid "{} isn't answering. Using URnetwork DNS."
+msgstr "{} 응답 없음. URnetwork DNS를 사용 중입니다."
+
+#. DNS settings and connect drawer: status line when an ad-blocking DNS provider isn't answering from the current exit, so URnetwork's own DNS answers for now and ads aren't blocked. It switches back on its own when the provider answers. {provider} is the provider's name, inserted as is.
+msgctxt "dns_status_paused"
+msgid "Ad blocking paused: {} isn't answering"
+msgstr "광고 차단 일시 중지됨: {} 응답 없음"
+
+#. DNS settings: line under "Ad blocking paused: … isn't answering". "it" is the ad-blocking DNS provider named in that line.
+msgctxt "dns_status_paused_detail"
+msgid "Using URnetwork DNS until it answers. Ad blocking comes back on its own."
+msgstr "제공업체가 응답할 때까지 URnetwork DNS를 사용합니다. 광고 차단은 자동으로 다시 시작됩니다."
+
+#. DNS settings: status line while the selected DNS provider answers normally. {provider} is the provider's name (for example AdGuard DNS), inserted as is.
+msgctxt "dns_status_provider"
+msgid "DNS: {}"
+msgstr "DNS: {}"
+
+#. DNS settings and connect drawer: status line when a family, malware-blocking or personal DNS provider isn't answering. To keep its filtering, URnetwork doesn't switch to other DNS, so sites may not load until the provider answers or the person picks "Use URnetwork DNS". {provider} is the provider's name, inserted as is.
+msgctxt "dns_status_unreachable"
+msgid "{} isn't answering"
+msgstr "{} 응답 없음"
+
+#. DNS settings: line under "… isn't answering" for a family, malware-blocking or personal DNS provider. "it" is the DNS provider named in that line.
+msgctxt "dns_status_unreachable_detail"
+msgid "To keep filtering on, URnetwork doesn't switch DNS for you. Sites may not load until it answers."
+msgstr "필터링을 유지하기 위해 URnetwork는 DNS를 자동으로 바꾸지 않습니다. 제공업체가 응답할 때까지 사이트가 로드되지 않을 수 있습니다."
+
+#. DNS settings and connect drawer: button beside a DNS provider status that isn't answering. It switches back to URnetwork's own DNS, the default, in one tap.
+msgctxt "dns_status_use_default"
+msgid "Use URnetwork DNS"
+msgstr "URnetwork DNS 사용"
+
+#. Connect drawer, DNS card: summary row while a DNS provider from "Block ads and trackers" is selected. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_ad_blocking"
+msgid "DNS: {} · Ad blocking"
+msgstr "DNS: {} · 광고 차단"
+
+#. Connect drawer, DNS card: summary row while the person's own servers are selected under "Custom", all of them encrypted.
+msgctxt "dns_summary_custom"
+msgid "DNS: Custom"
+msgstr "DNS: 사용자 지정"
+
+#. Connect drawer, DNS card: summary row while the person's own servers are selected under "Custom" and some lookups are sent without encryption (plain DNS is on).
+msgctxt "dns_summary_custom_unencrypted"
+msgid "DNS: Custom (unencrypted)"
+msgstr "DNS: 사용자 지정(암호화되지 않음)"
+
+#. Connect drawer, DNS card: summary row while URnetwork's own DNS, the default, is selected. URnetwork is the product name.
+msgctxt "dns_summary_default"
+msgid "DNS: URnetwork"
+msgstr "DNS: URnetwork"
+
+#. Connect drawer, DNS card: summary row while a DNS provider from "Family" is selected. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_family"
+msgid "DNS: {} · Family filter"
+msgstr "DNS: {} · 가족 필터"
+
+#. Connect drawer, DNS card: summary row while a DNS provider from "Block malware" is selected. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_malware_blocking"
+msgid "DNS: {} · Malware blocking"
+msgstr "DNS: {} · 악성코드 차단"
+
+#. Connect drawer, DNS card: summary row while a DNS provider from "No filtering" is selected. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_no_filtering"
+msgid "DNS: {} · No filtering"
+msgstr "DNS: {} · 필터링 없음"
+
+#. Connect drawer, DNS card: summary row while a provider from "Use my account" is selected. The profile ID itself is never shown. {provider} is the provider's name, inserted as is.
+msgctxt "dns_summary_personal"
+msgid "DNS: {} · your profile"
+msgstr "DNS: {} · 내 프로필"
+
+#. Connect drawer, DNS card: summary row while the regional pick is selected: plain DNS servers recommended for the exit's country, which send lookups without encryption.
+msgctxt "dns_summary_regional"
+msgid "DNS: Regional (unencrypted)"
+msgstr "DNS: 지역(암호화되지 않음)"
+
 #. dns settings
 msgctxt "dns_unapplied_recommended"
 msgid "There are unapplied recommended settings for {}"
 msgstr "{}에 대한 권장 설정이 적용되지 않았습니다"
 
-#. dns settings
-msgctxt "dns_using_recommended"
-msgid "Using recommended regional settings"
-msgstr "지역 권장 설정 사용 중"
+#. DNS settings, Use my account: AdGuard DNS fails every lookup for a device ID it can't read. {provider} is AdGuard DNS, inserted as is. "Device ID" is AdGuard DNS's name for the ID.
+msgctxt "dns_verify_malformed_adguard"
+msgid "{} rejected this device ID"
+msgstr "{}에서 이 기기 ID를 거부했습니다"
 
-#. dns settings
-msgctxt "dns_using_secure"
-msgid "Using most secure default settings"
-msgstr "가장 안전한 기본 설정 사용 중"
+#. DNS settings: result of the check the app runs after a filtering DNS provider is chosen: the provider answered a name it normally blocks with a real address, so it isn't filtering from the current exit location. {provider} is the provider's name, inserted as is.
+msgctxt "dns_verify_not_filtering"
+msgid "{} isn't filtering from this location"
+msgstr "이 위치에서는 {} 필터링이 작동하지 않습니다"
+
+#. DNS settings, Use my account: Control D refuses every lookup for a resolver ID it doesn't know. {provider} is Control D, inserted as is. "Resolver ID" is Control D's name for the ID.
+msgctxt "dns_verify_rejected_controld"
+msgid "{} doesn't recognize this resolver ID"
+msgstr "{}에서 이 리졸버 ID를 인식하지 못합니다"
+
+#. DNS settings, Use my account: shown after a profile ID is saved and the provider answers normally. A wrong ID or a used-up free plan also answers normally, just without filtering, so the app can't confirm the profile. {provider} is the provider's name, inserted as is.
+msgctxt "dns_verify_unconfirmed"
+msgid "Saved, but we can't confirm this profile. If the ID is wrong, {} answers without filtering."
+msgstr "저장했지만 이 프로필을 확인할 수 없습니다. ID가 잘못되면 {}에서 필터링 없이 응답합니다."
 
 #. Placeholder in the DNS-over-HTTPS URL inputs: the required URL scheme. Not prose; never translated.
 msgctxt "doh_url_placeholder"
@@ -8401,11 +8767,6 @@ msgctxt "restore_default_transports"
 msgid "Restore default transports"
 msgstr "기본 전송 방식 복원"
 
-#. dns settings
-msgctxt "restore_most_secure_settings"
-msgid "Restore to most secure settings"
-msgstr "가장 안전한 설정으로 복원"
-
 #. Action label that resyncs App Store purchases (AppStore.sync + entitlement scan). Shown in Settings and in the upgrade flow's failure states (Main/Account/Settings/SettingsForm-iOS.swift, SettingsForm-macOS.swift, Shared/Views/UpgradeSubscriptionSheet.swift, Shared/Views/PurchaseSuccessView.swift, Shared/Views/Introduction/IntroductionView.swift).
 msgctxt "restore_purchases"
 msgid "Restore purchases"
@@ -11083,11 +11444,6 @@ msgstr "익스텐더 설정 사용"
 msgctxt "use_most_stable_provider"
 msgid "Use most stable provider"
 msgstr "가장 안정적인 제공업체를 사용합니다"
-
-#. dns settings
-msgctxt "use_recommended_settings"
-msgid "Use recommended settings"
-msgstr "권장 설정 사용"
 
 #. Settings row that opens the cloud proxies page on ur.io (https://ur.io/app/proxies), where the user can create a WireGuard, SOCKS or HTTPS proxy. The app itself has no protocol switch.
 msgctxt "use_wireguard_socks_https_proxy"

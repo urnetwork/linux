@@ -32,6 +32,8 @@
 #include "Config.hpp"
 #include "CryptoInvoiceHost.hpp"
 #include "CryptoInvoiceStorage.hpp"
+#include "DnsMirror.hpp"
+#include "DnsSettingsEqual.hpp"
 #include "LocationFeed.hpp"
 #include "LocationSelection.hpp"
 #include "NetworkSpaceConfig.hpp"
@@ -3179,6 +3181,41 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
       device_->setProviderTransportSettings(settings);
     }
 
+    // The traffic dns settings are mirrored the same way (connect ADBLOCK3RD.md
+    // F2, DnsMirror.hpp). A fresh start's device is new, and its sync runs
+    // ahead of the start's connect, so a marked mirror goes to it here, with
+    // the transport policies: a family filter picked with the tunnel down is in
+    // force from the first lookup.
+    if (rememberOnSync && DnsMirrorMarkedLocked()) {
+      if (auto mirror = localState_->getDnsResolverSettings(); mirror) {
+        device_->setDnsResolverSettings(mirror);
+      }
+    }
+    // Beyond that the mirror meets the daemon's settings at each sync of the
+    // pinned pair (ReconcileDnsMirrorLocked): an unmarked one adopts them, and
+    // an attach's running device takes a marked one only when the two differ,
+    // since a settings swap restarts its dns resolvers mid-session. On the
+    // command queue, as the session's remember above: it takes mutex_ and
+    // reads the device.
+    const auto queueDnsReconcile = [this, rpcGeneration] {
+      PostToMain([this, rpcGeneration] {
+        RunCommand(ConnectCommandQueue::Kind::Device, [this, rpcGeneration] {
+          std::scoped_lock lock(mutex_);
+          if (rpcGeneration != rpcSessionGeneration_.load()) return;  // a newer session owns it
+          ReconcileDnsMirrorLocked();
+        });
+      });
+    };
+    subs_.push_back(device_->addRemoteChangeListener([queueDnsReconcile](bool connected) {
+      if (connected) queueDnsReconcile();
+    }));
+    // A new listener hears nothing from before it, and setRpcServer dials at
+    // once: a pair that synced already is reconciled now. A second run keeps.
+    if (ReadGuarded<bool>("getRemoteConnected", [&] { return device_->getRemoteConnected(); },
+                          false)) {
+      queueDnsReconcile();
+    }
+
     // Connection choice is data-plane state, so keep this lightweight listener
     // alive for the tray even when every presentation controller is closed.
     //
@@ -3966,6 +4003,13 @@ void SdkHost::SubscribeDrawer() {
       [this](std::optional<urnet::DnsResolverSettings>) {
         EmitDrawerEvent(DrawerEvent::DnsSettings);
       }));
+  // the dns resolver's status: its state, the selected preset's verification,
+  // the selection it describes (not the blocked count, which the DNS sheet
+  // reads while it shows)
+  presentationSubs_.push_back(device_->addDnsResolverStatusChangeListener(
+      [this](std::optional<urnet::DnsResolverStatus>) {
+        EmitDrawerEvent(DrawerEvent::DnsStatus);
+      }));
   // transport policies (dns-settings pattern): fired by the daemon's device on
   // change, forwarded over the rpc, re-fired with the daemon's truth on every
   // sync, and locally by the device remote for an edit queued while offline
@@ -4666,12 +4710,55 @@ void SdkHost::SetDnsResolverSettings(const urnet::DnsResolverSettings& settings)
   SetDnsResolverSettingsLocked(settings);
 }
 
-void SdkHost::SetDnsResolverSettingsLocked(const urnet::DnsResolverSettings& settings) {
+std::optional<urnet::DnsResolverStatus> SdkHost::GetDnsResolverStatus() {
+  return ReadOnMain<std::optional<urnet::DnsResolverStatus>>("GetDnsResolverStatus", [&]() -> std::optional<urnet::DnsResolverStatus> {
+    return device_ ? device_->getDnsResolverStatus() : std::nullopt;
+  });
+}
+
+int64_t SdkHost::GetDnsBlockedCount() {
+  return ReadOnMain<int64_t>("GetDnsBlockedCount", [&]() -> int64_t {
+    return device_ ? device_->getDnsBlockedCount() : 0;
+  });
+}
+
+std::optional<urnet::DnsResolverSettings> SdkHost::SetDnsResolverSettingsLocked(
+    const urnet::DnsResolverSettings& settings) {
+  // The device takes the write over the rpc (the daemon's DeviceLocal persists
+  // it in its own local state), and the GUI's LocalState mirrors what it took:
+  // with the tunnel down the mirror is the only copy, and a bound device's
+  // sync takes it (ReconcileDnsMirrorLocked). The mark is cleared while the
+  // two are written and set again after (DnsMirror.hpp), so a crash or a
+  // failed write between them leaves the mirror unmarked.
+  const bool wasMarked = DnsMirrorMarkedLocked();
+  SetDnsMirrorMarkedLocked(false);
+  std::optional<urnet::DnsResolverSettings> taken = settings;
   if (device_) {
     device_->setDnsResolverSettings(settings);  // applies to the live mux + persists
-    return;
+    // the device refuses a selection it cannot apply without a word: what it
+    // reads now is what it took
+    if (auto read = device_->getDnsResolverSettings(); read) taken = std::move(read);
   }
-  if (localState_) localState_->setDnsResolverSettings(settings);
+  if (!localState_) return taken;
+  try {
+    localState_->setDnsResolverSettings(taken);
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] persist dns resolver settings failed: %s\n", e.what());
+    // A home that refused this write (full, read-only) may have refused the
+    // mark's clear as well, leaving it over a stale mirror the next sync would
+    // apply: no mirror at all adopts the daemon's settings instead
+    // (DnsMirror.hpp), and a delete works on a full disk.
+    try {
+      localState_->setDnsResolverSettings(std::nullopt);
+    } catch (const std::exception& removeError) {
+      std::fprintf(stderr, "[sdk] remove dns resolver settings failed: %s\n", removeError.what());
+    }
+    return taken;
+  }
+  if (dns_mirror::MarkedAfterWrite(device_.has_value(), wasMarked)) {
+    SetDnsMirrorMarkedLocked(true);
+  }
+  return taken;
 }
 
 bool SdkHost::SetDnsResolverSettingsIf(
@@ -4684,9 +4771,69 @@ bool SdkHost::SetDnsResolverSettingsIf(
     if (current) *current = std::move(now);
     return false;
   }
-  SetDnsResolverSettingsLocked(settings);
-  if (current) *current = settings;
+  // what the device took, read back under the same hold, which may not be
+  // what was asked for
+  std::optional<urnet::DnsResolverSettings> taken = SetDnsResolverSettingsLocked(settings);
+  // a main-loop read before the queue settles says what was saved
+  if (OnMainLoop()) KeepOnMain<std::optional<urnet::DnsResolverSettings>>("GetDnsResolverSettings", taken);
+  if (current) *current = std::move(taken);
   return true;
+}
+
+// The mirror meets the daemon's settings at a sync of the pinned pair
+// (DnsMirror.hpp): an unmarked mirror, which may be a copy from before the
+// daemon split, takes the daemon's settings and is marked; a marked one holds
+// every write this app made, the last perhaps with the tunnel down, and the
+// device takes it when the two differ. Requires mutex_.
+void SdkHost::ReconcileDnsMirrorLocked() {
+  if (!device_ || !localState_) return;
+  const std::optional<urnet::DnsResolverSettings> daemon = device_->getDnsResolverSettings();
+  if (!daemon) return;
+  const bool marked = DnsMirrorMarkedLocked();
+  const std::optional<urnet::DnsResolverSettings> mirror =
+      marked ? localState_->getDnsResolverSettings() : std::nullopt;
+  const bool same = mirror && DnsSettingsEqual(*mirror, *daemon);
+  switch (dns_mirror::SyncAction(marked, mirror.has_value(), same)) {
+    case dns_mirror::Sync::Adopt:
+      try {
+        localState_->setDnsResolverSettings(daemon);
+      } catch (const std::exception& e) {
+        std::fprintf(stderr, "[sdk] mirror dns resolver settings failed: %s\n", e.what());
+        return;
+      }
+      SetDnsMirrorMarkedLocked(true);
+      return;
+    case dns_mirror::Sync::Apply:
+      SetDnsResolverSettingsLocked(*mirror);
+      return;
+    case dns_mirror::Sync::Keep:
+      return;
+  }
+}
+
+// The mark of this network space's mirror: each space has its own LocalState.
+// "" when the space has no key, which no mark covers. Requires mutex_.
+std::string SdkHost::DnsMirrorMarkKeyLocked() {
+  if (!networkSpace_) return std::string();
+  try {
+    const std::optional<urnet::NetworkSpaceKey> key = networkSpace_->getKey();
+    if (!key || !key->host_name || !key->env_name) return std::string();
+    return prefs::DnsSettingsMirroredKey(*key->host_name, *key->env_name);
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] the network space did not read: %s\n", e.what());
+    return std::string();
+  }
+}
+
+bool SdkHost::DnsMirrorMarkedLocked() {
+  const std::string key = DnsMirrorMarkKeyLocked();
+  return !key.empty() && prefs::Get<bool>(key.c_str(), false);
+}
+
+void SdkHost::SetDnsMirrorMarkedLocked(bool marked) {
+  const std::string key = DnsMirrorMarkKeyLocked();
+  if (key.empty()) return;
+  prefs::SetAll(nlohmann::json::object({{key, marked}}));
 }
 
 bool SdkHost::SetTransportSettingsIf(
