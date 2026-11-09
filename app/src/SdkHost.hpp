@@ -707,8 +707,12 @@ class SdkHost {
   // ---- balance plumbing ------------------------------------------------------
   // Offline claims from the stored jwt (Pro / GuestMode / network name).
   std::optional<urnet::ByJwt> ParseByJwt();
-  // Refresh the jwt when the server's Pro disagrees with the jwt claim (mac
-  // parity: Device::refreshToken). No-op without a device.
+  // The stored jwt itself, which the sdk's Pro decision reads its claim from
+  // (urnet::SubscriptionProTracker); "" when none was read. Never logged.
+  std::string StoredByJwt();
+  // Refresh the jwt when the sdk's Pro decision asks for it (mac parity:
+  // Device::refreshToken). It renews the device's client token, not the
+  // stored jwt. No-op without a device.
   void RefreshJwt();
 
   // Sign out of URnetwork (owner decisions 2026-10-05: the tunnel and the

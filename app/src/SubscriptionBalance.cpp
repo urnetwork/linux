@@ -63,13 +63,15 @@ void SubscriptionBalanceStore::Start() {
   paymentPastDue_ = false;
 
   // Offline Pro: the jwt's Pro (and GuestMode) claims are readable without a
-  // network call — the plan label is right even before the first fetch.
+  // network call — the plan label is right even before the first fetch. The
+  // sdk's decision reads the Pro claim until the first fetch lands.
   serverGuest_ = false;
+  proTracker_.reset();
+  TrackStoredJwt();
+  isPro_ = proTracker_.getIsPro();
   if (auto byJwt = host_.ParseByJwt()) {
-    isPro_ = byJwt->Pro;
     jwtGuest_ = byJwt->GuestMode;
   } else {
-    isPro_ = false;
     jwtGuest_ = false;
   }
   isGuest_ = IsGuestNetwork(jwtGuest_, serverGuest_);
@@ -95,6 +97,7 @@ void SubscriptionBalanceStore::Stop() {
   isLoading_ = false;
   isLoadingReferral_ = false;
   hasFetched_ = false;
+  proTracker_.reset();
   isPro_ = false;
   isGuest_ = false;
   jwtGuest_ = false;
@@ -178,24 +181,32 @@ void SubscriptionBalanceStore::OnJwtRefreshed() {
   if (!byJwt) return;
   const bool before = isPro_;
   const bool guestBefore = isGuest_;
-  UpdateIsPro(byJwt->Pro);  // flips the polling mode if Pro changed
+  // The refresh renewed the client token; the stored jwt is usually the one
+  // read before, and the sdk's decision keeps Pro the server's once a fetch
+  // answered. Re-deriving Pro from its claim here flipped Pro back, and the
+  // poll that switched on read the balance again at once (support inbox 8211).
+  TrackStoredJwt();
+  UpdateIsPro(proTracker_.getIsPro());  // only before the first fetch
   // a refresh signs the jwt without GuestMode; the server's guest still holds
   jwtGuest_ = byJwt->GuestMode;
   isGuest_ = IsGuestNetwork(jwtGuest_, serverGuest_);
   if (isPro_ != before || isGuest_ != guestBefore) Emit();
 }
 
+void SubscriptionBalanceStore::TrackStoredJwt() {
+  if (const std::string byJwt = host_.StoredByJwt(); !byJwt.empty()) {
+    proTracker_.setJwt(byJwt);
+  }
+}
+
 // mac updateIsPro: Pro stops all polling; a lapse back to free restarts the
-// background poll.
+// background poll. Not with a read at once: Pro changes on a read (or, before
+// the first one, with the stored jwt), so the balance is fresh.
 void SubscriptionBalanceStore::UpdateIsPro(bool isPro) {
   if (isPro == isPro_) return;
   isPro_ = isPro;
-  if (isPro) {
-    StopPolling();
-  } else {
-    StopPolling();
-    StartBackgroundPolling();
-  }
+  StopPolling();
+  if (!isPro) StartBackgroundPolling(/*fetchNow=*/false);
 }
 
 void SubscriptionBalanceStore::FetchSubscriptionBalance() {
@@ -253,8 +264,7 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
             // The server is the source of truth for Pro: `current_subscription`
             // is non-nil exactly when the network is Pro. The jwt's Pro claim
             // is baked in at issue time, so it goes stale on BOTH an upgrade
-            // and a lapse — refresh the jwt whenever the two disagree, in
-            // either direction (the mac view model learned this the hard way).
+            // and a lapse; the sdk decides when to refresh it (below).
             const bool serverIsPro = result->current_subscription.has_value();
             // no login method on the network (a legacy guest), read live by
             // the server: right even after a refresh cleared the jwt claim
@@ -274,10 +284,16 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
               // never once (mac didDetectUpgradeToPro; MainWindow applies it)
               didDetectUpgradeToPro_ = true;
             }
-            if (auto byJwt = host_.ParseByJwt(); byJwt && byJwt->Pro != serverIsPro) {
-              host_.RefreshJwt();
-            }
-            UpdateIsPro(serverIsPro);
+            // The sdk's decision (urnet::SubscriptionProTracker): Pro is the
+            // server's from here on, and a claim that disagrees asks for one
+            // refresh per stored jwt. The refresh renews the client token and
+            // leaves the stored jwt as it was, so asking on every read was
+            // the ping-pong of support inbox 8211. A stored jwt renewed since
+            // (it renews on its own schedule) is read again here.
+            TrackStoredJwt();
+            const bool refreshJwt = proTracker_.balanceLoaded(serverIsPro);
+            UpdateIsPro(proTracker_.getIsPro());
+            if (refreshJwt) host_.RefreshJwt();
           }
 
           // confirmation poll bookkeeping. mac runs these checks after EVERY
@@ -454,10 +470,10 @@ void SubscriptionBalanceStore::EnsureReferralPolling() {
       kBackgroundPollingSeconds);
 }
 
-void SubscriptionBalanceStore::StartBackgroundPolling() {
+void SubscriptionBalanceStore::StartBackgroundPolling(bool fetchNow) {
   backgroundTimer_.disconnect();
   if (!windowVisible_) return;
-  FetchNow();
+  if (fetchNow) FetchNow();
   backgroundTimer_ = Glib::signal_timeout().connect_seconds(
       [this]() -> bool {
         FetchNow();
