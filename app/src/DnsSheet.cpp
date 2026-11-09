@@ -52,6 +52,15 @@ std::string KeyLine(const std::string& key, const std::string& value) {
   return Format(Tr(text).c_str(), value);
 }
 
+// A preset's name (DnsPreset.NameKey with NameProvider, the summary's and the
+// status's): its key's words with the adblock provider's short name, as it
+// is, "AdGuard Family" (owner, 2026-11-09). A key this build does not know
+// shows the adblock provider's name alone.
+std::string PresetName(const std::string& nameKey, const std::string& nameProvider) {
+  const std::string name = KeyLine(nameKey, nameProvider);
+  return name.empty() ? nameProvider : name;
+}
+
 // A wrapping line in the dim caption style: the line under a pick, a note.
 Gtk::Label* MakeNote(const Glib::ustring& text) {
   auto* label = Gtk::make_managed<Gtk::Label>(text);
@@ -773,18 +782,19 @@ void DnsSheet::RebuildPicks() {
   customBox_->set_visible(customOpen);
   actionBar_->set_visible(customOpen);
 
-  // A dropped selection's notice (A7) names its provider; an id this release
-  // never knew (a newer catalog's, after a downgrade) has no name to give.
+  // A dropped selection's notice (A7) names the preset as it showed; an id
+  // this release never knew (a newer catalog's, after a downgrade) has no
+  // name to give.
   const bool dropped = summary_ && summary_->Dropped;
   droppedBanner_->set_visible(dropped);
   if (dropped) {
     droppedText_->set_text(
-        summary_->DroppedProviderName.empty()
+        summary_->DroppedNameKey.empty()
             ? std::string(Tr(dns_presets::ErrorText(dns_presets::kErrorUnknown)))
             : Format(T_("dns_preset_dropped",
                         "{} is no longer available. You're using URnetwork DNS, so lookups "
                         "aren't filtered."),
-                     summary_->DroppedProviderName));
+                     PresetName(summary_->DroppedNameKey, summary_->DroppedNameProvider)));
   }
 
   // with a preset, lookups while connecting are URnetwork's (C7)
@@ -792,7 +802,7 @@ void DnsSheet::RebuildPicks() {
   fastDnsPresetNote_->set_text(
       preset ? Format(T_("dns_preset_fast_dns_note",
                          "While connecting, lookups use URnetwork DNS, so {} doesn't filter them."),
-                      summary_->ProviderName)
+                      PresetName(summary_->NameKey, summary_->NameProvider))
              : std::string());
   fastDnsPresetNote_->set_visible(preset);
 
@@ -805,12 +815,15 @@ void DnsSheet::RebuildPicks() {
 Gtk::Widget* DnsSheet::BuildPickRow(const urnet::DnsPick& pick, Gtk::CheckButton*& group,
                                     bool active) {
   auto* row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
-  // a preset by its provider's name, never a logo (O10); the other picks by
-  // their label, the regional pick's with its country
+  // a preset by its name, never a logo (O10); the other picks by their
+  // label, the regional pick's with its country. A preset's line and
+  // disclosure name its adblock provider.
   const std::string country =
       pick.CountryCode.empty() ? std::string() : CountryName(pick.CountryCode);
   const std::string provider = pick.Preset ? pick.Preset->ProviderName : std::string();
-  const std::string title = pick.LabelKey.empty() ? provider : KeyLine(pick.LabelKey, country);
+  const std::string title =
+      pick.Preset ? PresetName(pick.Preset->NameKey, pick.Preset->NameProvider)
+                  : KeyLine(pick.LabelKey, country);
   auto* radio = Gtk::make_managed<Gtk::CheckButton>(title);
   if (group) {
     radio->set_group(*group);
@@ -1107,12 +1120,15 @@ void DnsSheet::RenderStatus() {
     return;
   }
   const urnet::DnsStatusSummary summary = statusSummary_.value_or(urnet::DnsStatusSummary{});
+  // the status line names the preset, the verification and its link the
+  // adblock provider
+  const std::string presetName = PresetName(summary.NameKey, summary.NameProvider);
   const std::string& provider = summary.ProviderName;
-  // the provider and its state (C8); one failing asks for attention
-  const std::string status = KeyLine(summary.StatusKey, provider);
+  // the preset and its state (C8); one failing asks for attention
+  const std::string status = KeyLine(summary.StatusKey, presetName);
   statusLine_->set_markup(ToneMarkup(status, summary.ShowUseDefault));
   statusLine_->set_visible(!status.empty());
-  const std::string detail = KeyLine(summary.StatusDetailKey, provider);
+  const std::string detail = KeyLine(summary.StatusDetailKey, presetName);
   statusDetail_->set_text(detail);
   statusDetail_->set_visible(!detail.empty());
   // what verification found out (C6), with the dashboard beside a profile it
@@ -1143,12 +1159,15 @@ void DnsSheet::RenderStatus() {
 
 void DnsSheet::RenderBlockedCount() {
   if (!blockedCountLine_) return;
-  const std::string provider = statusSummary_ ? statusSummary_->ProviderName : std::string();
+  // the lookups the preset blocked, by its name
+  const std::string presetName =
+      statusSummary_ ? PresetName(statusSummary_->NameKey, statusSummary_->NameProvider)
+                     : std::string();
   blockedCountLine_->set_text(Format(TN_("dns_blocked_count",
                                          "{0} lookup blocked by {1} this connection",
                                          "{0} lookups blocked by {1} this connection",
                                          static_cast<unsigned long>(blockedCount_)),
-                                     blockedCount_, provider));
+                                     blockedCount_, presetName));
 }
 
 void DnsSheet::StartBlockedCountPoll() {

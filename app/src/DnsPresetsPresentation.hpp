@@ -8,8 +8,12 @@
 // one, it only names the key ids those answers carry.
 //
 // Placeholders are the store's C++ forms (I18n.hpp Format): `{}` where a text
-// takes one value, the provider's name or the country's, and `{0}` `{1}` for
-// a personal id's format message, which takes the provider and its example.
+// takes one value, a name or the country's, and `{0}` `{1}` for a personal
+// id's format message, which takes the provider and its example. Each preset
+// has a name of its own (owner, 2026-11-09), a key whose `{}` is the adblock
+// provider's short name: the lines that name the selected preset take that
+// name, and the lines that name the adblock provider (the disclosure, the
+// personal id field, the verification line) take its name.
 //
 // Header-only and free of GTK and the SDK, so the unit tests reach it
 // (tests/DnsPresetsPresentationTest.cpp).
@@ -37,12 +41,14 @@ inline constexpr const char* kHelpUrl = "https://ur.io/docs/faq#dns-providers";
 inline constexpr const char* kPersonalIdsHelpUrl = "https://ur.io/docs/faq#dns-personal-ids";
 
 // The English of a key id the sdk returns: a group heading (DnsPick.GroupKey),
-// a pick's label and the line under it (DnsPick.LabelKey, CopyKey), the
-// summary row (DnsSelectionSummary.SummaryKey), the status line, the line
-// under it, the verification and its link (DnsStatusSummary.StatusKey,
-// StatusDetailKey, VerificationKey, VerificationLinkKey), and a personal
-// preset's notes (DnsPreset.PersonalIdWhereKey, PersonalIdFormatKey,
-// QuotaNoteKey). An id of a newer sdk has an empty key.
+// a preset's name (DnsPreset.NameKey, the summaries' NameKey and
+// DroppedNameKey), a pick's label and the line under it (DnsPick.LabelKey,
+// CopyKey), the summary row (DnsSelectionSummary.SummaryKey), the status
+// line, the line under it, the verification and its link
+// (DnsStatusSummary.StatusKey, StatusDetailKey, VerificationKey,
+// VerificationLinkKey), and a personal preset's notes
+// (DnsPreset.PersonalIdWhereKey, PersonalIdFormatKey, QuotaNoteKey). An id of
+// a newer sdk has an empty key.
 inline Text KeyText(std::string_view key) {
   static constexpr Text kTexts[] = {
       // the group headings, in the screen's order
@@ -51,6 +57,14 @@ inline Text KeyText(std::string_view key) {
       {"dns_group_family", "Family"},
       {"dns_group_my_account", "Use my account"},
       {"dns_group_no_filtering", "No filtering"},
+      // each preset's name, which takes the adblock provider's short name
+      {"dns_preset_name_ad_blocking", "{} Ad Blocking"},
+      {"dns_preset_name_malware_blocking", "{} Malware Blocking"},
+      {"dns_preset_name_family", "{} Family"},
+      {"dns_preset_name_child", "{} Child"},
+      {"dns_preset_name_child_ads", "{} Child, no ads"},
+      {"dns_preset_name_no_filtering", "{} No Filtering"},
+      {"dns_preset_name_personal", "{} Personal"},
       // the picks that are not presets, and the line under each; the regional
       // pick's two take the country
       {"dns_provider_default", "URnetwork (default)"},
@@ -78,17 +92,12 @@ inline Text KeyText(std::string_view key) {
       {"dns_preset_copy_nothing", "Blocks nothing"},
       {"dns_preset_copy_court_orders", "Blocks only what courts order it to block"},
       {"dns_preset_copy_personal", "Uses the filters you set up in your {} account"},
-      // the summary row; a preset's takes the provider
+      // the summary row; a preset's is dns_status_provider, with its name
       {"dns_summary_default", "DNS: URnetwork"},
-      {"dns_summary_ad_blocking", "DNS: {} · Ad blocking"},
-      {"dns_summary_malware_blocking", "DNS: {} · Malware blocking"},
-      {"dns_summary_family", "DNS: {} · Family filter"},
-      {"dns_summary_no_filtering", "DNS: {} · No filtering"},
-      {"dns_summary_personal", "DNS: {} · your profile"},
       {"dns_summary_custom", "DNS: Custom"},
       {"dns_summary_custom_unencrypted", "DNS: Custom (unencrypted)"},
       {"dns_summary_regional", "DNS: Regional (unencrypted)"},
-      // the status line, which takes the provider, and the line under it
+      // the status line, which takes the preset's name, and the line under it
       {"dns_status_provider", "DNS: {}"},
       {"dns_status_paused", "Ad blocking paused: {} isn't answering"},
       {"dns_status_paused_detail",
@@ -98,8 +107,8 @@ inline Text KeyText(std::string_view key) {
       {"dns_status_unreachable_detail",
        "To keep filtering on, URnetwork doesn't switch DNS for you. Sites may not load until it "
        "answers."},
-      // what verification found out, each taking the provider, and the
-      // dashboard link beside an unconfirmed profile
+      // what verification found out, each taking the adblock provider's name,
+      // and the dashboard link beside an unconfirmed profile
       {"dns_verify_not_filtering", "{} isn't filtering from this location"},
       {"dns_verify_unconfirmed",
        "Saved, but we can't confirm this profile. If the ID is wrong, {} answers without "
