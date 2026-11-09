@@ -207,17 +207,31 @@ ReferralPanel::ReferralPanel() : Gtk::Box(Gtk::Orientation::VERTICAL, 0) {
 
   if (motion::ShouldAnimate()) {
     start_ = Now();
-    tick_ = add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>&) {
-      const double period = crowned_ ? 3400.0 : 5000.0;
-      breath_ = 0.5 + 0.5 * std::sin((Now() - start_) / period * 2 * kPi);
-      queue_draw();
-      return true;
-    });
+    mapped_ = signal_map().connect([this] { StartBreath(); });
+    unmapped_ = signal_unmap().connect([this] { StopBreath(); });
   }
 }
 
 ReferralPanel::~ReferralPanel() {
-  if (tick_) remove_tick_callback(tick_);
+  mapped_.disconnect();
+  unmapped_.disconnect();
+  StopBreath();
+}
+
+void ReferralPanel::StartBreath() {
+  if (tick_) return;
+  tick_ = add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>&) {
+    const double period = crowned_ ? 3400.0 : 5000.0;
+    breath_ = 0.5 + 0.5 * std::sin((Now() - start_) / period * 2 * kPi);
+    queue_draw();
+    return true;
+  });
+}
+
+void ReferralPanel::StopBreath() {
+  if (!tick_) return;
+  remove_tick_callback(tick_);
+  tick_ = 0;
 }
 
 void ReferralPanel::Update(const std::string& referralCode, ReferralCodeView view,

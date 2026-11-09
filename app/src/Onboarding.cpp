@@ -167,23 +167,16 @@ class RouteLine : public Gtk::DrawingArea {
     set_draw_func([this](const Cairo::RefPtr<Cairo::Context>& cr, int w, int h) { Draw(cr, w, h); });
     if (motion::ShouldAnimate()) {
       start_ = Now();
-      tick_ = add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>&) {
-        const double elapsed = Now() - start_;
-        const int trip = static_cast<int>(elapsed / kTripMs);
-        if (trip != tripCount_) {
-          tripCount_ = trip;
-          NextPerson();
-        }
-        progress_ = std::fmod(elapsed, kTripMs) / kTripMs;
-        queue_draw();
-        return true;
-      });
+      mapped_ = signal_map().connect([this] { StartWalk(); });
+      unmapped_ = signal_unmap().connect([this] { StopWalk(); });
     } else {
       progress_ = 0.85;  // parked on the last leg, in view
     }
   }
   ~RouteLine() override {
-    if (tick_) remove_tick_callback(tick_);
+    mapped_.disconnect();
+    unmapped_.disconnect();
+    StopWalk();
   }
 
   // whether the route draws the mark itself (the host draws it while flying)
@@ -199,6 +192,29 @@ class RouteLine : public Gtk::DrawingArea {
   }
 
  private:
+  // The walk ticks only while the route is on screen, from map to unmap (the
+  // step left, the window hidden). A tick left running kept its window's
+  // frame clock busy for the life of the process.
+  void StartWalk() {
+    if (tick_) return;
+    tick_ = add_tick_callback([this](const Glib::RefPtr<Gdk::FrameClock>&) {
+      const double elapsed = Now() - start_;
+      const int trip = static_cast<int>(elapsed / kTripMs);
+      if (trip != tripCount_) {
+        tripCount_ = trip;
+        NextPerson();
+      }
+      progress_ = std::fmod(elapsed, kTripMs) / kTripMs;
+      queue_draw();
+      return true;
+    });
+  }
+  void StopWalk() {
+    if (!tick_) return;
+    remove_tick_callback(tick_);
+    tick_ = 0;
+  }
+
   void NextPerson() {
     if (people_.size() < 2) return;
     if (deck_.empty()) {
@@ -314,6 +330,8 @@ class RouteLine : public Gtk::DrawingArea {
   double progress_ = 0;
   double start_ = 0;
   guint tick_ = 0;
+  sigc::connection mapped_;
+  sigc::connection unmapped_;
   bool drawConnector_ = true;
 };
 

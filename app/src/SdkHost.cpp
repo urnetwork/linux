@@ -1485,6 +1485,18 @@ std::optional<urnet::ByJwt> SdkHost::ParseByJwt() {
   });
 }
 
+std::string SdkHost::StoredByJwt() {
+  return ReadOnMain<std::string>("StoredByJwt", [&]() -> std::string {
+    if (!localState_) return std::string();
+    try {
+      return localState_->getByJwt();
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] read stored jwt failed: %s\n", e.what());
+      return std::string();
+    }
+  });
+}
+
 void SdkHost::RefreshJwt() {
   std::scoped_lock lock(mutex_);
   if (!device_) return;  // refreshed on the next device creation anyway
@@ -3139,10 +3151,12 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
       ReportAuthLogout(DeviceAuthLogoutCause(deviceHandle));
     }));
 
-    // A jwt refresh re-derives Pro from the (now-updated) token — mac's
-    // JwtRefreshListener parity. Without this a mid-session Pro change (notably a
-    // Pro->free lapse, which a Pro network's paused poll won't catch) isn't reflected
-    // until the window is re-shown. Same marshaling rule as the logout listener.
+    // A jwt refresh hands the stored jwt to the balance store's Pro decision
+    // (urnet::SubscriptionProTracker) — mac's JwtRefreshListener parity. The
+    // refresh renews the client token, so the stored jwt is usually the same:
+    // its claim only counts before the first balance read, and it never moves
+    // Pro back once the server answered. Same marshaling rule as the logout
+    // listener.
     subs_.push_back(device_->addJwtRefreshListener([this](std::string) {
       if (onJwtRefreshed_) onJwtRefreshed_();
     }));

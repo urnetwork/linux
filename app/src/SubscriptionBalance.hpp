@@ -20,10 +20,14 @@
 //     2 minutes) and resume — with an immediate poll — when both are back.
 //     A Pro confirmation that lands after a give-up still clears the
 //     timed-out state.
-//   * offline Pro: the jwt's Pro claim (LocalState::parseByJwt) seeds the
-//     state before the first fetch; the server is the source of truth, and
-//     the jwt is refreshed (Device::refreshToken) whenever the two disagree
-//     in either direction — an upgrade AND a lapse both go stale in the jwt.
+//   * Pro is the sdk's decision (urnet::SubscriptionProTracker): the stored
+//     jwt's Pro claim before the first fetch, the server's answer from then
+//     on. When the two disagree (an upgrade AND a lapse both go stale in the
+//     jwt) the jwt is refreshed (Device::refreshToken) once per stored jwt.
+//     That refresh renews the client token, not the stored network jwt, so
+//     asking on every read and re-deriving Pro from the unchanged claim on
+//     the refresh ping-ponged Pro and re-read the balance as fast as the api
+//     answered (support inbox 8211).
 //   * the referral code + total referrals for the usage bar's referral row
 //     ride along on the same poll (mac polls them in a separate 60s view
 //     model; one cycle here keeps the plumbing in one place).
@@ -88,10 +92,11 @@ class SubscriptionBalanceStore {
   // called after Stop(), and never without a session (done(false) at once).
   void FetchBalanceThen(std::function<void(bool ok)> done);
 
-  // Re-derive Pro from the (freshly refreshed) jwt. Wired to the sdk's jwt-refresh
-  // listener so a mid-session Pro change — notably a Pro->free lapse, which a Pro
-  // network's paused poll would otherwise miss until the window is re-shown — is
-  // reflected right away. Must be called on the GTK main thread.
+  // Hand the stored jwt to the Pro decision after a jwt refresh (the sdk's
+  // jwt-refresh listener). Its claim counts only before the first fetch: once
+  // the server answered, Pro stays the server's until the next fetch, and the
+  // refresh's unchanged claim never flips it back. Must be called on the GTK
+  // main thread.
   void OnJwtRefreshed();
 
   // The upgrade/redeem confirmation poll: 5s interval, 2 minutes of active
@@ -176,7 +181,11 @@ class SubscriptionBalanceStore {
   void FetchSubscriptionBalance();
   void FetchReferralCode();
   void UpdateIsPro(bool isPro);  // mac updateIsPro: flips the polling mode
-  void StartBackgroundPolling();
+  // the 30s background poll; `fetchNow` reads at once too (not when Pro just
+  // changed on a read: that read is the fresh one)
+  void StartBackgroundPolling(bool fetchNow = true);
+  // hands the stored jwt to proTracker_ (an empty read changes nothing)
+  void TrackStoredJwt();
   void ResumeConfirmationPolling();
   // deadline spent: stop, flag timed-out, fall back to the background poll
   void GiveUpConfirmationPolling();
@@ -201,6 +210,8 @@ class SubscriptionBalanceStore {
   bool errorFetching_ = false;
   bool hasFetched_ = false;
 
+  // the sdk's Pro and jwt refresh decision; isPro_ is its GetIsPro
+  urnet::SubscriptionProTracker proTracker_ = urnet::newSubscriptionProTracker();
   bool isPro_ = false;
   // IsGuestNetwork(jwtGuest_, serverGuest_): the jwt's GuestMode claim (a
   // refresh clears it) or the server's `guest` (no login method, read live)
