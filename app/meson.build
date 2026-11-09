@@ -601,6 +601,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/TunnelPolicyTest.cpp',
     'tests/EgressWitnessIpv6Test.cpp',
     'tests/TunPrefixRouteTest.cpp',
+    'tests/EgressWitnessLogTest.cpp',
     'tests/KillSwitchExceptionCopyTest.cpp',
     'tests/FixedIpSubtitleCopyTest.cpp',
     'tests/IoLoopFdTest.cpp',
@@ -882,6 +883,8 @@ urnetwork_tests = executable('urnetwork-tests',
               # same way, and FailsafeNoticeWiringTest its health poll and connect page.
               # TunPrefixRouteTest reads Tunnel::Configure's address steps and the
               # egress witness's tun-counter refusal the same way.
+              # EgressWitnessLogTest reads the tun counter's rule, its load retry, the
+              # refusal and the stop that carries it, and the window, the same way.
               # TeardownOrderWiringTest reads TunnelHost's teardowns the same way.
               # SelfRestartWiringTest reads the daemon's self-restart and the unit the same way.
               # StatusStripWiringTest reads the status strip's writers in MainWindow.cpp

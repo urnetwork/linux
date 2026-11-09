@@ -1055,12 +1055,15 @@ std::string BuildNftRuleset(const FilterConfig& cfg) {
   //    device RPC on 127.0.0.1 is marked like everything else it opens, and
   //    counting it would inflate "left the machine properly" with traffic that
   //    never left the machine.
+  //
+  //    The tun rule also logs, rate-limited, after its counter, so the packets
+  //    that stop a session can be named (ProbeTunRule). The count is the same
+  //    with the log or without it.
   if (d.tun_named) {
     line(std::string("\tchain ") + kNftProbeChainName + " {");
     line("\t\ttype filter hook postrouting priority " + std::to_string(kMarkChainPriority) +
          "; policy accept;");
-    line("\t\tmeta mark " + mark + " oifname \"" + cfg.tun_name + "\" counter name \"" +
-         kNftProbeTunCounter + "\"");
+    line("\t\t" + ProbeTunRule(cfg.mark, cfg.tun_name, kNftProbeTunCounter, cfg.witness_log));
     line("\t\tmeta mark " + mark + " oifname != \"" + cfg.tun_name +
          "\" oifname != \"lo\" counter name \"" + kNftProbePhyCounter + "\"");
     line("\t}");
@@ -1314,6 +1317,11 @@ bool RulesetPinsDns(const FilterConfig& cfg) { return DeriveFilter(cfg).dns_floo
 bool RulesetOpensHelperDns(const FilterConfig& cfg) { return DeriveFilter(cfg).helper_dns; }
 
 bool RulesetExcludesApps(const FilterConfig& cfg) { return !DeriveFilter(cfg).excluded.empty(); }
+
+// The log rides on urnw_probe's tun rule, so only a ruleset with a tun has it.
+bool RulesetLogsWitness(const FilterConfig& cfg) {
+  return cfg.witness_log && DeriveFilter(cfg).tun_named;
+}
 
 bool IsIpv6OnlyNetwork(std::string* detail) {
   const std::string ip = FindTool("ip");
@@ -2005,19 +2013,37 @@ bool NetFilter::Apply(const FilterConfig& requested, std::string* error) {
   if (!ApplyScript(BuildNftRuleset(cfg), ToString(cfg.state), error)) {
     std::fprintf(stderr, "[filter] apply %s failed: %s\n", ToString(cfg.state),
                  lastError_.c_str());
-    if (cfg.exclude_cgroups.empty()) return false;
-    // An exclusion never costs the floor. Its rules are the only ones here that
-    // need nftables NAT (an inet nat chain, Linux 5.2), and a slice removed
-    // between the check above and the load fails the transaction too. Either
-    // way the protective ruleset goes in without them, and the slice's commands
-    // stay in the tunnel.
-    std::fprintf(stderr, "[filter] retrying %s without the per-app exclusion\n",
-                 ToString(cfg.state));
-    cfg.exclude_cgroups.clear();
-    if (!ApplyScript(BuildNftRuleset(cfg), ToString(cfg.state), error)) {
-      std::fprintf(stderr, "[filter] apply %s failed: %s\n", ToString(cfg.state),
-                   lastError_.c_str());
-      return false;
+    // A diagnostic never costs the floor, so the witness's kernel log goes
+    // first. It is the only rule here that needs the kernel's nf_log backend
+    // and nft_limit, and a kernel without them refuses the whole transaction.
+    // Without it urnw_probe_tun counts exactly as before, and a refusal only
+    // stops naming the packets.
+    bool loaded = false;
+    if (RulesetLogsWitness(cfg)) {
+      std::fprintf(stderr, "[filter] retrying %s without the egress witness's kernel log\n",
+                   ToString(cfg.state));
+      cfg.witness_log = false;
+      loaded = ApplyScript(BuildNftRuleset(cfg), ToString(cfg.state), error);
+      if (!loaded) {
+        std::fprintf(stderr, "[filter] apply %s failed: %s\n", ToString(cfg.state),
+                     lastError_.c_str());
+      }
+    }
+    if (!loaded) {
+      if (cfg.exclude_cgroups.empty()) return false;
+      // An exclusion never costs the floor. Its rules are the only ones here
+      // that need nftables NAT (an inet nat chain, Linux 5.2), and a slice
+      // removed between the check above and the load fails the transaction too.
+      // Either way the protective ruleset goes in without them, and the slice's
+      // commands stay in the tunnel.
+      std::fprintf(stderr, "[filter] retrying %s without the per-app exclusion\n",
+                   ToString(cfg.state));
+      cfg.exclude_cgroups.clear();
+      if (!ApplyScript(BuildNftRuleset(cfg), ToString(cfg.state), error)) {
+        std::fprintf(stderr, "[filter] apply %s failed: %s\n", ToString(cfg.state),
+                     lastError_.c_str());
+        return false;
+      }
     }
     if (error) error->clear();
   }
@@ -2029,13 +2055,13 @@ bool NetFilter::Apply(const FilterConfig& requested, std::string* error) {
   SetExcludeState(&applied_);
   std::fprintf(stderr,
                "[filter] %s (floor=%d ipv6_blocked=%d dns_pinned=%d helper_dns=%d lan=%d "
-               "socket_mark=%d cgroup_match=%d cgroup=%s excluded=%d)\n",
+               "socket_mark=%d cgroup_match=%d cgroup=%s excluded=%d witness_log=%d)\n",
                ToString(cfg.state), cfg.floor ? 1 : 0, RulesetBlocksIpv6(cfg) ? 1 : 0,
                RulesetPinsDns(cfg) ? 1 : 0, RulesetOpensHelperDns(cfg) ? 1 : 0,
                cfg.allow_lan ? 1 : 0, cfg.socket_mark_proven ? 1 : 0,
                cgroupMode == NftCgroupMode::CgroupAndMark ? 1 : 0,
                cfg.cgroup.valid ? cfg.cgroup.path.c_str() : "(none)",
-               RulesetExcludesApps(cfg) ? 1 : 0);
+               RulesetExcludesApps(cfg) ? 1 : 0, RulesetLogsWitness(cfg) ? 1 : 0);
   if (cfg.floor) {
     // Printed at the moment the floor goes in, so the recovery command is in
     // the journal BEFORE anyone needs it.
@@ -2916,6 +2942,7 @@ namespace {
 struct MarkCounters {
   uint64_t tun = 0;  // marked daemon packets that left through OUR OWN tun
   uint64_t phy = 0;  // marked daemon packets that left via a real interface
+  bool logged = false;  // the tun rule also writes its packets to the kernel log
 };
 
 // The instrument must (a) be installed, (b) still be watching THIS interface,
@@ -2965,6 +2992,9 @@ bool ReadMarkCounters(const std::string& tunName, uint32_t mark, MarkCounters* o
     return fail(std::string("the ") + kNftProbeChainName +
                 " counters are not installed, so nothing can weigh the daemon's own packets");
   }
+  // From the same listing as the counters: a ruleset loaded without the log
+  // (NetFilter::Apply) has no lines to point a refusal at.
+  c.logged = body.find(kWitnessLogTag) != std::string::npos;
   *out = c;
   return true;
 }
@@ -3385,6 +3415,9 @@ bool Tunnel::VerifyEgressWitness(const char* when, bool requireOffTunnelRoute,
       }
       message += " through " + name_;
     }
+    // The counter says how many; the kernel log says where they were going,
+    // and the stop message carries this reason to the app.
+    if (counters.logged) message += WitnessLogHint();
     return fail(kCodeEgressUnprotected, message);
   }
 
