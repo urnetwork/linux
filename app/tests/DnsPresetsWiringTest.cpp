@@ -10,12 +10,18 @@
 //   - the editors' comparison counts the selection, so a change of selection
 //     whose lists are the same is a change;
 //   - an edit made with the tunnel down reaches the tunnel: the GUI mirrors
-//     every write and applies the mirror to the daemon's device it binds, where
-//     before the edit lived only in the GUI's local state;
+//     what the device took and a bound device's sync takes the mirror when it
+//     differs, where before the edit lived only in the GUI's local state. The
+//     mirror's mark (DnsMirror.hpp) is cleared while the two are written, is
+//     per network space, and a write with no device never sets it, so a copy
+//     from before the daemon split takes the daemon's settings instead of
+//     replacing them;
 //   - the card's pill and summary are the sdk's description, not the app's
 //     whole-value equality, which showed the defaults pill under every preset;
-//   - the resolver's status reaches the card and the sheet, and the sheet reads
-//     the blocked count only while it shows.
+//   - the resolver's status reaches the card and the sheet, the lines under
+//     the selection follow it on every rebuild of the picks (a pick tapped and
+//     then left showed "Use URnetwork DNS" under a provider that answered),
+//     and the sheet reads the blocked count only while it shows.
 //
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
@@ -68,39 +74,99 @@ UR_TEST(DnsPresetsWiring_EverySaveStartsFromAnSdkHelper) {
 }
 
 UR_TEST(DnsPresetsWiring_TheComparisonCountsTheSelection) {
-  const std::string sheet = wiring::ReadCode("DnsSheet.cpp");
-  const std::string equal = wiring::FunctionBody(sheet, "bool DnsSheet::SettingsEqual(");
+  const std::string equal =
+      wiring::FunctionBody(wiring::ReadCode("DnsSettingsEqual.hpp"), "inline bool DnsSettingsEqual(");
   UR_EXPECT_TRUE(wiring::Contains(equal, "a.PresetId == b.PresetId"));
   UR_EXPECT_TRUE(wiring::Contains(equal, "a.PresetPersonalId == b.PresetPersonalId"));
+  // the sheet's comparison and the host's sync of its mirror are the one
+  const std::string sheet = wiring::ReadCode("DnsSheet.cpp");
+  UR_EXPECT_TRUE(wiring::Contains(wiring::FunctionBody(sheet, "bool DnsSheet::SettingsEqual("),
+                                  "return DnsSettingsEqual(a, b);"));
+  const std::string host = wiring::ReadCode("SdkHost.cpp");
+  UR_EXPECT_TRUE(wiring::Contains(wiring::FunctionBody(host, "void SdkHost::ReconcileDnsMirrorLocked() {"),
+                                  "DnsSettingsEqual(*mirror, *daemon)"));
 }
 
 UR_TEST(DnsPresetsWiring_AnEditWithTheTunnelDownReachesTheTunnel) {
   const std::string host = wiring::ReadCode("SdkHost.cpp");
-  // every write goes to the device when there is one AND to the GUI's mirror,
-  // which is marked as holding every write since; a missed write clears it
-  const std::string set =
-      wiring::FunctionBody(host, "void SdkHost::SetDnsResolverSettingsLocked(");
-  UR_EXPECT_TRUE(wiring::Contains(set, "if (device_) device_->setDnsResolverSettings(settings);"));
-  UR_EXPECT_FALSE(wiring::Contains(set, "return;"));
-  UR_EXPECT_TRUE(wiring::Before(set, "localState_->setDnsResolverSettings(settings);",
-                                "{prefs::kDnsSettingsMirroredKey, true}"));
-  UR_EXPECT_TRUE(wiring::Before(set, "catch (const std::exception& e)",
-                                "{prefs::kDnsSettingsMirroredKey, false}"));
-  // and the device a start binds gets the marked mirror, beside the transport
-  // policies and before the drawer subscribes to it
+  // a write clears the mark, goes to the device when there is one, mirrors
+  // what the device took (it refuses a selection without a word), and only
+  // then marks the mirror, unless it was a write with no device over an
+  // unmarked mirror (DnsMirror.hpp)
+  const std::string set = wiring::FunctionBody(host, "SdkHost::SetDnsResolverSettingsLocked(");
+  UR_EXPECT_TRUE(wiring::Before(set, "const bool wasMarked = DnsMirrorMarkedLocked();",
+                                "SetDnsMirrorMarkedLocked(false);"));
+  UR_EXPECT_TRUE(wiring::Before(set, "SetDnsMirrorMarkedLocked(false);",
+                                "device_->setDnsResolverSettings(settings);"));
+  UR_EXPECT_TRUE(wiring::Before(set, "device_->setDnsResolverSettings(settings);",
+                                "device_->getDnsResolverSettings()"));
+  UR_EXPECT_TRUE(wiring::Before(set, "device_->getDnsResolverSettings()",
+                                "localState_->setDnsResolverSettings(taken);"));
+  UR_EXPECT_TRUE(wiring::Before(set, "localState_->setDnsResolverSettings(taken);",
+                                "dns_mirror::MarkedAfterWrite(device_.has_value(), wasMarked)"));
+  UR_EXPECT_TRUE(wiring::Before(set, "dns_mirror::MarkedAfterWrite(device_.has_value(), wasMarked)",
+                                "SetDnsMirrorMarkedLocked(true);"));
+  // the compare-and-set reports what the device took, and a main-loop read
+  // before the queue settles says it
+  const std::string cas = wiring::FunctionBody(host, "bool SdkHost::SetDnsResolverSettingsIf(");
+  UR_EXPECT_TRUE(wiring::Before(cas, "= SetDnsResolverSettingsLocked(settings);",
+                                "KeepOnMain<std::optional<urnet::DnsResolverSettings>>(\"GetDnsResolverSettings\", taken)"));
+  UR_EXPECT_TRUE(wiring::Before(cas, "KeepOnMain<", "if (current) *current = std::move(taken);"));
+  // one mark per network space, as each has its own LocalState
+  const std::string key = wiring::FunctionBody(host, "std::string SdkHost::DnsMirrorMarkKeyLocked() {");
+  UR_EXPECT_TRUE(wiring::Before(key, "networkSpace_->getKey()",
+                                "prefs::DnsSettingsMirroredKey(*key->host_name, *key->env_name)"));
+  UR_EXPECT_FALSE(wiring::Contains(host, "prefs::kDnsSettingsMirroredKey"));
+  // the bound device's sync, not the start, meets the mirror with the
+  // daemon's settings: an unmarked mirror takes them, a marked one that
+  // differs goes to the device, and one that matches changes nothing
   const std::string bind =
       wiring::FunctionBody(host, "TunnelStartResult SdkHost::BindRemoteDeviceLocked(");
-  UR_EXPECT_TRUE(wiring::Before(bind, "device_->setProviderTransportSettings(settings);",
-                                "if (prefs::Get<bool>(prefs::kDnsSettingsMirroredKey, false)) {"));
-  UR_EXPECT_TRUE(wiring::Before(bind,
-                                "if (prefs::Get<bool>(prefs::kDnsSettingsMirroredKey, false)) {",
-                                "if (auto settings = localState_->getDnsResolverSettings(); "
-                                "settings) {"));
-  UR_EXPECT_TRUE(wiring::Before(bind,
-                                "if (auto settings = localState_->getDnsResolverSettings(); "
-                                "settings) {",
-                                "SubscribeDrawer();"));
-  UR_EXPECT_EQ(1, int(wiring::CountOf(host, "prefs::Get<bool>(prefs::kDnsSettingsMirroredKey")));
+  UR_EXPECT_FALSE(wiring::Contains(bind, "localState_->getDnsResolverSettings()"));
+  const size_t afterTransport = bind.find("device_->setProviderTransportSettings(settings);");
+  UR_EXPECT_TRUE(afterTransport != std::string::npos);
+  const std::string sync =
+      afterTransport == std::string::npos ? std::string() : bind.substr(afterTransport);
+  UR_EXPECT_TRUE(wiring::Before(sync, "subs_.push_back(device_->addRemoteChangeListener(",
+                                "RunCommand(ConnectCommandQueue::Kind::Device"));
+  UR_EXPECT_TRUE(wiring::Before(sync, "if (rpcGeneration != rpcSessionGeneration_.load()) return;",
+                                "ReconcileDnsMirrorLocked();"));
+  UR_EXPECT_TRUE(wiring::Before(sync, "ReconcileDnsMirrorLocked();", "SubscribeDrawer();"));
+  const std::string reconcile =
+      wiring::FunctionBody(host, "void SdkHost::ReconcileDnsMirrorLocked() {");
+  UR_EXPECT_TRUE(wiring::Before(reconcile, "device_->getDnsResolverSettings()",
+                                "dns_mirror::SyncAction("));
+  UR_EXPECT_TRUE(wiring::Before(reconcile, "case dns_mirror::Sync::Adopt:",
+                                "localState_->setDnsResolverSettings(daemon);"));
+  UR_EXPECT_TRUE(wiring::Before(reconcile, "localState_->setDnsResolverSettings(daemon);",
+                                "SetDnsMirrorMarkedLocked(true);"));
+  UR_EXPECT_TRUE(wiring::Before(reconcile, "case dns_mirror::Sync::Apply:",
+                                "SetDnsResolverSettingsLocked(*mirror);"));
+  UR_EXPECT_EQ(1, int(wiring::CountOf(host, "ReconcileDnsMirrorLocked();")));
+}
+
+// The lines under the selected preset are made hidden and say what the status
+// says after every rebuild of the picks. Before, only a seed rendered them: a
+// pick tapped and then left (Custom, then the selected preset again) rebuilt
+// them in GTK's default, shown, with "Use URnetwork DNS" and "Change location"
+// under a provider that answered, an empty status line, and the count's poll
+// stopped.
+UR_TEST(DnsPresetsWiring_TheStatusLinesFollowEveryRebuild) {
+  const std::string sheet = wiring::ReadCode("DnsSheet.cpp");
+  const std::string rebuild = wiring::FunctionBody(sheet, "void DnsSheet::RebuildPicks() {");
+  UR_EXPECT_TRUE(wiring::Before(rebuild, "fastDnsPresetNote_->set_visible(preset);", "RenderStatus();"));
+  const std::string panel = wiring::FunctionBody(sheet, "void DnsSheet::BuildStatusPanel(");
+  for (const char* line : {"statusLine_->set_visible(false);", "statusDetail_->set_visible(false);",
+                           "verificationLine_->set_visible(false);",
+                           "statusActions_->set_visible(false);", "useDefaultBtn_->set_visible(false);",
+                           "changeLocationBtn_->set_visible(false);",
+                           "blockedCountLine_->set_visible(false);",
+                           "blockedFloorNote_->set_visible(false);"}) {
+    UR_EXPECT_TRUE_MSG(line, wiring::Contains(panel, line));
+  }
+  // a seed reads the status before its rebuild renders it
+  UR_EXPECT_TRUE(wiring::Before(wiring::FunctionBody(sheet, "void DnsSheet::Seed("),
+                                "status_ = host_.GetDnsResolverStatus();", "RebuildPicks();"));
 }
 
 UR_TEST(DnsPresetsWiring_TheCardSaysWhatTheSdkDescribes) {

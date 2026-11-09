@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "DnsPresetsPresentation.hpp"
+#include "DnsSettingsEqual.hpp"
 #include "FastDnsCopy.hpp"
 #include "Formatters.hpp"
 #include "I18n.hpp"
@@ -34,14 +35,6 @@ std::string Uppercased(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
   return value;
-}
-
-bool ListsEqual(const std::optional<urnet::StringList>& a,
-                const std::optional<urnet::StringList>& b) {
-  static const urnet::StringList kEmpty;
-  const urnet::StringList& av = a ? *a : kEmpty;
-  const urnet::StringList& bv = b ? *b : kEmpty;
-  return av == bv;
 }
 
 // A presentation text through the catalog; an empty key is nothing to show.
@@ -125,17 +118,7 @@ void DnsSheet::Normalize(urnet::DnsResolverSettings& settings) {
 
 bool DnsSheet::SettingsEqual(const urnet::DnsResolverSettings& a,
                              const urnet::DnsResolverSettings& b) {
-  return a.PresetId == b.PresetId && a.PresetPersonalId == b.PresetPersonalId &&
-         a.EnableRemoteDoh == b.EnableRemoteDoh && a.EnableLocalDoh == b.EnableLocalDoh &&
-         a.EnableRemoteDns == b.EnableRemoteDns && a.EnableLocalDns == b.EnableLocalDns &&
-         a.EnableFallback == b.EnableFallback &&
-         ListsEqual(a.RemoteDohUrlsIpv4, b.RemoteDohUrlsIpv4) &&
-         ListsEqual(a.RemoteDohUrlsIpv6, b.RemoteDohUrlsIpv6) &&
-         ListsEqual(a.LocalDohUrlsIpv4, b.LocalDohUrlsIpv4) &&
-         ListsEqual(a.LocalDohUrlsIpv6, b.LocalDohUrlsIpv6) &&
-         ListsEqual(a.RemoteDnsIpv4, b.RemoteDnsIpv4) &&
-         ListsEqual(a.RemoteDnsIpv6, b.RemoteDnsIpv6) &&
-         ListsEqual(a.LocalDnsIpv4, b.LocalDnsIpv4) && ListsEqual(a.LocalDnsIpv6, b.LocalDnsIpv6);
+  return DnsSettingsEqual(a, b);
 }
 
 std::string DnsSheet::CountryDotMarkup(const std::string& countryCode) const {
@@ -249,11 +232,12 @@ void DnsSheet::Seed(urnet::DnsResolverSettings settings, Edits edits) {
   summary_ = urnet::describeDnsResolverSettings(original_, countryCode_);
   picks_ = urnet::getDnsPicks(countryCode_).value_or(urnet::DnsPickList());
   picksError_->set_visible(false);
+  // the rebuild renders the status under the selection
+  status_ = host_.GetDnsResolverStatus();
 
   BuildSuggestions();
   SyncFromDraft();
   RebuildPicks();
-  RefreshStatus();
 }
 
 void DnsSheet::BuildUi() {
@@ -807,6 +791,11 @@ void DnsSheet::RebuildPicks() {
                       summary_->ProviderName)
              : std::string());
   fastDnsPresetNote_->set_visible(preset);
+
+  // the status lines a rebuild made under the selection say what the status
+  // says, and the count's poll follows them (every rebuild, not only a seed's:
+  // a pick tapped and then left also rebuilds)
+  RenderStatus();
 }
 
 Gtk::Widget* DnsSheet::BuildPickRow(const urnet::DnsPick& pick, Gtk::CheckButton*& group,
@@ -931,20 +920,27 @@ void DnsSheet::BuildPersonalPanel(Gtk::Box& details, const urnet::DnsPreset& pre
   details.append(*save);
 }
 
+// The lines and actions under the selected preset, every one hidden until
+// RenderStatus says what the status says (GTK shows a new widget).
 void DnsSheet::BuildStatusPanel(Gtk::Box& details) {
   statusBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
   statusBox_->set_margin_top(4);
   statusLine_ = Gtk::make_managed<Gtk::Label>();
   statusLine_->set_wrap(true);
   statusLine_->set_xalign(0);
+  statusLine_->set_visible(false);
   statusBox_->append(*statusLine_);
   statusDetail_ = MakeNote(Glib::ustring());
+  statusDetail_->set_visible(false);
   statusBox_->append(*statusDetail_);
   verificationLine_ = MakeMarkupLine(Glib::ustring());
+  verificationLine_->set_visible(false);
   statusBox_->append(*verificationLine_);
   statusActions_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  statusActions_->set_visible(false);
   useDefaultBtn_ = Gtk::make_managed<Gtk::Button>(T_("dns_status_use_default", "Use URnetwork DNS"));
   useDefaultBtn_->add_css_class("pill");
+  useDefaultBtn_->set_visible(false);
   // one tap back to URnetwork's dns (C8)
   useDefaultBtn_->signal_clicked().connect([this] {
     Defer([this] { SelectPick(urnet::DnsPresetIdDefault); });
@@ -953,6 +949,7 @@ void DnsSheet::BuildStatusPanel(Gtk::Box& details) {
   changeLocationBtn_ =
       Gtk::make_managed<Gtk::Button>(T_("dns_status_change_location", "Change location"));
   changeLocationBtn_->add_css_class("pill");
+  changeLocationBtn_->set_visible(false);
   changeLocationBtn_->signal_clicked().connect([this] {
     // the chooser is the window's: this modal sheet steps aside for it
     set_visible(false);
@@ -963,9 +960,11 @@ void DnsSheet::BuildStatusPanel(Gtk::Box& details) {
   blockedCountLine_ = Gtk::make_managed<Gtk::Label>();
   blockedCountLine_->set_wrap(true);
   blockedCountLine_->set_xalign(0);
+  blockedCountLine_->set_visible(false);
   statusBox_->append(*blockedCountLine_);
   blockedFloorNote_ = MakeNote(T_("dns_blocked_count_floor_note",
                                   "Some blocks aren't counted, so the real number may be higher."));
+  blockedFloorNote_->set_visible(false);
   statusBox_->append(*blockedFloorNote_);
   details.append(*statusBox_);
 }
