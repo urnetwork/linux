@@ -40,12 +40,22 @@ UR_TEST(FastDnsToggleDrivesEnableFallbackWithItsDescription) {
   const size_t label = source.find("T_(kFastDnsLabel.key, kFastDnsLabel.english)");
   UR_EXPECT_TRUE(label != std::string::npos);
   if (label == std::string::npos) return;
-  // the switch row built with the label maps to EnableFallback, and the footer under it
-  // is the local-network description
-  const size_t end = source.find(';', label);
-  UR_EXPECT_TRUE(source.substr(label, end - label).find("EnableFallback") != std::string::npos);
-  const size_t description = source.find("T_(kFastDnsDescription.key", end);
-  UR_EXPECT_TRUE(description != std::string::npos && description - end < 400);
+  // the switch in the row built with the label saves at once, and the footer under it is
+  // the local-network description
+  const size_t save = source.find("SaveFallback(fallbackSwitch_->get_active());", label);
+  UR_EXPECT_TRUE(save != std::string::npos && save - label < 600);
+  if (save == std::string::npos) return;
+  const size_t description = source.find("T_(kFastDnsDescription.key", save);
+  UR_EXPECT_TRUE(description != std::string::npos && description - save < 400);
+  // the save sets EnableFallback through the sdk helper that keeps the selection (connect
+  // ADBLOCK3RD.md E2): a preset stays selected when Fast DNS on connect changes
+  const size_t body = source.find("void DnsSheet::SaveFallback(bool enableFallback) {");
+  UR_EXPECT_TRUE(body != std::string::npos);
+  if (body == std::string::npos) return;
+  const size_t bodyEnd = source.find("\n}\n", body);
+  UR_EXPECT_TRUE(source.substr(body, bodyEnd - body)
+                     .find("urnet::dnsResolverSettingsWithFallback(original_, enableFallback)") !=
+                 std::string::npos);
 }
 
 UR_TEST(FastDnsCatalogCarriesTheOptInKey) {

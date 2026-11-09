@@ -3179,6 +3179,19 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
       device_->setProviderTransportSettings(settings);
     }
 
+    // Restore the traffic dns settings the same way (connect ADBLOCK3RD.md
+    // F2): every write mirrors into the GUI's LocalState
+    // (SetDnsResolverSettingsLocked), so a pick made while the tunnel was down
+    // lives only there until it is applied here. Only a mirror this app wrote
+    // counts: a copy left from before it mirrored every write (the in-process
+    // device before the daemon split kept one) can be older than the daemon's
+    // own, which then stands, as it does when nothing is stored.
+    if (prefs::Get<bool>(prefs::kDnsSettingsMirroredKey, false)) {
+      if (auto settings = localState_->getDnsResolverSettings(); settings) {
+        device_->setDnsResolverSettings(settings);
+      }
+    }
+
     // Connection choice is data-plane state, so keep this lightweight listener
     // alive for the tray even when every presentation controller is closed.
     //
@@ -3966,6 +3979,13 @@ void SdkHost::SubscribeDrawer() {
       [this](std::optional<urnet::DnsResolverSettings>) {
         EmitDrawerEvent(DrawerEvent::DnsSettings);
       }));
+  // the dns resolver's status: its state, the selected preset's verification,
+  // the selection it describes (not the blocked count, which the DNS sheet
+  // reads while it shows)
+  presentationSubs_.push_back(device_->addDnsResolverStatusChangeListener(
+      [this](std::optional<urnet::DnsResolverStatus>) {
+        EmitDrawerEvent(DrawerEvent::DnsStatus);
+      }));
   // transport policies (dns-settings pattern): fired by the daemon's device on
   // change, forwarded over the rpc, re-fired with the daemon's truth on every
   // sync, and locally by the device remote for an edit queued while offline
@@ -4666,12 +4686,35 @@ void SdkHost::SetDnsResolverSettings(const urnet::DnsResolverSettings& settings)
   SetDnsResolverSettingsLocked(settings);
 }
 
+std::optional<urnet::DnsResolverStatus> SdkHost::GetDnsResolverStatus() {
+  return ReadOnMain<std::optional<urnet::DnsResolverStatus>>("GetDnsResolverStatus", [&]() -> std::optional<urnet::DnsResolverStatus> {
+    return device_ ? device_->getDnsResolverStatus() : std::nullopt;
+  });
+}
+
+int64_t SdkHost::GetDnsBlockedCount() {
+  return ReadOnMain<int64_t>("GetDnsBlockedCount", [&]() -> int64_t {
+    return device_ ? device_->getDnsBlockedCount() : 0;
+  });
+}
+
 void SdkHost::SetDnsResolverSettingsLocked(const urnet::DnsResolverSettings& settings) {
-  if (device_) {
-    device_->setDnsResolverSettings(settings);  // applies to the live mux + persists
-    return;
+  // apply live over the device rpc (the daemon's DeviceLocal persists it in
+  // its own local state) and mirror into the GUI local state: with the tunnel
+  // down the mirror is the only copy, and StartTunnel applies it to the device
+  // it binds. The mark says the mirror holds every write this app made since,
+  // so StartTunnel may apply it over the daemon's copy.
+  if (device_) device_->setDnsResolverSettings(settings);  // applies to the live mux + persists
+  if (localState_) {
+    try {
+      localState_->setDnsResolverSettings(settings);
+      prefs::SetAll(nlohmann::json::object({{prefs::kDnsSettingsMirroredKey, true}}));
+    } catch (const std::exception& e) {
+      // a mirror that missed a write can be older than the daemon's copy
+      prefs::SetAll(nlohmann::json::object({{prefs::kDnsSettingsMirroredKey, false}}));
+      std::fprintf(stderr, "[sdk] persist dns resolver settings failed: %s\n", e.what());
+    }
   }
-  if (localState_) localState_->setDnsResolverSettings(settings);
 }
 
 bool SdkHost::SetDnsResolverSettingsIf(

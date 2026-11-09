@@ -673,6 +673,8 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/FeedbackSendStateTest.cpp',
     'tests/FastDnsCopyTest.cpp',
     'tests/FastDnsWiringTest.cpp',
+    'tests/DnsPresetsPresentationTest.cpp',
+    'tests/DnsPresetsWiringTest.cpp',
     'tests/CountedCopyPluralTest.cpp',
     'tests/SafetyRulePresentationTest.cpp',
     'tests/NetworkNameCheckTest.cpp',
@@ -830,6 +832,8 @@ urnetwork_tests = executable('urnetwork-tests',
               # PotfilesTest reads every source and po/POTFILES.in the same way.
               # RetiredCliCommandsTest reads po/ the same way.
               # FastDnsWiringTest reads the DNS surfaces and po/en.po the same way.
+              # DnsPresetsPresentationTest reads po/en.po, and DnsPresetsWiringTest the DNS
+              # sheet's, the connect page's and SdkHost's call sites, the same way.
               # CountedCopyPluralTest reads the counted-copy surfaces and po/ the same way.
               # ErrorIdInternalTest reads every source the same way: the C ABI's
               # internal error id has one source, the SDK header.

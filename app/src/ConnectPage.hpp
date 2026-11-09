@@ -368,6 +368,7 @@ class ConnectPage : public Gtk::Box {
   void ApplySplitRuleCount();
   void ApplyDnsCard();
   void ApplyDnsRecommendationPill();
+  void ApplyDnsSummary();
   void ApplyInspector();
   // Reason in place: its plain value, or the link for a rule-decided one
   void ApplyInspectorReason(const Glib::ustring& reason, bool link);
@@ -522,6 +523,8 @@ class ConnectPage : public Gtk::Box {
   std::optional<urnet::ContractPeerRowList> contractRows_;
   std::optional<urnet::BlockActionOverrideList> splitRules_;
   std::optional<urnet::DnsResolverSettings> dnsSettings_;
+  // the dns resolver's status: nullopt with no device
+  std::optional<urnet::DnsResolverStatus> dnsStatus_;
   // §4.1's exit-routing cache, refreshed every 5 s in Advanced Mode. Carried
   // with the SNAPSHOT's own optionality, because on this surface a fabricated
   // zero is the failure mode: nullopt = "no session, or nothing has been read
@@ -735,6 +738,9 @@ class ConnectPage : public Gtk::Box {
   Gtk::Widget* dnsPillRow_ = nullptr;
   Gtk::Label* dnsPillDot_ = nullptr;
   Gtk::Label* dnsPillText_ = nullptr;
+  Gtk::Widget* dnsSummaryRow_ = nullptr;  // "DNS: AdGuard DNS · Ad blocking"
+  Gtk::Label* dnsSummaryText_ = nullptr;
+  Gtk::Label* dnsNoticeLine_ = nullptr;   // a dropped selection, a failing provider
   Gtk::Button* dnsEditButton_ = nullptr;  // desensitized with no settings
   Gtk::Box* dnsRowsPanel_ = nullptr;
   DnsStatusRow dnsDohRow_;

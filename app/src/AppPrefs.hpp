@@ -15,6 +15,8 @@
 //                                    (WindowGeometry.hpp)
 //   "slow_internet_notify"    bool   the slow-internet notification, DEFAULT
 //                                    TRUE (SlowInternet.hpp kNotifyPrefKey)
+//   "dns_settings_mirrored"   bool   the GUI's dns settings mirror holds every
+//                                    write since (kDnsSettingsMirroredKey)
 // Header-only; nlohmann + glib only.
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
@@ -40,6 +42,15 @@ namespace urnw::prefs {
 // It governs the NEXT launch only. Nothing reads it after startup, so turning
 // it on connects nothing now.
 inline constexpr const char* kConnectOnLaunchKey = "connect_on_launch";
+
+// Whether the traffic dns settings the GUI keeps in its LocalState mirror every
+// write this app made since (SdkHost::SetDnsResolverSettingsLocked), so
+// StartTunnel applies them to the daemon's device: a pick made with the tunnel
+// down reaches it. False by default: a copy from before the mirror (the
+// in-process device before the daemon split kept one) can be older than the
+// daemon's own, and is never applied over it. A write the mirror missed
+// clears it.
+inline constexpr const char* kDnsSettingsMirroredKey = "dns_settings_mirrored";
 
 inline std::string PrefsPath() {
   std::string dir = std::string(g_get_user_config_dir()) + "/urnetwork";

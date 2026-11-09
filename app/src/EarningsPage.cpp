@@ -7540,6 +7540,7 @@ void EarningsPage::OnHostEvent(DrawerEvent event) {
     case DrawerEvent::BlockStats:
     case DrawerEvent::Overrides:
     case DrawerEvent::DnsSettings:
+    case DrawerEvent::DnsStatus:
     case DrawerEvent::TransportSettings:
     case DrawerEvent::Blocker:
     case DrawerEvent::RouteLocal:
