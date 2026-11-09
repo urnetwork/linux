@@ -1737,7 +1737,7 @@ msgctxt "bittensor_walletconnect_hint"
 msgid "Nova, Nightly and other WalletConnect wallets"
 msgstr "Nova وNightly ومحافظ WalletConnect الأخرى"
 
-#. DNS settings: heading of the group of DNS providers that block ads and trackers (AdGuard DNS, Control D, DNS4EU), beside "Block malware" and "Family". Screens that haven't moved to dns_builtin_blocker_label also label URnetwork's own blocker's toggle with it, so it reads both as a heading and as an action.
+#. DNS settings: heading of the group of adblock providers that block ads and trackers (AdGuard DNS, Control D, DNS4EU), beside "Block malware" and "Family". Screens that haven't moved to dns_builtin_blocker_label also label URnetwork's own blocker's toggle with it, so it reads both as a heading and as an action.
 msgctxt "block_ads_and_trackers"
 msgid "Block ads and trackers"
 msgstr "حظر الإعلانات والمتعقبات"
@@ -4765,7 +4765,7 @@ msgctxt "dns_apple_profiles_note"
 msgid "DNS profiles installed on this device don't apply while connected. The DNS chosen here is used instead."
 msgstr "لا تُطبَّق ملفات تعريف DNS المثبتة على هذا الجهاز أثناء الاتصال. يُستخدم DNS المختار هنا بدلًا منها."
 
-#. DNS settings: how many DNS lookups the selected filtering provider has blocked since the device connected. Counted on the device only and reset at each connect. {count} is the number, {provider} the provider's name, inserted as is.
+#. DNS settings: how many DNS lookups the selected adblock provider has blocked since the device connected. Counted on the device only and reset at each connect. {count} is the number, {provider} the adblock provider's name, inserted as is.
 msgctxt "dns_blocked_count"
 msgid "{0} lookup blocked by {1} this connection"
 msgid_plural "{0} lookups blocked by {1} this connection"
@@ -4776,17 +4776,17 @@ msgstr[3] "تم حظر {0} عمليات بحث بواسطة {1} خلال هذا 
 msgstr[4] "تم حظر {0} عملية بحث بواسطة {1} خلال هذا الاتصال"
 msgstr[5] "تم حظر {0} عملية بحث بواسطة {1} خلال هذا الاتصال"
 
-#. DNS settings: note under the blocked lookups count. Some ways a provider answers a block can't be recognized, so the count is a minimum.
+#. DNS settings: note under the blocked lookups count. Some ways an adblock provider answers a block can't be recognized, so the count is a minimum.
 msgctxt "dns_blocked_count_floor_note"
 msgid "Some blocks aren't counted, so the real number may be higher."
 msgstr "لا يتم احتساب بعض عمليات الحظر، لذا قد يكون العدد الفعلي أعلى."
 
-#. Connect drawer and DNS settings: label of the toggle for URnetwork's own ad and tracker blocker, which works on the device beside any DNS choice. It is named as URnetwork's own so it isn't mistaken for the DNS providers in "Block ads and trackers".
+#. Connect drawer and DNS settings: label of the toggle for URnetwork's own ad and tracker blocker, which works on the device beside any DNS choice. It is named as URnetwork's own so it isn't mistaken for the adblock providers in "Block ads and trackers".
 msgctxt "dns_builtin_blocker_label"
 msgid "URnetwork ad blocker"
 msgstr "مانع الإعلانات من URnetwork"
 
-#. Connect drawer and DNS settings: line under the URnetwork ad blocker toggle. It can stay on with any DNS choice, a provider that blocks ads included, and it checks each name before the DNS provider is asked.
+#. Connect drawer and DNS settings: line under the URnetwork ad blocker toggle. It can stay on with any DNS choice, an adblock provider that blocks ads included, and it checks each name before the chosen DNS is asked.
 msgctxt "dns_builtin_blocker_note"
 msgid "URnetwork's own blocker. It works with any DNS choice and checks each name first."
 msgstr "مانع URnetwork الخاص. يعمل مع أي خيار DNS ويتحقق من كل اسم أولًا."
@@ -4801,22 +4801,22 @@ msgctxt "dns_default_not_applied"
 msgid "The default safe settings are not applied"
 msgstr "الإعدادات الآمنة الافتراضية غير مطبقة"
 
-#. DNS settings, provider picker: heading of the group of DNS providers that block malware and phishing but not ads (Cloudflare, DNS4EU, Quad9). It sits below "Block ads and trackers" and reads like it.
+#. DNS settings, adblock provider picker: heading of the group of adblock providers that block malware and phishing but not ads (Cloudflare, DNS4EU, Quad9). It sits below "Block ads and trackers" and reads like it.
 msgctxt "dns_group_block_malware"
 msgid "Block malware"
 msgstr "حظر البرمجيات الخبيثة"
 
-#. DNS settings, provider picker: heading of the group of family DNS providers, which block adult sites and similar content (some of them also block ads).
+#. DNS settings, adblock provider picker: heading of the group of the adblock providers' family filters, which block adult sites and similar content (some of them also block ads).
 msgctxt "dns_group_family"
 msgid "Family"
 msgstr "العائلة"
 
-#. DNS settings, provider picker: heading of the group for people with their own account at a DNS provider (AdGuard DNS, Control D, NextDNS). Choosing one asks for the account's profile ID, so the provider applies the person's own filters.
+#. DNS settings, adblock provider picker: heading of the group for people with their own account at an adblock provider (AdGuard DNS, Control D, NextDNS). Choosing one asks for the account's profile ID, so the adblock provider applies the person's own filters.
 msgctxt "dns_group_my_account"
 msgid "Use my account"
 msgstr "استخدام حسابي"
 
-#. DNS settings, provider picker: heading of the group of other DNS providers that resolve every name and block nothing.
+#. DNS settings, adblock provider picker: heading of the group of the adblock providers' picks that resolve every name and block nothing.
 msgctxt "dns_group_no_filtering"
 msgid "No filtering"
 msgstr "بدون تصفية"
@@ -4826,12 +4826,12 @@ msgctxt "dns_over_https"
 msgid "DNS over HTTPS"
 msgstr "DNS عبر HTTPS"
 
-#. DNS settings, Use my account: help about the provider's block response setting. URnetwork treats a REFUSED answer as a failing provider, so blocks must be answered with zero IP (0.0.0.0, the providers' default) or NXDOMAIN. 0.0.0.0, NXDOMAIN and REFUSED are technical values: keep them as they are. {provider} is the provider's name, inserted as is.
+#. DNS settings, Use my account: help about the adblock provider's block response setting. URnetwork treats a REFUSED answer as a failing adblock provider, so blocks must be answered with zero IP (0.0.0.0, the adblock providers' default) or NXDOMAIN. 0.0.0.0, NXDOMAIN and REFUSED are technical values: keep them as they are. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_personal_id_block_response"
 msgid "In {}, keep the block response at zero IP (0.0.0.0, the default) or NXDOMAIN. REFUSED and other responses look like an outage."
 msgstr "في {}، أبقِ استجابة الحظر على IP صفري (0.0.0.0، وهو الافتراضي) أو NXDOMAIN. تبدو REFUSED والاستجابات الأخرى كأنها انقطاع في الخدمة."
 
-#. DNS settings, Use my account: link that opens the provider's dashboard, for example under "Saved, but we can't confirm this profile". {provider} is the provider's name, inserted as is.
+#. DNS settings, Use my account: link that opens the adblock provider's dashboard, for example under "Saved, but we can't confirm this profile". {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_personal_id_dashboard_link"
 msgid "Open your {} dashboard"
 msgstr "افتح لوحة تحكم {}"
@@ -4851,12 +4851,12 @@ msgctxt "dns_personal_id_format_nextdns"
 msgid "{0} IDs are 6 characters: digits and the letters a to f, like {1}."
 msgstr "تتكون معرّفات {0} من 6 أحرف: أرقام والأحرف من a إلى f، مثل {1}."
 
-#. DNS settings, Use my account: label of the field where the person enters the ID of their profile at the DNS provider, or pastes the DNS address the provider's dashboard shows (a DNS over HTTPS URL or a Private DNS hostname).
+#. DNS settings, Use my account: label of the field where the person enters the ID of their profile at the adblock provider, or pastes the DNS address the adblock provider's dashboard shows (a DNS over HTTPS URL or a Private DNS hostname).
 msgctxt "dns_personal_id_label"
 msgid "Profile ID or DNS address"
 msgstr "معرّف الملف الشخصي أو عنوان DNS"
 
-#. DNS settings, Use my account: provider dashboards suggest linking your IP address to your account. Through URnetwork, lookups come from the VPN exit's address, which belongs to someone else, so the app uses only the ID and doesn't offer linking.
+#. DNS settings, Use my account: adblock provider dashboards suggest linking your IP address to your account. Through URnetwork, lookups come from the VPN exit's address, which belongs to someone else, so the app uses only the ID and doesn't offer linking.
 msgctxt "dns_personal_id_linked_ip_note"
 msgid "No need to link an IP address in your dashboard: through URnetwork, your lookups come from an address that isn't yours. Your ID is enough."
 msgstr "لا حاجة لربط عنوان IP في لوحة التحكم: عبر URnetwork، تأتي عمليات البحث الخاصة بك من عنوان ليس لك. يكفي معرّفك."
@@ -4906,162 +4906,162 @@ msgctxt "dns_preset_apply_note"
 msgid "Changes apply to new lookups right away. Apps may keep earlier answers for about a minute."
 msgstr "تُطبَّق التغييرات على عمليات البحث الجديدة فورًا. قد تحتفظ التطبيقات بالإجابات السابقة لمدة دقيقة تقريبًا."
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for AdGuard DNS Family in "Family": it also forces safe search on search engines. The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks. Used for AdGuard DNS Family in "Family": it also forces safe search on search engines. The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_ads_adult_safe_search"
 msgid "Blocks ads, trackers and adult sites, and turns on safe search"
 msgstr "يحظر الإعلانات والمتعقبات ومواقع البالغين، ويفعّل البحث الآمن"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for Control D in "Block ads and trackers". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks. Used for Control D in "Block ads and trackers". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_ads_malware"
 msgid "Blocks ads, trackers and malware"
 msgstr "يحظر الإعلانات والمتعقبات والبرمجيات الخبيثة"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for Control D Family in "Family". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks. Used for Control D Family in "Family". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_ads_malware_adult_drugs"
 msgid "Blocks ads, trackers, malware, adult sites and drugs"
 msgstr "يحظر الإعلانات والمتعقبات والبرمجيات الخبيثة ومواقع البالغين والمخدرات"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for DNS4EU in "Block ads and trackers". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks. Used for DNS4EU in "Block ads and trackers". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_ads_malware_phishing"
 msgid "Blocks ads, trackers, malware and phishing"
 msgstr "يحظر الإعلانات والمتعقبات والبرمجيات الخبيثة والتصيد الاحتيالي"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for AdGuard DNS in "Block ads and trackers". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks. Used for AdGuard DNS in "Block ads and trackers". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_ads_phishing"
 msgid "Blocks ads, trackers and phishing"
 msgstr "يحظر الإعلانات والمتعقبات والتصيد الاحتيالي"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for DNS4EU's child protection in "Family". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks, and that it doesn't block ads. Used for DNS4EU's child protection in "Family". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_child"
 msgid "Blocks malware, adult sites, gambling, drugs and violence, not ads"
 msgstr "يحظر البرمجيات الخبيثة ومواقع البالغين والمقامرة والمخدرات والعنف، وليس الإعلانات"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks. Used for DNS4EU's child protection with ad blocking in "Family". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks. Used for DNS4EU's child protection with ad blocking in "Family". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_child_ads"
 msgid "Blocks ads, trackers, malware, adult sites, gambling, drugs and violence"
 msgstr "يحظر الإعلانات والمتعقبات والبرمجيات الخبيثة ومواقع البالغين والمقامرة والمخدرات والعنف"
 
-#. DNS settings, provider picker: the line under DNS4EU in "No filtering". It does no protective filtering, but the domains courts order blocked stay blocked on every DNS4EU resolver. The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under DNS4EU in "No filtering". It does no protective filtering, but the domains courts order blocked stay blocked on every DNS4EU resolver. The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_court_orders"
 msgid "Blocks only what courts order it to block"
 msgstr "يحظر فقط ما تأمر المحاكم بحظره"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for Cloudflare in "Block malware". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks, and that it doesn't block ads. Used for Cloudflare in "Block malware". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_malware"
 msgid "Blocks malware, not ads"
 msgstr "يحظر البرمجيات الخبيثة، وليس الإعلانات"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for Cloudflare Family in "Family". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks, and that it doesn't block ads. Used for Cloudflare Family in "Family". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_malware_adult"
 msgid "Blocks malware and adult sites, not ads"
 msgstr "يحظر البرمجيات الخبيثة ومواقع البالغين، وليس الإعلانات"
 
-#. DNS settings, provider picker: the line under a DNS provider's name that says what it blocks, and that it doesn't block ads. Used for DNS4EU and Quad9 in "Block malware". The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name that says what it blocks, and that it doesn't block ads. Used for DNS4EU and Quad9 in "Block malware". The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_malware_phishing"
 msgid "Blocks malware and phishing, not ads"
 msgstr "يحظر البرمجيات الخبيثة والتصيد الاحتيالي، وليس الإعلانات"
 
-#. DNS settings, provider picker: the line under a DNS provider's name in "No filtering" (AdGuard DNS, Cloudflare, Control D): the provider resolves every name and blocks nothing. The provider's name is shown above it, not in this string.
+#. DNS settings, adblock provider picker: the line under an adblock provider's name in "No filtering" (AdGuard DNS, Cloudflare, Control D): the adblock provider resolves every name and blocks nothing. The adblock provider's name is shown above it, not in this string.
 msgctxt "dns_preset_copy_nothing"
 msgid "Blocks nothing"
 msgstr "لا يحظر أي شيء"
 
-#. DNS settings, provider picker: the line under each provider in "Use my account". {provider} is the provider's name (AdGuard DNS, Control D or NextDNS), inserted as is.
+#. DNS settings, adblock provider picker: the line under each adblock provider in "Use my account". {provider} is the adblock provider's name (AdGuard DNS, Control D or NextDNS), inserted as is.
 msgctxt "dns_preset_copy_personal"
 msgid "Uses the filters you set up in your {} account"
 msgstr "يستخدم عوامل التصفية التي أعددتها في حسابك على {}"
 
-#. DNS settings: disclosure under the selected DNS provider, above the Privacy policy and Help links. The provider receives the names looked up while connected, from the VPN exit's address, never the person's own IP address. {provider} is the provider's name (for example AdGuard DNS), inserted as is.
+#. DNS settings: disclosure under the selected adblock provider, above the Privacy policy and Help links. The adblock provider receives the names looked up while connected, from the VPN exit's address, never the person's own IP address. {provider} is the adblock provider's name (for example AdGuard DNS), inserted as is.
 msgctxt "dns_preset_disclosure"
 msgid "Your DNS lookups go to {} through the tunnel, so it never sees your IP address. Its privacy policy applies."
 msgstr "تذهب عمليات بحث DNS الخاصة بك إلى {} عبر النفق، فلا يرى عنوان IP الخاص بك أبدًا. وتنطبق سياسة الخصوصية الخاصة به."
 
-#. DNS settings and connect drawer: notice after an app update removed the DNS provider the person had selected. The app switched to URnetwork's own DNS, which doesn't filter. {provider} is the removed provider's name, inserted as is.
+#. DNS settings and connect drawer: notice after an app update removed the adblock provider the person had selected. The app switched to URnetwork's own DNS, which doesn't filter. {provider} is the removed adblock provider's name, inserted as is.
 msgctxt "dns_preset_dropped"
 msgid "{} is no longer available. You're using URnetwork DNS, so lookups aren't filtered."
 msgstr "لم يعد {} متاحًا. أنت تستخدم DNS الخاص بـ URnetwork، لذا لا تتم تصفية عمليات البحث."
 
-#. DNS settings: button on the notice of a removed DNS provider that opens the provider list. "Preset" means one of the DNS providers listed on the screen.
+#. DNS settings: button on the notice of a removed adblock provider that opens the adblock provider list. "Preset" means one of the adblock providers listed on the screen.
 msgctxt "dns_preset_dropped_choose"
 msgid "Choose another preset"
 msgstr "اختر إعدادًا مسبقًا آخر"
 
-#. DNS settings: button on the notice of a removed DNS provider that opens the Custom editor, where the person can enter the provider's addresses themselves. It names the "Custom" pick, so it uses that pick's exact word.
+#. DNS settings: button on the notice of a removed adblock provider that opens the Custom editor, where the person can enter the adblock provider's addresses themselves. It names the "Custom" pick, so it uses that pick's exact word.
 msgctxt "dns_preset_dropped_custom"
 msgid "Enter it yourself under Custom"
 msgstr "أدخله بنفسك ضمن مخصص"
 
-#. DNS settings, Use my account: error id the sdk returns when the profile ID doesn't have the provider's format. The provider's own format line is shown with it.
+#. DNS settings, Use my account: error id the sdk returns when the profile ID doesn't have the adblock provider's format. The adblock provider's own format line is shown with it.
 msgctxt "dns_preset_error_personal_id_invalid"
 msgid "This ID isn't in the right format."
 msgstr "صيغة هذا المعرّف غير صحيحة."
 
-#. DNS settings: error id the sdk returns when a profile ID is given for a DNS preset that doesn't take one. "Preset" means one of the DNS providers listed on the screen.
+#. DNS settings: error id the sdk returns when a profile ID is given for a DNS preset that doesn't take one. "Preset" means one of the adblock providers listed on the screen.
 msgctxt "dns_preset_error_personal_id_not_accepted"
 msgid "This preset doesn't use a profile ID."
 msgstr "هذا الإعداد المسبق لا يستخدم معرّف ملف شخصي."
 
-#. DNS settings, Use my account: error id the sdk returns when the pasted DNS address or hostname belongs to another DNS provider in the list.
+#. DNS settings, Use my account: error id the sdk returns when the pasted DNS address or hostname belongs to another adblock provider in the list. "Adblock provider" is what the app calls these DNS companies (AdGuard, Control D, Quad9, Cloudflare, DNS4EU, NextDNS): say it in full both times, never with the word the app uses for URnetwork's providers, which are the bandwidth providers.
 msgctxt "dns_preset_error_personal_id_other_provider"
-msgid "This address belongs to another provider. Choose that provider instead."
-msgstr "هذا العنوان يخص مزوّد DNS آخر. اختر ذلك المزوّد بدلًا منه."
+msgid "This address belongs to another adblock provider. Choose that adblock provider instead."
+msgstr "هذا العنوان يخص موفّر حظر إعلانات آخر. اختر موفّر حظر الإعلانات ذلك بدلًا منه."
 
 #. DNS settings, Use my account: error id the sdk returns when the profile ID field is empty.
 msgctxt "dns_preset_error_personal_id_required"
 msgid "Enter your profile ID."
 msgstr "أدخل معرّف ملفك الشخصي."
 
-#. DNS settings: error id the sdk returns when a DNS preset is no longer in the app's catalog. "Preset" means one of the DNS providers listed on the screen.
+#. DNS settings: error id the sdk returns when a DNS preset is no longer in the app's catalog. "Preset" means one of the adblock providers listed on the screen.
 msgctxt "dns_preset_error_unknown"
 msgid "This preset isn't available. Choose another one."
 msgstr "هذا الإعداد المسبق غير متاح. اختر إعدادًا آخر."
 
-#. DNS settings: note beside the "Fast DNS on connect" toggle while a DNS provider is selected. While the tunnel connects, lookups go to URnetwork's own DNS, so the provider never sees the person's own address, but those lookups aren't filtered. {provider} is the provider's name, inserted as is.
+#. DNS settings: note beside the "Fast DNS on connect" toggle while an adblock provider is selected. While the tunnel connects, lookups go to URnetwork's own DNS, so the adblock provider never sees the person's own address, but those lookups aren't filtered. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_preset_fast_dns_note"
 msgid "While connecting, lookups use URnetwork DNS, so {} doesn't filter them."
 msgstr "أثناء الاتصال، تستخدم عمليات البحث DNS الخاص بـ URnetwork، لذا لا يقوم {} بتصفيتها."
 
-#. DNS settings: link under the selected DNS provider, beside "Privacy policy", that opens the provider's help page.
+#. DNS settings: link under the selected adblock provider, beside "Privacy policy", that opens the adblock provider's help page.
 msgctxt "dns_preset_help_link"
 msgid "Help"
 msgstr "المساعدة"
 
-#. DNS settings, provider picker: which country's law the DNS provider operates under. {jurisdiction} comes from the app's provider catalog in English (for example Cyprus or Switzerland) and is inserted as is.
+#. DNS settings, adblock provider picker: which country's law the adblock provider operates under. {jurisdiction} comes from the app's adblock provider catalog in English (for example Cyprus or Switzerland) and is inserted as is.
 msgctxt "dns_preset_jurisdiction"
 msgid "Jurisdiction: {}"
 msgstr "الولاية القضائية: {}"
 
-#. DNS settings: link under the selected DNS provider that opens the provider's privacy policy.
+#. DNS settings: link under the selected adblock provider that opens the adblock provider's privacy policy.
 msgctxt "dns_preset_privacy_link"
 msgid "Privacy policy"
 msgstr "سياسة الخصوصية"
 
-#. Android connect screen: line added to the strict Private DNS notice while a DNS provider is selected, since Android's Private DNS sends lookups to its own server instead. {provider} is the selected DNS provider's name, inserted as is. Private DNS is Android's own setting, named as in Android.
+#. Android connect screen: line added to the strict Private DNS notice while an adblock provider is selected, since Android's Private DNS sends lookups to its own server instead. {provider} is the selected adblock provider's name, inserted as is. Private DNS is Android's own setting, named as in Android.
 msgctxt "dns_private_dns_overrides_preset"
 msgid "Private DNS overrides your DNS choice ({})."
 msgstr "يتجاوز DNS الخاص اختيارك لخادم DNS ({})."
 
-#. DNS settings, provider picker: the pick that opens the advanced editor, where the person enters their own DNS over HTTPS URLs and DNS servers. Other strings send the reader to this pick by name ("Enter it yourself under Custom"), so they use the same word.
+#. DNS settings, adblock provider picker: the pick that opens the advanced editor, where the person enters their own DNS over HTTPS URLs and DNS servers. Other strings send the reader to this pick by name ("Enter it yourself under Custom"), so they use the same word.
 msgctxt "dns_provider_custom"
 msgid "Custom"
 msgstr "مخصص"
 
-#. DNS settings, provider picker: the line under "Custom" that says what it holds.
+#. DNS settings, adblock provider picker: the line under "Custom" that says what it holds.
 msgctxt "dns_provider_custom_copy"
 msgid "Your own DNS over HTTPS URLs and DNS servers"
 msgstr "عناوين URL لـ DNS عبر HTTPS وخوادم DNS الخاصة بك"
 
-#. DNS settings, provider picker: the first pick, URnetwork's own encrypted DNS through the tunnel, which every app uses by default. URnetwork is the product name.
+#. DNS settings, adblock provider picker: the first pick, URnetwork's own encrypted DNS through the tunnel, which every app uses by default. URnetwork is the product name.
 msgctxt "dns_provider_default"
 msgid "URnetwork (default)"
 msgstr "URnetwork (الافتراضي)"
 
-#. DNS settings, provider picker: the line under "URnetwork (default)" that says what it does: names are resolved over encrypted DNS inside the VPN tunnel, and nothing is blocked.
+#. DNS settings, adblock provider picker: the line under "URnetwork (default)" that says what it does: names are resolved over encrypted DNS inside the VPN tunnel, and nothing is blocked.
 msgctxt "dns_provider_default_copy"
 msgid "Encrypted DNS through the tunnel, with no filtering"
 msgstr "DNS مشفّر عبر النفق، دون أي تصفية"
 
-#. DNS settings, provider picker: the last pick, shown only while the exit's country has a recommended set of plain DNS servers that work better there. It is never selected automatically. {country} is the exit country's name, inserted as is. Unencrypted means the DNS lookups are sent without encryption.
+#. DNS settings, adblock provider picker: the last pick, shown only while the exit's country has a recommended set of plain DNS servers that work better there. It is never selected automatically. {country} is the exit country's name, inserted as is. Unencrypted means the DNS lookups are sent without encryption.
 msgctxt "dns_provider_regional"
 msgid "Regional ({}), unencrypted"
 msgstr "إقليمي ({})، غير مشفر"
@@ -5076,47 +5076,47 @@ msgctxt "dns_settings_unavailable"
 msgid "DNS settings unavailable"
 msgstr "إعدادات DNS غير متاحة"
 
-#. DNS settings and connect drawer: button beside a DNS provider status that opens the location picker, since a provider can be blocked or unreachable from some exit locations.
+#. DNS settings and connect drawer: button beside an adblock provider's status that opens the location picker, since an adblock provider can be blocked or unreachable from some exit locations.
 msgctxt "dns_status_change_location"
 msgid "Change location"
 msgstr "تغيير الموقع"
 
-#. DNS settings and connect drawer: status line when a DNS provider from "No filtering" isn't answering, so URnetwork's own DNS answers until it does. {provider} is the provider's name, inserted as is.
+#. DNS settings and connect drawer: status line when an adblock provider from "No filtering" isn't answering, so URnetwork's own DNS answers until it does. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_status_fallback"
 msgid "{} isn't answering. Using URnetwork DNS."
 msgstr "{} لا يستجيب. يتم استخدام DNS الخاص بـ URnetwork."
 
-#. DNS settings and connect drawer: status line when an ad-blocking DNS provider isn't answering from the current exit, so URnetwork's own DNS answers for now and ads aren't blocked. It switches back on its own when the provider answers. {provider} is the provider's name, inserted as is.
+#. DNS settings and connect drawer: status line when an adblock provider that blocks ads isn't answering from the current exit, so URnetwork's own DNS answers for now and ads aren't blocked. It switches back on its own when the adblock provider answers. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_status_paused"
 msgid "Ad blocking paused: {} isn't answering"
 msgstr "تم إيقاف حظر الإعلانات مؤقتًا: {} لا يستجيب"
 
-#. DNS settings: line under "Ad blocking paused: … isn't answering". "it" is the ad-blocking DNS provider named in that line.
+#. DNS settings: line under "Ad blocking paused: … isn't answering". "it" is the adblock provider named in that line.
 msgctxt "dns_status_paused_detail"
 msgid "Using URnetwork DNS until it answers. Ad blocking comes back on its own."
-msgstr "يتم استخدام DNS الخاص بـ URnetwork حتى يستجيب المزوّد. وسيعود حظر الإعلانات تلقائيًا."
+msgstr "يتم استخدام DNS الخاص بـ URnetwork حتى يستجيب موفّر حظر الإعلانات. وسيعود حظر الإعلانات تلقائيًا."
 
-#. DNS settings: status line while the selected DNS provider answers normally. {provider} is the provider's name (for example AdGuard DNS), inserted as is.
+#. DNS settings: status line while the selected adblock provider answers normally. {provider} is the adblock provider's name (for example AdGuard DNS), inserted as is.
 msgctxt "dns_status_provider"
 msgid "DNS: {}"
 msgstr "DNS: {}"
 
-#. DNS settings and connect drawer: status line when a family, malware-blocking or personal DNS provider isn't answering. To keep its filtering, URnetwork doesn't switch to other DNS, so sites may not load until the provider answers or the person picks "Use URnetwork DNS". {provider} is the provider's name, inserted as is.
+#. DNS settings and connect drawer: status line when an adblock provider's family, malware-blocking or personal pick isn't answering. To keep its filtering, URnetwork doesn't switch to other DNS, so sites may not load until the adblock provider answers or the person picks "Use URnetwork DNS". {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_status_unreachable"
 msgid "{} isn't answering"
 msgstr "{} لا يستجيب"
 
-#. DNS settings: line under "… isn't answering" for a family, malware-blocking or personal DNS provider. "it" is the DNS provider named in that line.
+#. DNS settings: line under "… isn't answering" for an adblock provider's family, malware-blocking or personal pick. "it" is the adblock provider named in that line.
 msgctxt "dns_status_unreachable_detail"
 msgid "To keep filtering on, URnetwork doesn't switch DNS for you. Sites may not load until it answers."
-msgstr "للإبقاء على التصفية، لا يبدّل URnetwork خادم DNS تلقائيًا. قد لا يتم تحميل المواقع حتى يستجيب المزوّد."
+msgstr "للإبقاء على التصفية، لا يبدّل URnetwork خادم DNS تلقائيًا. قد لا يتم تحميل المواقع حتى يستجيب موفّر حظر الإعلانات."
 
-#. DNS settings and connect drawer: button beside a DNS provider status that isn't answering. It switches back to URnetwork's own DNS, the default, in one tap.
+#. DNS settings and connect drawer: button beside the status of an adblock provider that isn't answering. It switches back to URnetwork's own DNS, the default, in one tap.
 msgctxt "dns_status_use_default"
 msgid "Use URnetwork DNS"
 msgstr "استخدام DNS الخاص بـ URnetwork"
 
-#. Connect drawer, DNS card: summary row while a DNS provider from "Block ads and trackers" is selected. {provider} is the provider's name, inserted as is.
+#. Connect drawer, DNS card: summary row while an adblock provider from "Block ads and trackers" is selected. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_summary_ad_blocking"
 msgid "DNS: {} · Ad blocking"
 msgstr "DNS: {} · حظر الإعلانات"
@@ -5136,22 +5136,22 @@ msgctxt "dns_summary_default"
 msgid "DNS: URnetwork"
 msgstr "DNS: URnetwork"
 
-#. Connect drawer, DNS card: summary row while a DNS provider from "Family" is selected. {provider} is the provider's name, inserted as is.
+#. Connect drawer, DNS card: summary row while an adblock provider from "Family" is selected. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_summary_family"
 msgid "DNS: {} · Family filter"
 msgstr "DNS: {} · فلتر العائلة"
 
-#. Connect drawer, DNS card: summary row while a DNS provider from "Block malware" is selected. {provider} is the provider's name, inserted as is.
+#. Connect drawer, DNS card: summary row while an adblock provider from "Block malware" is selected. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_summary_malware_blocking"
 msgid "DNS: {} · Malware blocking"
 msgstr "DNS: {} · حظر البرمجيات الخبيثة"
 
-#. Connect drawer, DNS card: summary row while a DNS provider from "No filtering" is selected. {provider} is the provider's name, inserted as is.
+#. Connect drawer, DNS card: summary row while an adblock provider from "No filtering" is selected. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_summary_no_filtering"
 msgid "DNS: {} · No filtering"
 msgstr "DNS: {} · بدون تصفية"
 
-#. Connect drawer, DNS card: summary row while a provider from "Use my account" is selected. The profile ID itself is never shown. {provider} is the provider's name, inserted as is.
+#. Connect drawer, DNS card: summary row while an adblock provider from "Use my account" is selected. The profile ID itself is never shown. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_summary_personal"
 msgid "DNS: {} · your profile"
 msgstr "DNS: {} · ملفك الشخصي"
@@ -5171,7 +5171,7 @@ msgctxt "dns_verify_malformed_adguard"
 msgid "{} rejected this device ID"
 msgstr "رفض {} معرّف الجهاز هذا"
 
-#. DNS settings: result of the check the app runs after a filtering DNS provider is chosen: the provider answered a name it normally blocks with a real address, so it isn't filtering from the current exit location. {provider} is the provider's name, inserted as is.
+#. DNS settings: result of the check the app runs after a filtering adblock provider is chosen: the adblock provider answered a name it normally blocks with a real address, so it isn't filtering from the current exit location. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_verify_not_filtering"
 msgid "{} isn't filtering from this location"
 msgstr "{} لا يقوم بالتصفية من هذا الموقع"
@@ -5181,7 +5181,7 @@ msgctxt "dns_verify_rejected_controld"
 msgid "{} doesn't recognize this resolver ID"
 msgstr "{} لا يتعرّف على معرّف المحلّل هذا"
 
-#. DNS settings, Use my account: shown after a profile ID is saved and the provider answers normally. A wrong ID or a used-up free plan also answers normally, just without filtering, so the app can't confirm the profile. {provider} is the provider's name, inserted as is.
+#. DNS settings, Use my account: shown after a profile ID is saved and the adblock provider answers normally. A wrong ID or a used-up free plan also answers normally, just without filtering, so the app can't confirm the profile. {provider} is the adblock provider's name, inserted as is.
 msgctxt "dns_verify_unconfirmed"
 msgid "Saved, but we can't confirm this profile. If the ID is wrong, {} answers without filtering."
 msgstr "تم الحفظ، لكن لا يمكننا تأكيد هذا الملف الشخصي. إذا كان المعرّف خاطئًا، فسيجيب {} دون تصفية."

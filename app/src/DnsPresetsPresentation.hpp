@@ -149,7 +149,7 @@ inline Text ErrorText(std::string_view errorId) {
       {kErrorPersonalIdRequired, "Enter your profile ID."},
       {kErrorPersonalIdInvalid, "This ID isn't in the right format."},
       {kErrorPersonalIdOtherProvider,
-       "This address belongs to another provider. Choose that provider instead."},
+       "This address belongs to another adblock provider. Choose that adblock provider instead."},
       {kErrorPersonalIdNotAccepted, "This preset doesn't use a profile ID."},
   };
   for (const Text& error : kErrors) {
