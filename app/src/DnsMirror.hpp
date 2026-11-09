@@ -30,8 +30,11 @@ enum class Sync {
   Keep,   // the two match, and a settings swap would restart the device's dns
 };
 
-constexpr Sync SyncAction(bool marked, bool same) {
-  if (!marked) return Sync::Adopt;
+// `present`: the mirror exists. A marked one that does not adopts too: a
+// write that could neither clear the mark nor write the mirror (a full or
+// read-only home) removes the mirror, so no stale copy is applied under it.
+constexpr Sync SyncAction(bool marked, bool present, bool same) {
+  if (!marked || !present) return Sync::Adopt;
   return same ? Sync::Keep : Sync::Apply;
 }
 

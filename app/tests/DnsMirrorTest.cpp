@@ -30,10 +30,25 @@ UR_TEST(DnsMirror_AWriteMarksTheMirrorOnlyWhenItHoldsTheDevicesSettings) {
 
 UR_TEST(DnsMirror_TheSyncAdoptsAppliesOrKeeps) {
   // an unmarked mirror takes the daemon's settings, whatever it holds
-  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/false, /*same=*/false) == mirror::Sync::Adopt);
-  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/false, /*same=*/true) == mirror::Sync::Adopt);
+  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/false, /*present=*/true, /*same=*/false) ==
+                 mirror::Sync::Adopt);
+  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/false, /*present=*/true, /*same=*/true) ==
+                 mirror::Sync::Adopt);
+  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/false, /*present=*/false, /*same=*/false) ==
+                 mirror::Sync::Adopt);
   // a marked mirror that differs is an edit made with the tunnel down
-  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/true, /*same=*/false) == mirror::Sync::Apply);
+  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/true, /*present=*/true, /*same=*/false) ==
+                 mirror::Sync::Apply);
   // a marked mirror that matches leaves the device alone
-  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/true, /*same=*/true) == mirror::Sync::Keep);
+  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/true, /*present=*/true, /*same=*/true) ==
+                 mirror::Sync::Keep);
+}
+
+// A write that could neither clear the mark nor write the mirror (a full or
+// read-only home) removes the mirror: marked but missing, it adopts the
+// daemon's settings rather than leave a stale copy to be applied under the
+// mark.
+UR_TEST(DnsMirror_AMarkedMirrorThatIsMissingAdopts) {
+  UR_EXPECT_TRUE(mirror::SyncAction(/*marked=*/true, /*present=*/false, /*same=*/false) ==
+                 mirror::Sync::Adopt);
 }

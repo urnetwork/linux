@@ -3843,8 +3843,13 @@ void ConnectPage::OnHostEvent(DrawerEvent event) {
         dnsSettled_ = true;
         ApplyDnsCard();
       }
-      // an open DNS sheet's status belonged to the device that came or went
-      if (dnsSheet_ && dnsSheet_->is_visible()) dnsSheet_->RefreshStatus();
+      // An open DNS sheet re-reads both: the status belonged to the device that
+      // came or went, and a change the queue held back (a sync's apply of the
+      // mirror, SdkHost::ReconcileDnsMirrorLocked) arrives as this event.
+      if (dnsSheet_ && dnsSheet_->is_visible()) {
+        dnsSheet_->RefreshSettings();
+        dnsSheet_->RefreshStatus();
+      }
       if (transportBar_) transportBar_->SetDistribution(host_.ClientTransportDistribution());
       if (advanced_) RefreshExitRouting();
       break;

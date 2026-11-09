@@ -106,6 +106,11 @@ UR_TEST(DnsPresetsWiring_AnEditWithTheTunnelDownReachesTheTunnel) {
                                 "dns_mirror::MarkedAfterWrite(device_.has_value(), wasMarked)"));
   UR_EXPECT_TRUE(wiring::Before(set, "dns_mirror::MarkedAfterWrite(device_.has_value(), wasMarked)",
                                 "SetDnsMirrorMarkedLocked(true);"));
+  // a mirror write the home refused (full, read-only), which may have refused
+  // the mark's clear too, removes the mirror: marked but missing, it adopts the
+  // daemon's settings rather than be applied stale
+  UR_EXPECT_TRUE(wiring::Before(set, "catch (const std::exception& e)",
+                                "localState_->setDnsResolverSettings(std::nullopt);"));
   // the compare-and-set reports what the device took, and a main-loop read
   // before the queue settles says it
   const std::string cas = wiring::FunctionBody(host, "bool SdkHost::SetDnsResolverSettingsIf(");
@@ -117,25 +122,40 @@ UR_TEST(DnsPresetsWiring_AnEditWithTheTunnelDownReachesTheTunnel) {
   UR_EXPECT_TRUE(wiring::Before(key, "networkSpace_->getKey()",
                                 "prefs::DnsSettingsMirroredKey(*key->host_name, *key->env_name)"));
   UR_EXPECT_FALSE(wiring::Contains(host, "prefs::kDnsSettingsMirroredKey"));
-  // the bound device's sync, not the start, meets the mirror with the
-  // daemon's settings: an unmarked mirror takes them, a marked one that
-  // differs goes to the device, and one that matches changes nothing
+  // A fresh start's new device takes a marked mirror at bind, with the
+  // transport policies, so an offline pick is in force before the start's
+  // connect; an attach's running device does not, a swap restarting its dns.
   const std::string bind =
       wiring::FunctionBody(host, "TunnelStartResult SdkHost::BindRemoteDeviceLocked(");
-  UR_EXPECT_FALSE(wiring::Contains(bind, "localState_->getDnsResolverSettings()"));
   const size_t afterTransport = bind.find("device_->setProviderTransportSettings(settings);");
   UR_EXPECT_TRUE(afterTransport != std::string::npos);
   const std::string sync =
       afterTransport == std::string::npos ? std::string() : bind.substr(afterTransport);
-  UR_EXPECT_TRUE(wiring::Before(sync, "subs_.push_back(device_->addRemoteChangeListener(",
+  UR_EXPECT_TRUE(wiring::Before(sync, "if (rememberOnSync && DnsMirrorMarkedLocked()) {",
+                                "device_->setDnsResolverSettings(mirror);"));
+  UR_EXPECT_EQ(1, int(wiring::CountOf(bind, "localState_->getDnsResolverSettings()")));
+  // Beyond that, the bound device's sync meets the mirror with the daemon's
+  // settings, on the command queue: an unmarked mirror takes them, a marked one
+  // that differs goes to the device, and one that matches changes nothing.
+  // The listener hears no state from before it, so a pair that synced already
+  // is reconciled at once.
+  UR_EXPECT_TRUE(wiring::Before(sync, "device_->setDnsResolverSettings(mirror);",
+                                "const auto queueDnsReconcile = [this, rpcGeneration] {"));
+  UR_EXPECT_TRUE(wiring::Before(sync, "const auto queueDnsReconcile = [this, rpcGeneration] {",
                                 "RunCommand(ConnectCommandQueue::Kind::Device"));
   UR_EXPECT_TRUE(wiring::Before(sync, "if (rpcGeneration != rpcSessionGeneration_.load()) return;",
                                 "ReconcileDnsMirrorLocked();"));
-  UR_EXPECT_TRUE(wiring::Before(sync, "ReconcileDnsMirrorLocked();", "SubscribeDrawer();"));
+  UR_EXPECT_TRUE(wiring::Before(
+      sync, "subs_.push_back(device_->addRemoteChangeListener([queueDnsReconcile](bool connected) {",
+      "if (connected) queueDnsReconcile();"));
+  UR_EXPECT_TRUE(wiring::Before(sync, "if (connected) queueDnsReconcile();",
+                                "device_->getRemoteConnected()"));
+  UR_EXPECT_EQ(2, int(wiring::CountOf(sync, "queueDnsReconcile();")));
+  UR_EXPECT_TRUE(wiring::Before(sync, "device_->getRemoteConnected()", "SubscribeDrawer();"));
   const std::string reconcile =
       wiring::FunctionBody(host, "void SdkHost::ReconcileDnsMirrorLocked() {");
   UR_EXPECT_TRUE(wiring::Before(reconcile, "device_->getDnsResolverSettings()",
-                                "dns_mirror::SyncAction("));
+                                "dns_mirror::SyncAction(marked, mirror.has_value(), same)"));
   UR_EXPECT_TRUE(wiring::Before(reconcile, "case dns_mirror::Sync::Adopt:",
                                 "localState_->setDnsResolverSettings(daemon);"));
   UR_EXPECT_TRUE(wiring::Before(reconcile, "localState_->setDnsResolverSettings(daemon);",
@@ -202,9 +222,12 @@ UR_TEST(DnsPresetsWiring_TheStatusReachesTheCardAndTheSheet) {
   UR_EXPECT_TRUE(wiring::Contains(status, "dnsSheet_->RefreshStatus();"));
   UR_EXPECT_TRUE(wiring::Contains(CaseBody(events, "case DrawerEvent::DnsSettings:"),
                                   "dnsSheet_->RefreshSettings();"));
-  // a device that came or went takes its status with it
-  UR_EXPECT_TRUE(wiring::Contains(CaseBody(events, "case DrawerEvent::DeviceLifecycle:"),
-                                  "dnsSheet_->RefreshStatus();"));
+  // a device that came or went takes its status with it, and a change the
+  // queue held back (a sync's apply of the mirror) arrives as this event, so
+  // an open sheet re-reads both
+  const std::string lifecycle = CaseBody(events, "case DrawerEvent::DeviceLifecycle:");
+  UR_EXPECT_TRUE(wiring::Before(lifecycle, "dnsSheet_->RefreshSettings();",
+                                "dnsSheet_->RefreshStatus();"));
   // the poll re-reads the status too, for a push that landed while hidden
   const std::string feeds = wiring::FunctionBody(page, "void ConnectPage::RefreshFeeds(bool force) {");
   UR_EXPECT_TRUE(wiring::Contains(feeds, "!DnsStatusSame(status, dnsStatus_)"));

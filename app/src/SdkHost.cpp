@@ -3182,13 +3182,22 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
     }
 
     // The traffic dns settings are mirrored the same way (connect ADBLOCK3RD.md
-    // F2, DnsMirror.hpp), but the mirror meets the daemon's settings at each
-    // sync of the pinned pair rather than here: only then can the two be
-    // compared, and a settings swap the device does not need restarts its dns
-    // resolvers mid-session (ReconcileDnsMirrorLocked). On the command queue,
-    // as the session's remember above: it takes mutex_ and reads the device.
-    subs_.push_back(device_->addRemoteChangeListener([this, rpcGeneration](bool connected) {
-      if (!connected) return;
+    // F2, DnsMirror.hpp). A fresh start's device is new, and its sync runs
+    // ahead of the start's connect, so a marked mirror goes to it here, with
+    // the transport policies: a family filter picked with the tunnel down is in
+    // force from the first lookup.
+    if (rememberOnSync && DnsMirrorMarkedLocked()) {
+      if (auto mirror = localState_->getDnsResolverSettings(); mirror) {
+        device_->setDnsResolverSettings(mirror);
+      }
+    }
+    // Beyond that the mirror meets the daemon's settings at each sync of the
+    // pinned pair (ReconcileDnsMirrorLocked): an unmarked one adopts them, and
+    // an attach's running device takes a marked one only when the two differ,
+    // since a settings swap restarts its dns resolvers mid-session. On the
+    // command queue, as the session's remember above: it takes mutex_ and
+    // reads the device.
+    const auto queueDnsReconcile = [this, rpcGeneration] {
       PostToMain([this, rpcGeneration] {
         RunCommand(ConnectCommandQueue::Kind::Device, [this, rpcGeneration] {
           std::scoped_lock lock(mutex_);
@@ -3196,7 +3205,16 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
           ReconcileDnsMirrorLocked();
         });
       });
+    };
+    subs_.push_back(device_->addRemoteChangeListener([queueDnsReconcile](bool connected) {
+      if (connected) queueDnsReconcile();
     }));
+    // A new listener hears nothing from before it, and setRpcServer dials at
+    // once: a pair that synced already is reconciled now. A second run keeps.
+    if (ReadGuarded<bool>("getRemoteConnected", [&] { return device_->getRemoteConnected(); },
+                          false)) {
+      queueDnsReconcile();
+    }
 
     // Connection choice is data-plane state, so keep this lightweight listener
     // alive for the tray even when every presentation controller is closed.
@@ -4726,6 +4744,15 @@ std::optional<urnet::DnsResolverSettings> SdkHost::SetDnsResolverSettingsLocked(
     localState_->setDnsResolverSettings(taken);
   } catch (const std::exception& e) {
     std::fprintf(stderr, "[sdk] persist dns resolver settings failed: %s\n", e.what());
+    // A home that refused this write (full, read-only) may have refused the
+    // mark's clear as well, leaving it over a stale mirror the next sync would
+    // apply: no mirror at all adopts the daemon's settings instead
+    // (DnsMirror.hpp), and a delete works on a full disk.
+    try {
+      localState_->setDnsResolverSettings(std::nullopt);
+    } catch (const std::exception& removeError) {
+      std::fprintf(stderr, "[sdk] remove dns resolver settings failed: %s\n", removeError.what());
+    }
     return taken;
   }
   if (dns_mirror::MarkedAfterWrite(device_.has_value(), wasMarked)) {
@@ -4766,7 +4793,7 @@ void SdkHost::ReconcileDnsMirrorLocked() {
   const std::optional<urnet::DnsResolverSettings> mirror =
       marked ? localState_->getDnsResolverSettings() : std::nullopt;
   const bool same = mirror && DnsSettingsEqual(*mirror, *daemon);
-  switch (dns_mirror::SyncAction(marked && mirror.has_value(), same)) {
+  switch (dns_mirror::SyncAction(marked, mirror.has_value(), same)) {
     case dns_mirror::Sync::Adopt:
       try {
         localState_->setDnsResolverSettings(daemon);
