@@ -219,7 +219,9 @@ void DnsSheet::Seed(urnet::DnsResolverSettings settings, Edits edits) {
   if (edits == Edits::Drop) {
     pendingCustom_ = false;
     pendingPersonal_.clear();
-    personalInput_ = settings.PresetPersonalId;
+    // the selection's profile id field starts on its saved id, as the sdk
+    // gives it for that field alone (decision 21)
+    personalInput_ = urnet::getDnsPresetPersonalIdForEdit(original_, original_.PresetId);
   }
 
   countryCode_.clear();
@@ -697,7 +699,9 @@ void DnsSheet::RefreshDirty() {
 bool DnsSheet::CustomEdited() const { return !SettingsEqual(draft_, customSeed_); }
 
 bool DnsSheet::PersonalEdited() const {
-  return !pendingPersonal_.empty() || personalInput_ != original_.PresetPersonalId;
+  // against what the field starts on (Seed)
+  return !pendingPersonal_.empty() ||
+         personalInput_ != urnet::getDnsPresetPersonalIdForEdit(original_, original_.PresetId);
 }
 
 // ---- the picks -----------------------------------------------------------------
@@ -978,7 +982,7 @@ void DnsSheet::OnPick(const urnet::DnsPick& pick) {
     // back to what is saved, from a pick tapped that needed more
     pendingCustom_ = false;
     pendingPersonal_.clear();
-    personalInput_ = original_.PresetPersonalId;
+    personalInput_ = urnet::getDnsPresetPersonalIdForEdit(original_, pick.PresetId);
     RebuildPicks();
     return;
   }
