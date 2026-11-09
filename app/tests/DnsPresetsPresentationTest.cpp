@@ -181,8 +181,11 @@ UR_TEST(DnsPresets_TheProviderIsAPlaceholder) {
   }
 }
 
-// The help link is ur.io's DNS providers section, unlocalized as every ur.io
-// link in the app is.
+// The help links are ur.io's DNS providers section and its section on personal
+// ids, the anchors every language keeps, unlocalized as every ur.io link in the
+// app is.
 UR_TEST(DnsPresets_TheHelpLinkIsTheDnsProvidersSection) {
   UR_EXPECT_TRUE(std::string(presets::kHelpUrl) == "https://ur.io/docs/faq#dns-providers");
+  UR_EXPECT_TRUE(std::string(presets::kPersonalIdsHelpUrl) ==
+                 "https://ur.io/docs/faq#dns-personal-ids");
 }

@@ -910,6 +910,10 @@ void DnsSheet::BuildPersonalPanel(Gtk::Box& details, const urnet::DnsPreset& pre
          "In {}, keep the block response at zero IP (0.0.0.0, the default) or NXDOMAIN. REFUSED "
          "and other responses look like an outage."),
       provider)));
+  // ur.io's help on personal ids, as the android and apple apps link it
+  details.append(*MakeMarkupLine(LinkMarkup(
+      dns_presets::kPersonalIdsHelpUrl,
+      Glib::ustring(T_("learn_more", "Learn more")) + "\xC2\xA0\xE2\x86\x97")));
   auto* save = Gtk::make_managed<Gtk::Button>(T_("save", "Save"));
   save->add_css_class("suggested-action");
   save->add_css_class("pill");

@@ -239,8 +239,14 @@ UR_TEST(DnsPresetsWiring_TheSheetsActions) {
   // rebuilds the row
   const std::string row = wiring::FunctionBody(sheet, "Gtk::Widget* DnsSheet::BuildPickRow(");
   UR_EXPECT_TRUE(wiring::Contains(row, "Defer([this, pick] { OnPick(pick); });"));
-  // the help is ur.io's DNS providers section
+  // the help is ur.io's DNS providers section, and under the "Use my account"
+  // field its section on personal ids, as the android and apple apps link it
   UR_EXPECT_TRUE(wiring::Contains(sheet, "dns_presets::kHelpUrl"));
+  const std::string personal = wiring::FunctionBody(sheet, "void DnsSheet::BuildPersonalPanel(");
+  UR_EXPECT_TRUE(wiring::Before(personal, "personalEntry_ = Gtk::make_managed<Gtk::Entry>();",
+                                "dns_presets::kPersonalIdsHelpUrl"));
+  UR_EXPECT_TRUE(wiring::Before(personal, "dns_presets::kPersonalIdsHelpUrl",
+                                "T_(\"learn_more\", \"Learn more\")"));
 }
 
 // URnetwork's own blocker is named apart from the providers that block ads,

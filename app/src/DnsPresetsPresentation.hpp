@@ -31,6 +31,10 @@ struct Text {
 // the same anchor in every language). The app links ur.io pages as they are,
 // never localized.
 inline constexpr const char* kHelpUrl = "https://ur.io/docs/faq#dns-providers";
+// The same page's section on personal ids (where each provider shows the id,
+// and the block response to keep), linked under the "Use my account" field as
+// the android and apple apps link it.
+inline constexpr const char* kPersonalIdsHelpUrl = "https://ur.io/docs/faq#dns-personal-ids";
 
 // The English of a key id the sdk returns: a group heading (DnsPick.GroupKey),
 // a pick's label and the line under it (DnsPick.LabelKey, CopyKey), the
