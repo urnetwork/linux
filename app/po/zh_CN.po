@@ -5331,6 +5331,11 @@ msgctxt "email_e4_reason_trust"
 msgid "I'm not sure I trust a VPN"
 msgstr "不确定能不能信任 VPN"
 
+#. Onboarding emails E3a, E4b, E5b: the terms line under the button. ur.io: the terms line under the yearly plan's button while the welcome offer is active (site_plan_offer_trial_terms). {offer_price} and {regular_price} are localized amounts.
+msgctxt "email_offer_terms"
+msgid "14 days free, then {0} for your first year, then {1}/year. Cancel anytime."
+msgstr "14 天免费，然后第一年 {0}，之后 {1}/年。随时可取消。"
+
 #. Settings: label before the support email address link.
 msgctxt "email_support_at"
 msgid "Email support at"
@@ -10482,6 +10487,16 @@ msgctxt "site_client_limit_upgrade"
 msgid "Your plan is at its concurrent client limit — Pro raises it to 1,000."
 msgstr "您的套餐已达并发客户端上限——Pro可将上限提升至1,000。"
 
+#. Connect, the account panel and the onboarding's connect step: the install body in a browser that can't run the extension (a phone's, iPadOS's, desktop Safari's), which is offered the app instead
+msgctxt "site_connect_app_install_body"
+msgid "This browser can't run the URnetwork extension. Install the app on this device and sign in to this account to connect."
+msgstr "此浏览器无法运行 URnetwork 扩展。请在此设备上安装应用，并登录此账户以连接。"
+
+#. Connect: the install alert's title in a browser that can't run the extension (a phone's, iPadOS's, desktop Safari's), which is offered the app instead
+msgctxt "site_connect_app_install_title"
+msgid "Install the app to connect"
+msgstr "安装应用以连接"
+
 #. Referral link page (ur.io/c): under the referral code to copy, on iOS and on Android when the app did not open.
 msgctxt "site_connect_code_hint"
 msgid "Enter this code when you sign up in the app."
@@ -10581,6 +10596,11 @@ msgstr "使用URnetwork保护此浏览器。"
 msgctxt "site_ext_install"
 msgid "Install the extension"
 msgstr "安装扩展"
+
+#. Connect: after the extension's store opened in another tab, the button that reloads this tab (an open tab sees a newly installed extension only after a reload)
+msgctxt "site_ext_installed_reload"
+msgid "Installed it? Reload this page"
+msgstr "已安装？刷新此页面"
 
 #. Extension status: linked with the browser connection active
 msgctxt "site_ext_proxy_on"

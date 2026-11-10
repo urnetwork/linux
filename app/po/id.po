@@ -5236,6 +5236,11 @@ msgctxt "email_e4_reason_trust"
 msgid "I'm not sure I trust a VPN"
 msgstr "Saya tidak yakin percaya VPN"
 
+#. Onboarding emails E3a, E4b, E5b: the terms line under the button. ur.io: the terms line under the yearly plan's button while the welcome offer is active (site_plan_offer_trial_terms). {offer_price} and {regular_price} are localized amounts.
+msgctxt "email_offer_terms"
+msgid "14 days free, then {0} for your first year, then {1}/year. Cancel anytime."
+msgstr "14 hari gratis, lalu {0} untuk tahun pertamamu, lalu {1}/tahun. Batalkan kapan saja."
+
 #. Settings: label before the support email address link.
 msgctxt "email_support_at"
 msgid "Email support at"
