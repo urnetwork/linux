@@ -5896,10 +5896,10 @@ msgctxt "forgot_password"
 msgid "Forgot your password?"
 msgstr "忘记密码？"
 
-#. Display name for the paid plan. The WIRE value stays "supporter" (subscription_type / current_subscription.plan) because already-shipped app versions parse that string; only what the user reads changes.
+#. Name of the free plan: the plan shown when the network has no Pro subscription, on the account, settings and Connect screens of the apps and ur.io. Free as in no cost, not as in freedom.
 msgctxt "free"
 msgid "Free"
-msgstr "自由"
+msgstr "免费"
 
 #. Call to action
 msgctxt "friends_save_too"
