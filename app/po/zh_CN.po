@@ -32,7 +32,7 @@ msgstr "关于"
 #. 
 msgctxt "access_auth_code_instructions"
 msgid "To Access your Auth Code, create an account and sign in to {link}ur.io{/link}. Head over to Account -> Settings -> Create/Copy Auth code -> Paste -> UR In!"
-msgstr "要获取您的验证码，请创建账户并登录{link}ur.io{/link}。进入账户 -> 设置 -> 创建/复制验证码 -> 粘贴 -> 完成！"
+msgstr "要获取您的授权码，请创建账户并登录{link}ur.io{/link}。进入账户 -> 设置 -> 创建/复制授权码 -> 粘贴 -> 完成！"
 
 #. Account Screen
 msgctxt "account"
@@ -171,7 +171,7 @@ msgstr "拦截此主机"
 #. Windows sign-in screen, browser sign-in sheet: the text above the auth code field that says how the sheet works. ur.io, Google and Apple are names. The Google or Apple sessions are the sign-ins the browser already holds. 'Account → Create auth code' is the way to the Create auth code button on a signed-in device: use this language's labels of Account (account) and Create auth code (site_app_create_auth_code); right-to-left languages point the arrow the other way.
 msgctxt "adv_browser_sign_in_body"
 msgid "Sign in at ur.io in your browser — your password manager and existing Google or Apple sessions work there. Then paste a one-time auth code from any signed-in device (Account → Create auth code)."
-msgstr "请在浏览器中登录 ur.io——您的密码管理器和已登录的 Google 或 Apple 会话都能在那里使用。然后粘贴在任一已登录设备上生成的一次性验证码（账户 → 创建验证码）。"
+msgstr "请在浏览器中登录 ur.io——您的密码管理器和已登录的 Google 或 Apple 会话都能在那里使用。然后粘贴在任一已登录设备上生成的一次性授权码（账户 → 创建授权码）。"
 
 #. Windows sign-in screen: the title of the sheet for signing in through the browser at ur.io with a one-time auth code.
 msgctxt "adv_browser_sign_in_title"
@@ -900,22 +900,22 @@ msgstr "[{ \"include\": \"https://ur.io/.well-known/assetlinks.json\" }]"
 #. Call to action
 msgctxt "auth_code"
 msgid "Auth code"
-msgstr "验证码"
+msgstr "授权码"
 
 #. A message that displays the first and last six characters of an auth code.
 msgctxt "auth_code_2"
 msgid "Auth Code \n\n{0}...{1}"
-msgstr "验证码 \n\n{0}...{1}"
+msgstr "授权码 \n\n{0}...{1}"
 
 #. Used in Main/Account/Settings/AuthCodeCreate/AuthCodeCreate.swift.
 msgctxt "auth_code_create"
 msgid "Auth Code Create"
-msgstr "创建验证码"
+msgstr "创建授权码"
 
 #. Call to action
 msgctxt "auth_code_created"
 msgid "Auth code created"
-msgstr "验证码已创建"
+msgstr "授权码已创建"
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "auth_code_error"
@@ -925,32 +925,32 @@ msgstr "验证代码时出错。请重试或生成新代码。"
 #. Call to action
 msgctxt "auth_code_expires"
 msgid "Auth code expires after 5 minutes"
-msgstr "验证码在5分钟后过期"
+msgstr "授权码在5分钟后过期"
 
 #. Invalid auth code input error message
 msgctxt "auth_code_input_invalid"
 msgid "Auth code invalid or expired. Please login to ur.io to get a valid auth code."
-msgstr "验证码无效或已过期。请登录 ur.io 获取有效验证码。"
+msgstr "授权码无效或已过期。请登录 ur.io 获取有效授权码。"
 
 #. Auth code input label
 msgctxt "auth_code_input_label"
 msgid "Authentication Code"
-msgstr "验证码"
+msgstr "授权码"
 
 #. Call to action
 msgctxt "auth_code_loading"
 msgid "Auth code loading"
-msgstr "正在加载验证码"
+msgstr "正在加载授权码"
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "auth_code_login_button_text"
 msgid "Log in with Auth Code"
-msgstr "使用验证码登录"
+msgstr "使用授权码登录"
 
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "auth_code_login_sheet_header"
 msgid "Auth code login"
-msgstr "验证码登录"
+msgstr "授权码登录"
 
 #. Call to action
 msgctxt "authentication"
@@ -960,12 +960,12 @@ msgstr "认证"
 #. Guidance for someone who has no code yet. Deliberately PLAIN TEXT with no link and no button: app store rules forbid steering a user to an external purchase, but nothing stops us saying where codes come from. Without this, the sheet asks for a code and gives no way to obtain one.
 msgctxt "authentication_code"
 msgid "Authentication code"
-msgstr "验证码"
+msgstr "授权码"
 
 #. Placeholder text for the authentication code input field
 msgctxt "authentication_code_input_placeholder"
 msgid "Enter your one-time auth code"
-msgstr "输入您的一次性验证码"
+msgstr "输入您的一次性授权码"
 
 #. Call to action
 msgctxt "auto"
@@ -2115,7 +2115,7 @@ msgstr "代码"
 #. Error shown when signing in with an auth code fails.
 msgctxt "code_sign_in_failed"
 msgid "Code sign in failed"
-msgstr "使用验证码登录失败"
+msgstr "使用授权码登录失败"
 
 #. Screen reader state of a row that shows or hides a section below it (Advanced, Why?): the section is hidden. The counterpart of expanded.
 msgctxt "collapsed"
@@ -2537,7 +2537,7 @@ msgstr "复制"
 #. Call to action
 msgctxt "copy_auth_code"
 msgid "Copy Auth Code"
-msgstr "复制验证码"
+msgstr "复制授权码"
 
 #. A label for a context menu item that copies a client ID to the clipboard.
 msgctxt "copy_client_id"
@@ -2637,7 +2637,7 @@ msgstr "出了些问题。再试一次。"
 #. Used in Main/Account/Settings/SettingsForm-iOS.swift.
 msgctxt "created_auth_codes_expire_after_5_minutes"
 msgid "Created auth codes expire after 5 minutes"
-msgstr "创建的验证码将在5分钟后失效"
+msgstr "创建的授权码将在5分钟后失效"
 
 #. ur.io Buy data, under the data code: shown when the buyer gave an email address, which the code was also sent to. {email} is that address.
 msgctxt "crypto_code_emailed"
@@ -9346,7 +9346,7 @@ msgstr "Apple"
 #. Sessions screen (Account > Sessions), row line 3, after the sign-in date: the sign-in method of a session created with an auth code made on another signed-in device or with the command-line tools. Not tagged apple: Apple's catalog is keyed by the English source, and auth_code already carries "Auth code" there, so the apple screen reads that entry. Translated as auth_code is, so every platform shows the same words.
 msgctxt "sessions_kind_auth_code"
 msgid "Auth code"
-msgstr "验证码"
+msgstr "授权码"
 
 #. Sessions screen (Account > Sessions), row line 3, after the sign-in date: the sign-in method of a session created when a signed-in device adopted (paired with) a discoverable device.
 msgctxt "sessions_kind_device_adopt"
@@ -9680,12 +9680,12 @@ msgstr "已允许"
 #. App settings: auth code limit error
 msgctxt "site_app_auth_code_limit"
 msgid "Auth code limit reached. Try again later."
-msgstr "已达验证码上限。请稍后重试。"
+msgstr "已达授权码上限。请稍后重试。"
 
 #. App settings: auth code expiry note
 msgctxt "site_app_auth_code_note"
 msgid "Created auth codes expire after 5 minutes"
-msgstr "创建的验证码将在5分钟后过期"
+msgstr "创建的授权码将在5分钟后过期"
 
 #. Reliability: average label
 msgctxt "site_app_average_reliability"
@@ -9850,7 +9850,7 @@ msgstr "国家倍增器"
 #. App settings: create auth code button
 msgctxt "site_app_create_auth_code"
 msgid "Create auth code"
-msgstr "创建验证码"
+msgstr "创建授权码"
 
 #. App payout detail: created time
 msgctxt "site_app_created"
@@ -10840,7 +10840,7 @@ msgstr "位置"
 #. Login stack: hint above the auth code field when signing in with a code generated elsewhere.
 msgctxt "site_login_auth_code_hint"
 msgid "Paste an auth code generated from another device or the command line tools."
-msgstr "粘贴在其他设备上或通过命令行工具生成的验证码。"
+msgstr "粘贴在其他设备上或通过命令行工具生成的授权码。"
 
 #. Login stack: hint above the seedphrase field when signing in with an instant account's seed.
 msgctxt "site_login_seed_hint"
@@ -12382,7 +12382,7 @@ msgstr "登录时出错"
 #. Used in Authenticate/LoginInitial/AuthCodeLoginSheet.swift.
 msgctxt "there_was_an_error_validating_your_auth_code"
 msgid "There was an error validating your auth code. Please try again or generate a new one"
-msgstr "验证您的验证码时出错。请重试或生成新的验证码。"
+msgstr "验证您的授权码时出错。请重试或生成新的授权码。"
 
 #. A warning message displayed in the seedphrase display view.
 msgctxt "this_is_the_only_time_you_ll"
