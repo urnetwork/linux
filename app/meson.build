@@ -760,6 +760,8 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/FailsafeClientLimitTest.cpp',
     'tests/ClientLimitNoticeTest.cpp',
     'tests/ClientLimitWiringTest.cpp',
+    'tests/ProFeaturesNoticeTest.cpp',
+    'tests/ProFeaturesWiringTest.cpp',
     'tests/ManageDevicesPresentationTest.cpp',
     'tests/ManageDevicesWiringTest.cpp',
     'tests/TeardownOrderWiringTest.cpp',
@@ -973,6 +975,9 @@ urnetwork_tests = executable('urnetwork-tests',
               # SlowInternetWiringTest reads the slow-internet feed's host, window,
               # tray, Connect page and Settings call sites, meson.build and the
               # tray art the same way.
+              # ProFeaturesWiringTest reads the Pro features notice's window,
+              # Connect page and device list call sites and meson.build the same
+              # way.
               '-DUR_SRC_DIR="' + meson.project_source_root() / 'src' + '"'] +
              exhaustive_switch_args,
   install : false)

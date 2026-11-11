@@ -840,6 +840,63 @@ void ConnectPage::BuildPaneA() {
   clientLimitAlert_->set_visible(false);
   paneAContent_->append(*clientLimitAlert_);
 
+  // 2.4e a network without Pro whose hosted proxies hold SOCKS or WireGuard
+  // (ProFeaturesNotice.hpp; owner decision 2026-11-11), while the sdk's
+  // controller says so: before enforcement that they are part of Pro, after it
+  // that they stopped. Get Pro is the window's upgrade path, the client limit
+  // notice's; Manage devices the device list, which lists the proxies; the
+  // close withdraws it until its prompt changes (the sdk's). Nothing here
+  // disconnects or holds a connect back.
+  proFeaturesAlert_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+  proFeaturesAlert_->set_margin_top(8);
+  {
+    auto* heading = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    proFeaturesTitle_ = Gtk::make_managed<Gtk::Label>(
+        T_(pro_features::kInUseTitle.key, pro_features::kInUseTitle.english));
+    proFeaturesTitle_->add_css_class("ur-row-title");
+    proFeaturesTitle_->set_xalign(0);
+    proFeaturesTitle_->set_wrap(true);
+    proFeaturesTitle_->set_hexpand(true);
+    CapNatural(proFeaturesTitle_, 20);
+    heading->append(*proFeaturesTitle_);
+    // a small close, named for the screen reader and the pointer alike
+    auto* close = Gtk::make_managed<Gtk::Button>();
+    close->set_icon_name("window-close-symbolic");
+    close->add_css_class("flat");
+    close->set_valign(Gtk::Align::START);
+    close->set_tooltip_text(T_("close", "Close"));
+    kit::SetAccessibleLabel(*close, T_("close", "Close"));
+    close->signal_clicked().connect([this] {
+      if (on_pro_features_dismiss) on_pro_features_dismiss();
+    });
+    heading->append(*close);
+    proFeaturesAlert_->append(*heading);
+    proFeaturesBody_ = Gtk::make_managed<Gtk::Label>(
+        T_(pro_features::kUpgradeBody.key, pro_features::kUpgradeBody.english));
+    proFeaturesBody_->set_xalign(0);
+    proFeaturesBody_->set_wrap(true);
+    CapNatural(proFeaturesBody_, 20);
+    proFeaturesAlert_->append(*proFeaturesBody_);
+    auto* actions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    actions->set_homogeneous(true);
+    auto* upgrade = Gtk::make_managed<Gtk::Button>(T_("get_pro", "Get Pro"));
+    upgrade->add_css_class("ur-pane-primary");
+    upgrade->signal_clicked().connect([this] {
+      if (on_pro_features_upgrade) on_pro_features_upgrade();
+    });
+    actions->append(*upgrade);
+    auto* manage = Gtk::make_managed<Gtk::Button>(
+        T_(manage_devices::kTitleText.key, manage_devices::kTitleText.english));
+    manage->add_css_class("ur-pane-secondary");
+    manage->signal_clicked().connect([this] {
+      if (on_pro_features_manage_devices) on_pro_features_manage_devices();
+    });
+    actions->append(*manage);
+    proFeaturesAlert_->append(*actions);
+  }
+  proFeaturesAlert_->set_visible(false);
+  paneAContent_->append(*proFeaturesAlert_);
+
   // "More options" disclosure (Simple only) gating provide/options/peers
   moreOptionsToggle_ = Gtk::make_managed<Gtk::Button>(
       T_("more_options", "More options"));
@@ -2020,6 +2077,12 @@ void ConnectPage::ApplyClientLimitNotice(const client_limit::Notice& notice) {
   clientLimitBody_->set_text(T_(notice.body.key, notice.body.english));
   clientLimitUpgrade_->set_visible(notice.offersUpgrade);
   clientLimitManage_->set_visible(!notice.offersUpgrade);
+}
+
+void ConnectPage::ApplyProFeaturesNotice(const pro_features::Notice& notice) {
+  proFeaturesAlert_->set_visible(notice.shows);
+  proFeaturesTitle_->set_text(T_(notice.title.key, notice.title.english));
+  proFeaturesBody_->set_text(T_(notice.body.key, notice.body.english));
 }
 
 void ConnectPage::ApplyBalanceRecovery(const balance_notice::RecoveryLines& lines,

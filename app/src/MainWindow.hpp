@@ -37,6 +37,7 @@
 #include "ConnectionRegion.hpp"
 #include "ConnectionRegionSheet.hpp"
 #include "Onboarding.hpp"
+#include "ProFeaturesNotice.hpp"
 #include "ProviderLocationsSheet.hpp"
 #include "RedeemCodeSheet.hpp"
 #include "ReferralsPage.hpp"
@@ -447,7 +448,8 @@ class MainWindow : public Gtk::ApplicationWindow {
   // sent.
   bool appFocused_ = false;
   // The balance store's plan as the window last read it: an upgrade observed
-  // in this run (loaded and free, then Pro) ends a hold that offered it.
+  // in this run (loaded and free, then Pro) ends a hold that offered it, and a
+  // change either way reads the Pro features in use again.
   bool clientLimitPlanLoaded_ = false;
   bool clientLimitPlanPro_ = false;
   void ApplyClientLimit(const client_limit::Reading& reading);
@@ -469,6 +471,48 @@ class MainWindow : public Gtk::ApplicationWindow {
   void OfferSignInManageDevices(client_limit::Prompt prompt);
   // What the device list's retry of the refused sign-in answered.
   void OnRefusedSignInRetry(const AuthResult& result);
+
+  // ---- the Pro features in use (ProFeaturesNotice.hpp) ----------------------
+  // The sdk's ProFeaturesViewController, one per sign-in, on the Api this
+  // process holds: it reads GET /network/proxies with the network credential,
+  // tunnel up or not, when it starts, hourly while open and at each refresh,
+  // and decides the Connect page's notice (its MainPrompt). Opened and started
+  // at a sign-in; closed at a sign-out, which resets the notice (the next
+  // sign-in's alerts again). The list is read again when the window comes to
+  // the front, when the plan's Pro changes and when the device list closes.
+  // Main loop only.
+  std::optional<urnet::ProFeaturesViewController> proFeaturesVc_;
+  std::optional<urnet::Sub> proFeaturesSub_;
+  // What it was opened on: the Api (a network server switch replaces it) and
+  // the network the stored jwt names ("" when unknown).
+  uint64_t proFeaturesApi_ = 0;
+  std::string proFeaturesNetworkId_;
+  // Bumped by every close: a change the listener posted before one lands
+  // nowhere.
+  std::shared_ptr<uint64_t> proFeaturesEpoch_ = std::make_shared<uint64_t>(0);
+  // The window is in front of the user (shown, and a toplevel of the app
+  // active), as the last reading said.
+  bool proFeaturesInFront_ = false;
+  // The prompt the Connect page's notice says, for the log.
+  pro_features::Prompt proFeaturesShown_ = pro_features::Prompt::None;
+  // A sign-in: the controller for its Api and network, started (it loads the
+  // list). Again for the same Api and network it keeps the controller, and
+  // the user's close of its notice, and reads the list again.
+  void OpenProFeatures();
+  // A sign-out, another sign-in or the window's end: the controller closes,
+  // and nothing it posted lands. Touches no widget.
+  void CloseProFeatures();
+  // Reads the network's proxies again; `reason` (a literal) names why in the
+  // log. Nothing while signed out or with no controller.
+  void RefreshProFeatures(const char* reason);
+  // The Connect page's notice from the controller's latest snapshot; none
+  // without a controller.
+  void ApplyProFeatures();
+  // The notice's close: the sdk withdraws it while its prompt stays the same.
+  void DismissProFeaturesNotice();
+  // The window came to the front (shown, and the app focused): the list is
+  // read again.
+  void ObserveProFeaturesFront();
 
   // ---- the slow-internet indicator (SlowInternet.hpp) -----------------------
   // The device's transport delay as SdkHost last published it. Its feed is

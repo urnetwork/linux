@@ -8077,6 +8077,26 @@ msgctxt "pro_benefits_simple"
 msgid "The best version of URnetwork."
 msgstr "URnetworkの最高のバージョン。"
 
+#. Title of a notice on the app's main screen and above the list of proxies (the device list, ur.io's Proxies page), shown before the free plan loses SOCKS and WireGuard: the account is not on Pro, and its hosted proxies hold SOCKS or WireGuard, which are Pro features. pro_features_upgrade_message is the body, and Get Pro the button. Keep Pro as it is.
+msgctxt "pro_features_in_use"
+msgid "Pro features in use"
+msgstr "Pro の機能を使用中"
+
+#. Title of a notice on the app's main screen and above the list of proxies (the device list, ur.io's Proxies page), shown once the free plan no longer includes SOCKS and WireGuard: the account is not on Pro, and its hosted proxies stopped accepting SOCKS and WireGuard connections. pro_features_stopped_message is the body. Keep SOCKS and WireGuard as they are.
+msgctxt "pro_features_stopped"
+msgid "SOCKS and WireGuard stopped working"
+msgstr "SOCKS と WireGuard が使えなくなりました"
+
+#. Body under pro_features_stopped: SOCKS and WireGuard are Pro features, so the hosted proxies of an account on the free plan no longer accept SOCKS or WireGuard connections, while their HTTP and HTTPS proxies keep working. Upgrading to Pro turns them back on: SOCKS at once, WireGuard within 30 minutes. Get Pro is the button beside it. Keep SOCKS, WireGuard, HTTP, HTTPS and Pro as they are.
+msgctxt "pro_features_stopped_message"
+msgid "SOCKS and WireGuard are part of Pro, so they no longer work on your proxies. HTTP and HTTPS still work. Upgrade to turn them back on. WireGuard can take up to 30 minutes to reconnect."
+msgstr "SOCKS と WireGuard は Pro の機能のため、お使いのプロキシでは使えなくなりました。HTTP と HTTPS は引き続き使えます。再び使うにはアップグレードしてください。WireGuard の再接続には最大 30 分かかることがあります。"
+
+#. Body under pro_features_in_use, before the free plan loses SOCKS and WireGuard: the account's hosted proxies use SOCKS or WireGuard, which are part of the Pro plan, and upgrading keeps them working. Get Pro is the button beside it. Keep SOCKS, WireGuard and Pro as they are.
+msgctxt "pro_features_upgrade_message"
+msgid "SOCKS and WireGuard proxies are part of Pro. Upgrade to keep using them."
+msgstr "SOCKS と WireGuard のプロキシは Pro の機能です。引き続き使うにはアップグレードしてください。"
+
 #. Call to action
 msgctxt "processing_payment"
 msgid "Processing payment"

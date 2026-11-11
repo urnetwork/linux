@@ -42,6 +42,15 @@ manage_devices::Snapshot PlainOf(const urnet::ManageDevicesSnapshot& snapshot) {
     plain.error = manage_devices::Error::RemoveFailed;
   }
   plain.addRetryCount = snapshot.AddRetryCount;
+  // the network's Pro features in use, by the sdk's prompt values; a list
+  // from a daemon on an older sdk carries none, and says nothing
+  if (snapshot.ProFeatures) {
+    if (snapshot.ProFeatures->Prompt == urnet::ProFeaturesPromptUpgrade) {
+      plain.proFeatures = pro_features::Prompt::Upgrade;
+    } else if (snapshot.ProFeatures->Prompt == urnet::ProFeaturesPromptStopped) {
+      plain.proFeatures = pro_features::Prompt::Stopped;
+    }
+  }
   return plain;
 }
 
@@ -93,6 +102,24 @@ void ManageDevicesSheet::BuildUi() {
   message_ = MakeLine("", "ur-body");
   message_->set_visible(false);
   root->append(*message_);
+
+  // the network's Pro features in use, above the list of its proxies: the
+  // prompt's title and body with Get Pro, and no close (Render)
+  proFeaturesBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 6);
+  proFeaturesTitle_ = MakeLine("", "ur-row-title");
+  proFeaturesBox_->append(*proFeaturesTitle_);
+  proFeaturesBody_ = MakeLine("", "ur-body");
+  proFeaturesBox_->append(*proFeaturesBody_);
+  proFeaturesGetPro_ = Gtk::make_managed<Gtk::Button>(T_("get_pro", "Get Pro"));
+  proFeaturesGetPro_->set_halign(Gtk::Align::START);
+  proFeaturesGetPro_->signal_clicked().connect([this] {
+    // this modal sheet steps aside, so the upgrade comes up over the window
+    set_visible(false);
+    if (on_get_pro) on_get_pro();
+  });
+  proFeaturesBox_->append(*proFeaturesGetPro_);
+  proFeaturesBox_->set_visible(false);
+  root->append(*proFeaturesBox_);
 
   listBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
   listBox_->append(
@@ -190,6 +217,7 @@ void ManageDevicesSheet::OnHidden() {
   confirming_.reset();
   host_.CloseManageDevices();
   g_message("app: the device list closed");
+  if (on_closed) on_closed();
 }
 
 void ManageDevicesSheet::Apply(const SdkHost::ManageDevicesUpdate& update) {
@@ -223,6 +251,13 @@ manage_devices::Words ManageDevicesSheet::MakeWords() const {
 }
 
 void ManageDevicesSheet::Render() {
+  // the network's Pro features in use, whatever the list's own state says
+  const pro_features::Notice proFeatures = pro_features::NoticeFor(snapshot_.proFeatures);
+  proFeaturesBox_->set_visible(proFeatures.shows);
+  proFeaturesTitle_->set_text(T_(proFeatures.title.key, proFeatures.title.english));
+  proFeaturesBody_->set_text(T_(proFeatures.body.key, proFeatures.body.english));
+  proFeaturesGetPro_->set_visible(pro_features::ListOffersUpgrade(forSignIn_));
+
   const manage_devices::Status status = manage_devices::StatusOf(snapshot_, canManage_);
   if (status.line) {
     statusText_->set_text(T_(status.line->key, status.line->english));
