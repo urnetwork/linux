@@ -8098,6 +8098,26 @@ msgctxt "pro_benefits_simple"
 msgid "The best version of URnetwork."
 msgstr "A melhor versão do URnetwork."
 
+#. Title of a notice on the app's main screen and above the list of proxies (the device list, ur.io's Proxies page), shown before the free plan loses SOCKS and WireGuard: the account is not on Pro, and its hosted proxies hold SOCKS or WireGuard, which are Pro features. pro_features_upgrade_message is the body, and Get Pro the button. Keep Pro as it is.
+msgctxt "pro_features_in_use"
+msgid "Pro features in use"
+msgstr "Funcionalidades Pro em utilização"
+
+#. Title of a notice on the app's main screen and above the list of proxies (the device list, ur.io's Proxies page), shown once the free plan no longer includes SOCKS and WireGuard: the account is not on Pro, and its hosted proxies stopped accepting SOCKS and WireGuard connections. pro_features_stopped_message is the body. Keep SOCKS and WireGuard as they are.
+msgctxt "pro_features_stopped"
+msgid "SOCKS and WireGuard stopped working"
+msgstr "O SOCKS e o WireGuard deixaram de funcionar"
+
+#. Body under pro_features_stopped: SOCKS and WireGuard are Pro features, so the hosted proxies of an account on the free plan no longer accept SOCKS or WireGuard connections, while their HTTP and HTTPS proxies keep working. Upgrading to Pro turns them back on: SOCKS at once, WireGuard within 30 minutes. Get Pro is the button beside it. Keep SOCKS, WireGuard, HTTP, HTTPS and Pro as they are.
+msgctxt "pro_features_stopped_message"
+msgid "SOCKS and WireGuard are part of Pro, so they no longer work on your proxies. HTTP and HTTPS still work. Upgrade to turn them back on. WireGuard can take up to 30 minutes to reconnect."
+msgstr "O SOCKS e o WireGuard fazem parte do Pro, por isso já não funcionam nos seus proxies. O HTTP e o HTTPS continuam a funcionar. Faça upgrade para os voltar a ativar. O WireGuard pode demorar até 30 minutos a voltar a ligar-se."
+
+#. Body under pro_features_in_use, before the free plan loses SOCKS and WireGuard: the account's hosted proxies use SOCKS or WireGuard, which are part of the Pro plan, and upgrading keeps them working. Get Pro is the button beside it. Keep SOCKS, WireGuard and Pro as they are.
+msgctxt "pro_features_upgrade_message"
+msgid "SOCKS and WireGuard proxies are part of Pro. Upgrade to keep using them."
+msgstr "Os proxies SOCKS e WireGuard fazem parte do Pro. Faça upgrade para continuar a utilizá-los."
+
 #. Call to action
 msgctxt "processing_payment"
 msgid "Processing payment"
