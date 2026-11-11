@@ -50,17 +50,39 @@ inline std::string UrDeviceSpec() {
 }
 
 // The client info this app reports with every api request and connect auth
-// (sdk Api.SetClientInfo; REVOKE-UI-FINAL.md §1.13): the device type and the
-// app's build version, nothing more (the SDK adds its own version). The server
-// records it with each observed use of a session, which is what the account's
-// Sessions list shows ("Linux · 2026.10.8"). Both processes report it: the GUI
-// on every Api it takes from its space (SdkHost), the daemon on the space's
-// Api its DeviceLocal is built from (TunnelHost), whose connect auth and
-// requests are uses of the same session.
+// (sdk Api.SetClientInfo; REVOKE-UI-FINAL.md §1.13): the device type, the
+// app's build version and the build's distribution, nothing more (the SDK adds
+// its own version). The server records the first two with each observed use of
+// a session, which is what the account's Sessions list shows ("Linux ·
+// 2026.10.8"), and reads the distribution with the device type for the
+// account's onboarding platform. Both processes report it: the GUI on every
+// Api it takes from its space (SdkHost), the daemon on the space's Api its
+// DeviceLocal is built from (TunnelHost), whose connect auth and requests are
+// uses of the same session.
 inline constexpr const char* kClientInfoDeviceType = "linux";
 
+// meson passes the build's -Ddistribution as UR_DISTRIBUTION (meson_options.txt)
+#ifndef UR_DISTRIBUTION
+#define UR_DISTRIBUTION "linux"
+#endif
+
+// The distribution this build reports, one of the sdk's ClientDistribution
+// values: the AppImage's or the Flatpak's, as the packaging that built it
+// stamped it, else linux, a build whose package is not known. The daemon is
+// that: one daemon build goes into the .deb, the .rpm, the Arch package and
+// the install tarball.
+inline std::string UrDistribution() {
+  const std::string stamped = UR_DISTRIBUTION;
+  for (const char* known : {urnet::ClientDistributionLinuxAppimage, urnet::ClientDistributionLinuxFlatpak}) {
+    if (stamped == known) {
+      return known;
+    }
+  }
+  return urnet::ClientDistributionLinux;
+}
+
 inline void ReportClientInfo(const urnet::Api& api, const std::string& appVersion) {
-  api.setClientInfo(urnet::newClientInfo(kClientInfoDeviceType, appVersion));
+  api.setClientInfo(urnet::newClientInfoWithDistribution(kClientInfoDeviceType, appVersion, UrDistribution()));
 }
 
 // Moves a space stored under the retired ur.network/main key to the current
