@@ -82,6 +82,14 @@ std::vector<snledger::UnavailablePool> UnavailablePoolsOf(
 // The relay's accounts, as its per-pool rows read them.
 std::vector<snledger::RelayAccount> RelayAccountsOf(const urnet::SnClaimStatusResult& status);
 
+// The relay's per-pool rows (snledger::RelayRowsFor on Claim now's sheet,
+// snledger::RelayTileRowsFor on the tile): each pool by name, with its coldkey
+// while the rows are of more than one, its amount, and Pending, Below the claim
+// minimum, Claimed with its transaction, or Unavailable right now in place of
+// an amount. Nothing for no rows.
+void AppendRelayRows(Gtk::Box& into, const std::vector<snledger::RelayRow>& rows,
+                     const std::function<void(const std::string& url)>& openLink);
+
 // Claim now's sheet (4b, 4c, 4d): the balance, where it lands, why it waits,
 // and Claim now or why it can't act, with the device's own claim as the
 // fallback; or URnetwork's claim with its transaction, Done, and when Claim now

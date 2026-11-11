@@ -96,14 +96,19 @@
 > The Settlement v2 tile, its claim sheet and Claim now's sheet show each as a row of its own,
 > named from the store (`sn_ctf_pool` "Capture the flag", `sn_ledger_provider_pool` "Provider pool"
 > beside it). A pool in the SDK's `UnavailablePools` (it asks with `partial=true`) is a row reading
-> `sn_ledger_pool_unavailable` with no figure, never a zero, and the other rows show as usual. Beside
-> a capture the flag account, a row whose claimable is under the relay's `TransferFloorRao` reads
-> `sn_ledger_pool_under_floor` and counts for no claim. The device's one Claim claims every pool in
-> one `SnLedgerClaim` (the SDK batches them in one STClaimBatcher transaction) and reads
-> `sn_ledger_claim_both` while both kinds are claimable; Claim now keeps its label and claims both on
-> the server. The tile ends with the line of this device's latest win from `GET /sn/ctf/client`
-> (`sn_ctf_won_provider_slot` or `sn_ctf_won_extender_slot`, with the country's iso-codes name).
-> With no capture the flag account, as from every server before it, every surface reads as before.
+> `sn_ledger_pool_unavailable` with no figure, never a zero, and the other rows show as usual; if
+> the SDK's own read finds its account at the claim, that account takes the row. Beside a capture
+> the flag account, a row whose claimable is under the relay's `TransferFloorRao`, or that the
+> runtime refuses as `not_claimable: AmountTooLow`, reads `sn_ledger_pool_under_floor` and counts
+> for no claim. The device's one Claim claims every pool in one `SnLedgerClaim` (the SDK batches them
+> in one STClaimBatcher transaction) and reads `sn_ledger_claim_both` while it claims exactly the
+> pool's account and the capture the flag account, as Android's `snLedgerClaimsBoth`; Claim now
+> keeps its label and claims both on the server. With no wallet here the tile lists the primary
+> coldkey's pools under the relay's sum (Android's `snClaimRelayTileRows`). The tile ends with the
+> line of this device's latest win from `GET /sn/ctf/client` (`sn_ctf_won_provider_slot` or
+> `sn_ctf_won_extender_slot`, with the country's iso-codes name). With no capture the flag account
+> and no unavailable pool, as from every server before it, every surface reads as before (unlike
+> Android, which also marks a lone pool account under the floor).
 > The rules are `SnLedgerPresentation.hpp`, host-tested; `URNETWORK_PREVIEW_CTF=1` (the account beside
 > the pool's, and a won slot) and `URNETWORK_PREVIEW_CTF=unavailable` extend the wallet sample.
 

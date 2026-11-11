@@ -1832,8 +1832,9 @@ void LedgerClaimSheet::Rebuild() {
       }
     }
     line->append(*left);
-    // a pool that could not be read has no amount: never a zero
-    if (row.phase != snledger::Phase::Unavailable) {
+    // a pool that could not be read has no amount, nor has an account the SDK
+    // claims before its amount is known: never a zero
+    if (row.phase != snledger::Phase::Unavailable && 0 < row.amountRao) {
       auto* amount = MakeSizedLabel(FormatAlphaRao(row.amountRao), 13, "ur-value");
       amount->set_valign(Gtk::Align::CENTER);
       amount->set_wrap(false);
@@ -3580,18 +3581,14 @@ void EarningsPage::RebuildLedgerTile() {
     kit::SetAccessibleLabel(*value, claimableLabel + ", " + claimable);
     block->append(*value);
     ledgerRows_->append(*block);
-    // the pools the relay's sum leaves out, so it is not read as theirs too
-    const std::vector<snledger::RelayRow> rows = snledger::RelayRowsFor(
-        RelayAccountsOf(*claimStatus_), UnavailablePoolsOf(claimStatus_->unavailable_pools),
-        claimStatus_->transfer_floor_rao);
-    for (const snledger::RelayRow& row : rows) {
-      if (row.status != snledger::RelayStatus::Unavailable) continue;
-      auto* left = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
-      left->append(*MakeSizedLabel(LedgerPoolName(row.pool, row.noId), 12, "ur-caption"));
-      left->append(*MakeWrappedNote(T_("sn_ledger_pool_unavailable", "Unavailable right now"),
-                                    "ur-row-note"));
-      ledgerRows_->append(*left);
-    }
+    // what the sum adds up, pool by pool, and the pools it leaves out, so it is
+    // not read as theirs too
+    AppendRelayRows(*ledgerRows_,
+                    snledger::RelayTileRowsFor(RelayAccountsOf(*claimStatus_),
+                                               claimStatus_->coldkey_ss58.value_or(std::string()),
+                                               UnavailablePoolsOf(claimStatus_->unavailable_pools),
+                                               claimStatus_->transfer_floor_rao),
+                    [this](const std::string& url) { OpenLink(url); });
   }
   for (const snledger::AccountView& account : view.accounts) {
     auto* block = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
@@ -5914,8 +5911,9 @@ void EarningsPage::StartLedgerClaim() {
   if (sheet) sheet->OnSending();
   RebuildUnclaimedTile();
   RebuildLedgerTile();
-  // past the SDK's own bounds for every account it may claim
-  const int watchdogMs = snledger::ClaimWatchdogMs(ledgerAccounts_);
+  // past the SDK's own bounds for every account it may claim, in an unavailable
+  // pool too: the SDK reads the ledger again
+  const int watchdogMs = snledger::ClaimWatchdogMs(ledgerAccounts_, ledgerUnavailable_);
   const uint32_t generation = BeginFlow(ledgerClaimFlow_, watchdogMs, [this] {
     claiming_ = false;
     if (auto open = ledgerClaimSheet_.lock()) {

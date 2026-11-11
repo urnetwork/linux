@@ -213,61 +213,6 @@ std::string RowTransactionLink(const std::string& url) {
   return link;
 }
 
-// The sheet's per-pool rows (snledger::RelayRowsFor): each pool by name, with
-// its coldkey while the rows are of more than one, its amount, and Pending,
-// Below the claim minimum, Claimed with its transaction, or Unavailable right
-// now in place of an amount.
-void AppendRelayRows(Gtk::Box& into, const std::vector<snledger::RelayRow>& rows,
-                     const std::function<void(const std::string& url)>& openLink) {
-  if (rows.empty()) return;
-  auto* list = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 6);
-  for (const snledger::RelayRow& row : rows) {
-    auto* line = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
-    Glib::ustring name = LedgerPoolName(row.pool, row.noId);
-    if (!row.coldkeySs58.empty()) name += " · " + urnet::shortSs58(row.coldkeySs58);
-    auto* title = MakeText(name, "ur-body");
-    title->set_hexpand(true);
-    if (!row.coldkeySs58.empty()) title->set_tooltip_text(row.coldkeySs58);
-    line->append(*title);
-    if (row.status != snledger::RelayStatus::Unavailable && 0 < row.amountRao) {
-      auto* amount = MakeText(urnet::formatAlpha(row.amountRao), "ur-value");
-      amount->set_wrap(false);
-      amount->set_valign(Gtk::Align::CENTER);
-      line->append(*amount);
-    }
-    Glib::ustring status;
-    switch (row.status) {
-      case snledger::RelayStatus::Pending:
-        status = T_("pending_data_key", "Pending");
-        break;
-      case snledger::RelayStatus::UnderFloor:
-        status = T_("sn_ledger_pool_under_floor", "Below the claim minimum");
-        break;
-      case snledger::RelayStatus::Claimed:
-        status = T_("claim_confirmed", "Claimed");
-        break;
-      case snledger::RelayStatus::Unavailable:
-        status = T_("sn_ledger_pool_unavailable", "Unavailable right now");
-        break;
-    }
-    auto* pill = Gtk::make_managed<Gtk::Label>(status);
-    pill->add_css_class("ur-earn-tag");
-    pill->set_valign(Gtk::Align::CENTER);
-    line->append(*pill);
-    list->append(*line);
-    const std::string link =
-        row.status == snledger::RelayStatus::Claimed ? RowTransactionLink(row.txUrl) : std::string();
-    if (!link.empty()) {
-      auto* transaction = MakeLink(T_("transaction", "Transaction"), [openLink, link] {
-        if (openLink) openLink(link);
-      });
-      transaction->set_tooltip_text(link);
-      list->append(*transaction);
-    }
-  }
-  into.append(*list);
-}
-
 // Whether a row links its claim's transaction, which the claimed banner then
 // leaves out.
 bool RowsLinkATransaction(const std::vector<snledger::RelayRow>& rows) {
@@ -366,6 +311,8 @@ static_assert(std::string_view(snledger::kKindPool) == urnet::SnLedgerPoolKindPo
               "snledger::kKindPool is the SDK's SnLedgerPoolKindPool");
 static_assert(std::string_view(snledger::kKindCtf) == urnet::SnLedgerPoolKindCtf,
               "snledger::kKindCtf is the SDK's SnLedgerPoolKindCtf");
+static_assert(snledger::kCtfPoolIdBase == urnet::SnLedgerCtfPoolIdBase,
+              "snledger::kCtfPoolIdBase is the SDK's SnLedgerCtfPoolIdBase");
 static_assert(std::string_view(snledger::kRoleProvider) == urnet::SnCtfRoleProvider,
               "snledger::kRoleProvider is the SDK's SnCtfRoleProvider");
 static_assert(std::string_view(snledger::kRoleExtender) == urnet::SnCtfRoleExtender,
@@ -399,6 +346,57 @@ std::vector<snledger::RelayAccount> RelayAccountsOf(const urnet::SnClaimStatusRe
     out.push_back(row);
   }
   return out;
+}
+
+void AppendRelayRows(Gtk::Box& into, const std::vector<snledger::RelayRow>& rows,
+                     const std::function<void(const std::string& url)>& openLink) {
+  if (rows.empty()) return;
+  auto* list = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 6);
+  for (const snledger::RelayRow& row : rows) {
+    auto* line = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    Glib::ustring name = LedgerPoolName(row.pool, row.noId);
+    if (!row.coldkeySs58.empty()) name += " · " + urnet::shortSs58(row.coldkeySs58);
+    auto* title = MakeText(name, "ur-body");
+    title->set_hexpand(true);
+    if (!row.coldkeySs58.empty()) title->set_tooltip_text(row.coldkeySs58);
+    line->append(*title);
+    if (row.status != snledger::RelayStatus::Unavailable && 0 < row.amountRao) {
+      auto* amount = MakeText(urnet::formatAlpha(row.amountRao), "ur-value");
+      amount->set_wrap(false);
+      amount->set_valign(Gtk::Align::CENTER);
+      line->append(*amount);
+    }
+    Glib::ustring status;
+    switch (row.status) {
+      case snledger::RelayStatus::Pending:
+        status = T_("pending_data_key", "Pending");
+        break;
+      case snledger::RelayStatus::UnderFloor:
+        status = T_("sn_ledger_pool_under_floor", "Below the claim minimum");
+        break;
+      case snledger::RelayStatus::Claimed:
+        status = T_("claim_confirmed", "Claimed");
+        break;
+      case snledger::RelayStatus::Unavailable:
+        status = T_("sn_ledger_pool_unavailable", "Unavailable right now");
+        break;
+    }
+    auto* pill = Gtk::make_managed<Gtk::Label>(status);
+    pill->add_css_class("ur-earn-tag");
+    pill->set_valign(Gtk::Align::CENTER);
+    line->append(*pill);
+    list->append(*line);
+    const std::string link =
+        row.status == snledger::RelayStatus::Claimed ? RowTransactionLink(row.txUrl) : std::string();
+    if (!link.empty()) {
+      auto* transaction = MakeLink(T_("transaction", "Transaction"), [openLink, link] {
+        if (openLink) openLink(link);
+      });
+      transaction->set_tooltip_text(link);
+      list->append(*transaction);
+    }
+  }
+  into.append(*list);
 }
 
 void AppendClaimRelaySection(Gtk::Box& into, const urnet::SnClaimStatusResult& status,
