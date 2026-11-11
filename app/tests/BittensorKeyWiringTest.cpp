@@ -354,6 +354,32 @@ UR_TEST(BittensorKeyWiring_TheEarningsPageDrawsTheFlow) {
                           "claimNowOutcome_ = ClaimNowOutcome{};"));
 }
 
+// Claim now queued (4c) says what the relay does, as the owner decided on
+// 2026-11-11 (BTEASY.md, Claim now and the daily cap): taps go out ahead of the
+// automatic claims, the oldest first, as each day's budget allows, and the
+// coldkey's limit starts when this claim goes through, not at the tap. The
+// tile's note, the sheet after the tap and a tap the server finds already queued
+// carry the relay's period, as a plural; a spent budget says when it renews; the
+// limit's date reads as the same limit. Before, the note said "within today's
+// budget" beside a line saying the claim waits for the next day, and nothing
+// said when the 30 days start.
+UR_TEST(BittensorKeyWiring_ClaimNowQueuedSaysWhatHappens) {
+  const std::string relay = ReadCode("ClaimRelay.cpp");
+  const std::string queued = FunctionBody(relay, "Glib::ustring ClaimNowQueuedNote(");
+  UR_EXPECT_TRUE(Contains(queued, "T_(\"sn_claim_relay_requested\","));
+  UR_EXPECT_TRUE(Before(queued, "if (0 < periodDays) {", "TN_(\"sn_claim_relay_requested_period\","));
+  const std::string note = FunctionBody(relay, "Glib::ustring ClaimNowNote(");
+  UR_EXPECT_TRUE(Contains(
+      note, "if (reason == urnet::SnClaimNowReasonRequested) return ClaimNowQueuedNote(periodDays);"));
+  UR_EXPECT_TRUE(Contains(note, "T_(\"sn_claim_relay_again_on\", \"Your next Claim now opens on {}.\")"));
+  const std::string sheet = FunctionBody(relay, "void ClaimRelaySheet::Apply(");
+  UR_EXPECT_TRUE(
+      Contains(sheet, "MakeText(ClaimNowQueuedNote(status->claim_now_period_days), \"ur-body\")"));
+  UR_EXPECT_TRUE(Contains(sheet, "ClaimNowNote(false, outcome.reason, outcome.nextAtMillis, "
+                                 "status->claim_now_period_days,"));
+  UR_EXPECT_TRUE(!Contains(relay, "within today's budget") && !Contains(relay, "waits for the next day"));
+}
+
 // The new sources are built into the GUI and listed for xgettext.
 UR_TEST(BittensorKeyWiring_TheSourcesAreBuiltAndListed) {
   const std::string meson = ReadRaw("../meson.build");

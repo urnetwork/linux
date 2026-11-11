@@ -10232,15 +10232,15 @@ msgctxt "sn_alpha_symbol"
 msgid "SN25α"
 msgstr "SN25α"
 
-#. Earnings, the settlement v2 tile and the claim sheet: Claim now was used for this address, and works again from this date. The placeholder is a date, as Dec 3.
+#. Earnings, the settlement v2 tile and the claim sheet: a Claim now for this address went through, so the next one opens on this date, 30 days after that claim went through (the limit the queued note names). The placeholder is a date, as Dec 3. Claim now is the button's label; keep it recognizable as that label.
 msgctxt "sn_claim_relay_again_on"
-msgid "Claim now is available again on {}."
-msgstr "「立即領取」將於 {} 再次可用。"
+msgid "Your next Claim now opens on {}."
+msgstr "下一次「立即領取」將於 {} 可用。"
 
-#. Earnings, the settlement v2 tile and the claim sheet: URnetwork's daily budget for paying claim gas is spent, so the claim waits for the next day (UTC).
+#. Earnings, the settlement v2 tile and the claim sheet: URnetwork's daily budget for paying claim gas is spent, so the claim waits. The budget renews every day at 00:00 UTC, and a waiting claim goes out once a day's budget reaches it, which can be later than the next day. Say nothing that promises a day, and keep 00:00 and UTC.
 msgctxt "sn_claim_relay_cap"
-msgid "Today's claim budget is used up, so this waits for the next day. Nothing is lost: this credit never expires."
-msgstr "今日的領取預算已用完，因此將等到翌日。不會有任何損失：這筆餘額永不過期。"
+msgid "Today's claim budget is used up, so this waits. The budget renews each day at 00:00 UTC. Nothing is lost: this credit never expires."
+msgstr "今日的領取預算已用完，因此需要等待。預算每日在 UTC 時間 00:00 重置。不會有任何損失：這筆餘額永不過期。"
 
 #. Earnings, the settlement v2 tile and the claim sheet: a button that asks URnetwork to claim the balance now, without waiting for the automatic threshold. Short: a button.
 msgctxt "sn_claim_relay_claim_now"
@@ -10299,10 +10299,16 @@ msgctxt "sn_claim_relay_refused"
 msgid "The last claim didn't go through. URnetwork tries again later."
 msgstr "上一次領取未成功。URnetwork 稍後會重試。"
 
-#. Earnings, the settlement v2 tile and the claim sheet, after the user tapped Claim now: the claim is in line and goes out before the automatic ones, as long as the day's gas budget lasts.
+#. Earnings, the settlement v2 tile and the claim sheet, after the user tapped Claim now: the claim is in line. URnetwork sends tapped claims before its automatic ones, the oldest request first, as far as each day's gas budget reaches, so it can go out today or on a later day. Say nothing that promises a day. Claim now is the button's label; keep it recognizable as that label.
 msgctxt "sn_claim_relay_requested"
-msgid "Claim now is queued. URnetwork sends it first, within today's budget."
-msgstr "「立即領取」已排隊。URnetwork 會在今日預算內優先傳送。"
+msgid "Claim now is queued. It goes out ahead of automatic claims, in the order requests came in, as each day's budget allows."
+msgstr "「立即領取」已排隊。它排在自動領取之前，按請求到達的先後次序，在每日的預算容許時傳送。"
+
+#. Earnings, the settlement v2 tile and the claim sheet, under the queued Claim now: the Claim now limit (once in this many days, 30 today; the count selects the plural form) starts when URnetwork's claim of this balance is paid, not at the tap, so the next Claim now opens this many days after this claim goes through. Claim now is the button's label; keep it recognizable as that label.
+msgctxt "sn_claim_relay_requested_period"
+msgid "Your next Claim now opens a day after this claim goes through."
+msgid_plural "Your next Claim now opens {} days after this claim goes through."
+msgstr[0] "下一次「立即領取」將在今次領取完成 {} 日後可用。"
 
 #. Earnings, the settlement v2 tile and the claim sheet: a link to claim the balance from this device, paying the gas with the user's gas key (a small TAO account on this device). Keep gas key as the app writes it elsewhere.
 msgctxt "sn_claim_relay_self_claim"
