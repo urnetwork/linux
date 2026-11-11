@@ -26,6 +26,7 @@
 #include "UrTheme.hpp"
 #include "I18n.hpp"
 #include "LocationSelection.hpp"
+#include "PaymentMethodRow.hpp"  // LabelText: a line the SDK hands out
 #include "StatusStripPresentation.hpp"
 #include "Top200Binding.hpp"
 #include "TrayPolicy.hpp"
@@ -3421,10 +3422,10 @@ void MainWindow::OpenCryptoInvoice() {
 void MainWindow::ApplyCryptoInvoiceRow() {
   if (!accountPage_) return;
   const crypto_pay::InvoiceView& invoice = host_.CryptoInvoice().State();
-  const crypto_pay::Text network = crypto_pay::NetworkLine(invoice.asset);
-  accountPage_->ApplyCryptoInvoice(
-      crypto_pay::InvoiceInProgress(invoice),
-      network.key ? Glib::ustring(T_(network.key, network.english)) : Glib::ustring());
+  // the coin's network line, the SDK's, looked up as its labels are
+  const crypto_pay::CoinLine& network = invoice.lines.networkLine;
+  accountPage_->ApplyCryptoInvoice(crypto_pay::InvoiceInProgress(invoice),
+                                   LabelText(network.key, network.english));
 }
 
 void MainWindow::OpenLocationChooser() {

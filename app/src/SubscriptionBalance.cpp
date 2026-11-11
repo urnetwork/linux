@@ -60,6 +60,7 @@ void SubscriptionBalanceStore::Start() {
   // the coins, the crypto term and a failing renewal belong to the network the
   // fetch answers for
   cryptoAssets_.reset();
+  cryptoUnavailableAssets_.reset();
   cryptoTerm_.reset();
   paymentPastDue_ = false;
 
@@ -111,6 +112,7 @@ void SubscriptionBalanceStore::Stop() {
   totals_.Reset();
   referral_.Reset();
   cryptoAssets_.reset();
+  cryptoUnavailableAssets_.reset();
   cryptoTerm_.reset();
   paymentPastDue_ = false;
   purchaseConfirmationTimedOut_ = false;
@@ -254,9 +256,11 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
               for (const auto& a : *result->experiments) experiments_.push_back(a);
             }
             // the enabled coins (omitted when none, and by an older server, so
-            // no crypto method is offered then) and a one-time crypto year
-            // whose grace has not ended
+            // no crypto method is offered then), the ones that are on but
+            // cannot be quoted now (greyed in the selector), and a one-time
+            // crypto year whose grace has not ended
             cryptoAssets_ = result->crypto_assets;
+            cryptoUnavailableAssets_ = result->crypto_unavailable_assets;
             cryptoTerm_ = result->crypto_term;
             // a renewal the store is still retrying after its payment did not
             // go through (left out by an older server): the past-due notice
@@ -335,12 +339,12 @@ void SubscriptionBalanceStore::SetOffer(const urnet::OnboardingOffer& offer) {
 std::vector<crypto_pay::PaymentTabView> SubscriptionBalanceStore::PaymentTabs(
     const std::string& plan) const {
   std::vector<crypto_pay::PaymentTabView> tabs;
-  if (!cryptoAssets_ || cryptoAssets_->empty()) return tabs;
   try {
     // USDC on Solana, Zcash, Monero, then More coins, each coin saying whether
-    // it sells the plan now; no list of coins that cannot be quoted, since the
-    // balance names only those it can sell
-    const auto answer = urnet::cryptoPaymentTabs(cryptoAssets_, urnet::CryptoPaymentAssetList{},
+    // it sells the plan now; a coin the balance lists as unavailable stays in
+    // its place, greyed, and whether there is a selector at all (none while
+    // neither list names a coin) is the SDK's to say
+    const auto answer = urnet::cryptoPaymentTabs(cryptoAssets_, cryptoUnavailableAssets_,
                                                  urnet::StringList{plan});
     if (!answer) return tabs;
     for (const urnet::CryptoPaymentTab& sdkTab : *answer) {
@@ -357,6 +361,10 @@ std::vector<crypto_pay::PaymentTabView> SubscriptionBalanceStore::PaymentTabs(
           coin.labelKey = sdkCoin.label_key;
           coin.iconKey = sdkCoin.icon_key;
           coin.available = sdkCoin.available;
+          // the line under it in the More coins list: the network it is sent on
+          if (const auto lines = urnet::cryptoAssetLinesFor(sdkCoin.asset)) {
+            coin.networkLine = {lines->network_line_key, lines->network_line};
+          }
           tab.coins.push_back(std::move(coin));
         }
       }

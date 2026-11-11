@@ -19,12 +19,14 @@ crypto_pay::InvoiceView NoInvoice() {
   return view;
 }
 
-// The controller's state as the screens read it, with the SDK's answers
-// beside it. The controller already drops a URI that fails the check; it is
-// checked again here because the screens must never show or open one that
-// fails it, whatever produced the state. The QR draws the state's qr text
-// (urnet::cryptoPaymentQrText); a coin without a payment URI scheme (TAO) is
-// paid by hand.
+// The controller's state as the screens read it, its status steps among it,
+// with the SDK's answers beside it. The controller already drops a URI that
+// fails the check; it is checked again here because the screens must never
+// show or open one that fails it, whatever produced the state, and the SDK's
+// check is the whole gate (an empty URI fails it too). The QR draws the
+// state's qr text (urnet::cryptoPaymentQrText); a coin without a payment URI
+// scheme (TAO) is paid by hand. The coin's lines and whether its memo shows
+// are the SDK's too.
 crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {
   crypto_pay::InvoiceView view;
   view.phase = state.phase;
@@ -47,16 +49,31 @@ crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {
   view.remaining = state.remaining;
   view.confirmations = state.confirmations;
   view.confirmationsRequired = state.confirmations_required;
+  if (state.steps) {
+    for (const urnet::CryptoPaymentStep& sdkStep : *state.steps) {
+      crypto_pay::Step step;
+      step.status = sdkStep.status;
+      step.progress = sdkStep.progress;
+      step.confirmations = sdkStep.confirmations;
+      step.confirmationsRequired = sdkStep.confirmations_required;
+      view.steps.push_back(std::move(step));
+    }
+  }
   view.refreshing = state.refreshing;
   view.errorCode = state.error_code;
   view.errorMessage = state.error_message;
-  view.uriChecked =
-      !state.uri.empty() && urnet::checkCryptoPaymentUri(state.asset, state.uri, state.address);
+  view.uriChecked = urnet::checkCryptoPaymentUri(state.asset, state.uri, state.address);
   if (const auto wallets = urnet::cryptoWalletSuggestions(state.asset)) {
     view.wallets.assign(wallets->begin(), wallets->end());
   }
   view.noPaymentLink =
       crypto_pay::IsCoin(state.asset) && urnet::cryptoPaymentUriScheme(state.asset).empty();
+  if (const auto lines = urnet::cryptoAssetLinesFor(state.asset)) {
+    view.lines.networkLine = {lines->network_line_key, lines->network_line};
+    view.lines.networkWarning = {lines->network_warning_key, lines->network_warning};
+    view.lines.noPaymentLinkNote = {lines->no_payment_link_note_key, lines->no_payment_link_note};
+  }
+  view.showsMemo = urnet::cryptoPaymentShowsMemo(state.asset, state.memo);
   return view;
 }
 

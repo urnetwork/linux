@@ -2,6 +2,7 @@
 #include "PaymentMethodRow.hpp"
 
 #include <exception>
+#include <utility>
 
 #include <urnetwork_sdk.hpp>
 
@@ -17,14 +18,6 @@ namespace {
 constexpr int kTabMarkPx = 16;
 constexpr int kCoinMarkPx = 20;
 
-// The catalog's text for a label the SDK hands out: its store key as the
-// context and its English as the msgid (I18n.hpp T_), so a pair the catalog
-// lacks reads the English.
-Glib::ustring LabelText(const std::string& key, const std::string& english) {
-  if (key.empty()) return Glib::ustring(english);
-  return Glib::ustring(T_(key.c_str(), english.c_str()));
-}
-
 // The tab a method sits in (urnet::cryptoPaymentTabId): the asset itself for
 // USDC on Solana, Zcash and Monero, more_coins for TAO, Bitcoin, ETH and SOL,
 // "" for Card. The remembered method selects this tab.
@@ -32,6 +25,46 @@ std::string PaymentTabIdFor(const std::string& method) {
   if (!crypto_pay::IsCoin(method)) return std::string();
   try {
     return urnet::cryptoPaymentTabId(method);
+  } catch (const std::exception&) {
+    return std::string();
+  }
+}
+
+// A tab the other way, as the SDK lays it out (urnet::CryptoPaymentTab): what
+// urnet::cryptoPaymentTabCoin reads. The coins' network lines are no part of
+// the SDK's tab and stay behind.
+urnet::CryptoPaymentTab TabToSdk(const crypto_pay::PaymentTabView& tab) {
+  urnet::CryptoPaymentTab sdkTab;
+  sdkTab.id = tab.id;
+  sdkTab.label = tab.label;
+  sdkTab.label_key = tab.labelKey;
+  sdkTab.icon_keys = tab.iconKeys;
+  urnet::CryptoPaymentCoinList sdkCoins;
+  for (const crypto_pay::PaymentCoinView& coin : tab.coins) {
+    urnet::CryptoPaymentCoin sdkCoin;
+    sdkCoin.asset = coin.asset;
+    sdkCoin.label = coin.label;
+    sdkCoin.label_key = coin.labelKey;
+    sdkCoin.icon_key = coin.iconKey;
+    sdkCoin.available = coin.available;
+    sdkCoins.push_back(std::move(sdkCoin));
+  }
+  sdkTab.coins = std::move(sdkCoins);
+  sdkTab.available = tab.available;
+  return sdkTab;
+}
+
+// The coin a tap on `tab` chooses (urnet::cryptoPaymentTabCoin): `lastChosen`,
+// the coin chosen last in that tab (crypto_pay::LastChosenCoins), while it can
+// be paid with now; else `remembered`, the method remembered on this device,
+// while it is one of the tab's coins that can; else the tab's first that can.
+// "" when none can (the tab cannot be chosen), for a coin this app does not
+// take, and on an SDK error.
+std::string TabCoinFor(const crypto_pay::PaymentTabView& tab, const std::string& lastChosen,
+                       const std::string& remembered) {
+  try {
+    const std::string coin = urnet::cryptoPaymentTabCoin(TabToSdk(tab), lastChosen, remembered);
+    return crypto_pay::IsCoin(coin) ? coin : std::string();
   } catch (const std::exception&) {
     return std::string();
   }
@@ -74,6 +107,11 @@ void SetChoosable(Gtk::Widget& choice, Gtk::Label& label, bool choosable) {
 
 }  // namespace
 
+Glib::ustring LabelText(const std::string& key, const std::string& english) {
+  if (key.empty()) return Glib::ustring(english);
+  return Glib::ustring(T_(key.c_str(), english.c_str()));
+}
+
 Glib::ustring PaymentMethodName(const std::string& method) {
   if (method == crypto_pay::kMethodCard) return T_("pay_method_card", "Card");
   if (!crypto_pay::IsCoin(method)) return Glib::ustring(method);
@@ -88,6 +126,15 @@ std::string PaymentMethodEventStore(const std::string& method) {
   if (!crypto_pay::IsCoin(method)) return urnet::EventStoreStripe;
   try {
     return urnet::cryptoAssetMarket(method);
+  } catch (const std::exception&) {
+    return std::string();
+  }
+}
+
+std::string PaymentMethodEventProduct(const std::string& method) {
+  if (!crypto_pay::IsCoin(method)) return std::string();
+  try {
+    return urnet::cryptoPaymentEventProduct(method);
   } catch (const std::exception&) {
     return std::string();
   }
@@ -133,8 +180,9 @@ bool PaymentMethodRow::SetTabs(const std::vector<crypto_pay::PaymentTabView>& ta
 }
 
 void PaymentMethodRow::Select(const std::string& method) {
+  remembered_ = method;
   selected_ = crypto_pay::MethodSelection(tabs_, method);
-  if (crypto_pay::IsCoin(selected_)) wanted_ = selected_;
+  lastChosen_.Choose(tabs_, selected_);
   Sync();
 }
 
@@ -148,7 +196,7 @@ void PaymentMethodRow::SetEnabled(bool enabled) {
 
 void PaymentMethodRow::Pick(const std::string& method) {
   selected_ = crypto_pay::MethodSelection(tabs_, method);
-  if (crypto_pay::IsCoin(selected_)) wanted_ = selected_;
+  lastChosen_.Choose(tabs_, selected_);
   Sync();
   if (on_select) on_select(selected_);
 }
@@ -179,9 +227,10 @@ void PaymentMethodRow::Rebuild() {
       }
       for (const crypto_pay::PaymentTabView& tab : tabs_) {
         if (tab.id != id) continue;
-        // a tab of one coin is that coin; More coins the coin chosen there
-        // last (or remembered), else its first that can be paid with now
-        const std::string coin = crypto_pay::TabCoinSelection(tab, wanted_);
+        // the SDK's coin for the tap: a tab of one coin is that coin; More
+        // coins the coin chosen there last, else the remembered one, else its
+        // first that can be paid with now
+        const std::string coin = TabCoinFor(tab, lastChosen_.In(tab.id), remembered_);
         if (coin.empty()) {
           Sync();  // nothing to choose there
           return;
@@ -254,9 +303,9 @@ void PaymentMethodRow::Rebuild() {
       Gtk::Label* nameLabel = nullptr;
       Gtk::Box* texts = MakeChoiceText(nameLabel, name, coin.available);
       Glib::ustring description;
-      const crypto_pay::Text network = crypto_pay::NetworkLine(coin.asset);
-      if (network.key) {
-        description = T_(network.key, network.english);
+      const crypto_pay::CoinLine& network = coin.networkLine;
+      if (!network.key.empty()) {
+        description = LabelText(network.key, network.english);
         auto* networkLabel = Gtk::make_managed<Gtk::Label>(description);
         networkLabel->add_css_class("dim-label");
         networkLabel->add_css_class("caption");

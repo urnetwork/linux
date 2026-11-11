@@ -19,8 +19,10 @@
 //     (PostToMain); State() is read and the subscribers run on the GTK loop,
 //     and a change that lands after a sign-out or the host's end is dropped
 //     (epoch).
-//   * State() is crypto_pay::InvoiceView: the controller's state plus the SDK's
-//     two answers beside it, the payment URI check and the wallets that work.
+//   * State() is crypto_pay::InvoiceView: the controller's state (its status
+//     steps among it) plus the SDK's answers beside it: the payment URI check,
+//     the wallets that work, whether the coin has a payment link, its lines
+//     and whether its memo shows.
 //
 // The last payment method chosen on this device is the controller's
 // (Get/SetPaymentMethod, its .payment_method), so a sign-out forgets it with
