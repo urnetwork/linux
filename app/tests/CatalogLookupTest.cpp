@@ -511,10 +511,12 @@ const std::set<std::string>& LinuxTaggedKeys() {
   return keys;
 }
 
-// The crypto payment row's labels (mmm/BTCPAY.md §17.6), which the SDK hands
-// out with each tab and coin as a store key with its English
-// (urnet::cryptoPaymentTabs' label_key and label, urnet::cryptoAssetLabelKey and
-// urnet::cryptoAssetLabel), as the SDK's crypto_pay.go spells them.
+// The crypto payment row's labels and each coin's own lines (mmm/BTCPAY.md
+// §17.6), which the SDK hands out as a store key with its English, as the
+// SDK's crypto_pay.go spells them: the labels with each tab and coin
+// (urnet::cryptoPaymentTabs' label_key and label, urnet::cryptoAssetLabelKey
+// and urnet::cryptoAssetLabel), and each coin's network line, its network's
+// warning and TAO's note under its QR (urnet::cryptoAssetLinesFor).
 // PaymentMethodRow.cpp LabelText looks each up with T_(key, English), so the
 // English must be the catalog's msgid byte for byte.
 const std::vector<std::pair<std::string, std::string>>& SdkCryptoLabels() {
@@ -527,20 +529,46 @@ const std::vector<std::pair<std::string, std::string>>& SdkCryptoLabels() {
       {"pay_method_bitcoin", "Bitcoin"},
       {"pay_method_eth", "ETH"},
       {"pay_method_sol", "SOL"},
+      // each coin's lines
+      {"crypto_network_usdc", "USDC on Solana"},
+      {"crypto_network_zcash", "Zcash, shielded"},
+      {"crypto_network_monero", "Monero"},
+      {"crypto_network_tao", "Bittensor network"},
+      {"crypto_network_bitcoin", "Bitcoin network"},
+      {"crypto_network_eth", "Ethereum mainnet"},
+      {"crypto_network_sol", "Solana (native SOL)"},
+      {"usdc_solana_network_only",
+       "Send USDC on the Solana network only. USDC sent on any other network will not arrive."},
+      {"crypto_invoice_tao_network_only",
+       "Send only TAO on the Bittensor network to this address. TAO sent on any other network won't "
+       "be credited."},
+      {"crypto_invoice_bitcoin_network_only",
+       "Send only Bitcoin on the Bitcoin network to this address. Bitcoin sent on any other network "
+       "won't be credited."},
+      {"crypto_invoice_eth_network_only",
+       "Send only ETH on Ethereum mainnet to this address. Tokens and ETH on other networks, such as "
+       "Base or Arbitrum, won't be credited."},
+      {"crypto_invoice_sol_network_only",
+       "Send only SOL on the Solana network to this address. Tokens, including USDC, won't be "
+       "credited."},
+      {"crypto_invoice_tao_no_payment_link",
+       "TAO has no payment link, so this QR code holds only the address. Enter the exact amount in "
+       "your wallet."},
   };
   return labels;
 }
 
 // Keys tagged linux that the app looks up only where the scan cannot see, each
-// with where: the crypto payment row's labels (SdkCryptoLabels). Every other
-// lookup is a T_/TN_ call or a table pair the scan reads.
+// with where: the crypto payment row's labels and each coin's lines
+// (SdkCryptoLabels). Every other lookup is a T_/TN_ call or a table pair the
+// scan reads.
 const std::map<std::string, std::string>& UnscannedTaggedKeys() {
   static const std::map<std::string, std::string> keys = [] {
     std::map<std::string, std::string> out;
     for (const auto& label : SdkCryptoLabels()) {
       out.emplace(label.first,
-                  "a crypto payment label the SDK hands out with its English, looked up by "
-                  "PaymentMethodRow.cpp LabelText");
+                  "a crypto payment label or a coin's line the SDK hands out with its English, "
+                  "looked up by PaymentMethodRow.cpp LabelText");
     }
     return out;
   }();
