@@ -6114,7 +6114,7 @@ msgctxt "instant_account_no_email_password"
 msgid "No email or password needed. Your account is secured by a seedphrase."
 msgstr "無需電郵或密碼。您的帳戶由助記詞保護。"
 
-#. Call to action
+#. Shown on the Connect screen when the account's data balance has run out: a balance of data, not of money.
 msgctxt "insufficient_balance"
 msgid "Insufficient balance"
 msgstr "餘額不足"
