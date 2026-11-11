@@ -15,6 +15,8 @@
 
 #include "ExtenderProvidePresentation.hpp"
 
+using urnw::extender::PortMappingRow;
+using urnw::extender::PortMappingRowOf;
 using urnw::extender::ProvideDot;
 using urnw::extender::ProvideRow;
 using urnw::extender::ProvideRowFor;
@@ -85,11 +87,18 @@ struct FullStatus {
   int64_t LastPeerPingTime{};
   int64_t LimitedBySubnetsCount{};
   int64_t LimitedBySourceCount{};
+  std::string PortMapping{};
+  std::string PortMappingMethod{};
+  std::string PortMappingExternalIp{};
+  int64_t PortMappingTcpPort{};
+  int64_t PortMappingUdpPort{};
+  int64_t PortMappingDnsPort{};
+  std::string PortMappingError{};
   int64_t ConnectionCount{};
 };
 
-// A supported status with the fields the reading takes; the other nineteen stay
-// at their zero values.
+// A supported status with the fields the reading takes; the other twenty-six
+// stay at their zero values.
 FullStatus SupportedStatus(const std::string& state, const std::string& errorCase = std::string(),
                            const std::string& reason = std::string(), bool activatedV4 = false,
                            bool activatedV6 = false, bool refused = false) {
@@ -327,9 +336,10 @@ UR_TEST(ExtenderProvide_EqualReadingsCompareEqual) {
 }
 
 // The reading takes Supported, State, ErrorCase, Reason, ActivatedV4,
-// ActivatedV6 and LastActivationRefused and nothing else: the other nineteen
+// ActivatedV6 and LastActivationRefused and nothing else: the other twenty-six
 // fields, set to noise, leave every reading as it was. The tcp 443 bind error
-// reaches the row as the Reason of its case, never as TcpUnavailableError.
+// reaches the row as the Reason of its case, never as TcpUnavailableError, and
+// the router port mapping's state never moves the row.
 UR_TEST(ExtenderProvide_ReadsOnlyTheContractFields) {
   FullStatus unsupported = SupportedStatus("active", "", "", true, true);
   unsupported.Supported = false;
@@ -364,6 +374,13 @@ UR_TEST(ExtenderProvide_ReadsOnlyTheContractFields) {
     noisy.LastPeerPingTime = 1757800000002;
     noisy.LimitedBySubnetsCount = 3;
     noisy.LimitedBySourceCount = 4;
+    noisy.PortMapping = "failed";
+    noisy.PortMappingMethod = "upnp";
+    noisy.PortMappingExternalIp = "198.51.100.7";
+    noisy.PortMappingTcpPort = 8443;
+    noisy.PortMappingUdpPort = 8443;
+    noisy.PortMappingDnsPort = 14053;
+    noisy.PortMappingError = "no gateway answered";
     noisy.ConnectionCount = 42;
     const std::string label = reading.State + "/" + reading.ErrorCase;
     UR_EXPECT_TRUE_MSG(label, RowOf(reading, true) == RowOf(noisy, true));
@@ -476,6 +493,64 @@ UR_TEST(SpeedTests_IndependentOfTheExtenderSwitchAndOnByDefault) {
   // a hidden row compares equal to every other hidden row, so a push that
   // changes nothing is dropped
   UR_EXPECT_TRUE(SpeedTestsRowOf(ProvideRow(), true, [] { return false; }) == SpeedTestsRow());
+}
+
+// The router port mapping switch under it (connect EXTENDER.md S8): shown only
+// beside a visible Extender row and where its write has a taker, hidden
+// otherwise, and its setting read once, only for a row that shows.
+UR_TEST(PortMapping_ShowsOnlyBesideTheExtenderRowWithAWriter) {
+  int reads = 0;
+  const auto on = [&reads] {
+    ++reads;
+    return true;
+  };
+  const ProvideRow extenderShown =
+      ProvideRowOf(std::optional<FullStatus>(SupportedStatus("active", "", "", true)),
+                   [] { return true; });
+  const ProvideRow extenderHidden = ProvideRowOf(std::optional<FullStatus>(), [] { return true; });
+  const ProvideRow extenderUnsupported =
+      ProvideRowOf(std::optional<FullStatus>(FullStatus()), [] { return true; });
+  UR_EXPECT_TRUE(extenderShown.visible);
+  UR_EXPECT_FALSE(extenderHidden.visible);
+  UR_EXPECT_FALSE(extenderUnsupported.visible);
+
+  UR_EXPECT_FALSE(PortMappingRowOf(extenderHidden, true, on).visible);
+  UR_EXPECT_FALSE(PortMappingRowOf(extenderUnsupported, true, on).visible);
+  UR_EXPECT_FALSE(PortMappingRowOf(extenderShown, false, on).visible);
+  UR_EXPECT_FALSE(PortMappingRowOf(extenderHidden, false, on).visible);
+  UR_EXPECT_EQ(0, reads);
+  // a hidden row never reads as on, whatever the setting
+  UR_EXPECT_FALSE(PortMappingRowOf(extenderHidden, true, on).on);
+
+  const PortMappingRow shown = PortMappingRowOf(extenderShown, true, on);
+  UR_EXPECT_TRUE(shown.visible);
+  UR_EXPECT_TRUE(shown.on);
+  UR_EXPECT_EQ(1, reads);
+}
+
+// It shows whatever the Extender switch's position, and is off by default on
+// every app (owner, 2026-11-11): the switch starts off until a reading says
+// otherwise.
+UR_TEST(PortMapping_IndependentOfTheExtenderSwitchAndOffByDefault) {
+  for (const bool extenderOn : {false, true}) {
+    const ProvideRow extender = ProvideRowOf(
+        std::optional<FullStatus>(SupportedStatus(extenderOn ? "active" : "off", "", "", true)),
+        [extenderOn] { return extenderOn; });
+    const PortMappingRow row = PortMappingRowOf(extender, true, [] { return false; });
+    UR_EXPECT_TRUE(row.visible);
+    UR_EXPECT_FALSE(row.on);
+  }
+  UR_EXPECT_FALSE(PortMappingRow().on);
+  UR_EXPECT_FALSE(PortMappingRow().visible);
+  // a hidden row compares equal to every other hidden row, so a push that
+  // changes nothing is dropped
+  UR_EXPECT_TRUE(PortMappingRowOf(ProvideRow(), true, [] { return true; }) == PortMappingRow());
+  // and a shown row that changes only the setting is a change
+  const ProvideRow extender =
+      ProvideRowOf(std::optional<FullStatus>(SupportedStatus("active", "", "", true)),
+                   [] { return true; });
+  UR_EXPECT_TRUE(PortMappingRowOf(extender, true, [] { return true; }) !=
+                 PortMappingRowOf(extender, true, [] { return false; }));
 }
 
 // Every key and English source the row can emit is the catalog's, byte for

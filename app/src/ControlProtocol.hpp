@@ -361,6 +361,7 @@ enum class Verb {
   ProviderStats,
   SetProvideExtender,
   SetMeasurementsEnabled,
+  SetProvideExtenderPortMapping,
   ResetExtenders,
   SetKillSwitch,
   LocationOverrideAvailable,
@@ -383,6 +384,7 @@ inline const char* ToString(Verb v) {
     case Verb::ProviderStats: return "provider_stats";
     case Verb::SetProvideExtender: return "set_provide_extender";
     case Verb::SetMeasurementsEnabled: return "set_measurements_enabled";
+    case Verb::SetProvideExtenderPortMapping: return "set_provide_extender_port_mapping";
     case Verb::ResetExtenders: return "reset_extenders";
     case Verb::SetKillSwitch: return "set_kill_switch";
     case Verb::LocationOverrideAvailable: return "location_override_available";
@@ -406,6 +408,7 @@ inline Verb VerbFromString(const std::string& s) {
   if (s == "provider_stats") return Verb::ProviderStats;
   if (s == "set_provide_extender") return Verb::SetProvideExtender;
   if (s == "set_measurements_enabled") return Verb::SetMeasurementsEnabled;
+  if (s == "set_provide_extender_port_mapping") return Verb::SetProvideExtenderPortMapping;
   if (s == "reset_extenders") return Verb::ResetExtenders;
   if (s == "set_kill_switch") return Verb::SetKillSwitch;
   if (s == "location_override_available") return Verb::LocationOverrideAvailable;
@@ -470,6 +473,10 @@ inline const char* ActionIdForVerb(Verb verb, bool is_log_tail, bool cross_uid) 
     // set_measurements_enabled as well: the lag.dev speed tests switch under
     // the Extender switch, a setting of the same space that rides on the role.
     case Verb::SetMeasurementsEnabled:
+    // set_provide_extender_port_mapping as well: the router port mapping switch
+    // under the speed tests switch, another setting of that space that rides on
+    // the role, and one that opens ports on the router.
+    case Verb::SetProvideExtenderPortMapping:
     // reset_extenders as well: the daemon's spaces are shared by every user of
     // this machine, so a reset changes what another uid's live session dials
     // through, and that costs the take-over action.
@@ -523,6 +530,8 @@ inline bool VerbWantsInteraction(Verb verb, bool is_log_tail) {
     case Verb::SetProvideExtender:
     // a press of the lag.dev speed tests switch under it
     case Verb::SetMeasurementsEnabled:
+    // and of the router port mapping switch under that
+    case Verb::SetProvideExtenderPortMapping:
     // a confirmed press of Account > Extenders' Reset extenders
     case Verb::ResetExtenders:
     case Verb::SetKillSwitch:
@@ -1097,6 +1106,36 @@ inline void from_json(const nlohmann::json& j, SetMeasurementsEnabledRequest& v)
     throw std::runtime_error("set_measurements_enabled requires measurements_enabled (a boolean)");
   }
   v.measurements_enabled = it->get<bool>();
+}
+
+// ---- set_provide_extender_port_mapping -------------------------------------
+// The router port mapping switch while no tunnel session's device takes it
+// (connect EXTENDER.md S8): whether the extender role asks the router, by UPnP,
+// NAT-PMP or PCP, to forward its ports (tcp 443, udp 443 and udp 4053) to this
+// device. Off by default on every app (owner, 2026-11-11). Like the provider
+// extender setting it belongs to the network space
+// (`.provide_extender_port_mapping`) and every device reads it from its space
+// when it starts, but the sdk writes it only through a device, so the daemon
+// writes it through the device that runs and refuses with none
+// (TunnelHost::SetProvideExtenderPortMapping). Gated like set_provide_extender.
+// A new verb, additive within protocol v1: the GUI sends it only to a daemon
+// whose provider_stats said it takes it (provide_extender_port_mapping_writable).
+struct SetProvideExtenderPortMappingRequest {
+  bool provide_extender_port_mapping = false;
+};
+inline void to_json(nlohmann::json& j, const SetProvideExtenderPortMappingRequest& v) {
+  j["provide_extender_port_mapping"] = v.provide_extender_port_mapping;
+}
+// Strict, as set_provide_extender's: a write whose value did not arrive must
+// not write a default the user never chose, least of all one that opens ports
+// on the router.
+inline void from_json(const nlohmann::json& j, SetProvideExtenderPortMappingRequest& v) {
+  auto it = j.find("provide_extender_port_mapping");
+  if (it == j.end() || !it->is_boolean()) {
+    throw std::runtime_error(
+        "set_provide_extender_port_mapping requires provide_extender_port_mapping (a boolean)");
+  }
+  v.provide_extender_port_mapping = it->get<bool>();
 }
 
 // ---- reset_extenders -------------------------------------------------------
@@ -1737,6 +1776,13 @@ struct ProviderStatsReply {
   // stays hidden while disconnected, and the setting still applies.
   bool measurements_enabled = true;
   bool measurements_enabled_writable = false;
+  // The router port mapping setting read beside them
+  // (getProvideExtenderPortMapping), the switch under the speed tests switch,
+  // and that this daemon takes its write (set_provide_extender_port_mapping). A
+  // daemon that predates them sends neither, which reads as the setting off and
+  // no writer: that switch stays hidden while disconnected.
+  bool provide_extender_port_mapping = false;
+  bool provide_extender_port_mapping_writable = false;
 };
 inline void to_json(nlohmann::json& j, const ProviderStatsReply& v) {
   j["running"] = v.running;
@@ -1753,6 +1799,8 @@ inline void to_json(nlohmann::json& j, const ProviderStatsReply& v) {
   j["provide_extender_writable"] = v.provide_extender_writable;
   j["measurements_enabled"] = v.measurements_enabled;
   j["measurements_enabled_writable"] = v.measurements_enabled_writable;
+  j["provide_extender_port_mapping"] = v.provide_extender_port_mapping;
+  j["provide_extender_port_mapping_writable"] = v.provide_extender_port_mapping_writable;
 }
 inline void from_json(const nlohmann::json& j, ProviderStatsReply& v) {
   detail::Get(j, "running", v.running);  // absent = nothing runs
@@ -1770,6 +1818,10 @@ inline void from_json(const nlohmann::json& j, ProviderStatsReply& v) {
   detail::Get(j, "measurements_enabled", v.measurements_enabled);  // absent = on
   detail::Get(j, "measurements_enabled_writable",
               v.measurements_enabled_writable);  // absent = no writer
+  detail::Get(j, "provide_extender_port_mapping",
+              v.provide_extender_port_mapping);  // absent = off
+  detail::Get(j, "provide_extender_port_mapping_writable",
+              v.provide_extender_port_mapping_writable);  // absent = no writer
 }
 
 // ---- upload_logs -----------------------------------------------------------

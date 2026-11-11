@@ -42,6 +42,7 @@ const std::vector<std::string>& MainReadGetters() {
       "ProviderIdentities", "ConnectedProviderLocations", "SelectedProviderClientId",
       "GetExtenderStatus", "GetExtenderProvideStatus", "ProviderExtenderProvideStatus",
       "GetProvideExtender", "MeasurementsSwitchWritable", "GetMeasurementsEnabled",
+      "PortMappingSwitchWritable", "GetProvideExtenderPortMapping",
       "GetExtenderSettings", "GetPrivateExtender", "GetProvideControlMode", "ProvideEnabled"};
   return names;
 }
