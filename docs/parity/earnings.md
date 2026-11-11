@@ -85,8 +85,10 @@
 > - **Claims:** with no wallet here the Settlement v2 tile shows exactly while the SDK's
 >   `ShowsTile` says so. URnetwork's claim (`ShowsClaimed`, 4d) draws "Claimed", the amount and the
 >   coldkey on lines of their own (the store has no sentence for the mocks' banner yet), the
->   Transaction link to `ClaimTxUrl` (an https page only), Done, and "Claim now is available again
->   on {date}" from `ClaimNowNextAtMillis`. The points card counts a key the consent pays here as
+>   Transaction link to `ClaimTxUrl` (an https page only), Done, and "Your next Claim now opens on
+>   {date}" from `ClaimNowNextAtMillis`. A queued Claim now says it goes out ahead of automatic
+>   claims, in the order requests came in, as each day's budget allows, and that the next one opens
+>   the relay's period after this claim goes through (owner, 2026-11-11). The points card counts a key the consent pays here as
 >   the network's coldkey (`PaysKeyOnThisDevice`).
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
