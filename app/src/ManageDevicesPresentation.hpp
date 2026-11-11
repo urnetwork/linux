@@ -23,6 +23,8 @@
 #include <string>
 #include <vector>
 
+#include "ProFeaturesNotice.hpp"
+
 namespace urnw {
 namespace manage_devices {
 
@@ -85,6 +87,10 @@ struct Snapshot {
   Error error = Error::None;
   // removals that freed a slot and added this device again
   int64_t addRetryCount = 0;
+  // the network's Pro features in use, read from the same proxies list
+  // (ProFeaturesStatus.Prompt): what the sheet says above the rows
+  // (ProFeaturesNotice.hpp)
+  pro_features::Prompt proFeatures = pro_features::Prompt::None;
 };
 
 // What the platform lends the words: the catalog (T_), the store's {}

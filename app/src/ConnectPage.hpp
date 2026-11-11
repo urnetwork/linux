@@ -47,6 +47,7 @@
 #include "InsufficientBalanceNotice.hpp"
 #include "IpFamilyStatusRow.hpp"
 #include "PaneKit.hpp"
+#include "ProFeaturesNotice.hpp"
 #include "QuickAction.hpp"
 #include "SdkHost.hpp"
 #include "SlowInternet.hpp"
@@ -102,6 +103,12 @@ class ConnectPage : public Gtk::Box {
   // what to do, with Get Pro on a free plan and Retry. The connect action's
   // Disconnect stays the way out; nothing here disconnects.
   void ApplyClientLimitNotice(const client_limit::Notice& notice);
+  // The Pro features notice under it (ProFeaturesNotice.hpp; owner decision
+  // 2026-11-11): a network without Pro whose hosted proxies hold SOCKS or
+  // WireGuard, while the sdk's controller says so (its MainPrompt), with Get
+  // Pro, Manage devices and a close. Nothing here disconnects or holds a
+  // connect back.
+  void ApplyProFeaturesNotice(const pro_features::Notice& notice);
   // The plan's say over the status row (health::WithPlan). Asked before the
   // reading it goes with, so the row never paints the wrong word in between.
   void SetBalancePlan(bool pro, bool dataLimit);
@@ -199,6 +206,12 @@ class ConnectPage : public Gtk::Box {
   std::function<void()> on_client_limit_retry;
   // its Manage devices on a Pro plan (the window's device list)
   std::function<void()> on_client_limit_manage_devices;
+  // the Pro features notice's Get Pro (the client limit notice's upgrade
+  // path), Manage devices (the same device list, which lists the proxies) and
+  // close (the sdk's dismissal, which holds while the prompt stays the same)
+  std::function<void()> on_pro_features_upgrade;
+  std::function<void()> on_pro_features_manage_devices;
+  std::function<void()> on_pro_features_dismiss;
   // The window's status strip, which shows on every destination what this page
   // says: the status row's word and dot after each render (the word the hero is
   // named by, "Disconnecting…" included), and the provider row's text.
@@ -589,6 +602,11 @@ class ConnectPage : public Gtk::Box {
   Gtk::Label* clientLimitBody_ = nullptr;
   Gtk::Button* clientLimitUpgrade_ = nullptr;
   Gtk::Button* clientLimitManage_ = nullptr;
+  // the Pro features notice (ApplyProFeaturesNotice): its title and body
+  // follow the prompt
+  Gtk::Box* proFeaturesAlert_ = nullptr;
+  Gtk::Label* proFeaturesTitle_ = nullptr;
+  Gtk::Label* proFeaturesBody_ = nullptr;
   Gtk::Button* hero_ = nullptr;
   ConnectCanvas* canvas_ = nullptr;
   Gtk::Label* locationText_ = nullptr;

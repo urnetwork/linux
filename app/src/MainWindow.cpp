@@ -271,6 +271,8 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     if (developerPage_) developerPage_->SetPresenting(windowVisible_);
     // the slow numbers are read sooner while the window shows the pill's
     ScheduleSlowRefresh();
+    // a window back in front reads the network's proxies again
+    ObserveProFeaturesFront();
     if (windowVisible_) {
       // The reading is RE-READ, never replayed, but not here: the queued
       // SetPresentationActive(true) above hands on the reading its own
@@ -360,12 +362,18 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     const bool planLoaded = balance_.HasFetched();
     const bool planPro = balance_.IsPro();
     const bool upgraded = clientLimitPlanLoaded_ && !clientLimitPlanPro_ && planLoaded && planPro;
+    // ...and either way, a purchase or a lapse, the Pro features notice reads
+    // the network's proxies again: the server reads the plan beside them live
+    const bool planChanged = clientLimitPlanLoaded_ && planLoaded && planPro != clientLimitPlanPro_;
     clientLimitPlanLoaded_ = planLoaded;
     clientLimitPlanPro_ = planPro;
     // a purchase is a change the server confirmed: the change retry, past the
     // backoff of any retries refused before it
     if (upgraded && client_limit::Held(clientLimitReading_)) {
       host_.RetryClientLimitAfterChange("the plan turned Pro");
+    }
+    if (planChanged) {
+      RefreshProFeatures(planPro ? "the plan turned Pro" : "the plan is no longer Pro");
     }
   });
 
@@ -1316,6 +1324,8 @@ void MainWindow::ApplyPageBreakpoint(int widthDip) {
 // screen — a tray app spends most of its life hidden, and a slideshow nobody
 // can see is pure wakeups.
 MainWindow::~MainWindow() {
+  // the Pro features controller's posts carry `this`: none lands after it
+  CloseProFeatures();
   host_.CryptoInvoice().Unsubscribe(cryptoInvoiceSubscription_);
   geometrySave_.disconnect();
   slowNoticeTimer_.disconnect();
@@ -1382,6 +1392,8 @@ void MainWindow::ScheduleAppFocusSync() {
     balance_.SetAppFocused(focused);
     // in front, the client limit notice is on screen and no notification goes
     appFocused_ = focused;
+    // and the app back in front reads the network's proxies again
+    ObserveProFeaturesFront();
     if (const auto away = appFocusAway_.Read(focused, g_get_monotonic_time() / 1000)) {
       OnAppReturned(*away);
     }
@@ -1890,6 +1902,12 @@ void MainWindow::BuildHome() {
   connectPage_->on_client_limit_retry = [this] { host_.RetryClientLimit("the notice's Retry"); };
   // and on a Pro plan, the device list, where a removal frees a slot
   connectPage_->on_client_limit_manage_devices = [this] { ShowManageDevicesSheet(false, {}); };
+  // the Pro features notice under it: Get Pro is the same upgrade path (it
+  // leaves the provide mode as it is), Manage devices the same list, and its
+  // close the sdk's dismissal (ProFeaturesNotice.hpp)
+  connectPage_->on_pro_features_upgrade = [this] { OpenUpgrade(); };
+  connectPage_->on_pro_features_manage_devices = [this] { ShowManageDevicesSheet(false, {}); };
+  connectPage_->on_pro_features_dismiss = [this] { DismissProFeaturesNotice(); };
   // The strip's state and provider are the page's own render, as on Windows,
   // so the strip and the Connect page cannot disagree.
   connectPage_->on_status_rendered = [this](const Glib::ustring& text, const std::string& dot) {
@@ -2605,6 +2623,9 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
     // the network's crypto invoice controller, with the payment this device
     // saved before a quit (Account's "Payment in progress")
     host_.CryptoInvoice().SignIn();
+    // the Pro features controller of this sign-in, on the Api this process
+    // holds, so it reads the proxies whether or not the tunnel is up
+    OpenProFeatures();
     // A new session invalidates every destination's cache; the one currently
     // on screen reloads now, the rest reload when they are next navigated to.
     if (accountPage_) accountPage_->Load();
@@ -2629,6 +2650,10 @@ void MainWindow::ApplyAuthState(bool loggedIn) {
     ObserveClientLimit();
     clientLimitPlanLoaded_ = false;
     clientLimitPlanPro_ = false;
+    // ...and its Pro features controller with its notice: the next sign-in's
+    // controller alerts again (ProFeaturesNotice.hpp)
+    CloseProFeatures();
+    ApplyProFeatures();
     // a connect waiting on a balance read belonged to that session, and so
     // does one waiting on the balance itself
     CancelBalanceCheck();
@@ -3057,7 +3082,14 @@ void MainWindow::ApplyClientLimitNotification(const std::string& trackerAction) 
 // ---- the device list (ManageDevicesSheet) ---------------------------------------
 
 void MainWindow::ShowManageDevicesSheet(bool forSignIn, const Glib::ustring& message) {
-  if (!manageDevicesSheet_) manageDevicesSheet_ = std::make_unique<ManageDevicesSheet>(*this, host_);
+  if (!manageDevicesSheet_) {
+    manageDevicesSheet_ = std::make_unique<ManageDevicesSheet>(*this, host_);
+    // the Pro features notice above the list: its Get Pro is every Get Pro's
+    // path, and the list closing reads the network's proxies again (a removal
+    // may have taken a SOCKS or WireGuard proxy with it)
+    manageDevicesSheet_->on_get_pro = [this] { OpenUpgrade(); };
+    manageDevicesSheet_->on_closed = [this] { RefreshProFeatures("the device list closed"); };
+  }
   manageDevicesSheet_->Open(forSignIn, message);
 }
 
@@ -3089,6 +3121,151 @@ void MainWindow::OnRefusedSignInRetry(const AuthResult& result) {
     manageDevicesSheet_->SetMessage(SignInFailureText(
         result, T_("there_was_an_error_logging_in", "There was an error logging in")));
   }
+}
+
+// ---- the Pro features in use (ProFeaturesNotice.hpp) ----------------------------
+
+namespace {
+// The sdk's prompt (ProFeaturesSnapshot.MainPrompt), by its exported values;
+// anything else, or none, is no notice.
+pro_features::Prompt ToProFeaturesPrompt(const std::string& prompt) {
+  if (prompt == urnet::ProFeaturesPromptUpgrade) return pro_features::Prompt::Upgrade;
+  if (prompt == urnet::ProFeaturesPromptStopped) return pro_features::Prompt::Stopped;
+  return pro_features::Prompt::None;
+}
+
+// The network the stored jwt names, "" when it names none or cannot be read.
+std::string SignedInNetworkId(SdkHost& host) {
+  const std::optional<urnet::ByJwt> byJwt = host.ParseByJwt();
+  if (byJwt && byJwt->NetworkId) return *byJwt->NetworkId;
+  return std::string();
+}
+}  // namespace
+
+void MainWindow::OpenProFeatures() {
+  if (!host_.IsLoggedIn()) return;
+  // The same Api and network again (another sign-in event for this session)
+  // keep the controller, and with it the user's close of its notice, and read
+  // the list again. Another Api (a network server switch) or another network
+  // is another sign-in, whose notice starts over. The jwt is read without
+  // waiting on a command, so an unknown network ("") keeps the controller.
+  const std::string networkId = SignedInNetworkId(host_);
+  const uint64_t api = host_.api().handle();
+  if (proFeaturesVc_ && api == proFeaturesApi_ &&
+      (networkId.empty() || networkId == proFeaturesNetworkId_)) {
+    if (proFeaturesNetworkId_.empty()) proFeaturesNetworkId_ = networkId;
+    RefreshProFeatures("a sign-in again");
+    return;
+  }
+  CloseProFeatures();
+  proFeaturesApi_ = api;
+  proFeaturesNetworkId_ = networkId;
+  try {
+    urnet::ProFeaturesViewController controller = host_.api().openProFeaturesViewController();
+    if (controller) {
+      proFeaturesVc_ = std::move(controller);
+      auto epoch = proFeaturesEpoch_;
+      const uint64_t issued = *epoch;
+      // Called on a goroutine of the controller's, and from inside start,
+      // refresh and dismissMainNotice on this thread: marshal only. The main
+      // loop reads the controller's latest snapshot, so posts that land out of
+      // order still show the newest.
+      proFeaturesSub_ = proFeaturesVc_->addProFeaturesListener(
+          [this, epoch, issued](std::optional<urnet::ProFeaturesSnapshot>) {
+            PostToMain([this, epoch, issued] {
+              if (*epoch != issued) return;  // closed since: a sign-out, the window's end
+              ApplyProFeatures();
+            });
+          });
+      // loads the list, then again every hour until the close
+      proFeaturesVc_->start();
+      g_message("pro features: the controller is open for this sign-in");
+    } else {
+      g_warning("pro features: the api opened no controller");
+    }
+  } catch (const std::exception& e) {
+    g_warning("pro features: the controller could not be opened: %s", e.what());
+    proFeaturesSub_.reset();
+    proFeaturesVc_.reset();
+  }
+  // the last sign-in's notice goes; the new controller's first snapshot says
+  // what shows
+  ApplyProFeatures();
+}
+
+void MainWindow::CloseProFeatures() {
+  // whatever the listener posted before this lands nowhere
+  ++*proFeaturesEpoch_;
+  proFeaturesSub_.reset();
+  if (proFeaturesVc_) {
+    try {
+      proFeaturesVc_->close();
+    } catch (const std::exception& e) {
+      g_warning("pro features: close failed: %s", e.what());
+    }
+    proFeaturesVc_.reset();
+  }
+  proFeaturesApi_ = 0;
+  proFeaturesNetworkId_.clear();
+}
+
+void MainWindow::RefreshProFeatures(const char* reason) {
+  // nothing while signed out, or with no controller (its open failed: the
+  // next sign-in opens one)
+  if (!signedIn_ || !proFeaturesVc_) return;
+  g_message("pro features: reading the network's proxies again (%s)", reason);
+  try {
+    proFeaturesVc_->refresh();
+  } catch (const std::exception& e) {
+    g_warning("pro features: refresh failed: %s", e.what());
+  }
+}
+
+void MainWindow::ApplyProFeatures() {
+  pro_features::Prompt prompt = pro_features::Prompt::None;
+  std::string mainPrompt;
+  if (signedIn_ && proFeaturesVc_) {
+    try {
+      if (const std::optional<urnet::ProFeaturesSnapshot> snapshot = proFeaturesVc_->getSnapshot()) {
+        mainPrompt = snapshot->MainPrompt;
+        prompt = ToProFeaturesPrompt(snapshot->MainPrompt);
+      }
+    } catch (const std::exception& e) {
+      // the page keeps what it shows; the next change reads again
+      g_warning("pro features: reading the snapshot failed: %s", e.what());
+      return;
+    }
+  }
+  if (prompt != proFeaturesShown_) {
+    proFeaturesShown_ = prompt;
+    if (prompt == pro_features::Prompt::None) {
+      g_message("pro features: the Connect page's notice is gone");
+    } else {
+      g_message("pro features: the Connect page shows the notice (\"%s\")", mainPrompt.c_str());
+    }
+  }
+  if (connectPage_) connectPage_->ApplyProFeaturesNotice(pro_features::NoticeFor(prompt));
+}
+
+void MainWindow::DismissProFeaturesNotice() {
+  if (!proFeaturesVc_) return;
+  g_message("pro features: the user closed the Connect page's notice");
+  try {
+    // withdrawn while its prompt stays the same; the listener brings the
+    // snapshot without it
+    proFeaturesVc_->dismissMainNotice();
+  } catch (const std::exception& e) {
+    g_warning("pro features: dismiss failed: %s", e.what());
+  }
+}
+
+void MainWindow::ObserveProFeaturesFront() {
+  // in front of the user: shown, and a toplevel of the app active (what the
+  // client limit notification reads as not in the background)
+  const bool inFront = windowVisible_ && appFocused_;
+  if (inFront == proFeaturesInFront_) return;
+  proFeaturesInFront_ = inFront;
+  if (inFront) RefreshProFeatures("the window came to the front");
 }
 
 // ---- the slow-internet indicator (SlowInternet.hpp) ---------------------------
