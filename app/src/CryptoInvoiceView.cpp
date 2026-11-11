@@ -39,8 +39,16 @@ CryptoInvoiceView::CryptoInvoiceView() : Gtk::Box(Gtk::Orientation::VERTICAL, 12
   // 1. the network to send on, named before anything is asked for
   network_ = MakeLine("title-2");
   append(*network_);
+  // a coin with no payment link (TAO): nothing fills the amount in for the
+  // payer, so the invoice says to send exactly this amount to this address
+  byHandLine_ = MakeLine();
+  byHandLine_->set_text(T_("crypto_invoice_send_exactly_to_address",
+                           "Send exactly this amount to this address."));
+  byHandLine_->set_visible(false);
+  append(*byHandLine_);
 
-  // 2. the server's payment URI as a QR, and Open in wallet
+  // 2. the SDK's qr text as a QR (a checked payment URI, or TAO's address
+  // alone, with the note saying so), and Open in wallet
   qr_ = Gtk::make_managed<Gtk::DrawingArea>();
   qr_->set_content_width(crypto_pay::kQrMinSide);
   qr_->set_content_height(crypto_pay::kQrMinSide);
@@ -53,6 +61,12 @@ CryptoInvoiceView::CryptoInvoiceView() : Gtk::Box(Gtk::Orientation::VERTICAL, 12
   kit::MarkDecorative(*qr_);
   qr_->set_visible(false);
   append(*qr_);
+  noLinkNote_ = MakeLine("dim-label");
+  noLinkNote_->add_css_class("caption");
+  noLinkNote_->set_justify(Gtk::Justification::CENTER);
+  noLinkNote_->set_xalign(0.5f);
+  noLinkNote_->set_visible(false);
+  append(*noLinkNote_);
   openWallet_ = Gtk::make_managed<Gtk::Button>(T_("crypto_invoice_open_wallet", "Open in wallet"));
   openWallet_->add_css_class("suggested-action");
   openWallet_->add_css_class("pill");
@@ -61,16 +75,14 @@ CryptoInvoiceView::CryptoInvoiceView() : Gtk::Box(Gtk::Orientation::VERTICAL, 12
   openWallet_->set_visible(false);
   append(*openWallet_);
 
-  // 3. what to send, where to, and USDC's memo
+  // 3. what to send, where to (with the coin's network warning: a transfer on
+  // another network is not credited), and the memo of a coin on Solana
   BuildCopyRow(amount_, T_("crypto_invoice_send_exactly", "Send exactly"));
   BuildCopyRow(address_, T_("crypto_invoice_to_address", "To this address"));
-  usdcWarning_ = MakeLine("ur-amber");
-  usdcWarning_->add_css_class("caption");
-  usdcWarning_->set_text(T_("usdc_solana_network_only",
-                            "Send USDC on the Solana network only. USDC sent on any other network "
-                            "will not arrive."));
-  usdcWarning_->set_visible(false);
-  append(*usdcWarning_);
+  networkWarning_ = MakeLine("ur-amber");
+  networkWarning_->add_css_class("caption");
+  networkWarning_->set_visible(false);
+  append(*networkWarning_);
   BuildCopyRow(memo_, T_("crypto_invoice_memo", "Memo, if you send by hand"));
 
   // 4. the quote's time, or its end, with Refresh quote
@@ -205,15 +217,23 @@ void CryptoInvoiceView::SetCopyText(CopyRow& row, const std::string& shown,
   row.text = copied;
 }
 
+Glib::ustring CryptoInvoiceView::IdleCopyLabel(const CopyRow& row) const {
+  // a coin paid by hand carries two values over to the wallet: each button
+  // names its own
+  if (copySaysWhat_ && &row == &amount_) return T_("crypto_invoice_copy_amount", "Copy amount");
+  if (copySaysWhat_ && &row == &address_) return T_("crypto_invoice_copy_address", "Copy address");
+  return T_("crypto_invoice_copy", "Copy");
+}
+
 void CryptoInvoiceView::Copy(CopyRow& row) {
   if (row.text.empty()) return;
   row.copy->get_clipboard()->set_text(row.text);
   row.copy->set_label(T_("crypto_invoice_copied", "Copied"));
   row.reset.disconnect();
-  Gtk::Button* button = row.copy;
+  CopyRow* target = &row;
   row.reset = Glib::signal_timeout().connect(
-      [button] {
-        button->set_label(T_("crypto_invoice_copy", "Copy"));
+      [this, target] {
+        target->copy->set_label(IdleCopyLabel(*target));
         return false;
       },
       kCopiedMillis);
@@ -226,30 +246,46 @@ void CryptoInvoiceView::Render(const crypto_pay::InvoiceView& invoice) {
   network_->set_text(network.key ? Glib::ustring(T_(network.key, network.english))
                                  : Glib::ustring());
   network_->set_visible(network.key != nullptr);
+  byHandLine_->set_visible(p.showByHandLine);
 
-  // Only a URI the SDK's check accepted is drawn or opened (p.showQr). It is
-  // encoded once per URI, and the canvas sized from its modules so every
-  // module is a whole number of pixels.
-  const std::string uri = p.showQr ? invoice.uri : std::string();
-  if (uri != qrUri_) {
-    qrUri_ = uri;
-    qrModules_ = crypto_pay::EncodePaymentQr(uri);
+  // Only the SDK's qr text is drawn (p.qrText: a URI the SDK's check accepted,
+  // or TAO's address alone), and only a checked URI is opened
+  // (p.showOpenWallet). The code is encoded once per text, and the canvas
+  // sized from its modules so every module is a whole number of pixels.
+  const std::string qrText = p.qrText;
+  if (qrText != qrText_) {
+    qrText_ = qrText;
+    qrModules_ = crypto_pay::EncodePaymentQr(qrText);
     const int side = crypto_pay::QrCanvasSide(qrModules_.count);
     qr_->set_content_width(side);
     qr_->set_content_height(side);
     qr_->queue_draw();
   }
-  qr_->set_visible(p.showQr && 0 < qrModules_.count);
-  openUri_ = uri;
-  openWallet_->set_visible(p.showQr);
+  const bool qrDrawn = p.showQr && 0 < qrModules_.count;
+  qr_->set_visible(qrDrawn);
+  const crypto_pay::Text note = p.noPaymentLinkNote;
+  noLinkNote_->set_text(note.key ? Glib::ustring(T_(note.key, note.english)) : Glib::ustring());
+  noLinkNote_->set_visible(qrDrawn && note.key != nullptr);
+  openUri_ = p.showOpenWallet ? invoice.uri : std::string();
+  openWallet_->set_visible(p.showOpenWallet);
 
+  if (p.noPaymentLink != copySaysWhat_) {
+    copySaysWhat_ = p.noPaymentLink;
+    // a button showing "Copied" takes its label back when its moment ends
+    for (CopyRow* row : {&amount_, &address_, &memo_}) {
+      if (!row->reset.connected()) row->copy->set_label(IdleCopyLabel(*row));
+    }
+  }
   // the amount is copied without its ticker: a wallet's amount field takes a
   // number
   SetCopyText(amount_, p.amountText, invoice.amount);
   amount_.root->set_visible(p.showAmount);
   SetCopyText(address_, invoice.address, invoice.address);
   address_.root->set_visible(p.showAddress);
-  usdcWarning_->set_visible(p.usdcWarning);
+  const crypto_pay::Text warning = p.networkWarning;
+  networkWarning_->set_text(warning.key ? Glib::ustring(T_(warning.key, warning.english))
+                                        : Glib::ustring());
+  networkWarning_->set_visible(p.showNetworkWarning);
   SetCopyText(memo_, invoice.memo, invoice.memo);
   memo_.root->set_visible(p.showMemo);
 

@@ -527,7 +527,7 @@ void OnboardingWindow::StartCheckout(bool yearly, const char* surface) {
   const bool coin = crypto_pay::IsCoin(method_);
   if (offerEnabled_ && balance_.OfferActive() && (yearly || coin)) {
     // the method's store: stripe for the card, the coin's market for a coin
-    host_.events().OfferCtaTapped(PlanName(true), crypto_pay::EventStore(method_));
+    host_.events().OfferCtaTapped(PlanName(true), PaymentMethodEventStore(method_));
   }
   (void)surface;
   if (!checkout_) {
@@ -644,7 +644,7 @@ void OnboardingWindow::BuildWelcome() {
   welcomeOffer_->set_visible(false);
   top->append(*welcomeOffer_);
 
-  // Card · USDC · Zcash · Monero above the button (hidden with no coin listed)
+  // Card and the SDK's coin tabs above the button (hidden with no coin listed)
   welcomeMethods_ = Gtk::make_managed<PaymentMethodRow>();
   welcomeMethods_->set_margin_top(20);
   welcomeMethods_->on_select = [this](const std::string& method) {
@@ -710,11 +710,11 @@ void OnboardingWindow::SelectPlan(bool yearly) {
 bool OnboardingWindow::ShowsOffer() const { return offerEnabled_ && balance_.Offer().active; }
 
 void OnboardingWindow::ApplyMethods(bool remembered) {
-  const std::vector<std::string> methods =
-      balance_.PaymentMethods(crypto_pay::CoinPlan(ShowsOffer()));
+  const std::vector<crypto_pay::PaymentTabView> tabs =
+      balance_.PaymentTabs(crypto_pay::CoinPlan(ShowsOffer()));
   bool changed = false;
   for (PaymentMethodRow* row : {welcomeMethods_, offerMethods_}) {
-    if (row && row->SetMethods(methods)) changed = true;
+    if (row && row->SetTabs(tabs)) changed = true;
   }
   if (!changed && !remembered) return;
   // the method picked in this open while it is still offered, else the

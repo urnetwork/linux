@@ -2,16 +2,43 @@
 // Windows markup carries (MainWindow.xaml), drawn with GskPath. The Solana
 // mark keeps its brand gradient; Bittensor and the auth-code barcode draw in
 // the button's content colour (black on the white SECONDARY pill). Also the
-// navigation rail's icons (NavIcon) and the Material Design Icons glyphs
+// crypto payment row's coin marks (CoinMark, GskPath from the installed svgs),
+// the navigation rail's icons (NavIcon) and the Material Design Icons glyphs
 // (GlyphIcon, GlyphDot), both drawn with Cairo.
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
+
+#include <string>
 
 #include <gtkmm.h>
 
 #include "MdiGlyphs.hpp"
 
+typedef struct _GskPath GskPath;
+
 namespace urnw {
+
+// A coin's mark in the crypto payment row (mmm/BTCPAY.md §17.6): the installed
+// coins/<icon key>.svg the SDK's icon key names, its one path filled nonzero
+// with GSK_FILL_RULE_WINDING, at full contrast (white on this dark app) and
+// never dimmed, whatever the coin's state or the row's: Solana's and
+// Bittensor's brand rules allow their marks only in black or white. Decorative
+// (hidden from the accessibility tree): the label beside it names the coin. A
+// key without a file draws nothing (Drawn() false).
+class CoinMark : public Gtk::Widget {
+ public:
+  CoinMark(const std::string& iconKey, int sizePx);
+  bool Drawn() const;
+
+ protected:
+  void measure_vfunc(Gtk::Orientation orientation, int for_size, int& minimum, int& natural,
+                     int& minimum_baseline, int& natural_baseline) const override;
+  void snapshot_vfunc(const Glib::RefPtr<Gtk::Snapshot>& snapshot) override;
+
+ private:
+  GskPath* path_ = nullptr;  // the per-key cache's, never freed
+  int size_;
+};
 
 class BrandIcon : public Gtk::Widget {
  public:

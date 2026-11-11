@@ -533,6 +533,15 @@ install_data('assets/ReferralFrog.png',
 install_data('assets/UrPerson1.png', 'assets/UrPerson2.png', 'assets/UrPerson3.png',
              install_dir : get_option('datadir') / 'urnetwork')
 
+# The crypto payment row's More coins marks (mmm/BTCPAY.md section 17.6),
+# named by the sdk's icon keys. src/BrandIcons.cpp CoinMark reads each file's
+# one path from the pkgdatadir (assets/ in a build tree) and draws it with
+# GskPath, white at full contrast; without this install every packaged build
+# would show the tab's name with no marks.
+install_data('assets/coin_tao.svg', 'assets/coin_btc.svg', 'assets/coin_eth.svg',
+             'assets/coin_sol.svg',
+             install_dir : get_option('datadir') / 'urnetwork/coins')
+
 # The four licensed brand faces (SEPARATELY LICENSED commercial fonts — ABC
 # Dinamo + Pangram Pangram, NOT MPL; ship deliberately, per the owner's
 # licenses). UrTheme.cpp registers them with fontconfig at runtime; the
