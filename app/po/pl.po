@@ -5824,6 +5824,11 @@ msgctxt "extension_location_unchanged"
 msgid "The browser is still connected at the previous location."
 msgstr "Przeglądarka jest nadal połączona z poprzednią lokalizacją."
 
+#. Browser extension popup, under the settings toggles, beside the Turn on alerts button (extension_turn_on_alerts): what the alerts are. Once the user allows it, the browser shows one notification when the account's data runs out, also while the popup is closed.
+msgctxt "extension_out_of_data_alerts_note"
+msgid "Get a notification when your data runs out."
+msgstr "Otrzymaj powiadomienie, gdy skończą Ci się dane."
+
 #. Browser extension popup, out-of-balance alert, and the body of the browser notification for it: the account has no data left, and the extension keeps its proxy set whatever the kill switch says, so pages fail rather than load without URnetwork, until the free refresh, an upgrade or a data pack makes data available, or the user presses Disconnect. The ur.io counterpart is site_out_of_data_browser_held, without its kill switch clause.
 msgctxt "extension_out_of_data_held"
 msgid "Pages won't load in this browser until data is available or you disconnect."
@@ -5873,6 +5878,11 @@ msgstr "Serwer proxy nie odpowiada"
 msgctxt "extension_status_proxy_policy"
 msgid "Proxy managed by policy"
 msgstr "Serwer proxy zarządzany przez zasady"
+
+#. Browser extension popup: a small button, shown while the browser has not let the extension show notifications, that asks the browser for that permission. With it, the extension shows one browser notification when the account runs out of data; without it, the popup's alert and a ! on the toolbar icon show it. It sits under the settings toggles beside extension_out_of_data_alerts_note, and in the out-of-data alert beside Get Pro and Buy data. Short.
+msgctxt "extension_turn_on_alerts"
+msgid "Turn on alerts"
+msgstr "Włącz powiadomienia"
 
 #. Used in Shared/Intents/ConnectIntent.swift.
 msgctxt "failed_to_connect"
