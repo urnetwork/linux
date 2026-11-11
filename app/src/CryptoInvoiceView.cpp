@@ -97,6 +97,14 @@ CryptoInvoiceView::CryptoInvoiceView() : Gtk::Box(Gtk::Orientation::VERTICAL, 12
   expired_->set_text(T_("crypto_invoice_quote_expired",
                         "This quote expired. Refresh it for a new amount."));
   countdownRow_->append(*expired_);
+  // through Bitcoin's confirmation grace (mmm/BTCPAY.md §16.8) the coin's
+  // line where the expired one would be, with no Refresh quote: a payment
+  // sent before the quote expired may still confirm, at this price
+  awaiting_ = MakeLine();
+  awaiting_->set_hexpand(true);
+  awaiting_->set_valign(Gtk::Align::CENTER);
+  awaiting_->set_visible(false);
+  countdownRow_->append(*awaiting_);
   refresh_ = Gtk::make_managed<Gtk::Button>(T_("crypto_invoice_refresh_quote", "Refresh quote"));
   refresh_->set_valign(Gtk::Align::CENTER);
   refresh_->signal_clicked().connect([this] {
@@ -105,6 +113,13 @@ CryptoInvoiceView::CryptoInvoiceView() : Gtk::Box(Gtk::Orientation::VERTICAL, 12
   countdownRow_->append(*refresh_);
   countdownRow_->set_visible(false);
   append(*countdownRow_);
+  // under the countdown, the coin's line on how long its payment takes to
+  // confirm, and that one sent before the quote expires is credited at this
+  // price (Bitcoin's)
+  confirmationNote_ = MakeLine("dim-label");
+  confirmationNote_->add_css_class("caption");
+  confirmationNote_->set_visible(false);
+  append(*confirmationNote_);
 
   // 5. the status steps, what is left to send, or the review copy
   steps_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 6);
@@ -288,15 +303,24 @@ void CryptoInvoiceView::Render(const crypto_pay::InvoiceView& invoice) {
   SetCopyText(memo_, invoice.memo, invoice.memo);
   memo_.root->set_visible(p.showMemo);
 
-  countdownRow_->set_visible(p.showCountdown || p.expired || p.showRefresh);
+  countdownRow_->set_visible(p.showCountdown || p.expired || p.showAwaitingConfirmationNote ||
+                             p.showRefresh);
   countdown_->set_visible(p.showCountdown);
   if (p.showCountdown) {
     countdown_->set_text(
         Format(T_("crypto_invoice_expires_in", "Quote expires in {}"), p.countdownText));
   }
   expired_->set_visible(p.expired);
+  // Bitcoin's confirmation grace: its awaiting line in place of the expired
+  // one, and no Refresh quote (p.showRefresh is false through it)
+  const crypto_pay::CoinLine& awaiting = p.awaitingConfirmationNote;
+  awaiting_->set_text(LabelText(awaiting.key, awaiting.english));
+  awaiting_->set_visible(p.showAwaitingConfirmationNote);
   refresh_->set_visible(p.showRefresh);
   refresh_->set_sensitive(p.refreshEnabled);
+  const crypto_pay::CoinLine& confirmation = p.confirmationNote;
+  confirmationNote_->set_text(LabelText(confirmation.key, confirmation.english));
+  confirmationNote_->set_visible(p.showConfirmationNote);
 
   RenderSteps(p);
   remaining_->set_visible(p.showRemaining);

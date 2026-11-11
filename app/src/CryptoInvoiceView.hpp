@@ -19,7 +19,11 @@
 //      memo while the SDK says it shows (the server sent one: USDC on
 //      Solana), each with Copy (the display's clipboard; Copy amount and Copy
 //      address for TAO), which reads "Copied" for a moment;
-//   4. "Quote expires in m:ss" with Refresh quote, or the expired line;
+//   4. "Quote expires in m:ss" with Refresh quote, and under it the coin's
+//      line on how long its payment takes to confirm (Bitcoin's); or the
+//      expired line; or through Bitcoin's confirmation grace (mmm/BTCPAY.md
+//      §16.8), while a payment sent in time may still confirm, the coin's
+//      awaiting line in its place, with no Refresh quote;
 //   5. the SDK's status steps, each drawn by its progress, what is left to
 //      send after a partial payment, or the review copy alone;
 //   6. the wallets that work, and Zcash's note about exchanges;
@@ -94,7 +98,13 @@ class CryptoInvoiceView : public Gtk::Box {
   Gtk::Box* countdownRow_ = nullptr;
   Gtk::Label* countdown_ = nullptr;
   Gtk::Label* expired_ = nullptr;
+  // through Bitcoin's confirmation grace, the coin's line in place of the
+  // expired one
+  Gtk::Label* awaiting_ = nullptr;
   Gtk::Button* refresh_ = nullptr;
+  // under the countdown, the coin's line on how long its payment takes to
+  // confirm (Bitcoin's)
+  Gtk::Label* confirmationNote_ = nullptr;
   Gtk::Box* steps_ = nullptr;
   // the SDK's steps in its order, one row each (at most four: waiting,
   // payment seen, confirming n of N, paid)

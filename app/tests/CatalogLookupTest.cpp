@@ -516,7 +516,8 @@ const std::set<std::string>& LinuxTaggedKeys() {
 // SDK's crypto_pay.go spells them: the labels with each tab and coin
 // (urnet::cryptoPaymentTabs' label_key and label, urnet::cryptoAssetLabelKey
 // and urnet::cryptoAssetLabel), and each coin's network line, its network's
-// warning and TAO's note under its QR (urnet::cryptoAssetLinesFor).
+// warning, TAO's note under its QR and Bitcoin's two lines of its
+// confirmation grace (urnet::cryptoAssetLinesFor).
 // PaymentMethodRow.cpp LabelText looks each up with T_(key, English), so the
 // English must be the catalog's msgid byte for byte.
 const std::vector<std::pair<std::string, std::string>>& SdkCryptoLabels() {
@@ -554,6 +555,14 @@ const std::vector<std::pair<std::string, std::string>>& SdkCryptoLabels() {
       {"crypto_invoice_tao_no_payment_link",
        "TAO has no payment link, so this QR code holds only the address. Enter the exact amount in "
        "your wallet."},
+      // Bitcoin's confirmation grace (mmm/BTCPAY.md §16.8): the line under the
+      // countdown, and the one in place of the expired line
+      {"crypto_invoice_bitcoin_confirmation_time",
+       "Bitcoin payments can take up to 3 hours to confirm. A payment sent before the quote expires "
+       "is credited at this price."},
+      {"crypto_invoice_bitcoin_awaiting_confirmation",
+       "This quote expired. A payment you sent before it expired is credited at this price once it "
+       "confirms, which can take up to 3 hours. If you didn't send one, pay another way."},
   };
   return labels;
 }

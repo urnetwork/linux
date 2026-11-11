@@ -36,7 +36,10 @@
 //     payment in review, the wallets that work, and Zcash's exchange note. A
 //     coin with no payment link (TAO) says to send exactly this amount to this
 //     address, its Copy buttons say what they copy, and its QR says it holds
-//     only the address;
+//     only the address. Bitcoin's countdown has its line on how long a payment
+//     takes to confirm under it, and through Bitcoin's confirmation grace
+//     (mmm/BTCPAY.md §16.8) its awaiting line stands for the expired line,
+//     with no Refresh quote;
 //   * the renewal notice of a one-time crypto year (§2.2 crypto_term), and the
 //     "does not renew" reading of a crypto store.
 //
@@ -132,8 +135,9 @@ inline bool IsCoin(std::string_view method) {
 // One of a coin's lines as the SDK hands it out (urnet::cryptoAssetLinesFor):
 // its store key, and its English, the store's byte for byte and so the
 // gettext msgid it is looked up with (I18n.hpp T_). A line whose key is "" is
-// one the coin does not have (Zcash and Monero have no network warning, and
-// only TAO has the note under its QR), and is not shown.
+// one the coin does not have (Zcash and Monero have no network warning, only
+// TAO has the note under its QR, and only Bitcoin the lines of its
+// confirmation grace), and is not shown.
 struct CoinLine {
   std::string key;
   std::string english;
@@ -147,13 +151,18 @@ inline bool operator!=(const CoinLine& a, const CoinLine& b) { return !(a == b);
 // A coin's own lines (urnet::CryptoAssetLines): the network it is sent on,
 // named before anything else (the USDC panel's lesson: "which network do I
 // select?") and under the coin in the More coins list; the warning beside its
-// address (only this coin, sent on this network, is credited); and for a coin
+// address (only this coin, sent on this network, is credited); for a coin
 // with no payment link (TAO) the note under its QR code, which holds the
-// address alone.
+// address alone; and for a coin whose payment may confirm after its quote
+// ends and still be credited at its price (Bitcoin's confirmation grace,
+// mmm/BTCPAY.md §16.8) the line under its countdown and the one that stands
+// for the expired line through the grace.
 struct CoinLines {
   CoinLine networkLine;
   CoinLine networkWarning;
   CoinLine noPaymentLinkNote;
+  CoinLine confirmationNote;
+  CoinLine awaitingConfirmationNote;
 };
 
 // ---- the method row -----------------------------------------------------------
@@ -356,7 +365,13 @@ struct InvoiceView {
   double priceUsd = 0;
   std::string expiresAt;
   int64_t secondsLeft = 0;  // 0 once expired
-  std::string status;       // §2.5
+  // Bitcoin's confirmation grace (mmm/BTCPAY.md §16.8): the quote ran out with
+  // nothing received, but a payment sent within it may not be confirmed yet
+  // and is still credited at its price. The SDK's AwaitingConfirmation (open,
+  // pending, secondsLeft 0, the grace not over); false for every coin
+  // without a grace.
+  bool awaitingConfirmation = false;
+  std::string status;  // §2.5
   std::string reviewReason;
   std::string received;
   std::string remaining;
@@ -451,7 +466,18 @@ struct InvoicePresentation {
   bool showMemo = false;      // the memo, and Copy, while the SDK says it shows
   bool showCountdown = false; // Quote expires in m:ss
   std::string countdownText;  // m:ss
+  // under the countdown, the coin's line on how long its payment takes to
+  // confirm (Bitcoin's; no key: none)
+  bool showConfirmationNote = false;
+  CoinLine confirmationNote;
   bool expired = false;       // the expired line
+  // Bitcoin's confirmation grace (mmm/BTCPAY.md §16.8): the quote ran out
+  // with nothing received while a payment sent within it may still confirm.
+  // Not expired: the coin's awaiting line in place of the expired line (no
+  // key: none), and no Refresh quote.
+  bool awaitingConfirmation = false;
+  bool showAwaitingConfirmationNote = false;
+  CoinLine awaitingConfirmationNote;
   bool showRefresh = false;   // Refresh quote
   bool refreshEnabled = false;
   // the SDK's steps while they show, each drawn by its progress and the
@@ -479,12 +505,20 @@ inline InvoicePresentation PresentInvoice(const InvoiceView& invoice) {
   // money may already be on its way then: it shows only its waiting steps
   // until the server answers (CONTRACT §6.2.1).
   const bool nothingReceived = status == kStatusPending || status == kStatusExpired;
+  // Bitcoin's confirmation grace (mmm/BTCPAY.md §16.8): the countdown ran out
+  // with nothing received, but the server sees a Bitcoin payment only once it
+  // is mined, so one sent within the quote may still be on its way, and it is
+  // credited at the quoted price. The SDK says when
+  // (urnet::CryptoInvoiceState.awaiting_confirmation); the server keeps the
+  // invoice pending through the grace and refuses a re-quote in it.
+  p.awaitingConfirmation = open && status == kStatusPending && invoice.awaitingConfirmation;
   // The quote ran out: the server says so, or the countdown reached zero
   // first. Paying a stale amount is not offered: the amount, the QR and Open
-  // in wallet wait for a fresh quote.
-  p.expired = open && (status == kStatusExpired ||
-                       (status == kStatusPending && invoice.secondsLeft <= 0));
-  const bool payable = open && status == kStatusPending && !p.expired;
+  // in wallet wait for a fresh quote. Through the grace there is nothing to
+  // pay with either, but the quote is not expired: no fresh one is offered.
+  p.expired = open && !p.awaitingConfirmation &&
+              (status == kStatusExpired || (status == kStatusPending && invoice.secondsLeft <= 0));
+  const bool payable = open && status == kStatusPending && !p.expired && !p.awaitingConfirmation;
   // something arrived but not enough: the address stays for the top-up
   const bool partial = open && status == kStatusSeen;
 
@@ -510,12 +544,23 @@ inline InvoicePresentation PresentInvoice(const InvoiceView& invoice) {
   p.showNetworkWarning = p.showAddress && !p.networkWarning.key.empty();
   p.showCountdown = payable;
   p.countdownText = FormatCountdown(invoice.secondsLeft);
-  p.showRefresh = open && nothingReceived;
+  // Bitcoin's line on how long its payment takes to confirm, with the
+  // countdown: one sent before the quote expires is credited at this price
+  p.confirmationNote = invoice.lines.confirmationNote;
+  p.showConfirmationNote = p.showCountdown && !p.confirmationNote.key.empty();
+  // through the grace its awaiting line, where the expired line would be
+  p.awaitingConfirmationNote = invoice.lines.awaitingConfirmationNote;
+  p.showAwaitingConfirmationNote =
+      p.awaitingConfirmation && !p.awaitingConfirmationNote.key.empty();
+  // and no Refresh quote: a payment sent in time may still confirm, and the
+  // server refuses a re-quote until the grace is over (the SDK ignores one)
+  p.showRefresh = open && nothingReceived && !p.awaitingConfirmation;
   p.refreshEnabled = p.showRefresh && !invoice.refreshing;
 
   // When the steps show is this app's; what they say is the SDK's (the
   // state's steps: none before the first status poll, so a resumed invoice
-  // shows none until the server answers).
+  // shows none until the server answers). Through Bitcoin's grace they show
+  // as while pending: the invoice still waits for a payment sent in time.
   p.review = (open || stage == InvoiceStage::Paid) && status == kStatusReview;
   const bool stepped = status.empty() || status == kStatusPending || status == kStatusSeen ||
                        status == kStatusConfirming || status == kStatusPaid;
@@ -538,7 +583,10 @@ inline InvoicePresentation PresentInvoice(const InvoiceView& invoice) {
   }
   // Paying another way abandons the invoice: offered while nothing was
   // received, and when the invoice failed. Money on its way (seen,
-  // confirming), paid or in review leaves only Close.
+  // confirming), paid or in review leaves only Close. Through Bitcoin's grace
+  // it stays, as the awaiting line says (a buyer who sent nothing pays another
+  // way), and the controller then only puts the invoice away: a payment sent
+  // in time may still arrive.
   p.showPayAnotherWay = (open && nothingReceived) || status == kStatusUnknown ||
                         stage == InvoiceStage::Failed;
   return p;

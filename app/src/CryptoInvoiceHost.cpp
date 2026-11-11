@@ -26,7 +26,9 @@ crypto_pay::InvoiceView NoInvoice() {
 // check is the whole gate (an empty URI fails it too). The QR draws the
 // state's qr text (urnet::cryptoPaymentQrText); a coin without a payment URI
 // scheme (TAO) is paid by hand. The coin's lines and whether its memo shows
-// are the SDK's too.
+// are the SDK's too, and so is when Bitcoin's confirmation grace holds an
+// expired quote open (mmm/BTCPAY.md §16.8): the state's
+// awaiting_confirmation, with no clock of this app's.
 crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {
   crypto_pay::InvoiceView view;
   view.phase = state.phase;
@@ -43,6 +45,7 @@ crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {
   view.priceUsd = state.price_usd;
   view.expiresAt = state.expires_at;
   view.secondsLeft = state.seconds_left;
+  view.awaitingConfirmation = state.awaiting_confirmation;
   view.status = state.status;
   view.reviewReason = state.review_reason;
   view.received = state.received;
@@ -72,6 +75,9 @@ crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {
     view.lines.networkLine = {lines->network_line_key, lines->network_line};
     view.lines.networkWarning = {lines->network_warning_key, lines->network_warning};
     view.lines.noPaymentLinkNote = {lines->no_payment_link_note_key, lines->no_payment_link_note};
+    view.lines.confirmationNote = {lines->confirmation_note_key, lines->confirmation_note};
+    view.lines.awaitingConfirmationNote = {lines->awaiting_confirmation_note_key,
+                                           lines->awaiting_confirmation_note};
   }
   view.showsMemo = urnet::cryptoPaymentShowsMemo(state.asset, state.memo);
   return view;
