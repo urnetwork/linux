@@ -6264,7 +6264,7 @@ msgctxt "instant_account_no_email_password"
 msgid "No email or password needed. Your account is secured by a seedphrase."
 msgstr "لا حاجة إلى بريد إلكتروني أو كلمة مرور. حسابك محمي بعبارة الاسترداد."
 
-#. Call to action
+#. Shown on the Connect screen when the account's data balance has run out: a balance of data, not of money.
 msgctxt "insufficient_balance"
 msgid "Insufficient balance"
 msgstr "رصيد غير كافٍ"
@@ -11473,12 +11473,12 @@ msgstr "ينتهي في {date}"
 #. Subscription: free plan body
 msgctxt "site_sub_free_body"
 msgid "You're on the Free plan. Upgrade to Pro for more data and features."
-msgstr "أنت على خطة Free. رقِّ إلى Pro للحصول على بيانات وميزات أكثر."
+msgstr "أنت على الخطة المجانية. رقِّ إلى Pro للحصول على بيانات وميزات أكثر."
 
 #. Subscription: free plan title
 msgctxt "site_sub_free_title"
 msgid "Free plan"
-msgstr "خطة Free"
+msgstr "الخطة المجانية"
 
 #. Subscription: manage-on-platform button ({platform})
 msgctxt "site_sub_manage_on"

@@ -6136,15 +6136,15 @@ msgctxt "instant_account_no_email_password"
 msgid "No email or password needed. Your account is secured by a seedphrase."
 msgstr "Не потрібні ні пошта, ні пароль. Ваш обліковий запис захищено сід-фразою."
 
-#. Call to action
+#. Shown on the Connect screen when the account's data balance has run out: a balance of data, not of money.
 msgctxt "insufficient_balance"
 msgid "Insufficient balance"
-msgstr "Недостатньо коштів"
+msgstr "Недостатній баланс даних"
 
 #. Connection status shown when the network has no data balance left.
 msgctxt "insufficient_balance_add_balance_or_plan"
 msgid "Insufficient balance — add balance or a plan"
-msgstr "Недостатньо коштів — поповніть баланс або додайте план"
+msgstr "Недостатній баланс даних — поповніть баланс або додайте план"
 
 #. Out-of-balance alert, on the desktop builds whose checkout has to go through the tunnel (Windows, Linux), while the tunnel holds or blocks traffic. Their Disconnect lifts the kill switch too; apple and android say more (insufficient_balance_disconnect_first_kill_switch). Payment cannot reach the store until the user disconnects, and nothing disconnects for them; Disconnect is the button beside this line. Each translation names that button by its own label (the disconnect key).
 msgctxt "insufficient_balance_disconnect_first"

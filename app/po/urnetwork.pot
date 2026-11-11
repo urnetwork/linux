@@ -6220,7 +6220,7 @@ msgctxt "instant_account_no_email_password"
 msgid "No email or password needed. Your account is secured by a seedphrase."
 msgstr ""
 
-#. Call to action
+#. Shown on the Connect screen when the account's data balance has run out: a balance of data, not of money.
 msgctxt "insufficient_balance"
 msgid "Insufficient balance"
 msgstr ""

@@ -6125,7 +6125,7 @@ msgctxt "instant_account_no_email_password"
 msgid "No email or password needed. Your account is secured by a seedphrase."
 msgstr "ईमेल या पासवर्ड की ज़रूरत नहीं। आपका खाता एक सीडफ़्रेज़ से सुरक्षित है।"
 
-#. Call to action
+#. Shown on the Connect screen when the account's data balance has run out: a balance of data, not of money.
 msgctxt "insufficient_balance"
 msgid "Insufficient balance"
 msgstr "अपर्याप्त शेष राशि"

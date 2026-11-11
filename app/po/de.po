@@ -6220,7 +6220,7 @@ msgctxt "instant_account_no_email_password"
 msgid "No email or password needed. Your account is secured by a seedphrase."
 msgstr "Keine E-Mail und kein Passwort nötig. Dein Konto wird durch eine Seedphrase gesichert."
 
-#. Call to action
+#. Shown on the Connect screen when the account's data balance has run out: a balance of data, not of money.
 msgctxt "insufficient_balance"
 msgid "Insufficient balance"
 msgstr "Unzureichendes Guthaben"
@@ -11341,12 +11341,12 @@ msgstr "Endet am {date}"
 #. Subscription: free plan body
 msgctxt "site_sub_free_body"
 msgid "You're on the Free plan. Upgrade to Pro for more data and features."
-msgstr "Du nutzt den Free-Plan. Wechsle zu Pro für mehr Daten und Funktionen."
+msgstr "Du nutzt den kostenlosen Plan. Wechsle zu Pro für mehr Daten und Funktionen."
 
 #. Subscription: free plan title
 msgctxt "site_sub_free_title"
 msgid "Free plan"
-msgstr "Free-Plan"
+msgstr "Kostenloser Plan"
 
 #. Subscription: manage-on-platform button ({platform})
 msgctxt "site_sub_manage_on"
