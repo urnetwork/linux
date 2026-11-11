@@ -1,10 +1,10 @@
 // The client info this app reports (REVOKE-UI-FINAL.md §1.13): every Api the
 // GUI takes from its space, and the space Api the daemon builds its
-// DeviceLocal from, report device type "linux" and the build version through
-// the sdk's Api.setClientInfo. Before this both processes sent the sdk's
-// unknown client, so the account's Sessions list read every use from this
-// machine as "Unknown device" with no version. SdkHost and TunnelHost need the
-// SDK, so this reads their sources.
+// DeviceLocal from, report device type "linux", the build version and the
+// build's distribution through the sdk's Api.setClientInfo. Before this both
+// processes sent the sdk's unknown client, so the account's Sessions list read
+// every use from this machine as "Unknown device" with no version. SdkHost and
+// TunnelHost need the SDK, so this reads their sources.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -75,8 +75,35 @@ UR_TEST(ClientInfo_TheAdoptionReportsLinuxAndTheBuildVersion) {
   UR_EXPECT_TRUE(Contains(config, "inline constexpr const char* kClientInfoDeviceType = \"linux\";"));
   const std::string report = FunctionBody(config, "inline void ReportClientInfo(");
   UR_EXPECT_TRUE_MSG("NetworkSpaceConfig.hpp defines ReportClientInfo", !report.empty());
+  UR_EXPECT_TRUE(Contains(
+      report,
+      "api.setClientInfo(urnet::newClientInfoWithDistribution(kClientInfoDeviceType, appVersion, UrDistribution()));"));
+}
+
+// The distribution both processes report with it (sdk ClientDistribution*),
+// which the server reads for the account's onboarding platform: the one the
+// packaging stamped (-Ddistribution, compiled in as UR_DISTRIBUTION), mapped
+// onto the sdk's values, and linux, the package not known, for anything else.
+UR_TEST(ClientInfo_TheDistributionIsTheStampedPackage) {
+  const std::string config = ReadCode("NetworkSpaceConfig.hpp");
+  const std::string distribution = FunctionBody(config, "inline std::string UrDistribution()");
+  UR_EXPECT_TRUE_MSG("NetworkSpaceConfig.hpp defines UrDistribution", !distribution.empty());
+  UR_EXPECT_TRUE(Contains(distribution, "const std::string stamped = UR_DISTRIBUTION;"));
+  UR_EXPECT_TRUE(Contains(distribution,
+                          "{urnet::ClientDistributionLinuxAppimage, urnet::ClientDistributionLinuxFlatpak}"));
+  UR_EXPECT_TRUE(Contains(distribution, "return urnet::ClientDistributionLinux;"));
+  UR_EXPECT_TRUE(Contains(config, "#define UR_DISTRIBUTION \"linux\""));
+
+  // both binaries are compiled with the stamp, and the option offers only
+  // the values UrDistribution knows
+  const std::string meson = urnw::testing::wiring::ReadRaw("../meson.build");
   UR_EXPECT_TRUE(
-      Contains(report, "api.setClientInfo(urnet::newClientInfo(kClientInfoDeviceType, appVersion));"));
+      Contains(meson, "distribution_args = ['-DUR_DISTRIBUTION=\"' + get_option('distribution') + '\"']"));
+  UR_EXPECT_EQ(CountOf(meson, "version_args + distribution_args +"), static_cast<size_t>(2));
+  const std::string options = urnw::testing::wiring::ReadRaw("../meson_options.txt");
+  UR_EXPECT_TRUE(Contains(options,
+                          "option('distribution', type : 'combo', choices : ['linux', 'linux_appimage', "
+                          "'linux_flatpak'], value : 'linux',"));
 }
 
 // The daemon's devices are built from its own NetworkSpace (the space json the
