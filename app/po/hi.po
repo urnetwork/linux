@@ -4679,7 +4679,7 @@ msgstr "इसे बंद करने के लिए, Android की बै
 #. Disconnect VPN button text
 msgctxt "disconnect"
 msgid "Disconnect"
-msgstr "डिस्कनेक्ट क"
+msgstr "डिस्कनेक्ट करें"
 
 #. Used in Shared/Intents/DisconnectIntent.swift.
 msgctxt "disconnect_urnetwork_vpn"
