@@ -56,6 +56,12 @@ fontconfig = dependency('fontconfig', required : get_option('gui'))
 # passes -Dapp_version=$VERSION; the default is a dev sentinel.
 version_args = ['-DUR_APP_VERSION="' + get_option('app_version') + '"']
 
+# The build's distribution -> UR_DISTRIBUTION in both binaries, which report it
+# in their client info (NetworkSpaceConfig.hpp UrDistribution). The packaging
+# passes -Ddistribution, as it passes the version; the default is linux, a
+# build whose package is not known.
+distribution_args = ['-DUR_DISTRIBUTION="' + get_option('distribution') + '"']
+
 # Localization (GNOME convention: gettext via glib's i18n). po/ is generated
 # from the canonical localization store (localizations/keys/*.yaml, `npm run
 # gen`) — msgid is the english source, msgctxt the store key id — and is never
@@ -298,7 +304,7 @@ executable('urnetwork-gui',
   include_directories : [sdk_inc, qrcodegen_inc],
   dependencies : gui_deps,
   cpp_args : wc_args + i18n_args + webkit_args + zxing_args + sdk_warn_args + pkgdata_args +
-             version_args + exhaustive_switch_args,
+             version_args + distribution_args + exhaustive_switch_args,
   install : true,
   # AppDir layout: usr/bin/urnetwork-gui next to usr/lib/libURnetworkSdk.so
   install_rpath : '$ORIGIN/../lib')
@@ -343,7 +349,7 @@ executable('urnetworkd',
   ],
   include_directories : [include_directories('src'), sdk_inc],
   dependencies : [gio, json, threads, sdk_lib],
-  cpp_args : sdk_warn_args + version_args + exhaustive_switch_args,
+  cpp_args : sdk_warn_args + version_args + distribution_args + exhaustive_switch_args,
   link_args : daemon_link_args,
   install : true,
   install_dir : 'lib' / 'urnetwork',
