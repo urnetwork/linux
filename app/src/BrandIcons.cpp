@@ -6,10 +6,18 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <map>
 #include <optional>
+#include <string_view>
 #include <vector>
 
+#include "CryptoPay.hpp"  // the coins' marks: IsMarkKey, SvgPathData, kMarkViewBox
 #include "GlyphPath.hpp"
+#include "RuntimePaths.hpp"
+
+#ifndef UR_PKGDATADIR
+#define UR_PKGDATADIR "/usr/share/urnetwork"
+#endif
 
 namespace urnw {
 namespace {
@@ -443,6 +451,84 @@ void GlyphDot::snapshot_vfunc(const Glib::RefPtr<Gtk::Snapshot>& snapshot) {
   cr->set_source_rgba(1, 1, 1, 1);
   FillGlyph(cr, glyph_, (w - glyphSide) / 2.0, (h - glyphSide) / 2.0, glyphSide);
   cairo_destroy(raw);
+}
+
+// ---- the coins' marks (mmm/BTCPAY.md §17.6) ---------------------------------------
+
+namespace {
+
+// A mark's colour at full contrast: black on a light theme, white on a dark
+// one, so white on this app's (main.cpp forces the dark scheme). Never
+// dimmed, whatever the coin's state: Solana's and Bittensor's brand rules
+// allow their marks only in black or white.
+constexpr GdkRGBA kMarkOnDark{1.f, 1.f, 1.f, 1.f};
+
+// The path of the mark `iconKey` names, coins/<iconKey>.svg under the
+// pkgdatadir (meson.build installs the four of More coins there) or assets/ in
+// a build tree, read and parsed once per key (GTK loop only): nullptr for a key
+// without a file, or a file that is not one plain path
+// (crypto_pay::SvgPathData). Kept for the process, a handful of small paths.
+GskPath* CoinMarkPath(const std::string& iconKey) {
+  static std::map<std::string, GskPath*> paths;
+  const auto found = paths.find(iconKey);
+  if (found != paths.end()) return found->second;
+  GskPath* path = nullptr;
+  if (crypto_pay::IsMarkKey(iconKey)) {
+    const std::string file =
+        ResolveRuntimePath(std::string(UR_PKGDATADIR) + "/coins/" + iconKey + ".svg",
+                           G_FILE_TEST_IS_REGULAR, "assets/" + iconKey + ".svg");
+    gchar* text = nullptr;
+    gsize length = 0;
+    if (!file.empty() && g_file_get_contents(file.c_str(), &text, &length, nullptr)) {
+      const std::string data = crypto_pay::SvgPathData(std::string_view(text, length));
+      g_free(text);
+      if (!data.empty()) path = gsk_path_parse(data.c_str());
+    }
+    if (!path) g_warning("crypto pay: no mark for %s", iconKey.c_str());
+  }
+  paths.emplace(iconKey, path);
+  return path;
+}
+
+}  // namespace
+
+CoinMark::CoinMark(const std::string& iconKey, int sizePx)
+    : path_(CoinMarkPath(iconKey)), size_(sizePx) {
+  set_valign(Gtk::Align::CENTER);
+  // the label beside it names the coin
+  MarkGlyphDecorative(*this);
+}
+
+bool CoinMark::Drawn() const { return path_ != nullptr; }
+
+void CoinMark::measure_vfunc(Gtk::Orientation, int, int& minimum, int& natural,
+                             int& minimum_baseline, int& natural_baseline) const {
+  minimum = natural = size_;
+  minimum_baseline = natural_baseline = -1;
+}
+
+void CoinMark::snapshot_vfunc(const Glib::RefPtr<Gtk::Snapshot>& snapshot) {
+  if (!path_) return;
+  const double w = get_width();
+  const double h = get_height();
+  if (w <= 0 || h <= 0) return;
+  const double box = crypto_pay::kMarkViewBox;
+  const double scale = std::min(w, h) / box;
+  GtkSnapshot* snap = snapshot->gobj();
+  gtk_snapshot_save(snap);
+  const graphene_point_t origin{static_cast<float>((w - box * scale) / 2.0),
+                                static_cast<float>((h - box * scale) / 2.0)};
+  gtk_snapshot_translate(snap, &origin);
+  gtk_snapshot_scale(snap, static_cast<float>(scale), static_cast<float>(scale));
+  // nonzero, the svg's rule: even-odd would hollow out ETH's facets and leave
+  // a seam in TAO's
+  gtk_snapshot_push_fill(snap, path_, GSK_FILL_RULE_WINDING);
+  // a little past the box: a path may touch its edge
+  const graphene_rect_t bounds{{-1.f, -1.f},
+                               {static_cast<float>(box) + 2.f, static_cast<float>(box) + 2.f}};
+  gtk_snapshot_append_color(snap, &kMarkOnDark, &bounds);
+  gtk_snapshot_pop(snap);
+  gtk_snapshot_restore(snap);
 }
 
 }  // namespace urnw

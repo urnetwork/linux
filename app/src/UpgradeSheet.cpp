@@ -191,8 +191,9 @@ void UpgradeSheet::BuildUi() {
   offerLine_->set_visible(false);
   optionsBox_->append(*offerLine_);
 
-  // Card · USDC · Zcash · Monero, directly above the button; hidden while the
-  // server lists no coin, so the sheet then looks as it always did
+  // Card · USDC on Solana · Zcash · Monero · More coins, directly above the
+  // button; hidden while the server lists no coin, so the sheet then looks as
+  // it always did
   methodRow_ = Gtk::make_managed<PaymentMethodRow>();
   methodRow_->set_margin_top(20);
   methodRow_->on_select = [this](const std::string& method) {
@@ -456,7 +457,8 @@ void UpgradeSheet::SetState(State state) {
   }
   joinBtn_->set_sensitive(!launching);
   plans_->set_sensitive(!launching);
-  methodRow_->set_sensitive(!launching);
+  // held, not insensitive: an insensitive row would dim the coins' marks
+  methodRow_->SetEnabled(!launching);
 }
 
 void UpgradeSheet::ApplyPrices() {
@@ -470,8 +472,9 @@ void UpgradeSheet::ApplyPrices() {
 }
 
 void UpgradeSheet::EmitPurchase(const char* outcome, const std::string& errorClass) {
-  // A coin's purchase names its market as the store (§6.1: solana, zcash,
-  // monero), buys the yearly plan, and has no trial; the card's is Stripe's.
+  // A coin's purchase names its market as the store (§6.1, the SDK's
+  // urnet::cryptoAssetMarket: solana, zcash, monero, bittensor, bitcoin,
+  // ethereum), buys the yearly plan, and has no trial; the card's is Stripe's.
   const bool coin = crypto_pay::IsCoin(purchaseMethod_);
   const bool yearly = coin || plans_->Yearly();
   const PriceTierView& tier = balance_.Tier();
@@ -483,7 +486,7 @@ void UpgradeSheet::EmitPurchase(const char* outcome, const std::string& errorCla
     const crypto_pay::InvoiceView& invoice = host_.CryptoInvoice().State();
     if (invoice.asset == purchaseMethod_ && 0 < invoice.priceUsd) price = invoice.priceUsd;
   }
-  const std::string store = coin ? crypto_pay::EventStore(purchaseMethod_) : kStoreStripe;
+  const std::string store = coin ? PaymentMethodEventStore(purchaseMethod_) : kStoreStripe;
   const bool trial = yearly && !coin;
   const std::string out(outcome);
   ClientEventQueue& events = host_.events();
@@ -1052,8 +1055,7 @@ void UpgradeSheet::OnBalanceChanged() {
 // ---- crypto (mmm/ZCASH-CONTRACT.md §6.1, §6.2) -------------------------------------------
 
 bool UpgradeSheet::RefreshMethods() {
-  return methodRow_->SetMethods(
-      balance_.PaymentMethods(crypto_pay::CoinPlan(balance_.Offer().active)));
+  return methodRow_->SetTabs(balance_.PaymentTabs(crypto_pay::CoinPlan(balance_.Offer().active)));
 }
 
 void UpgradeSheet::SelectMethod(const std::string& method) {

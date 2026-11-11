@@ -47,6 +47,7 @@
 #include <glibmm/main.h>
 
 #include "ConfirmationPollGate.hpp"
+#include "CryptoPay.hpp"
 #include "PricePresentation.hpp"
 #include "ReferralCodeState.hpp"
 #include "ReferralTotalsState.hpp"
@@ -151,11 +152,12 @@ class SubscriptionBalanceStore {
   // plan surface prints it before the next poll.
   void SetOffer(const urnet::OnboardingOffer& offer);
 
-  // The payment methods a plan surface offers (mmm/ZCASH-CONTRACT.md §6.1): the SDK's
-  // urnet::paymentMethods over the balance result's crypto_assets, for the
-  // one plan a coin would buy there (crypto_pay::CoinPlan). Just Card before
-  // the first fetch, from a server that lists no coin, and on an SDK error.
-  std::vector<std::string> PaymentMethods(const std::string& plan) const;
+  // The coin selector a plan surface offers beside Card (mmm/ZCASH-CONTRACT.md
+  // §6.1, mmm/BTCPAY.md §17.6): the SDK's urnet::cryptoPaymentTabs over the
+  // balance result's crypto_assets, for the one plan a coin would buy there
+  // (crypto_pay::CoinPlan). Empty, which leaves Card alone, before the first
+  // fetch, from a server that lists no coin, and on an SDK error.
+  std::vector<crypto_pay::PaymentTabView> PaymentTabs(const std::string& plan) const;
   // The renewal notice of a one-time crypto year is due now
   // (urnet::cryptoTermNoticeDue over the balance result's crypto_term:
   // term_end_time <= now < grace_end_time), and the grace's end it names

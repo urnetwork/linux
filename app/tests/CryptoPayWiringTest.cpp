@@ -70,10 +70,15 @@ UR_TEST(CryptoPayWiring_TheSheetsRowSitsAboveTheButton) {
   InOrder(FunctionBody(sheet, "Glib::ustring UpgradeSheet::JoinLabel() const {"),
           {"T_(\"crypto_pay_button\", \"Pay with {}\")", "PaymentMethodName(method_)",
            "PlanPicker::CtaLabel(plans_->Yearly())"});
-  // the methods come from the SDK's answer over the balance, and the opening
+  // the tabs come from the SDK's answer over the balance, and the opening
   // selection is the device's last method
   Has(FunctionBody(sheet, "bool UpgradeSheet::RefreshMethods() {"),
-      "balance_.PaymentMethods(crypto_pay::CoinPlan(balance_.Offer().active))");
+      "methodRow_->SetTabs(balance_.PaymentTabs(crypto_pay::CoinPlan(balance_.Offer().active)));");
+  // a start in flight holds the row's picks without making it insensitive,
+  // whose libadwaita filter would dim the coins' marks
+  const std::string setState = FunctionBody(sheet, "void UpgradeSheet::SetState(");
+  Has(setState, "methodRow_->SetEnabled(!launching);");
+  UR_EXPECT_FALSE(Contains(sheet, "methodRow_->set_sensitive("));
   InOrder(FunctionBody(sheet, "void UpgradeSheet::Open(bool freeRefresh) {"),
           {"RefreshMethods();", "SelectMethod(host_.CryptoInvoice().PaymentMethod());",
            "crypto_pay::InvoiceInProgress(host_.CryptoInvoice().State())", "ShowInvoice();"});
@@ -132,6 +137,10 @@ UR_TEST(CryptoPayWiring_TheControllerFeedIsMarshalled) {
   // the state is read on the GTK loop, with the SDK's URI check beside it
   Has(host, "urnet::checkCryptoPaymentUri(state.asset, state.uri, state.address)");
   Has(host, "urnet::cryptoWalletSuggestions(state.asset)");
+  // the QR draws the SDK's qr text, and a coin with no payment URI scheme
+  // (TAO) is paid by hand
+  Has(host, "view.qrText = state.qr_text;");
+  Has(host, "crypto_pay::IsCoin(state.asset) && urnet::cryptoPaymentUriScheme(state.asset).empty();");
   // a plan, never an item, and no storefront on the desktop
   Has(FunctionBody(host, "bool CryptoInvoiceHost::StartInvoice("), "vc_->startInvoice(asset, plan, \"\", \"\");");
 }
@@ -193,23 +202,32 @@ UR_TEST(CryptoPayWiring_PaidAndRefusals) {
   InOrder(build, {"invoiceView_->on_pay_another_way = [this] {", "host_.CryptoInvoice().Dismiss();",
                   "SelectMethod(crypto_pay::kMethodCard);", "SetState(State::Options);"});
   Has(build, "invoiceView_->on_refresh = [this] { host_.CryptoInvoice().Requote(); };");
-  // the events name the coin's market and no trial
+  // the events name the coin's market (the SDK's) and no trial
   InOrder(FunctionBody(sheet, "void UpgradeSheet::EmitPurchase("),
-          {"crypto_pay::EventStore(purchaseMethod_)", "const bool trial = yearly && !coin;"});
+          {"PaymentMethodEventStore(purchaseMethod_)", "const bool trial = yearly && !coin;"});
+  const std::string row = ReadCode("PaymentMethodRow.cpp");
+  InOrder(FunctionBody(row, "std::string PaymentMethodEventStore(const std::string& method) {"),
+          {"if (!crypto_pay::IsCoin(method)) return urnet::EventStoreStripe;",
+           "return urnet::cryptoAssetMarket(method);"});
   // the onboarding's coin never replaces a payment going on
   InOrder(FunctionBody(sheet, "void UpgradeSheet::OpenCryptoCheckout("),
           {"crypto_pay::InvoiceInProgress(host_.CryptoInvoice().State())", "ShowInvoice();",
            "return;", "StartCrypto(plan);"});
 }
 
-// Only a URI that passed the SDK's check is drawn or opened; a failed open
-// says nothing alarming and never logs the URI.
+// Only the SDK's qr text is drawn (a URI that passed the SDK's check, or TAO's
+// address alone), and only a checked URI is opened; a failed open says nothing
+// alarming and never logs the URI.
 UR_TEST(CryptoPayWiring_TheUriIsCheckedBeforeItIsShownOrOpened) {
   const std::string view = ReadCode("CryptoInvoiceView.cpp");
   const std::string render = FunctionBody(view, "void CryptoInvoiceView::Render(");
-  InOrder(render, {"const std::string uri = p.showQr ? invoice.uri : std::string();",
-                   "crypto_pay::EncodePaymentQr(uri)", "openUri_ = uri;",
-                   "openWallet_->set_visible(p.showQr);"});
+  InOrder(render, {"const std::string qrText = p.qrText;", "crypto_pay::EncodePaymentQr(qrText)",
+                   "noLinkNote_->set_visible(qrDrawn && note.key != nullptr);",
+                   "openUri_ = p.showOpenWallet ? invoice.uri : std::string();",
+                   "openWallet_->set_visible(p.showOpenWallet);"});
+  // Open in wallet never hands over the qr text (TAO's QR is a bare address)
+  UR_EXPECT_FALSE(Contains(render, "openUri_ = qrText"));
+  UR_EXPECT_FALSE(Contains(render, "openWallet_->set_visible(p.showQr);"));
   const std::string open = FunctionBody(view, "void CryptoInvoiceView::OpenInWallet() {");
   InOrder(open, {"if (openUri_.empty()) return;",
                  "g_app_info_launch_default_for_uri(openUri_.c_str(), nullptr, &error)", "g_debug("});
@@ -234,10 +252,12 @@ UR_TEST(CryptoPayWiring_TheUriIsCheckedBeforeItIsShownOrOpened) {
 UR_TEST(CryptoPayWiring_TheInvoiceReadsInTheContractsOrder) {
   const std::string view = ReadCode("CryptoInvoiceView.cpp");
   const std::string build = FunctionBody(view, "CryptoInvoiceView::CryptoInvoiceView() :");
-  InOrder(build, {"network_ = MakeLine(\"title-2\");", "append(*qr_);", "append(*openWallet_);",
+  InOrder(build, {"network_ = MakeLine(\"title-2\");",
+                  "T_(\"crypto_invoice_send_exactly_to_address\"", "append(*byHandLine_);",
+                  "append(*qr_);", "append(*noLinkNote_);", "append(*openWallet_);",
                   "BuildCopyRow(amount_, T_(\"crypto_invoice_send_exactly\", \"Send exactly\"));",
                   "BuildCopyRow(address_, T_(\"crypto_invoice_to_address\", \"To this address\"));",
-                  "T_(\"usdc_solana_network_only\"",
+                  "networkWarning_ = MakeLine(\"ur-amber\");", "append(*networkWarning_);",
                   "BuildCopyRow(memo_, T_(\"crypto_invoice_memo\", \"Memo, if you send by hand\"));",
                   "T_(\"crypto_invoice_quote_expired\"", "T_(\"crypto_invoice_refresh_quote\"",
                   "append(*steps_);", "append(*remaining_);", "T_(\"crypto_status_review\"",
@@ -255,9 +275,10 @@ UR_TEST(CryptoPayWiring_TheRowIsLinkedToggleButtons) {
   const std::string row = ReadCode("PaymentMethodRow.cpp");
   Has(row, "toggles_->add_css_class(\"linked\");");
   Has(row, "kit::SetAccessibleLabel(*toggles_, T_(\"pay_method_label\", \"Pay with\"));");
-  Has(row, "Gtk::make_managed<Gtk::ToggleButton>(T_(label.key, label.english))");
+  Has(row, "auto* toggle = Gtk::make_managed<Gtk::ToggleButton>();");
+  Has(row, "toggle->set_child(content);");
   Has(row, "toggle->set_group(*group);");
-  Has(row, "set_visible(crypto_pay::MethodRowShown(methods_));");
+  Has(row, "set_visible(crypto_pay::MethodRowShown(tabs_));");
   Has(row, "T_(\"pay_method_unavailable\", \"Temporarily unavailable\")");
   for (const char* file : {"PaymentMethodRow.cpp", "UpgradeSheet.cpp", "Onboarding.cpp"}) {
     const std::string code = ReadCode(file);
@@ -318,7 +339,7 @@ UR_TEST(CryptoPayWiring_TheOnboardingPagesCarryTheRow) {
           {"offerMethods_ = Gtk::make_managed<PaymentMethodRow>();", "page->append(*offerMethods_);",
            "page->append(*offerCta_);", "page->append(*offerFinePrint_);"});
   const std::string start = FunctionBody(onboarding, "void OnboardingWindow::StartCheckout(");
-  InOrder(start, {"crypto_pay::EventStore(method_)",
+  InOrder(start, {"PaymentMethodEventStore(method_)",
                   "checkout_->OpenCryptoCheckout(method_, crypto_pay::CoinPlan(ShowsOffer()));",
                   "checkout_->OpenCheckout(yearly);"});
   Has(FunctionBody(onboarding, "bool OnboardingWindow::ShowsOffer() const {"),
@@ -338,8 +359,15 @@ UR_TEST(CryptoPayWiring_TheBalanceCarriesTheCoins) {
   const std::string store = ReadCode("SubscriptionBalance.cpp");
   Has(store, "cryptoAssets_ = result->crypto_assets;");
   Has(store, "cryptoTerm_ = result->crypto_term;");
-  Has(FunctionBody(store, "std::vector<std::string> SubscriptionBalanceStore::PaymentMethods("),
-      "urnet::paymentMethods(cryptoAssets_, urnet::StringList{plan})");
+  // the SDK's tabs over the balance's coins, with no unavailable list (the
+  // balance names only the coins it can sell now)
+  const std::string tabs =
+      FunctionBody(store, "std::vector<crypto_pay::PaymentTabView> SubscriptionBalanceStore::PaymentTabs(");
+  InOrder(tabs, {"urnet::cryptoPaymentTabs(cryptoAssets_, urnet::CryptoPaymentAssetList{},",
+                 "urnet::StringList{plan})", "tab.labelKey = sdkTab.label_key;",
+                 "coin.iconKey = sdkCoin.icon_key;", "coin.available = sdkCoin.available;",
+                 "tab.available = sdkTab.available;"});
+  UR_EXPECT_FALSE(Contains(store, "urnet::paymentMethods("));
   Has(FunctionBody(store, "bool SubscriptionBalanceStore::CryptoTermNoticeDue() const {"),
       "urnet::cryptoTermNoticeDue(cryptoTerm_)");
   // a sign-in and a sign-out forget the last network's
@@ -394,4 +422,66 @@ UR_TEST(CryptoPayWiring_TheBuildListsTheSources) {
   // Open in wallet inside the Flatpak goes through the OpenURI portal
   Has(ReadRaw("../../packaging/flatpak/com.bringyour.network.yml"),
       "--talk-name=org.freedesktop.portal.OpenURI");
+  // More coins' marks are installed where CoinMark reads them
+  InOrder(build, {"install_data('assets/coin_tao.svg', 'assets/coin_btc.svg', 'assets/coin_eth.svg',",
+                  "'assets/coin_sol.svg',",
+                  "install_dir : get_option('datadir') / 'urnetwork/coins')"});
+}
+
+// More coins (mmm/BTCPAY.md §17.6): the tab shows its coins' marks, each its
+// own with space between them, names the coins for a screen reader, and opens
+// a list titled with its name, each coin with its mark and its network line; a
+// coin or tab that cannot be paid with now greys its label without going
+// insensitive; the selection's tab is the SDK's tab id; the labels are the
+// SDK's keys with its English; the marks are the installed svgs, filled
+// nonzero in white, never dimmed.
+UR_TEST(CryptoPayWiring_MoreCoins) {
+  const std::string row = ReadCode("PaymentMethodRow.cpp");
+  const std::string rebuild = FunctionBody(row, "void PaymentMethodRow::Rebuild() {");
+  InOrder(rebuild, {"if (crypto_pay::MethodRowShown(tabs_)) {",
+                    "PaymentMethodName(crypto_pay::kMethodCard)",
+                    "for (const crypto_pay::PaymentTabView& tab : tabs_) {",
+                    "LabelText(tab.labelKey, tab.label)",
+                    "auto* marks = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);",
+                    "for (const std::string& iconKey : tab.iconKeys) {",
+                    "Gtk::make_managed<CoinMark>(iconKey, kTabMarkPx);",
+                    "T_(\"pay_method_more_coins_a11y\", \"More coins: {}\")",
+                    "crypto_pay::NetworkLine(coin.asset)", "radio->set_child(*line);",
+                    "coinChoices_.push_back(CoinChoice{coin.asset, radio, nameLabel, coin.available});",
+                    "ApplyChoosable();"});
+  // a tab picks its coin: the one chosen there last (or remembered), else its
+  // first that can be paid with now
+  Has(rebuild, "crypto_pay::TabCoinSelection(tab, wanted_)");
+  // unavailable greys the label and takes no pointer or focus, never
+  // insensitive: libadwaita's disabled filter would dim the mark with it
+  InOrder(FunctionBody(row, "void SetChoosable(Gtk::Widget& choice, Gtk::Label& label, bool choosable) {"),
+          {"choice.set_can_target(choosable);", "choice.set_focusable(choosable);",
+           "label.add_css_class(\"dim-label\");", "GTK_ACCESSIBLE_STATE_DISABLED"});
+  UR_EXPECT_FALSE(Contains(row, "set_sensitive("));
+  UR_EXPECT_FALSE(Contains(row, "set_opacity("));
+  // the selection's tab is the SDK's tab id
+  Has(FunctionBody(row, "void PaymentMethodRow::Sync() {"),
+      "const std::string tabId = PaymentTabIdFor(selected_);");
+  Has(FunctionBody(row, "std::string PaymentTabIdFor(const std::string& method) {"),
+      "return urnet::cryptoPaymentTabId(method);");
+  // the labels by the SDK's key, its English the msgid ("Pay with USDC on Solana")
+  Has(FunctionBody(row, "Glib::ustring LabelText(const std::string& key, const std::string& english) {"),
+      "return Glib::ustring(T_(key.c_str(), english.c_str()));");
+  InOrder(FunctionBody(row, "Glib::ustring PaymentMethodName(const std::string& method) {"),
+          {"T_(\"pay_method_card\", \"Card\")",
+           "LabelText(urnet::cryptoAssetLabelKey(method), urnet::cryptoAssetLabel(method))"});
+
+  // the marks: the installed svgs, filled nonzero in white whatever the coin's
+  // state, on this dark-only app
+  const std::string icons = ReadCode("BrandIcons.cpp");
+  Has(icons, "constexpr GdkRGBA kMarkOnDark{1.f, 1.f, 1.f, 1.f};");
+  InOrder(FunctionBody(icons, "GskPath* CoinMarkPath(const std::string& iconKey) {"),
+          {"if (crypto_pay::IsMarkKey(iconKey)) {",
+           "std::string(UR_PKGDATADIR) + \"/coins/\" + iconKey + \".svg\"",
+           "\"assets/\" + iconKey + \".svg\"", "crypto_pay::SvgPathData(",
+           "gsk_path_parse(data.c_str())"});
+  InOrder(FunctionBody(icons, "void CoinMark::snapshot_vfunc("),
+          {"gtk_snapshot_push_fill(snap, path_, GSK_FILL_RULE_WINDING);",
+           "gtk_snapshot_append_color(snap, &kMarkOnDark, &bounds);"});
+  Has(ReadCode("main.cpp"), "ADW_COLOR_SCHEME_FORCE_DARK");
 }

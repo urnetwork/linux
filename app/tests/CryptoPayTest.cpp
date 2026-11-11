@@ -1,15 +1,19 @@
 // The payment-method toggle and the crypto invoice's rules (CryptoPay.hpp,
-// PaymentQr.hpp; mmm/ZCASH-CONTRACT.md §6): the method row's segments,
-// selection and plan rules, what the invoice shows in each state, the
-// renewal notice's window and the QR's encoding and sizing. The screens that
-// show them need GTK and the SDK; CryptoPayWiringTest.cpp reads those.
+// PaymentQr.hpp; mmm/ZCASH-CONTRACT.md §6, mmm/BTCPAY.md §17.6): the method
+// row's selection over the SDK's coin selector and its plan rules, each coin's
+// words, what the invoice shows in each state and for each coin, the renewal
+// notice's window, the QR's encoding and sizing, and the marks' svg reading.
+// The screens that show them need GTK and the SDK; CryptoPayWiringTest.cpp
+// reads those.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -18,11 +22,76 @@
 #include "CryptoPay.hpp"
 #include "PaymentQr.hpp"
 
+#ifndef UR_ASSETS_DIR
+#define UR_ASSETS_DIR ""
+#endif
+
 namespace {
 
 namespace cp = urnw::crypto_pay;
 
-using Methods = std::vector<std::string>;
+using Tabs = std::vector<cp::PaymentTabView>;
+
+// A coin of the selector as the SDK lays it out.
+cp::PaymentCoinView MakeCoin(const char* asset, const char* label, const char* labelKey,
+                             const char* iconKey, bool available) {
+  cp::PaymentCoinView coin;
+  coin.asset = asset;
+  coin.label = label;
+  coin.labelKey = labelKey;
+  coin.iconKey = iconKey;
+  coin.available = available;
+  return coin;
+}
+
+// The SDK's selector (urnet::cryptoPaymentTabs) for a balance that sells
+// `listed`, with no unavailable list: none at all without a coin; else the
+// main three tabs always, and More coins while one of its coins is listed,
+// each coin available while it is.
+Tabs SelectorFor(const std::vector<std::string>& listed) {
+  Tabs tabs;
+  if (listed.empty()) return tabs;
+  const auto has = [&listed](const char* asset) {
+    return std::find(listed.begin(), listed.end(), asset) != listed.end();
+  };
+  const auto single = [&](const char* asset, const char* label, const char* labelKey,
+                          const char* iconKey) {
+    cp::PaymentTabView tab;
+    tab.id = asset;
+    tab.label = label;
+    tab.labelKey = labelKey;
+    tab.iconKeys = {iconKey};
+    tab.coins = {MakeCoin(asset, label, labelKey, iconKey, has(asset))};
+    tab.available = has(asset);
+    tabs.push_back(tab);
+  };
+  single(cp::kAssetUsdcSolana, "USDC on Solana", "pay_method_usdc_solana", "coin_usdc");
+  single(cp::kAssetZec, "Zcash", "pay_method_zcash", "coin_zec");
+  single(cp::kAssetXmr, "Monero", "pay_method_monero", "coin_xmr");
+  if (has(cp::kAssetTao) || has(cp::kAssetBtc) || has(cp::kAssetEth) || has(cp::kAssetSol)) {
+    cp::PaymentTabView more;
+    more.id = cp::kTabMoreCoins;
+    more.label = "More coins";
+    more.labelKey = "pay_method_more_coins";
+    more.iconKeys = {"coin_tao", "coin_btc", "coin_eth", "coin_sol"};
+    more.coins = {MakeCoin(cp::kAssetTao, "TAO", "pay_method_tao", "coin_tao", has(cp::kAssetTao)),
+                  MakeCoin(cp::kAssetBtc, "Bitcoin", "pay_method_bitcoin", "coin_btc",
+                           has(cp::kAssetBtc)),
+                  MakeCoin(cp::kAssetEth, "ETH", "pay_method_eth", "coin_eth", has(cp::kAssetEth)),
+                  MakeCoin(cp::kAssetSol, "SOL", "pay_method_sol", "coin_sol", has(cp::kAssetSol))};
+    more.available = true;
+    tabs.push_back(more);
+  }
+  return tabs;
+}
+
+// The whole file, or "" when it cannot be read.
+std::string ReadAsset(const std::string& name) {
+  std::ifstream in(std::string(UR_ASSETS_DIR) + "/" + name, std::ios::binary);
+  std::ostringstream text;
+  text << in.rdbuf();
+  return text.str();
+}
 
 // An open, payable Monero invoice as the host hands it over.
 cp::InvoiceView OpenXmr() {
@@ -35,6 +104,7 @@ cp::InvoiceView OpenXmr() {
   v.amount = "0.072387";
   v.ticker = "XMR";
   v.uri = "monero:" + v.address + "?tx_amount=0.072387&tx_description=URnetwork%20Pro%20yearly";
+  v.qrText = v.uri;  // urnet::cryptoPaymentQrText: the URI its check passed
   v.expiresAt = "2026-10-20T18:30:00Z";
   v.secondsLeft = 1799;
   v.status = "pending";
@@ -63,43 +133,87 @@ std::string Kinds(const std::vector<cp::Step>& steps) {
 
 }  // namespace
 
-// Card first, then the coins in the fixed order, whatever order the answer
-// came in; ids this app has no label for are left out; Card is always there.
-UR_TEST(CryptoPay_RowMethodsAreCardThenTheCoinsInOrder) {
-  UR_EXPECT_TRUE(cp::RowMethods({"card", "xmr", "usdc_solana", "zec"}) ==
-                 Methods({"card", "usdc_solana", "zec", "xmr"}));
-  UR_EXPECT_TRUE(cp::RowMethods({"xmr", "doge", "xmr"}) == Methods({"card", "xmr"}));
-  UR_EXPECT_TRUE(cp::RowMethods({}) == Methods({"card"}));
-  UR_EXPECT_TRUE(cp::RowMethods({"card"}) == Methods({"card"}));
+// The SDK lays the selector out (urnet::cryptoPaymentTabs): USDC on Solana,
+// Zcash, Monero, then More coins with TAO, Bitcoin, ETH and SOL, each its own
+// mark; the row is Card and those tabs.
+UR_TEST(CryptoPay_TheSelectorIsTheSdksTabs) {
+  const Tabs all = SelectorFor({"usdc_solana", "zec", "xmr", "tao", "btc", "eth", "sol"});
+  std::string ids;
+  std::string assets;
+  for (const cp::PaymentTabView& tab : all) {
+    ids += (ids.empty() ? "" : ",") + tab.id;
+    for (const cp::PaymentCoinView& coin : tab.coins) assets += (assets.empty() ? "" : ",") + coin.asset;
+  }
+  UR_EXPECT_TRUE_MSG(ids, ids == "usdc_solana,zec,xmr,more_coins");
+  UR_EXPECT_TRUE_MSG(assets, assets == "usdc_solana,zec,xmr,tao,btc,eth,sol");
+  UR_EXPECT_TRUE(all[3].iconKeys ==
+                 std::vector<std::string>({"coin_tao", "coin_btc", "coin_eth", "coin_sol"}));
+  UR_EXPECT_TRUE(cp::TabOpensCoins(all[3]) && !cp::TabOpensCoins(all[0]));
+  const cp::PaymentCoinView* eth = cp::FindCoin(all, "eth");
+  UR_EXPECT_TRUE(eth != nullptr && eth->labelKey == "pay_method_eth");
+  UR_EXPECT_TRUE(cp::FindCoin(all, "doge") == nullptr);
+  // the row rebuilds only for a selector that changed
+  UR_EXPECT_TRUE(SelectorFor({"xmr"}) == SelectorFor({"xmr"}));
+  UR_EXPECT_TRUE(SelectorFor({"xmr"}) != SelectorFor({"xmr", "tao"}));
 }
 
-// No coin listed: no row, and the surface looks as it did before the toggle.
+// No coin listed: no tabs, no row, and the surface looks as it did before the
+// toggle; the main three tabs while no More coins coin is listed.
 UR_TEST(CryptoPay_TheRowShowsOnlyWithACoin) {
-  UR_EXPECT_FALSE(cp::MethodRowShown({"card"}));
-  UR_EXPECT_FALSE(cp::MethodRowShown({}));
-  UR_EXPECT_TRUE(cp::MethodRowShown({"card", "usdc_solana"}));
-  UR_EXPECT_TRUE(cp::MethodRowShown({"card", "xmr"}));
+  UR_EXPECT_FALSE(cp::MethodRowShown(SelectorFor({})));
+  UR_EXPECT_TRUE(cp::MethodRowShown(SelectorFor({"usdc_solana"})));
+  UR_EXPECT_TRUE(cp::MethodRowShown(SelectorFor({"tao"})));
+  UR_EXPECT_EQ(size_t{3}, SelectorFor({"xmr"}).size());
+  UR_EXPECT_EQ(size_t{4}, SelectorFor({"sol"}).size());
 }
 
-// The remembered method when listed, else Card.
+// The remembered method while it can be paid with now, else Card: a coin the
+// server stopped selling, or one that cannot be quoted (greyed in its place).
 UR_TEST(CryptoPay_ARememberedCoinTheServerDroppedFallsBackToCard) {
-  const Methods methods{"card", "usdc_solana", "xmr"};
-  UR_EXPECT_TRUE(cp::MethodSelection(methods, "xmr") == "xmr");
-  UR_EXPECT_TRUE(cp::MethodSelection(methods, "card") == "card");
-  UR_EXPECT_TRUE(cp::MethodSelection(methods, "zec") == "card");
-  UR_EXPECT_TRUE(cp::MethodSelection(methods, "") == "card");
-  UR_EXPECT_TRUE(cp::MethodSelection({"card"}, "usdc_solana") == "card");
+  const Tabs tabs = SelectorFor({"usdc_solana", "xmr", "tao", "sol"});
+  UR_EXPECT_TRUE(cp::MethodSelection(tabs, "xmr") == "xmr");
+  UR_EXPECT_TRUE(cp::MethodSelection(tabs, "sol") == "sol");
+  UR_EXPECT_TRUE(cp::MethodSelection(tabs, "card") == "card");
+  UR_EXPECT_TRUE(cp::MethodSelection(tabs, "zec") == "card");
+  UR_EXPECT_TRUE(cp::MethodSelection(tabs, "btc") == "card");
+  UR_EXPECT_TRUE(cp::MethodSelection(tabs, "") == "card");
+  UR_EXPECT_TRUE(cp::MethodSelection(tabs, "doge") == "card");
+  UR_EXPECT_TRUE(cp::MethodSelection(tabs, "more_coins") == "card");
+  UR_EXPECT_TRUE(cp::MethodSelection(SelectorFor({}), "usdc_solana") == "card");
+  UR_EXPECT_TRUE(cp::MethodOffered(tabs, "card") && cp::MethodOffered(tabs, "tao"));
+  UR_EXPECT_FALSE(cp::MethodOffered(tabs, "eth"));
+}
+
+// A tab chosen selects a coin: a tab of one coin is that coin; More coins the
+// coin chosen there last while it can be paid with, else its first that can;
+// a tab with none cannot be chosen.
+UR_TEST(CryptoPay_ATabSelectsItsCoin) {
+  const Tabs taoAndSol = SelectorFor({"tao", "sol"});  // Bitcoin and ETH not quotable
+  const cp::PaymentTabView& more = taoAndSol[3];
+  UR_EXPECT_TRUE(cp::TabCoinSelection(more, "") == "tao");
+  UR_EXPECT_TRUE(cp::TabCoinSelection(more, "sol") == "sol");
+  UR_EXPECT_TRUE(cp::TabCoinSelection(more, "btc") == "tao");
+  UR_EXPECT_TRUE(cp::TabCoinSelection(more, "xmr") == "tao");
+  UR_EXPECT_TRUE(cp::TabCoinSelection(taoAndSol[0], "").empty());  // USDC not listed: greyed
+  UR_EXPECT_FALSE(taoAndSol[0].available);
+  UR_EXPECT_TRUE(more.available);
+  const Tabs all = SelectorFor({"usdc_solana", "zec", "xmr"});
+  UR_EXPECT_TRUE(cp::TabCoinSelection(all[1], "xmr") == "zec");
+  UR_EXPECT_TRUE(cp::JoinNames({"TAO", "", "Bitcoin", "ETH", "SOL"}) == "TAO, Bitcoin, ETH, SOL");
 }
 
 // Monthly is card only; a coin buys the yearly plan, or the welcome offer.
 UR_TEST(CryptoPay_ACoinBuysYearlyOrTheOffer) {
   UR_EXPECT_TRUE(cp::MonthlyAllowed("card"));
-  for (const char* coin : {"usdc_solana", "zec", "xmr"}) {
+  for (const char* coin : {"usdc_solana", "zec", "xmr", "tao", "btc", "eth", "sol"}) {
     UR_EXPECT_FALSE(cp::MonthlyAllowed(coin));
-    UR_EXPECT_TRUE(cp::IsCoin(coin));
+    UR_EXPECT_TRUE_MSG(coin, cp::IsCoin(coin));
   }
   UR_EXPECT_FALSE(cp::IsCoin("card"));
   UR_EXPECT_FALSE(cp::IsCoin(""));
+  UR_EXPECT_FALSE(cp::IsCoin("XMR"));
+  UR_EXPECT_FALSE(cp::IsCoin("doge"));
+  UR_EXPECT_FALSE(cp::IsCoin("more_coins"));
   UR_EXPECT_TRUE(std::string(cp::CoinPlan(false)) == "yearly");
   UR_EXPECT_TRUE(std::string(cp::CoinPlan(true)) == "yearly_onboarding");
 }
@@ -122,30 +236,40 @@ UR_TEST(CryptoPay_ACoinShowsNoRenewalLine) {
   UR_EXPECT_TRUE(cp::YearlyCardLines("", false, "", true).empty());
 }
 
-// The client events name the method's store (§6.1).
-UR_TEST(CryptoPay_EventsUseTheMethodsStore) {
-  UR_EXPECT_TRUE(std::string(cp::EventStore("card")) == "stripe");
-  UR_EXPECT_TRUE(std::string(cp::EventStore("usdc_solana")) == "solana");
-  UR_EXPECT_TRUE(std::string(cp::EventStore("zec")) == "zcash");
-  UR_EXPECT_TRUE(std::string(cp::EventStore("xmr")) == "monero");
-  UR_EXPECT_TRUE(std::string(cp::EventStore("doge")).empty());
-}
+// (The events' store is the SDK's market, urnet::cryptoAssetMarket:
+// CryptoPayWiringTest.cpp reads PaymentMethodEventStore.)
 
-// The segment labels and the invoice's network line are the store's keys.
-UR_TEST(CryptoPay_LabelsAndNetworkLinesAreTheStoresKeys) {
+// Each coin's network line, its warning and TAO's QR note are the store's
+// keys; the labels of the tabs and coins are the SDK's.
+UR_TEST(CryptoPay_NetworkLinesAndWarningsAreTheStoresKeys) {
   const auto is = [](cp::Text text, const char* key, const char* english) {
     return text.key && text.english && std::string(text.key) == key &&
            std::string(text.english) == english;
   };
-  UR_EXPECT_TRUE(is(cp::MethodLabel("card"), "pay_method_card", "Card"));
-  UR_EXPECT_TRUE(is(cp::MethodLabel("usdc_solana"), "pay_method_usdc", "USDC"));
-  UR_EXPECT_TRUE(is(cp::MethodLabel("zec"), "pay_method_zcash", "Zcash"));
-  UR_EXPECT_TRUE(is(cp::MethodLabel("xmr"), "pay_method_monero", "Monero"));
-  UR_EXPECT_TRUE(cp::MethodLabel("doge").key == nullptr);
   UR_EXPECT_TRUE(is(cp::NetworkLine("usdc_solana"), "crypto_network_usdc", "USDC on Solana"));
   UR_EXPECT_TRUE(is(cp::NetworkLine("zec"), "crypto_network_zcash", "Zcash, shielded"));
   UR_EXPECT_TRUE(is(cp::NetworkLine("xmr"), "crypto_network_monero", "Monero"));
+  UR_EXPECT_TRUE(is(cp::NetworkLine("tao"), "crypto_network_tao", "Bittensor network"));
+  UR_EXPECT_TRUE(is(cp::NetworkLine("btc"), "crypto_network_bitcoin", "Bitcoin network"));
+  UR_EXPECT_TRUE(is(cp::NetworkLine("eth"), "crypto_network_eth", "Ethereum mainnet"));
+  UR_EXPECT_TRUE(is(cp::NetworkLine("sol"), "crypto_network_sol", "Solana (native SOL)"));
   UR_EXPECT_TRUE(cp::NetworkLine("card").key == nullptr);
+  // every coin of this app's has its network line
+  for (const char* coin : cp::kCoins) UR_EXPECT_TRUE_MSG(coin, cp::NetworkLine(coin).key != nullptr);
+  UR_EXPECT_TRUE(cp::NetworkWarning("usdc_solana").key != nullptr &&
+                 std::string(cp::NetworkWarning("usdc_solana").key) == "usdc_solana_network_only");
+  UR_EXPECT_TRUE(std::string(cp::NetworkWarning("tao").key) == "crypto_invoice_tao_network_only");
+  UR_EXPECT_TRUE(std::string(cp::NetworkWarning("btc").key) == "crypto_invoice_bitcoin_network_only");
+  UR_EXPECT_TRUE(std::string(cp::NetworkWarning("eth").key) == "crypto_invoice_eth_network_only");
+  UR_EXPECT_TRUE(std::string(cp::NetworkWarning("sol").key) == "crypto_invoice_sol_network_only");
+  UR_EXPECT_TRUE(cp::NetworkWarning("zec").key == nullptr && cp::NetworkWarning("xmr").key == nullptr);
+  // the warnings name the coin and its network, as the store's contract test pins
+  UR_EXPECT_TRUE(std::string(cp::NetworkWarning("tao").english).find("Send only TAO on the Bittensor network") == 0);
+  UR_EXPECT_TRUE(std::string(cp::NetworkWarning("eth").english).find("Send only ETH on Ethereum mainnet") == 0);
+  UR_EXPECT_TRUE(is(cp::NoPaymentLinkNote("tao"), "crypto_invoice_tao_no_payment_link",
+                    "TAO has no payment link, so this QR code holds only the address. Enter the exact "
+                    "amount in your wallet."));
+  UR_EXPECT_TRUE(cp::NoPaymentLinkNote("sol").key == nullptr);
 }
 
 // A refused start: unavailable stays on the coin, a guest converts, the rest
@@ -236,11 +360,14 @@ UR_TEST(CryptoPay_StatusSteps) {
 UR_TEST(CryptoPay_APendingInvoiceShowsEverythingToPayWith) {
   const cp::InvoicePresentation p = cp::PresentInvoice(OpenXmr());
   UR_EXPECT_TRUE(p.showQr);
+  UR_EXPECT_TRUE(p.qrText == OpenXmr().uri);  // the SDK's qr text: the checked URI
+  UR_EXPECT_TRUE(p.showOpenWallet);
+  UR_EXPECT_FALSE(p.noPaymentLink || p.showByHandLine || p.noPaymentLinkNote.key);
   UR_EXPECT_TRUE(p.showAmount);
   UR_EXPECT_TRUE(p.amountText == "0.072387 XMR");
   UR_EXPECT_TRUE(p.showAddress);
-  UR_EXPECT_FALSE(p.showMemo);  // USDC only
-  UR_EXPECT_FALSE(p.usdcWarning);
+  UR_EXPECT_FALSE(p.showMemo);  // a coin on Solana only
+  UR_EXPECT_FALSE(p.showNetworkWarning);  // Monero has none
   UR_EXPECT_TRUE(p.showCountdown);
   UR_EXPECT_TRUE(p.countdownText == "29:59");
   UR_EXPECT_FALSE(p.expired);
@@ -261,19 +388,27 @@ UR_TEST(CryptoPay_AnUncheckedUriShowsNoQr) {
   cp::InvoiceView v = OpenXmr();
   v.uriChecked = false;
   cp::InvoicePresentation p = cp::PresentInvoice(v);
-  UR_EXPECT_FALSE(p.showQr);
+  UR_EXPECT_FALSE(p.showQr || p.showOpenWallet);
   UR_EXPECT_TRUE(p.showAmount && p.showAddress);
   // Requoted on another device (mmm/ZCASH-CONTRACT.md §4.4.1): the controller blanks the
-  // URI, which asked for the old amount. No QR and no Open in wallet; the new
-  // exact amount and the address to send it to by hand.
+  // URI, which asked for the old amount, and its qr text with it. No QR and no
+  // Open in wallet; the new exact amount and the address to send it to by hand.
   v = OpenXmr();
   v.uri.clear();
+  v.qrText.clear();
   v.uriChecked = false;
   v.amount = "0.071000";
   p = cp::PresentInvoice(v);
-  UR_EXPECT_FALSE(p.showQr);
+  UR_EXPECT_FALSE(p.showQr || p.showOpenWallet);
   UR_EXPECT_TRUE(p.showAmount && p.amountText == "0.071000 XMR");
   UR_EXPECT_TRUE(p.showAddress && p.showCountdown && p.showRefresh);
+  // A coin with a payment link draws its URI and nothing else: never its bare
+  // address
+  v = OpenXmr();
+  v.qrText = v.address;
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_FALSE(p.showQr);
+  UR_EXPECT_TRUE(p.qrText.empty());
 }
 
 // Expired, as the server says or as the countdown ran out: no stale amount
@@ -407,9 +542,11 @@ UR_TEST(CryptoPay_UsdcShowsTheMemoAndTheNetworkWarning) {
   v.amount = "40.012345";
   v.memo = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
   v.uri = "solana:" + v.address + "?amount=40.012345";
+  v.qrText = v.uri;
   cp::InvoicePresentation p = cp::PresentInvoice(v);
   UR_EXPECT_TRUE(p.showMemo);
-  UR_EXPECT_TRUE(p.usdcWarning);
+  UR_EXPECT_TRUE(p.showNetworkWarning);
+  UR_EXPECT_TRUE(std::string(p.networkWarning.key) == "usdc_solana_network_only");
   UR_EXPECT_TRUE(p.amountText == "40.012345 USDC");
   UR_EXPECT_TRUE(Kinds(p.steps) == "waiting=current paid=upcoming");
   UR_EXPECT_FALSE(p.zcashNote);
@@ -425,6 +562,138 @@ UR_TEST(CryptoPay_ZcashShowsTheExchangeNote) {
   UR_EXPECT_TRUE(cp::PresentInvoice(v).zcashNote);
   v.status = "confirming";
   UR_EXPECT_FALSE(cp::PresentInvoice(v).zcashNote);
+}
+
+// TAO has no payment link (mmm/BTCPAY.md §17.6): the SDK keeps no URI and its
+// qr text is the address alone. The QR holds the address, with the note saying
+// so; nothing opens in a wallet; the invoice says to send exactly this amount
+// to this address, Copy amount and Copy address, with the Bittensor network's
+// warning.
+UR_TEST(CryptoPay_TaoIsPaidByHand) {
+  cp::InvoiceView v = OpenXmr();
+  v.asset = "tao";
+  v.ticker = "TAO";
+  v.amount = "0.123456";
+  v.address = "5" + std::string(47, 'T');
+  v.uri.clear();
+  v.uriChecked = false;
+  v.qrText = v.address;
+  v.noPaymentLink = true;
+  v.wallets = {"btcli", "Talisman", "Nova", "SubWallet", "Polkadot.js", "Ledger", "Tangem"};
+  cp::InvoicePresentation p = cp::PresentInvoice(v);
+  UR_EXPECT_TRUE(p.showQr && p.qrText == v.address);
+  UR_EXPECT_TRUE(p.noPaymentLinkNote.key != nullptr &&
+                 std::string(p.noPaymentLinkNote.key) == "crypto_invoice_tao_no_payment_link");
+  UR_EXPECT_FALSE(p.showOpenWallet);
+  UR_EXPECT_TRUE(p.noPaymentLink && p.showByHandLine);
+  UR_EXPECT_TRUE(p.showAmount && p.amountText == "0.123456 TAO");
+  UR_EXPECT_TRUE(p.showAddress && p.showNetworkWarning);
+  UR_EXPECT_TRUE(std::string(p.networkWarning.key) == "crypto_invoice_tao_network_only");
+  UR_EXPECT_FALSE(p.showMemo || p.zcashNote);
+  UR_EXPECT_TRUE(p.showCountdown && p.showWallets);
+  // the QR holds the address or nothing
+  v.qrText = "tao:" + v.address;
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_FALSE(p.showQr);
+  UR_EXPECT_TRUE(p.noPaymentLinkNote.key == nullptr);
+  UR_EXPECT_TRUE(p.showAmount && p.showAddress && p.showByHandLine);
+  v.qrText.clear();
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_FALSE(p.showQr);
+  UR_EXPECT_TRUE(p.showAmount && p.showAddress);
+  // a top-up: the address and its warning for the rest, never the QR or the
+  // full amount
+  v.qrText = v.address;
+  v.status = "seen";
+  v.received = "0.12";
+  v.remaining = "0.003456";
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_TRUE(p.showAddress && p.showNetworkWarning);
+  UR_EXPECT_FALSE(p.showQr || p.showAmount || p.showByHandLine);
+  UR_EXPECT_TRUE(p.remainingText == "0.003456 TAO");
+  // expired: nothing to send
+  v.status = "pending";
+  v.secondsLeft = 0;
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_FALSE(p.showQr || p.showAmount || p.showByHandLine || p.noPaymentLinkNote.key);
+}
+
+// Bitcoin, ETH and native SOL: their links' QR and Open in wallet as Monero's,
+// each network's warning with the address, and SOL's memo as USDC's.
+UR_TEST(CryptoPay_TheNewCoinsLinksAndWarnings) {
+  struct Linked {
+    const char* asset;
+    const char* ticker;
+    std::string uri;
+    const char* network;
+    const char* warning;
+  };
+  for (const Linked& c : {
+           Linked{"btc", "BTC", "bitcoin:bc1qsample?amount=0.00061234", "crypto_network_bitcoin",
+                  "crypto_invoice_bitcoin_network_only"},
+           Linked{"eth", "ETH", "ethereum:0xsample@1?value=12000000000000000", "crypto_network_eth",
+                  "crypto_invoice_eth_network_only"},
+           Linked{"sol", "SOL", "solana:Ssample?amount=0.251234", "crypto_network_sol",
+                  "crypto_invoice_sol_network_only"},
+       }) {
+    cp::InvoiceView v = OpenXmr();
+    v.asset = c.asset;
+    v.ticker = c.ticker;
+    v.uri = c.uri;
+    v.qrText = c.uri;
+    const cp::InvoicePresentation p = cp::PresentInvoice(v);
+    UR_EXPECT_TRUE_MSG(c.asset, p.showQr && p.qrText == c.uri && p.showOpenWallet);
+    UR_EXPECT_TRUE_MSG(c.asset, !p.noPaymentLink && !p.showByHandLine && !p.noPaymentLinkNote.key);
+    UR_EXPECT_TRUE_MSG(c.asset, p.showNetworkWarning && std::string(p.networkWarning.key) == c.warning);
+    UR_EXPECT_TRUE_MSG(c.asset, std::string(cp::NetworkLine(c.asset).key) == c.network);
+    UR_EXPECT_TRUE_MSG(c.asset, !p.showMemo && !p.zcashNote);
+  }
+  cp::InvoiceView sol = OpenXmr();
+  sol.asset = "sol";
+  sol.memo = "Rsample";
+  UR_EXPECT_TRUE(cp::PresentInvoice(sol).showMemo);
+  cp::InvoiceView btc = OpenXmr();
+  btc.asset = "btc";
+  btc.memo = "Rsample";
+  UR_EXPECT_FALSE(cp::PresentInvoice(btc).showMemo);
+}
+
+// The marks' files (BrandIcons.cpp CoinMark): an icon key names an installed
+// file and nothing else, and SvgPathData reads one plain path out of it.
+UR_TEST(CryptoPay_AMarkIsOnePlainPath) {
+  for (const char* key : {"coin_tao", "coin_btc", "coin_eth", "coin_sol"}) {
+    UR_EXPECT_TRUE_MSG(key, cp::IsMarkKey(key));
+  }
+  for (const char* key : {"", "../coin_tao", "coin_tao.svg", "Coin_Tao", "coin tao", "coins/tao"}) {
+    UR_EXPECT_FALSE(cp::IsMarkKey(key));
+  }
+  const std::string svg =
+      "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\">\n"
+      "<!-- a comment that names <path d=\"M9 9Z\"/> -->\n"
+      "<path fill=\"currentColor\" d=\"M14.38 18.415V8.577C14.38 6.119 12.351 4.116 9.893 4.116Z\"/>\n"
+      "</svg>\n";
+  UR_EXPECT_TRUE(cp::SvgPathData(svg) == "M14.38 18.415V8.577C14.38 6.119 12.351 4.116 9.893 4.116Z");
+  UR_EXPECT_TRUE(cp::SvgPathData("<svg><path d=\"M0 0Z\"/><path d=\"M1 1Z\"/></svg>").empty());
+  UR_EXPECT_TRUE(cp::SvgPathData("<svg></svg>").empty());
+  UR_EXPECT_TRUE(cp::SvgPathData("<svg><path fill=\"x\"/></svg>").empty());
+  UR_EXPECT_TRUE(cp::SvgPathData("<svg><path d=\"M0 0'/><text/>\"/></svg>").empty());
+  UR_EXPECT_TRUE(cp::SvgPathData("<svg><path d=\"M0 0&amp;Z\"/></svg>").empty());
+  UR_EXPECT_TRUE(cp::SvgPathData("<svg><path d=\"M0 0Z").empty());
+  UR_EXPECT_TRUE(cp::SvgPathData("<!-- <path d=\"M0 0Z\"/>").empty());
+  UR_EXPECT_TRUE(cp::SvgPathData("<svg><pathway/><path\nd=\"M0 0Z\"/></svg>") == "M0 0Z");
+  UR_EXPECT_EQ(24.0, cp::kMarkViewBox);
+}
+
+// The four marks meson installs are each one plain path on the 24 x 24 box,
+// filled nonzero, that SvgPathData reads.
+UR_TEST(CryptoPay_TheInstalledMarksReadAsOnePath) {
+  for (const char* key : {"coin_tao", "coin_btc", "coin_eth", "coin_sol"}) {
+    const std::string svg = ReadAsset(std::string(key) + ".svg");
+    UR_EXPECT_TRUE_MSG(key, !svg.empty());
+    UR_EXPECT_TRUE_MSG(key, !cp::SvgPathData(svg).empty());
+    UR_EXPECT_TRUE_MSG(key, svg.find("viewBox=\"0 0 24 24\"") != std::string::npos);
+    UR_EXPECT_TRUE_MSG(key, svg.find("evenodd") == std::string::npos);
+  }
 }
 
 // A resumed invoice before its first status poll: money may already be on its
@@ -521,7 +790,15 @@ UR_TEST(CryptoPay_PaymentUrisEncodeAtAScannableSize) {
       "solana:" + std::string(44, 'C') +
       "?amount=40.012345&spl-token=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&reference=" +
       std::string(44, 'D') + "&label=URnetwork&message=URnetwork%20Pro%20yearly";
-  for (const std::string& uri : {xmr, zec, usdc}) {
+  // mmm/BTCPAY.md §17.7: BIP 21, EIP-681, Solana Pay without spl-token, and
+  // TAO's address alone (an ss58 address)
+  const std::string btc = "bitcoin:bc1q" + std::string(38, 'q') +
+                          "?amount=0.00061234&label=URnetwork&message=URnetwork%20Pro%20yearly";
+  const std::string eth = "ethereum:0x" + std::string(40, 'a') + "@1?value=12000000000000000";
+  const std::string sol = "solana:" + std::string(44, 'S') + "?amount=0.251234&reference=" +
+                          std::string(44, 'R') + "&label=URnetwork&message=URnetwork%20Pro%20yearly";
+  const std::string tao = "5" + std::string(47, 'T');
+  for (const std::string& uri : {xmr, zec, usdc, btc, eth, sol, tao}) {
     const cp::QrModules code = cp::EncodePaymentQr(uri);
     UR_EXPECT_TRUE_MSG(uri, 21 <= code.count && code.count <= 97);  // versions 1..20
     UR_EXPECT_TRUE_MSG(uri, code.dark.size() ==

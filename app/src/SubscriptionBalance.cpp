@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <utility>
 
 #include <glib.h>
 
@@ -331,18 +332,42 @@ void SubscriptionBalanceStore::SetOffer(const urnet::OnboardingOffer& offer) {
   offer_.expiresAt = offer.expires_at;
 }
 
-std::vector<std::string> SubscriptionBalanceStore::PaymentMethods(const std::string& plan) const {
-  std::vector<std::string> methods{crypto_pay::kMethodCard};
-  if (!cryptoAssets_ || cryptoAssets_->empty()) return methods;
+std::vector<crypto_pay::PaymentTabView> SubscriptionBalanceStore::PaymentTabs(
+    const std::string& plan) const {
+  std::vector<crypto_pay::PaymentTabView> tabs;
+  if (!cryptoAssets_ || cryptoAssets_->empty()) return tabs;
   try {
-    // Card first, then each listed coin that sells the plan, in the fixed order
-    if (const auto answer = urnet::paymentMethods(cryptoAssets_, urnet::StringList{plan})) {
-      methods.assign(answer->begin(), answer->end());
+    // USDC on Solana, Zcash, Monero, then More coins, each coin saying whether
+    // it sells the plan now; no list of coins that cannot be quoted, since the
+    // balance names only those it can sell
+    const auto answer = urnet::cryptoPaymentTabs(cryptoAssets_, urnet::CryptoPaymentAssetList{},
+                                                 urnet::StringList{plan});
+    if (!answer) return tabs;
+    for (const urnet::CryptoPaymentTab& sdkTab : *answer) {
+      crypto_pay::PaymentTabView tab;
+      tab.id = sdkTab.id;
+      tab.label = sdkTab.label;
+      tab.labelKey = sdkTab.label_key;
+      if (sdkTab.icon_keys) tab.iconKeys = *sdkTab.icon_keys;
+      if (sdkTab.coins) {
+        for (const urnet::CryptoPaymentCoin& sdkCoin : *sdkTab.coins) {
+          crypto_pay::PaymentCoinView coin;
+          coin.asset = sdkCoin.asset;
+          coin.label = sdkCoin.label;
+          coin.labelKey = sdkCoin.label_key;
+          coin.iconKey = sdkCoin.icon_key;
+          coin.available = sdkCoin.available;
+          tab.coins.push_back(std::move(coin));
+        }
+      }
+      tab.available = sdkTab.available;
+      tabs.push_back(std::move(tab));
     }
   } catch (const std::exception& e) {
     g_warning("balance: the payment methods could not be read: %s", e.what());
+    tabs.clear();
   }
-  return methods;
+  return tabs;
 }
 
 bool SubscriptionBalanceStore::CryptoTermNoticeDue() const {

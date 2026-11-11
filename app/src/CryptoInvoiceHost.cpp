@@ -22,7 +22,9 @@ crypto_pay::InvoiceView NoInvoice() {
 // The controller's state as the screens read it, with the SDK's answers
 // beside it. The controller already drops a URI that fails the check; it is
 // checked again here because the screens must never show or open one that
-// fails it, whatever produced the state.
+// fails it, whatever produced the state. The QR draws the state's qr text
+// (urnet::cryptoPaymentQrText); a coin without a payment URI scheme (TAO) is
+// paid by hand.
 crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {
   crypto_pay::InvoiceView view;
   view.phase = state.phase;
@@ -34,6 +36,7 @@ crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {
   view.amount = state.amount;
   view.ticker = state.ticker.empty() ? urnet::cryptoAssetTicker(state.asset) : state.ticker;
   view.uri = state.uri;
+  view.qrText = state.qr_text;
   view.memo = state.memo;
   view.priceUsd = state.price_usd;
   view.expiresAt = state.expires_at;
@@ -52,6 +55,8 @@ crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {
   if (const auto wallets = urnet::cryptoWalletSuggestions(state.asset)) {
     view.wallets.assign(wallets->begin(), wallets->end());
   }
+  view.noPaymentLink =
+      crypto_pay::IsCoin(state.asset) && urnet::cryptoPaymentUriScheme(state.asset).empty();
   return view;
 }
 

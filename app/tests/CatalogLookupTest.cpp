@@ -511,11 +511,39 @@ const std::set<std::string>& LinuxTaggedKeys() {
   return keys;
 }
 
+// The crypto payment row's labels (mmm/BTCPAY.md §17.6), which the SDK hands
+// out with each tab and coin as a store key with its English
+// (urnet::cryptoPaymentTabs' label_key and label, urnet::cryptoAssetLabelKey and
+// urnet::cryptoAssetLabel), as the SDK's crypto_pay.go spells them.
+// PaymentMethodRow.cpp LabelText looks each up with T_(key, English), so the
+// English must be the catalog's msgid byte for byte.
+const std::vector<std::pair<std::string, std::string>>& SdkCryptoLabels() {
+  static const std::vector<std::pair<std::string, std::string>> labels = {
+      {"pay_method_usdc_solana", "USDC on Solana"},
+      {"pay_method_zcash", "Zcash"},
+      {"pay_method_monero", "Monero"},
+      {"pay_method_more_coins", "More coins"},
+      {"pay_method_tao", "TAO"},
+      {"pay_method_bitcoin", "Bitcoin"},
+      {"pay_method_eth", "ETH"},
+      {"pay_method_sol", "SOL"},
+  };
+  return labels;
+}
+
 // Keys tagged linux that the app looks up only where the scan cannot see, each
-// with where. None today: every lookup is a T_/TN_ call or a table pair the
-// scan reads.
+// with where: the crypto payment row's labels (SdkCryptoLabels). Every other
+// lookup is a T_/TN_ call or a table pair the scan reads.
 const std::map<std::string, std::string>& UnscannedTaggedKeys() {
-  static const std::map<std::string, std::string> keys = {};
+  static const std::map<std::string, std::string> keys = [] {
+    std::map<std::string, std::string> out;
+    for (const auto& label : SdkCryptoLabels()) {
+      out.emplace(label.first,
+                  "a crypto payment label the SDK hands out with its English, looked up by "
+                  "PaymentMethodRow.cpp LabelText");
+    }
+    return out;
+  }();
   return keys;
 }
 
@@ -771,6 +799,18 @@ UR_TEST(catalogLookupEveryTaggedKeyIsLookedUp) {
     UR_EXPECT_TRUE_MSG(entry.first + " (" + entry.second + ") is no longer tagged linux, or the "
                        "scan now sees it: drop it from UnscannedTaggedKeys",
                        LinuxTaggedKeys().count(entry.first) == 1 && lookedUp.count(entry.first) == 0);
+  }
+}
+
+// The labels the SDK hands out are entries of the catalog under the SDK's
+// English and tagged linux, so the row's runtime T_(key, English) finds each.
+UR_TEST(catalogLookupSdkCryptoLabelsAreInTheCatalog) {
+  UR_EXPECT_TRUE_MSG("po/urnetwork.pot was read", TemplateCatalog().size() > 1000);
+  for (const auto& label : SdkCryptoLabels()) {
+    const std::string miss = CatalogMiss(
+        TemplateCatalog(), Lookup{"the SDK's crypto_pay.go", 0, label.first, label.second, std::nullopt});
+    if (!miss.empty()) UR_FAIL(miss);
+    UR_EXPECT_TRUE_MSG(label.first + " is tagged linux", LinuxTaggedKeys().count(label.first) == 1);
   }
 }
 
