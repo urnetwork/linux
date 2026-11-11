@@ -10697,6 +10697,11 @@ msgctxt "site_create_proxy_error"
 msgid "Could not create the proxy."
 msgstr ""
 
+#. ur.io Connect screen, out-of-balance notice for a Pro account whose plan data is used up (title: Data limit reached). Pro's data is granted at 00:00 UTC on the 1st of each month; a data pack (sold on ur.io, the Buy data button beside this line) adds data at once. Keep Pro and UTC as is.
+msgctxt "site_data_limit_pro"
+msgid "Your Pro data for this month is used up. It renews on the 1st of next month (UTC), and a data pack adds more now."
+msgstr ""
+
 #. Account panel: download a WireGuard config file
 msgctxt "site_download_conf"
 msgid "Download .conf"
@@ -11004,6 +11009,16 @@ msgstr ""
 #. App sidebar: open the operator client UI (formerly the client admin UI)
 msgctxt "site_operator_client_ui"
 msgid "Operator Client UI"
+msgstr ""
+
+#. ur.io Connect screen, out-of-balance notice: what the browser does meanwhile when the URnetwork extension's kill switch is off (its default). The extension then takes its proxy off after failed health checks (or, in Firefox, sends each request directly), so the browser goes online without URnetwork. Keep URnetwork as is; translate kill switch as the extension and the apps do.
+msgctxt "site_out_of_data_browser_direct"
+msgid "With the kill switch off, the extension soon lets this browser connect directly, without URnetwork."
+msgstr ""
+
+#. ur.io Connect screen, out-of-balance notice: what the browser does meanwhile when the URnetwork extension's kill switch is on. The extension keeps its proxy set, so pages fail until data is available again or the user disconnects. Translate kill switch as the extension and the apps do.
+msgctxt "site_out_of_data_browser_held"
+msgid "With the kill switch on, pages won't load in this browser until data is available or you disconnect."
 msgstr ""
 
 #. Upgrade sheet: escape from the waiting state back to the payment options
