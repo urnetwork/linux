@@ -34,6 +34,13 @@
 
 namespace urnw {
 
+// The catalog's text for a label or a line the SDK hands out (a tab's or a
+// coin's label, a coin's network line, its warning, TAO's note): its store
+// key as the context and its English as the msgid (I18n.hpp T_), so a pair
+// the catalog lacks reads the English. A line with no key is "": the coin
+// does not have it.
+Glib::ustring LabelText(const std::string& key, const std::string& english);
+
 // A method's name for "Pay with {}" and "Paying with {} is temporarily
 // unavailable": Card's, or the SDK's label of a coin (urnet::cryptoAssetLabelKey
 // and urnet::cryptoAssetLabel: "USDC on Solana", "TAO", "Bitcoin"), looked up
@@ -46,6 +53,13 @@ Glib::ustring PaymentMethodName(const std::string& method);
 // bittensor, bitcoin, ethereum), stripe for Card.
 std::string PaymentMethodEventStore(const std::string& method);
 
+// The product a coin's purchase events name (urnet::cryptoPaymentEventProduct:
+// the year of Pro by the coin's ticker, pro_yearly_usdc to pro_yearly_sol, the
+// welcome offer's year included): USDC and SOL share the solana store, and the
+// product tells them apart. "" for Card, whose product is its plan's
+// (PlanProduct), and on an SDK error.
+std::string PaymentMethodEventProduct(const std::string& method);
+
 class PaymentMethodRow : public Gtk::Box {
  public:
   PaymentMethodRow();
@@ -56,7 +70,9 @@ class PaymentMethodRow : public Gtk::Box {
   // either.
   bool SetTabs(const std::vector<crypto_pay::PaymentTabView>& tabs);
   // Selects `method` while it is offered, Card otherwise. Does not fire
-  // on_select.
+  // on_select. `method` is the method remembered on this device from here on
+  // (the host hands over the device's last choice, which every pick updates),
+  // what a tap on a tab hands the SDK beside the coin chosen last there.
   void Select(const std::string& method);
   const std::string& Selected() const { return selected_; }
   // "Temporarily unavailable" under the row.
@@ -89,8 +105,8 @@ class PaymentMethodRow : public Gtk::Box {
   void Sync();
   // each choice takes picks while the row is enabled and the choice available
   void ApplyChoosable();
-  // a pick of the user's: the selection, the coin More coins selects again,
-  // and on_select
+  // a pick of the user's: the selection, the coin chosen last in its tab, and
+  // on_select
   void Pick(const std::string& method);
 
   Gtk::Box* toggles_ = nullptr;
@@ -100,7 +116,10 @@ class PaymentMethodRow : public Gtk::Box {
   std::vector<CoinChoice> coinChoices_;
   std::vector<crypto_pay::PaymentTabView> tabs_;
   std::string selected_;
-  std::string wanted_;  // the coin More coins selects when it is chosen again
+  // what a tap on a tab hands the SDK (TabCoinFor): the coin chosen last in
+  // that tab, kept per tab, and the remembered method (Select's last)
+  crypto_pay::LastChosenCoins lastChosen_;
+  std::string remembered_;
   bool enabled_ = true;
   bool syncing_ = false;  // set_active from Sync, not a pick
 };

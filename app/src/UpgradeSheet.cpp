@@ -474,7 +474,9 @@ void UpgradeSheet::ApplyPrices() {
 void UpgradeSheet::EmitPurchase(const char* outcome, const std::string& errorClass) {
   // A coin's purchase names its market as the store (§6.1, the SDK's
   // urnet::cryptoAssetMarket: solana, zcash, monero, bittensor, bitcoin,
-  // ethereum), buys the yearly plan, and has no trial; the card's is Stripe's.
+  // ethereum) and the SDK's product for the coin (pro_yearly_<ticker>: USDC
+  // and SOL share the solana store), buys the yearly plan, and has no trial;
+  // the card's is Stripe's, with its plan's product.
   const bool coin = crypto_pay::IsCoin(purchaseMethod_);
   const bool yearly = coin || plans_->Yearly();
   const PriceTierView& tier = balance_.Tier();
@@ -487,21 +489,20 @@ void UpgradeSheet::EmitPurchase(const char* outcome, const std::string& errorCla
     if (invoice.asset == purchaseMethod_ && 0 < invoice.priceUsd) price = invoice.priceUsd;
   }
   const std::string store = coin ? PaymentMethodEventStore(purchaseMethod_) : kStoreStripe;
+  const std::string coinProduct = coin ? PaymentMethodEventProduct(purchaseMethod_) : std::string();
+  const std::string product = coinProduct.empty() ? std::string(PlanProduct(yearly)) : coinProduct;
   const bool trial = yearly && !coin;
   const std::string out(outcome);
   ClientEventQueue& events = host_.events();
   if (out == "started") {
-    events.PurchaseStarted(store, PlanProduct(yearly), PlanName(yearly), trial, price,
-                           tier.currency);
+    events.PurchaseStarted(store, product, PlanName(yearly), trial, price, tier.currency);
   } else if (out == "completed") {
-    events.PurchaseCompleted(store, PlanProduct(yearly), PlanName(yearly), trial, price,
-                             tier.currency);
+    events.PurchaseCompleted(store, product, PlanName(yearly), trial, price, tier.currency);
   } else if (out == "cancelled") {
-    events.PurchaseCancelled(store, PlanProduct(yearly), PlanName(yearly), trial, price,
-                             tier.currency);
+    events.PurchaseCancelled(store, product, PlanName(yearly), trial, price, tier.currency);
   } else {
-    events.PurchaseFailed(store, PlanProduct(yearly), PlanName(yearly), trial, price,
-                          tier.currency, errorClass);
+    events.PurchaseFailed(store, product, PlanName(yearly), trial, price, tier.currency,
+                          errorClass);
   }
 }
 

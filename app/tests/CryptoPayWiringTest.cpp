@@ -134,13 +134,27 @@ UR_TEST(CryptoPayWiring_TheControllerFeedIsMarshalled) {
   InOrder(FunctionBody(host, "void CryptoInvoiceHost::CloseController() {"),
           {"++*epoch_;", "sub_.reset();", "vc_->close();", "vc_.reset();"});
   Has(FunctionBody(host, "CryptoInvoiceHost::~CryptoInvoiceHost() {"), "CloseController();");
-  // the state is read on the GTK loop, with the SDK's URI check beside it
-  Has(host, "urnet::checkCryptoPaymentUri(state.asset, state.uri, state.address)");
+  // the state is read on the GTK loop, with the SDK's URI check beside it:
+  // the whole gate, with no pre-check of this app's (an empty URI fails it)
+  Has(host, "view.uriChecked = urnet::checkCryptoPaymentUri(state.asset, state.uri, state.address);");
+  UR_EXPECT_FALSE(Contains(host, "!state.uri.empty() &&"));
   Has(host, "urnet::cryptoWalletSuggestions(state.asset)");
   // the QR draws the SDK's qr text, and a coin with no payment URI scheme
   // (TAO) is paid by hand
   Has(host, "view.qrText = state.qr_text;");
   Has(host, "crypto_pay::IsCoin(state.asset) && urnet::cryptoPaymentUriScheme(state.asset).empty();");
+  // the coin's lines, whether its memo shows and the status steps are the
+  // SDK's, carried as it hands them out
+  const std::string viewOf =
+      FunctionBody(host, "crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {");
+  InOrder(viewOf, {"for (const urnet::CryptoPaymentStep& sdkStep : *state.steps) {",
+                   "step.progress = sdkStep.progress;",
+                   "step.confirmationsRequired = sdkStep.confirmations_required;",
+                   "if (const auto lines = urnet::cryptoAssetLinesFor(state.asset)) {",
+                   "view.lines.networkLine = {lines->network_line_key, lines->network_line};",
+                   "view.lines.networkWarning = {lines->network_warning_key, lines->network_warning};",
+                   "view.lines.noPaymentLinkNote = {lines->no_payment_link_note_key, lines->no_payment_link_note};",
+                   "view.showsMemo = urnet::cryptoPaymentShowsMemo(state.asset, state.memo);"});
   // a plan, never an item, and no storefront on the desktop
   Has(FunctionBody(host, "bool CryptoInvoiceHost::StartInvoice("), "vc_->startInvoice(asset, plan, \"\", \"\");");
 }
@@ -202,13 +216,24 @@ UR_TEST(CryptoPayWiring_PaidAndRefusals) {
   InOrder(build, {"invoiceView_->on_pay_another_way = [this] {", "host_.CryptoInvoice().Dismiss();",
                   "SelectMethod(crypto_pay::kMethodCard);", "SetState(State::Options);"});
   Has(build, "invoiceView_->on_refresh = [this] { host_.CryptoInvoice().Requote(); };");
-  // the events name the coin's market (the SDK's) and no trial
-  InOrder(FunctionBody(sheet, "void UpgradeSheet::EmitPurchase("),
-          {"PaymentMethodEventStore(purchaseMethod_)", "const bool trial = yearly && !coin;"});
+  // the events name the coin's market and the coin's product (the SDK's:
+  // pro_yearly_<ticker>, so USDC and SOL, which share the solana store, stay
+  // apart), and no trial; Card's product is its plan's
+  const std::string emit = FunctionBody(sheet, "void UpgradeSheet::EmitPurchase(");
+  InOrder(emit, {"PaymentMethodEventStore(purchaseMethod_)",
+                 "const std::string coinProduct = coin ? PaymentMethodEventProduct(purchaseMethod_) : std::string();",
+                 "const std::string product = coinProduct.empty() ? std::string(PlanProduct(yearly)) : coinProduct;",
+                 "const bool trial = yearly && !coin;", "events.PurchaseStarted(store, product,",
+                 "events.PurchaseCompleted(store, product,", "events.PurchaseCancelled(store, product,",
+                 "events.PurchaseFailed(store, product,"});
+  UR_EXPECT_FALSE(Contains(emit, "(store, PlanProduct("));
   const std::string row = ReadCode("PaymentMethodRow.cpp");
   InOrder(FunctionBody(row, "std::string PaymentMethodEventStore(const std::string& method) {"),
           {"if (!crypto_pay::IsCoin(method)) return urnet::EventStoreStripe;",
            "return urnet::cryptoAssetMarket(method);"});
+  InOrder(FunctionBody(row, "std::string PaymentMethodEventProduct(const std::string& method) {"),
+          {"if (!crypto_pay::IsCoin(method)) return std::string();",
+           "return urnet::cryptoPaymentEventProduct(method);"});
   // the onboarding's coin never replaces a payment going on
   InOrder(FunctionBody(sheet, "void UpgradeSheet::OpenCryptoCheckout("),
           {"crypto_pay::InvoiceInProgress(host_.CryptoInvoice().State())", "ShowInvoice();",
@@ -221,10 +246,26 @@ UR_TEST(CryptoPayWiring_PaidAndRefusals) {
 UR_TEST(CryptoPayWiring_TheUriIsCheckedBeforeItIsShownOrOpened) {
   const std::string view = ReadCode("CryptoInvoiceView.cpp");
   const std::string render = FunctionBody(view, "void CryptoInvoiceView::Render(");
-  InOrder(render, {"const std::string qrText = p.qrText;", "crypto_pay::EncodePaymentQr(qrText)",
-                   "noLinkNote_->set_visible(qrDrawn && note.key != nullptr);",
+  InOrder(render, {"network_->set_text(LabelText(network.key, network.english));",
+                   "const std::string qrText = p.qrText;", "crypto_pay::EncodePaymentQr(qrText)",
+                   "noLinkNote_->set_text(LabelText(note.key, note.english));",
+                   "noLinkNote_->set_visible(qrDrawn && !note.key.empty());",
                    "openUri_ = p.showOpenWallet ? invoice.uri : std::string();",
-                   "openWallet_->set_visible(p.showOpenWallet);"});
+                   "openWallet_->set_visible(p.showOpenWallet);",
+                   "networkWarning_->set_text(LabelText(warning.key, warning.english));"});
+  // the coin's network line is the one the SDK carried for it
+  Has(render, "const crypto_pay::CoinLine& network = invoice.lines.networkLine;");
+  // the steps are the SDK's, row by row, each drawn by its progress and the
+  // confirming one with its own counts
+  const std::string steps = FunctionBody(view, "void CryptoInvoiceView::RenderSteps(");
+  InOrder(steps, {"for (size_t index = 0; index < p.steps.size() && index < stepRows_.size(); ++index) {",
+                  "const crypto_pay::Step& step = p.steps[index];",
+                  "if (step.status == crypto_pay::kStatusPending) {",
+                  "} else if (step.status == crypto_pay::kStatusConfirming) {",
+                  "step.confirmationsRequired);",
+                  "const bool done = step.progress == crypto_pay::kStepDone;",
+                  "const bool current = step.progress == crypto_pay::kStepCurrent;"});
+  UR_EXPECT_FALSE(Contains(steps, "StepKind") || Contains(steps, "p.confirmations"));
   // Open in wallet never hands over the qr text (TAO's QR is a bare address)
   UR_EXPECT_FALSE(Contains(render, "openUri_ = qrText"));
   UR_EXPECT_FALSE(Contains(render, "openWallet_->set_visible(p.showQr);"));
@@ -358,20 +399,27 @@ UR_TEST(CryptoPayWiring_TheOnboardingPagesCarryTheRow) {
 UR_TEST(CryptoPayWiring_TheBalanceCarriesTheCoins) {
   const std::string store = ReadCode("SubscriptionBalance.cpp");
   Has(store, "cryptoAssets_ = result->crypto_assets;");
+  Has(store, "cryptoUnavailableAssets_ = result->crypto_unavailable_assets;");
   Has(store, "cryptoTerm_ = result->crypto_term;");
-  // the SDK's tabs over the balance's coins, with no unavailable list (the
-  // balance names only the coins it can sell now)
+  // the SDK's tabs over the balance's two lists: a coin it cannot quote now
+  // greys out in its place instead of vanishing (and More coins with it when
+  // all four are), and the SDK alone says whether there is a selector; each
+  // coin with the SDK's network line
   const std::string tabs =
       FunctionBody(store, "std::vector<crypto_pay::PaymentTabView> SubscriptionBalanceStore::PaymentTabs(");
-  InOrder(tabs, {"urnet::cryptoPaymentTabs(cryptoAssets_, urnet::CryptoPaymentAssetList{},",
+  InOrder(tabs, {"urnet::cryptoPaymentTabs(cryptoAssets_, cryptoUnavailableAssets_,",
                  "urnet::StringList{plan})", "tab.labelKey = sdkTab.label_key;",
                  "coin.iconKey = sdkCoin.icon_key;", "coin.available = sdkCoin.available;",
+                 "if (const auto lines = urnet::cryptoAssetLinesFor(sdkCoin.asset)) {",
+                 "coin.networkLine = {lines->network_line_key, lines->network_line};",
                  "tab.available = sdkTab.available;"});
+  UR_EXPECT_FALSE(Contains(tabs, "cryptoAssets_->empty()") || Contains(tabs, "CryptoPaymentAssetList{}"));
   UR_EXPECT_FALSE(Contains(store, "urnet::paymentMethods("));
   Has(FunctionBody(store, "bool SubscriptionBalanceStore::CryptoTermNoticeDue() const {"),
       "urnet::cryptoTermNoticeDue(cryptoTerm_)");
   // a sign-in and a sign-out forget the last network's
   UR_EXPECT_EQ(size_t{2}, CountOf(store, "cryptoAssets_.reset();"));
+  UR_EXPECT_EQ(size_t{2}, CountOf(store, "cryptoUnavailableAssets_.reset();"));
   UR_EXPECT_EQ(size_t{2}, CountOf(store, "cryptoTerm_.reset();"));
 }
 
@@ -396,8 +444,9 @@ UR_TEST(CryptoPayWiring_TheAccountRows) {
   Has(window, "snapshot.cryptoTermRenewBy = LocalDateText(balance_.CryptoTermGraceEnd());");
   Has(window, "accountPage_->on_open_crypto_invoice = [this] { OpenCryptoInvoice(); };");
   Has(FunctionBody(window, "void MainWindow::OpenCryptoInvoice() {"), "upgradeSheet_->OpenInvoice();");
-  Has(FunctionBody(window, "void MainWindow::ApplyCryptoInvoiceRow() {"),
-      "crypto_pay::InvoiceInProgress(invoice)");
+  const std::string invoiceRow = FunctionBody(window, "void MainWindow::ApplyCryptoInvoiceRow() {");
+  InOrder(invoiceRow, {"const crypto_pay::CoinLine& network = invoice.lines.networkLine;",
+                       "crypto_pay::InvoiceInProgress(invoice)", "LabelText(network.key, network.english)"});
   // Account appearing resumes the saved invoice (§6.2)
   InOrder(window, {"if (tag == \"account\" && accountPage_) {", "accountPage_->Load();",
                    "host_.CryptoInvoice().Resume();"});
@@ -446,12 +495,30 @@ UR_TEST(CryptoPayWiring_MoreCoins) {
                     "for (const std::string& iconKey : tab.iconKeys) {",
                     "Gtk::make_managed<CoinMark>(iconKey, kTabMarkPx);",
                     "T_(\"pay_method_more_coins_a11y\", \"More coins: {}\")",
-                    "crypto_pay::NetworkLine(coin.asset)", "radio->set_child(*line);",
+                    "const crypto_pay::CoinLine& network = coin.networkLine;",
+                    "description = LabelText(network.key, network.english);", "radio->set_child(*line);",
                     "coinChoices_.push_back(CoinChoice{coin.asset, radio, nameLabel, coin.available});",
                     "ApplyChoosable();"});
-  // a tab picks its coin: the one chosen there last (or remembered), else its
-  // first that can be paid with now
-  Has(rebuild, "crypto_pay::TabCoinSelection(tab, wanted_)");
+  // a tap on a tab takes the SDK's coin for it, asked with the coin chosen
+  // last in that tab (kept per tab: a choice in another tab never replaces
+  // it) and the remembered method
+  Has(rebuild, "const std::string coin = TabCoinFor(tab, lastChosen_.In(tab.id), remembered_);");
+  InOrder(FunctionBody(row, "std::string TabCoinFor(const crypto_pay::PaymentTabView& tab,"),
+          {"urnet::cryptoPaymentTabCoin(TabToSdk(tab), lastChosen, remembered);",
+           "return crypto_pay::IsCoin(coin) ? coin : std::string();"});
+  InOrder(FunctionBody(row, "urnet::CryptoPaymentTab TabToSdk(const crypto_pay::PaymentTabView& tab) {"),
+          {"sdkTab.id = tab.id;", "sdkCoin.available = coin.available;", "sdkTab.available = tab.available;"});
+  // every selection counts as the coin chosen last in its tab, a programmatic
+  // one too (the remembered method, the onboarding's one choice on two rows),
+  // and what the row is given is the remembered method
+  InOrder(FunctionBody(row, "void PaymentMethodRow::Select(const std::string& method) {"),
+          {"remembered_ = method;", "selected_ = crypto_pay::MethodSelection(tabs_, method);",
+           "lastChosen_.Choose(tabs_, selected_);"});
+  InOrder(FunctionBody(row, "void PaymentMethodRow::Pick(const std::string& method) {"),
+          {"selected_ = crypto_pay::MethodSelection(tabs_, method);", "lastChosen_.Choose(tabs_, selected_);",
+           "if (on_select) on_select(selected_);"});
+  // one coin chosen last anywhere was the bug: More coins fell back to TAO
+  UR_EXPECT_FALSE(Contains(row, "wanted_"));
   // unavailable greys the label and takes no pointer or focus, never
   // insensitive: libadwaita's disabled filter would dim the mark with it
   InOrder(FunctionBody(row, "void SetChoosable(Gtk::Widget& choice, Gtk::Label& label, bool choosable) {"),
