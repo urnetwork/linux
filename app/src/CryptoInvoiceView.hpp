@@ -16,12 +16,12 @@
 //      a phone and nothing alarming is said;
 //   3. "Send exactly" with the amount and its ticker, "To this address" with
 //      the address (monospace, wrapping) and the coin's network warning, the
-//      memo of a coin on Solana, each with Copy (the display's clipboard;
-//      Copy amount and Copy address for TAO), which reads "Copied" for a
-//      moment;
+//      memo while the SDK says it shows (the server sent one: USDC on
+//      Solana), each with Copy (the display's clipboard; Copy amount and Copy
+//      address for TAO), which reads "Copied" for a moment;
 //   4. "Quote expires in m:ss" with Refresh quote, or the expired line;
-//   5. the status steps, what is left to send after a partial payment, or the
-//      review copy alone;
+//   5. the SDK's status steps, each drawn by its progress, what is left to
+//      send after a partial payment, or the review copy alone;
 //   6. the wallets that work, and Zcash's note about exchanges;
 //   7. Pay another way (while nothing was received) and Close.
 //
@@ -96,7 +96,8 @@ class CryptoInvoiceView : public Gtk::Box {
   Gtk::Label* expired_ = nullptr;
   Gtk::Button* refresh_ = nullptr;
   Gtk::Box* steps_ = nullptr;
-  // waiting, payment seen, confirming n of N, paid
+  // the SDK's steps in its order, one row each (at most four: waiting,
+  // payment seen, confirming n of N, paid)
   std::array<StepRow, 4> stepRows_{};
   Gtk::Label* remaining_ = nullptr;
   Gtk::Label* review_ = nullptr;

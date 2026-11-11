@@ -242,10 +242,10 @@ void CryptoInvoiceView::Copy(CopyRow& row) {
 void CryptoInvoiceView::Render(const crypto_pay::InvoiceView& invoice) {
   const crypto_pay::InvoicePresentation p = crypto_pay::PresentInvoice(invoice);
 
-  const crypto_pay::Text network = crypto_pay::NetworkLine(invoice.asset);
-  network_->set_text(network.key ? Glib::ustring(T_(network.key, network.english))
-                                 : Glib::ustring());
-  network_->set_visible(network.key != nullptr);
+  // the coin's lines are the SDK's, looked up as its labels are
+  const crypto_pay::CoinLine& network = invoice.lines.networkLine;
+  network_->set_text(LabelText(network.key, network.english));
+  network_->set_visible(!network.key.empty());
   byHandLine_->set_visible(p.showByHandLine);
 
   // Only the SDK's qr text is drawn (p.qrText: a URI the SDK's check accepted,
@@ -263,9 +263,9 @@ void CryptoInvoiceView::Render(const crypto_pay::InvoiceView& invoice) {
   }
   const bool qrDrawn = p.showQr && 0 < qrModules_.count;
   qr_->set_visible(qrDrawn);
-  const crypto_pay::Text note = p.noPaymentLinkNote;
-  noLinkNote_->set_text(note.key ? Glib::ustring(T_(note.key, note.english)) : Glib::ustring());
-  noLinkNote_->set_visible(qrDrawn && note.key != nullptr);
+  const crypto_pay::CoinLine& note = p.noPaymentLinkNote;
+  noLinkNote_->set_text(LabelText(note.key, note.english));
+  noLinkNote_->set_visible(qrDrawn && !note.key.empty());
   openUri_ = p.showOpenWallet ? invoice.uri : std::string();
   openWallet_->set_visible(p.showOpenWallet);
 
@@ -282,9 +282,8 @@ void CryptoInvoiceView::Render(const crypto_pay::InvoiceView& invoice) {
   amount_.root->set_visible(p.showAmount);
   SetCopyText(address_, invoice.address, invoice.address);
   address_.root->set_visible(p.showAddress);
-  const crypto_pay::Text warning = p.networkWarning;
-  networkWarning_->set_text(warning.key ? Glib::ustring(T_(warning.key, warning.english))
-                                        : Glib::ustring());
+  const crypto_pay::CoinLine& warning = p.networkWarning;
+  networkWarning_->set_text(LabelText(warning.key, warning.english));
   networkWarning_->set_visible(p.showNetworkWarning);
   SetCopyText(memo_, invoice.memo, invoice.memo);
   memo_.root->set_visible(p.showMemo);
@@ -335,51 +334,40 @@ void CryptoInvoiceView::Render(const crypto_pay::InvoiceView& invoice) {
 }
 
 void CryptoInvoiceView::RenderSteps(const crypto_pay::InvoicePresentation& p) {
+  // the SDK's steps in its order, one row each: which steps there are (two
+  // for USDC; confirming only while its count is known) and how each is drawn
+  // (a step the payment skipped is done, and once paid every step is) are the
+  // SDK's, and the confirming one carries its own counts
   for (StepRow& row : stepRows_) row.root->set_visible(false);
   steps_->set_visible(!p.steps.empty());
-  for (const crypto_pay::Step& step : p.steps) {
-    StepRow& row = stepRows_[static_cast<size_t>(step.kind)];
+  for (size_t index = 0; index < p.steps.size() && index < stepRows_.size(); ++index) {
+    const crypto_pay::Step& step = p.steps[index];
+    StepRow& row = stepRows_[index];
     Glib::ustring text;
-    switch (step.kind) {
-      case crypto_pay::StepKind::Waiting:
-        text = T_("crypto_status_waiting", "Waiting for your payment");
-        break;
-      case crypto_pay::StepKind::Seen:
-        text = T_("crypto_status_seen", "Payment seen");
-        break;
-      case crypto_pay::StepKind::Confirming:
-        // a resumed invoice learns its count from the first status poll; an
-        // upcoming step with no count yet waits for it
-        if (p.confirmationsRequired <= 0 && step.state == crypto_pay::StepState::Upcoming) continue;
-        text = Format(T_("crypto_status_confirming", "Confirming: {0} of {1}"), p.confirmations,
-                      p.confirmationsRequired);
-        break;
-      case crypto_pay::StepKind::Paid:
-        text = T_("crypto_status_paid", "Paid. Thank you!");
-        break;
+    if (step.status == crypto_pay::kStatusPending) {
+      text = T_("crypto_status_waiting", "Waiting for your payment");
+    } else if (step.status == crypto_pay::kStatusSeen) {
+      text = T_("crypto_status_seen", "Payment seen");
+    } else if (step.status == crypto_pay::kStatusConfirming) {
+      text = Format(T_("crypto_status_confirming", "Confirming: {0} of {1}"), step.confirmations,
+                    step.confirmationsRequired);
+    } else if (step.status == crypto_pay::kStatusPaid) {
+      text = T_("crypto_status_paid", "Paid. Thank you!");
+    } else {
+      continue;  // a step this app has no line for
     }
-    const Rgba* color = &kUrTextFaint;
-    const char* mark = "○";
-    switch (step.state) {
-      case crypto_pay::StepState::Done:
-        color = &kUrGreen;
-        mark = "●";
-        break;
-      case crypto_pay::StepState::Current:
-        color = &kUrPink;
-        mark = "●";
-        break;
-      case crypto_pay::StepState::Upcoming:
-        break;
-    }
+    const bool done = step.progress == crypto_pay::kStepDone;
+    const bool current = step.progress == crypto_pay::kStepCurrent;
+    const Rgba* color = done ? &kUrGreen : current ? &kUrPink : &kUrTextFaint;
+    const char* mark = done || current ? "●" : "○";
     row.dot->set_markup("<span foreground='" + HexForMarkup(*color) + "'>" + mark + "</span>");
     if (row.text->get_text() != text) row.text->set_text(text);
-    if (step.state == crypto_pay::StepState::Current) {
+    if (current) {
       row.text->add_css_class("heading");
     } else {
       row.text->remove_css_class("heading");
     }
-    if (step.state == crypto_pay::StepState::Upcoming) {
+    if (!done && !current) {
       row.text->add_css_class("dim-label");
     } else {
       row.text->remove_css_class("dim-label");

@@ -154,9 +154,13 @@ class SubscriptionBalanceStore {
 
   // The coin selector a plan surface offers beside Card (mmm/ZCASH-CONTRACT.md
   // §6.1, mmm/BTCPAY.md §17.6): the SDK's urnet::cryptoPaymentTabs over the
-  // balance result's crypto_assets, for the one plan a coin would buy there
-  // (crypto_pay::CoinPlan). Empty, which leaves Card alone, before the first
-  // fetch, from a server that lists no coin, and on an SDK error.
+  // balance result's two lists, crypto_assets (the coins it sells now) and
+  // crypto_unavailable_assets (the coins that are on but cannot be quoted
+  // now, shown greyed instead of left out), for the one plan a coin would buy
+  // there (crypto_pay::CoinPlan); each coin with the SDK's network line. The
+  // SDK decides whether there is a selector: empty, which leaves Card alone,
+  // before the first fetch, from a server that lists no coin, and on an SDK
+  // error.
   std::vector<crypto_pay::PaymentTabView> PaymentTabs(const std::string& plan) const;
   // The renewal notice of a one-time crypto year is due now
   // (urnet::cryptoTermNoticeDue over the balance result's crypto_term:
@@ -241,8 +245,11 @@ class SubscriptionBalanceStore {
   PriceTierView tier_;
   OfferView offer_;
   std::vector<urnet::ExperimentAssignment> experiments_;
-  // the balance result's crypto payment fields, as the server sent them
+  // the balance result's crypto payment fields, as the server sent them (the
+  // term's asset among them, which nothing here reads: no surface names the
+  // coin a year was paid with)
   std::optional<urnet::CryptoPaymentAssetList> cryptoAssets_;
+  std::optional<urnet::CryptoPaymentAssetList> cryptoUnavailableAssets_;
   std::optional<urnet::CryptoTerm> cryptoTerm_;
   // the latest balance result carried payment_past_due
   bool paymentPastDue_ = false;
