@@ -12,6 +12,18 @@ option('sdk_arch', type : 'combo', choices : ['amd64', 'arm64'], value : 'amd64'
 option('app_version', type : 'string', value : '0.0.0',
        description : 'Release version stamped into both binaries (UR_APP_VERSION)')
 
+# The distribution both binaries report in their client info, one of the sdk's
+# ClientDistribution values. Compiled in as UR_DISTRIBUTION; the server reads it
+# with the device type for the account's onboarding platform. The packaging
+# that builds the binaries names it, as it names the version: the release's
+# GUI build for the AppImage passes linux_appimage (build/all/linux/
+# build-arch.sh, ROLE=gui), the Flatpak manifest linux_flatpak. The default,
+# linux, is a build whose package is not known: the daemon, one build of which
+# goes into the .deb, the .rpm, the Arch package and the install tarball, and a
+# build from source.
+option('distribution', type : 'combo', choices : ['linux', 'linux_appimage', 'linux_flatpak'], value : 'linux',
+       description : 'Distribution stamped into both binaries (UR_DISTRIBUTION): linux, linux_appimage or linux_flatpak')
+
 # The declared C runtime floor, asserted against the built daemon by the
 # `glibc-floor` test (APPIMAGE.md R9/§10c). It MUST equal the `Depends: libc6
 # (>= x)` the packaging declares, because nothing else couples that hand-written

@@ -265,6 +265,11 @@ modules:
     config-opts:
       - --libdir=lib
       - -Dgui=enabled
+      # The distribution the GUI reports in its client info (meson_options.txt
+      # distribution): this build is the Flatpak. Here in the committed
+      # manifest, not stamped by make-flatpak.sh, so that a Flathub build of it
+      # reports it too.
+      - -Ddistribution=linux_flatpak
       # Drops urnetworkd and the four host-integration files that install to
       # ABSOLUTE paths (/lib/systemd/system, /etc/urnetwork, /etc/NetworkManager,
       # /etc/udev) — nothing outside /app is writable in a Flatpak build, so
