@@ -10122,15 +10122,15 @@ msgctxt "sn_alpha_symbol"
 msgid "SN25α"
 msgstr "SN25α"
 
-#. Earnings, the settlement v2 tile and the claim sheet: Claim now was used for this address, and works again from this date. The placeholder is a date, as Dec 3.
+#. Earnings, the settlement v2 tile and the claim sheet: a Claim now for this address went through, so the next one opens on this date, 30 days after that claim went through (the limit the queued note names). The placeholder is a date, as Dec 3. Claim now is the button's label; keep it recognizable as that label.
 msgctxt "sn_claim_relay_again_on"
-msgid "Claim now is available again on {}."
-msgstr "“Klaim sekarang” tersedia lagi pada {}."
+msgid "Your next Claim now opens on {}."
+msgstr "“Klaim sekarang” berikutnya tersedia pada {}."
 
-#. Earnings, the settlement v2 tile and the claim sheet: URnetwork's daily budget for paying claim gas is spent, so the claim waits for the next day (UTC).
+#. Earnings, the settlement v2 tile and the claim sheet: URnetwork's daily budget for paying claim gas is spent, so the claim waits. The budget renews every day at 00:00 UTC, and a waiting claim goes out once a day's budget reaches it, which can be later than the next day. Say nothing that promises a day, and keep 00:00 and UTC.
 msgctxt "sn_claim_relay_cap"
-msgid "Today's claim budget is used up, so this waits for the next day. Nothing is lost: this credit never expires."
-msgstr "Anggaran klaim hari ini sudah habis, jadi ini menunggu hari berikutnya. Tidak ada yang hilang: saldo ini tidak pernah kedaluwarsa."
+msgid "Today's claim budget is used up, so this waits. The budget renews each day at 00:00 UTC. Nothing is lost: this credit never expires."
+msgstr "Anggaran klaim hari ini sudah habis, jadi ini menunggu. Anggaran diperbarui setiap hari pukul 00:00 UTC. Tidak ada yang hilang: saldo ini tidak pernah kedaluwarsa."
 
 #. Earnings, the settlement v2 tile and the claim sheet: a button that asks URnetwork to claim the balance now, without waiting for the automatic threshold. Short: a button.
 msgctxt "sn_claim_relay_claim_now"
@@ -10189,10 +10189,16 @@ msgctxt "sn_claim_relay_refused"
 msgid "The last claim didn't go through. URnetwork tries again later."
 msgstr "Klaim terakhir tidak berhasil. URnetwork akan mencoba lagi nanti."
 
-#. Earnings, the settlement v2 tile and the claim sheet, after the user tapped Claim now: the claim is in line and goes out before the automatic ones, as long as the day's gas budget lasts.
+#. Earnings, the settlement v2 tile and the claim sheet, after the user tapped Claim now: the claim is in line. URnetwork sends tapped claims before its automatic ones, the oldest request first, as far as each day's gas budget reaches, so it can go out today or on a later day. Say nothing that promises a day. Claim now is the button's label; keep it recognizable as that label.
 msgctxt "sn_claim_relay_requested"
-msgid "Claim now is queued. URnetwork sends it first, within today's budget."
-msgstr "“Klaim sekarang” sudah masuk antrean. URnetwork mengirimnya lebih dulu, dalam batas anggaran hari ini."
+msgid "Claim now is queued. It goes out ahead of automatic claims, in the order requests came in, as each day's budget allows."
+msgstr "“Klaim sekarang” sudah masuk antrean. Klaim ini dikirim sebelum klaim otomatis, sesuai urutan masuknya permintaan, dalam batas anggaran setiap hari."
+
+#. Earnings, the settlement v2 tile and the claim sheet, under the queued Claim now: the Claim now limit (once in this many days, 30 today; the count selects the plural form) starts when URnetwork's claim of this balance is paid, not at the tap, so the next Claim now opens this many days after this claim goes through. Claim now is the button's label; keep it recognizable as that label.
+msgctxt "sn_claim_relay_requested_period"
+msgid "Your next Claim now opens a day after this claim goes through."
+msgid_plural "Your next Claim now opens {} days after this claim goes through."
+msgstr[0] "“Klaim sekarang” berikutnya tersedia {} hari setelah klaim ini berhasil."
 
 #. Earnings, the settlement v2 tile and the claim sheet: a link to claim the balance from this device, paying the gas with the user's gas key (a small TAO account on this device). Keep gas key as the app writes it elsewhere.
 msgctxt "sn_claim_relay_self_claim"

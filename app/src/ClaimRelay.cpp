@@ -89,9 +89,12 @@ void AppendReason(Gtk::Box& into, const std::string& reason, int64_t thresholdTa
   } else if (reason == urnet::SnClaimReasonQueued) {
     into.append(*MakeStrong(T_("sn_claim_relay_queued", "URnetwork claims this soon.")));
   } else if (reason == urnet::SnClaimReasonCapReached) {
+    // the budget renews at 00:00 UTC, and a claim goes out once a day's budget
+    // reaches it: no day is promised
     into.append(*MakeStrong(T_("sn_claim_relay_cap",
-                               "Today's claim budget is used up, so this waits for the next day. "
-                               "Nothing is lost: this credit never expires.")));
+                               "Today's claim budget is used up, so this waits. The budget "
+                               "renews each day at 00:00 UTC. Nothing is lost: this credit "
+                               "never expires.")));
   } else if (reason == urnet::SnClaimReasonRefused) {
     into.append(*MakeStrong(T_("sn_claim_relay_refused",
                                "The last claim didn't go through. URnetwork tries again later.")));
@@ -105,6 +108,29 @@ void AppendReason(Gtk::Box& into, const std::string& reason, int64_t thresholdTa
         T_("sn_claim_relay_waits", "Your SN25α waits in the vault, and this credit never expires."),
         "ur-row-note"));
   }
+}
+
+// Claim now queued (the mocks' 4c), as the relay runs it (owner, 2026-11-11;
+// BTEASY.md, Claim now and the daily cap): taps go out ahead of the automatic
+// claims, the oldest first, as each day's budget allows, so no day is promised;
+// and the coldkey's limit starts when URnetwork pays this claim, not at the tap,
+// so the next Claim now opens the relay's period after it goes through. No
+// period, no second line.
+Glib::ustring ClaimNowQueuedNote(int64_t periodDays) {
+  Glib::ustring note = T_("sn_claim_relay_requested",
+                          "Claim now is queued. It goes out ahead of automatic claims, in the "
+                          "order requests came in, as each day's budget allows.");
+  if (0 < periodDays) {
+    // the period is a count: each language reads it in its own plural form
+    const unsigned long count = static_cast<unsigned long>(periodDays);
+    note += "\n";
+    note += Glib::ustring(Format(
+        TN_("sn_claim_relay_requested_period",
+            "Your next Claim now opens a day after this claim goes through.",
+            "Your next Claim now opens {} days after this claim goes through.", count),
+        periodDays));
+  }
+  return note;
 }
 
 // Under Claim now: who pays and how often, or why it can't act now. ""
@@ -130,14 +156,11 @@ Glib::ustring ClaimNowNote(bool available, const std::string& reason, int64_t ne
     return Format(T_("sn_claim_relay_under_floor", "Claim now needs a balance worth at least {} TAO."),
                   FormatTaoFigure(floorTaoRao));
   }
-  if (reason == urnet::SnClaimNowReasonRequested) {
-    return T_("sn_claim_relay_requested",
-              "Claim now is queued. URnetwork sends it first, within today's budget.");
-  }
+  if (reason == urnet::SnClaimNowReasonRequested) return ClaimNowQueuedNote(periodDays);
   if (reason == urnet::SnClaimNowReasonLimit && 0 < nextAtMillis) {
     const std::string date = FormatDate(nextAtMillis);
     if (!date.empty()) {
-      return Format(T_("sn_claim_relay_again_on", "Claim now is available again on {}."), date);
+      return Format(T_("sn_claim_relay_again_on", "Your next Claim now opens on {}."), date);
     }
   }
   return {};
@@ -231,7 +254,7 @@ Glib::ustring ClaimedAgainNote(const urnet::SnClaimStatusResult& status) {
   if (nextAtMillis <= g_get_real_time() / 1000) return {};
   const std::string date = FormatDate(nextAtMillis);
   if (date.empty()) return {};
-  return Format(T_("sn_claim_relay_again_on", "Claim now is available again on {}."), date);
+  return Format(T_("sn_claim_relay_again_on", "Your next Claim now opens on {}."), date);
 }
 
 }  // namespace
@@ -374,10 +397,8 @@ void ClaimRelaySheet::Apply(const std::optional<urnet::SnClaimStatusResult>& sta
 
   switch (outcome.kind) {
     case ClaimNowOutcome::Kind::Requested: {
-      content_->append(*MakeText(T_("sn_claim_relay_requested",
-                                    "Claim now is queued. URnetwork sends it first, within "
-                                    "today's budget."),
-                                 "ur-body"));
+      // the queued note, with when the next Claim now opens (the relay's period)
+      content_->append(*MakeText(ClaimNowQueuedNote(status->claim_now_period_days), "ur-body"));
       auto* queued = Gtk::make_managed<Gtk::Button>(T_("sn_claim_relay_queued_button", "Queued"));
       queued->add_css_class("ur-pane-primary");
       queued->set_sensitive(false);

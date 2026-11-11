@@ -53,6 +53,10 @@ const CountedCopy kCounted[] = {
     {"ClaimRelay.cpp", "sn_claim_relay_claim_now_paid_each",
      "Paid by URnetwork, once a day for each coldkey.",
      "Paid by URnetwork, once every {} days for each coldkey."},
+    // when the next Claim now opens, under a queued one: the relay's period again
+    {"ClaimRelay.cpp", "sn_claim_relay_requested_period",
+     "Your next Claim now opens a day after this claim goes through.",
+     "Your next Claim now opens {} days after this claim goes through."},
 };
 
 UR_TEST(CountedCopyIsLookedUpAsAPlural) {
