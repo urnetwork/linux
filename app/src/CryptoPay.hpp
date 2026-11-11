@@ -413,7 +413,7 @@ inline bool AmountAboveZero(const std::string& amount) {
   return std::any_of(amount.begin(), amount.end(), [](char c) { return '1' <= c && c <= '9'; });
 }
 
-// The wallet names as one list ("Cake, Feather, Monerujo").
+// The wallet names as one list ("btcli, Talisman, Nova").
 inline std::string JoinWallets(const std::vector<std::string>& wallets) {
   std::string out;
   for (const std::string& wallet : wallets) {

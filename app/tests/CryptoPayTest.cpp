@@ -110,7 +110,8 @@ cp::Step MakeStep(const char* status, const char* progress, int64_t confirmation
 
 // An open, payable Monero invoice as the host hands it over: the SDK's
 // answers for Monero beside the state (its network line, no warning and no
-// note, a payment link, no memo, its four steps at pending).
+// note, a payment link, no memo, its four steps at pending, and no wallets:
+// urnet::cryptoWalletSuggestions names TAO's alone).
 cp::InvoiceView OpenXmr() {
   cp::InvoiceView v;
   v.phase = "open";
@@ -130,7 +131,6 @@ cp::InvoiceView OpenXmr() {
   v.steps = {MakeStep("pending", "current"), MakeStep("seen", "upcoming"),
              MakeStep("confirming", "upcoming", 0, 1), MakeStep("paid", "upcoming")};
   v.uriChecked = true;
-  v.wallets = {"Cake", "Feather", "Monerujo", "Stack", "Unstoppable"};
   v.lines.networkLine = {"crypto_network_monero", "Monero"};
   return v;
 }
@@ -341,7 +341,7 @@ UR_TEST(CryptoPay_Formats) {
   UR_EXPECT_FALSE(cp::AmountAboveZero("0"));
   UR_EXPECT_FALSE(cp::AmountAboveZero("0.000000"));
   UR_EXPECT_FALSE(cp::AmountAboveZero(""));
-  UR_EXPECT_TRUE(cp::JoinWallets({"Cake", "", "Feather"}) == "Cake, Feather");
+  UR_EXPECT_TRUE(cp::JoinWallets({"btcli", "", "Talisman"}) == "btcli, Talisman");
   UR_EXPECT_TRUE(cp::JoinWallets({}).empty());
 }
 
@@ -395,8 +395,8 @@ UR_TEST(CryptoPay_APendingInvoiceShowsEverythingToPayWith) {
   UR_EXPECT_TRUE(Kinds(p.steps) == "pending=current seen=upcoming confirming=upcoming 0/1 paid=upcoming");
   UR_EXPECT_FALSE(p.showRemaining);
   UR_EXPECT_FALSE(p.review);
-  UR_EXPECT_TRUE(p.showWallets);
-  UR_EXPECT_TRUE(p.walletsText == "Cake, Feather, Monerujo, Stack, Unstoppable");
+  // Monero names no wallets (the SDK names TAO's alone): no such line
+  UR_EXPECT_FALSE(p.showWallets);
   UR_EXPECT_FALSE(p.zcashNote);
   UR_EXPECT_TRUE(p.notice == cp::InvoiceNotice::None);
   UR_EXPECT_TRUE(p.showPayAnotherWay);
@@ -642,7 +642,9 @@ UR_TEST(CryptoPay_TaoIsPaidByHand) {
   UR_EXPECT_TRUE(p.showAddress && p.showNetworkWarning);
   UR_EXPECT_TRUE(p.networkWarning.key == "crypto_invoice_tao_network_only");
   UR_EXPECT_FALSE(p.showMemo || p.zcashNote);
+  // the one coin the SDK names wallets for, its names joined untranslated
   UR_EXPECT_TRUE(p.showCountdown && p.showWallets);
+  UR_EXPECT_TRUE(p.walletsText == "btcli, Talisman, Nova, SubWallet, Polkadot.js, Ledger, Tangem");
   // the QR holds the address or nothing
   v.qrText = "tao:" + v.address;
   p = cp::PresentInvoice(v);
@@ -673,50 +675,49 @@ UR_TEST(CryptoPay_TaoIsPaidByHand) {
   v.secondsLeft = 0;
   p = cp::PresentInvoice(v);
   UR_EXPECT_FALSE(p.showQr || p.showAmount || p.showByHandLine || !p.noPaymentLinkNote.key.empty());
+  // nor the wallets to send it with: the line shows only while there is
+  // something to send (payable, or a top-up), so not once the quote expired,
+  // while confirming, in review or before the first status, whatever the SDK
+  // names
+  UR_EXPECT_FALSE(p.showWallets);
+  v.secondsLeft = 1799;
+  for (const char* status : {"confirming", "review", ""}) {
+    v.status = status;
+    UR_EXPECT_TRUE_MSG(status, !cp::PresentInvoice(v).showWallets);
+  }
 }
 
 // Bitcoin, ETH and native SOL: their links' QR and Open in wallet as Monero's,
-// each network's warning with the address, and the wallets that work, the
-// SDK's list for each (Bitcoin's and ETH's since 2026-11-11), joined into the
-// line untranslated. No memo: the server sends one for USDC alone, SOL
-// included in the "".
+// and each network's warning with the address. No wallets line: the SDK names
+// TAO's wallets alone (the owner, 2026-11-11), so these name none. No memo:
+// the server sends one for USDC alone, SOL included in the "".
 UR_TEST(CryptoPay_TheNewCoinsLinksAndWarnings) {
   struct Linked {
     const char* asset;
     const char* ticker;
     std::string uri;
     const char* warning;
-    std::vector<std::string> wallets;
-    const char* walletsText;
   };
   for (const Linked& c : {
-           Linked{"btc", "BTC", "bitcoin:bc1qsample?amount=0.00061234", "crypto_invoice_bitcoin_network_only",
-                  {"Sparrow", "BlueWallet", "Electrum", "Ledger", "Trezor"},
-                  "Sparrow, BlueWallet, Electrum, Ledger, Trezor"},
-           Linked{"eth", "ETH", "ethereum:0xsample@1?value=12000000000000000", "crypto_invoice_eth_network_only",
-                  {"MetaMask", "Rabby", "Coinbase Wallet", "Ledger", "Trezor"},
-                  "MetaMask, Rabby, Coinbase Wallet, Ledger, Trezor"},
-           Linked{"sol", "SOL", "solana:Ssample?amount=0.251234", "crypto_invoice_sol_network_only",
-                  {"Phantom", "Solflare"}, "Phantom, Solflare"},
+           Linked{"btc", "BTC", "bitcoin:bc1qsample?amount=0.00061234", "crypto_invoice_bitcoin_network_only"},
+           Linked{"eth", "ETH", "ethereum:0xsample@1?value=12000000000000000", "crypto_invoice_eth_network_only"},
+           Linked{"sol", "SOL", "solana:Ssample?amount=0.251234", "crypto_invoice_sol_network_only"},
        }) {
     cp::InvoiceView v = OpenXmr();
     v.asset = c.asset;
     v.ticker = c.ticker;
     v.uri = c.uri;
     v.qrText = c.uri;
-    v.wallets = c.wallets;  // urnet::cryptoWalletSuggestions
+    v.wallets.clear();  // urnet::cryptoWalletSuggestions: none for this coin
     v.lines.networkWarning = {c.warning, "Send only this coin on its network."};
     const cp::InvoicePresentation p = cp::PresentInvoice(v);
     UR_EXPECT_TRUE_MSG(c.asset, p.showQr && p.qrText == c.uri && p.showOpenWallet);
     UR_EXPECT_TRUE_MSG(c.asset, !p.noPaymentLink && !p.showByHandLine && p.noPaymentLinkNote.key.empty());
     UR_EXPECT_TRUE_MSG(c.asset, p.showNetworkWarning && p.networkWarning.key == c.warning);
     UR_EXPECT_TRUE_MSG(c.asset, !p.showMemo && !p.zcashNote);
-    UR_EXPECT_TRUE_MSG(c.asset, p.showWallets && p.walletsText == c.walletsText);
+    // a coin the SDK lists no wallets for has no such line, never an empty one
+    UR_EXPECT_TRUE_MSG(c.asset, !p.showWallets && p.walletsText.empty());
   }
-  // a coin the SDK lists no wallets for has no such line
-  cp::InvoiceView none = OpenXmr();
-  none.wallets.clear();
-  UR_EXPECT_FALSE(cp::PresentInvoice(none).showWallets);
 }
 
 // The marks' files (BrandIcons.cpp CoinMark): an icon key names an installed
