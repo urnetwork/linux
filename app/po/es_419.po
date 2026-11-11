@@ -10438,10 +10438,30 @@ msgctxt "sn_consent_title"
 msgid "Payout consent"
 msgstr "Consentimiento de pago"
 
+#. Earnings, the settlement v2 tile, the claim sheet and the claim dialog: names the coldkey's account in URnetwork's capture the flag pool (an account whose kind is ctf), in place of Pool {no_id} (sn_ledger_pool). Capture the flag is a draw in each country: each epoch it picks up to five of the providers and up to five of the extenders that were online there for at least half the epoch, and pays them SN25α into this account. A short title: use your language's name for the game capture the flag, never the hacking contest.
+msgctxt "sn_ctf_pool"
+msgid "Capture the flag"
+msgstr "Captura la bandera"
+
+#. Earnings, with the capture the flag account (sn_ctf_pool): a line saying a capture the flag draw gave this device one of a country's five extender slots (GET /sn/ctf/client). Up to five devices win a role's slots, and a flag counts as held only once all ten of a country's slots are won, so say the device won a slot, never that it captured or holds the flag. The placeholder is the country's name exactly as the app shows it, e.g. Kenya, with no case ending or article added, so keep it where the bare name reads correctly (several languages lead with it: "{country}: ..."). Mention no amount.
+msgctxt "sn_ctf_won_extender_slot"
+msgid "You won one of the {} extender slots"
+msgstr "{}: ganaste uno de los cupos de extensor"
+
+#. Earnings, with the capture the flag account (sn_ctf_pool): a line saying a capture the flag draw gave this device one of a country's five provider slots (GET /sn/ctf/client). Up to five devices win a role's slots, and a flag counts as held only once all ten of a country's slots are won, so say the device won a slot, never that it captured or holds the flag. The placeholder is the country's name exactly as the app shows it, e.g. Kenya, with no case ending or article added, so keep it where the bare name reads correctly (several languages lead with it: "{country}: ..."). Mention no amount.
+msgctxt "sn_ctf_won_provider_slot"
+msgid "You won one of the {} provider slots"
+msgstr "{}: ganaste uno de los cupos de proveedor"
+
 #. Windows Earnings page, the ledger header's Earnings actions menu (which repeats the page's actions while the window is too narrow to show them): the item for settlement v2's claim, which opens its claim dialog. Keep "v2".
 msgctxt "sn_ledger_claim"
 msgid "Claim settlement v2"
 msgstr "Reclamar liquidación v2"
+
+#. Earnings, the settlement v2 tile and the claim dialog: the one button that claims the coldkey's provider pool account (sn_ledger_provider_pool) and its capture the flag account (sn_ctf_pool) together, while both are claimable. The device sends the two claims in one transaction. Claim now, URnetwork's own button, keeps its label and claims both pools too. Short: a button.
+msgctxt "sn_ledger_claim_both"
+msgid "Claim both"
+msgstr "Reclamar ambos"
 
 #. Settlement v2 tile: label of the SN25α the user can claim now.
 msgctxt "sn_ledger_claimable"
@@ -10467,6 +10487,21 @@ msgstr "Pendiente: +{}, en espera de finalización"
 msgctxt "sn_ledger_pool"
 msgid "Pool {}"
 msgstr "Pool {}"
+
+#. Earnings, the settlement v2 tile and the claim sheet: shown in one pool's row in place of its balances, never a zero, when the server lists that pool in unavailable_pools (its ledger could not be read just now). The other pools' rows show as usual. The tile's Unavailable (sn_ledger_unavailable) stays for when no balance can be read at all.
+msgctxt "sn_ledger_pool_unavailable"
+msgid "Unavailable right now"
+msgstr "No disponible por ahora"
+
+#. Earnings, the settlement v2 tile and the claim sheet: the status of one pool's account, in its row where Pending or Claimed would be, while its balance is under the transfer floor, the smallest amount the chain lets a claim move (sn_claim_relay_under_floor gives it in TAO). Neither URnetwork's claim nor the device's can claim it until it is worth at least that; it waits in the vault, and this credit never expires. A capture the flag account is often this small. Short: a status. Say nothing about when it becomes claimable.
+msgctxt "sn_ledger_pool_under_floor"
+msgid "Below the claim minimum"
+msgstr "Por debajo del mínimo para reclamar"
+
+#. Earnings, the settlement v2 tile, the claim sheet and the claim dialog: names the coldkey's account in URnetwork's provider pool (an account whose kind is provider) beside its capture the flag account (sn_ctf_pool), in place of Pool {no_id} (sn_ledger_pool). The provider pool is the settlement v2 pool that pays for the network's usage and the extenders' share. A short title; use the app's word for provider and for pool.
+msgctxt "sn_ledger_provider_pool"
+msgid "Provider pool"
+msgstr "Pool de proveedores"
 
 #. Title of the settlement v2 tile, and the caption of its claim dialog's total. Keep "v2".
 msgctxt "sn_ledger_title"
