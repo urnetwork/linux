@@ -9827,6 +9827,11 @@ msgctxt "site_copy_seedphrase"
 msgid "Copy Seedphrase"
 msgstr "Nakili seedphrase"
 
+#. ur.io Connect screen, out-of-balance notice for a Pro account whose plan data is used up (title: Data limit reached). Pro's data is granted at 00:00 UTC on the 1st of each month; a data pack (sold on ur.io, the Buy data button beside this line) adds data at once. Keep Pro and UTC as is.
+msgctxt "site_data_limit_pro"
+msgid "Your Pro data for this month is used up. It renews on the 1st of next month (UTC), and a data pack adds more now."
+msgstr "Data yako ya Pro ya mwezi huu imekwisha. Itasasishwa tarehe 1 ya mwezi ujao (UTC), na kifurushi cha data kinaongeza zaidi sasa."
+
 #. Extension status: setup in flight
 msgctxt "site_ext_setting_up"
 msgid "Setting up…"
@@ -9876,6 +9881,16 @@ msgstr "Dhibiti"
 msgctxt "site_manage_subscription_hint"
 msgid "See your renewal date, auto-renew status and cancel options."
 msgstr "Angalia tarehe ya kusasisha, hali ya kusasisha kiotomatiki na chaguo za kughairi."
+
+#. ur.io Connect screen, out-of-balance notice: what the browser does meanwhile when the URnetwork extension's kill switch is off (its default). The extension then takes its proxy off after failed health checks (or, in Firefox, sends each request directly), so the browser goes online without URnetwork. Keep URnetwork as is; translate kill switch as the extension and the apps do.
+msgctxt "site_out_of_data_browser_direct"
+msgid "With the kill switch off, the extension soon lets this browser connect directly, without URnetwork."
+msgstr "Kill switch ikiwa imezimwa, kiendelezi hivi karibuni kitaruhusu kivinjari hiki kuunganishwa moja kwa moja, bila URnetwork."
+
+#. ur.io Connect screen, out-of-balance notice: what the browser does meanwhile when the URnetwork extension's kill switch is on. The extension keeps its proxy set, so pages fail until data is available again or the user disconnects. Translate kill switch as the extension and the apps do.
+msgctxt "site_out_of_data_browser_held"
+msgid "With the kill switch on, pages won't load in this browser until data is available or you disconnect."
+msgstr "Kill switch ikiwa imewashwa, kurasa hazitapakia katika kivinjari hiki hadi data ipatikane au utenganishe."
 
 #. Checkout (ur.io's payment screens; the plan purchase in the F-Droid and dapp Android builds; the upgrade sheet in the macOS direct download, Windows and Linux): the server refused a new subscription because the network already has an active Pro subscription (error.code already_subscribed). Nothing was charged.
 msgctxt "site_payment_error_already_subscribed"
