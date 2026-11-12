@@ -534,10 +534,12 @@ class EarningsPage : public Gtk::Box {
 
   // ---- capture the flag: the won slots' lines (GET /sn/ctf/client) ---------
   // Every win whose award is not claimed yet, read on every load and after a
-  // v2 claim: a line each, newest first, naming the role and the country
-  // (snledger::WonLinesFor).
+  // v2 claim (snledger::WinsAfterClaim): a line each, newest first, naming
+  // the role and the country (snledger::WonLinesFor).
   void LoadCtfWins();
   void ApplyCtfWins(std::vector<snledger::Win> wins);
+  // The schedule's reads go through LoadCtfWins, on the main loop's timers.
+  snledger::WinsAfterClaim::Ports WinsAfterClaimPorts();
 
   // ---- the Solana payout wallet (USDC until the Bittensor migration) ---------
   // The three-dot overflow (icon-only, named "Wallet options") over `menu`.
@@ -917,6 +919,12 @@ class EarningsPage : public Gtk::Box {
   // the capture the flag wins not claimed yet (none: none, not read yet, or
   // their read failed: no line, never "no wins")
   std::vector<snledger::Win> ctfWins_;
+  // their reads after a v2 claim's Done: at Done, and on the apps' schedule
+  // after a claim that paid an account; stopped on sign-out
+  snledger::WinsAfterClaim winsAfterClaim_;
+  // the v2 claim in flight paid an account: claimed, or claimed already by
+  // another claim, which vault2 paid to the same coldkey
+  bool ledgerClaimPaid_ = false;
 
   // preview + balance relay
   bool previewMode_ = false;

@@ -130,6 +130,20 @@
 >   (`snClaimRelayTotalKnown`); and a pool the claim sheet showed unavailable leaves it at Done once
 >   the SDK's own read found it with nothing to claim (`snLedgerClaimSettled`).
 > `URNETWORK_PREVIEW_CTF=1` now shows two won slots.
+>
+> **2026-11-12 — capture the flag, the review's fixes, as in every app.**
+> - **The wins after a claim:** the SDK's Done comes once the claim is in a block, but the route
+>   reads vault2's `claimed` at the finalized head, so the read at Done can still list a win the
+>   claim paid. After a claim that paid an account (claimed, or `already_claimed`) the wins are read
+>   at Done and again about 30 s, 60 s and 120 s after it (`snledger::WinsAfterClaim`, the apps'
+>   shared schedule); each read replaces the lines. A sign-out stops the reads; the next claim that
+>   paid starts them over. A claim that paid nothing reads them once, at Done, as before, and leaves
+>   the reads an earlier claim is owed.
+> - **An account the sheet lists below the claim minimum, which the SDK still tries** (it claims
+>   every account with something to claim): its row shows what came of it, as Android's do. Only
+>   `not_claimable: AmountTooLow` reads `sn_ledger_pool_under_floor`; `needs_gas` leaves it
+>   claimable under the sheet's top-up; any other failure is Failed, with the SDK's message. A press
+>   never counts it, as Android's dialog never offers a claim for it.
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 
