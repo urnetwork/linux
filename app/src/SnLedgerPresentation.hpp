@@ -31,7 +31,9 @@
 // the claim minimum. The tile ends with a line for every capture the flag win
 // whose award is not claimed yet: "You won one of the Kenya provider slots",
 // read again after a claim until the server reads the wins it paid claimed
-// (WinsAfterClaim).
+// (WinsAfterClaim); the newest read's good answer shows, and a read that fails
+// keeps the lines (WinsLines). A claim in flight is the session's, not a
+// load's (ClaimInFlight).
 //
 // The claim minimum (owner, 2026-11-11, for every app): any account whose
 // claimable is under the claim relay's transfer floor, alone or beside others,
@@ -53,6 +55,8 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -209,7 +213,13 @@ struct SectionView {
 // coldkey's. Before the release configures v2 claims only a read that returned
 // accounts shows, without Claim. Configured, the tile shows in every state with
 // Claim, enabled while the read is in, something is claimable and no claim is
-// in flight (v1 or v2: the gas key sends one claim at a time).
+// in flight (v1 or v2: the gas key sends one claim at a time). While a v2
+// claim is in flight (`ledgerClaimInFlight`, the session's) Claim stays
+// enabled whatever the read says: it opens the claim's sheet on its rows,
+// where Claim waits for it, so a page left during the claim and come back to
+// can show it. (Android's tile reopens its claim in flight from Claim too, but
+// there Claim follows the last read, which a refresh during the claim may find
+// with nothing left to claim.)
 //
 // Each pool in `unavailable` is a row among the accounts, by its pool, and
 // hides none of them. An account under `transferFloorRao`, alone or beside
@@ -219,12 +229,15 @@ struct SectionView {
 inline SectionView SectionFor(bool hasColdkey, Load load, const std::vector<Account>& accounts,
                               const std::vector<UnavailablePool>& unavailable,
                               int64_t transferFloorRao, bool claimConfigured, bool claiming,
-                              const std::function<std::string(int64_t)>& formatAlpha) {
+                              const std::function<std::string(int64_t)>& formatAlpha,
+                              bool ledgerClaimInFlight = false) {
   SectionView view;
   const bool ready = load == Load::Ready;
   if (!hasColdkey || (!claimConfigured && (!ready || accounts.empty()))) return view;
   view.visible = true;
   view.showClaim = claimConfigured;
+  // the v2 claim in flight: Claim opens its sheet, whatever the read says
+  view.claimEnabled = claimConfigured && ledgerClaimInFlight;
   if (!ready) {
     view.status = load == Load::Loading ? Status::Loading : Status::Unavailable;
     return view;
@@ -288,7 +301,7 @@ inline SectionView SectionFor(bool hasColdkey, Load load, const std::vector<Acco
     }
     view.accounts.push_back(row);
   }
-  view.claimEnabled = claimConfigured && claimableRao > 0 && !claiming;
+  view.claimEnabled = claimConfigured && ((claimableRao > 0 && !claiming) || ledgerClaimInFlight);
   view.claimBoth = claimConfigured && poolsClaimable == 1 && ctfsClaimable == 1;
   return view;
 }
@@ -464,12 +477,37 @@ class ClaimProgress {
     }
     return total;
   }
+  // ClaimableRao is a figure to show, as on the other apps' sheets: a row a
+  // press takes holds a known amount, or no row is left at all (every row
+  // claimed, or none), a true zero. While the rows left are below the claim
+  // minimum, in a pool that could not be read, of an amount not known yet, or
+  // in flight, they say what they are, and there is no figure, never a zero;
+  // and Claim names no amount (ClaimableRao 0).
+  bool TotalKnown() const {
+    bool left = false;
+    for (const ClaimRow& row : rows_) {
+      if (row.phase == Phase::Claimed) continue;
+      if (Takes(row) && 0 < row.amountRao) return true;
+      left = true;
+    }
+    return !left;
+  }
+  // The last press's failure about no account (noId 0: no wallet, v2 claims
+  // not configured, the ledger or the chain unreachable, nothing to claim), the
+  // SDK's message, or "": the rows stay as they are and the sheet says it, a
+  // sheet opened after it too.
+  const std::string& FailureMessage() const { return failure_; }
   bool AnyClaimed() const {
     for (const ClaimRow& row : rows_) {
       if (row.phase == Phase::Claimed) return true;
     }
     return false;
   }
+  // This press paid an account: claimed, or claimed already by another claim,
+  // which vault2 paid to the same coldkey (Android's snLedgerClaimPaid). The
+  // capture the flag wins it paid read claimed once the finalized head covers
+  // it, so the page reads them again on the apps' schedule (WinsAfterClaim).
+  bool Paid() const { return paid_; }
 
   // Claim pressed: every row the press claims is sending. One under the
   // sheet's floor that the last press left claimable or failed waits below
@@ -479,6 +517,8 @@ class ClaimProgress {
     busy_ = true;
     needsGas_ = false;
     read_ = false;
+    paid_ = false;
+    failure_.clear();
     reportedUnavailable_.clear();
     for (ClaimRow& row : rows_) {
       if (row.phase != Phase::Claimable && row.phase != Phase::Failed) continue;
@@ -494,6 +534,7 @@ class ClaimProgress {
   }
   void Confirmed(int64_t noId, int64_t index, const std::string& txHash, int64_t amountRao) {
     read_ = true;
+    paid_ = true;
     ClaimRow& row = Find(noId, index);
     row.phase = Phase::Claimed;
     if (!txHash.empty()) row.txHash = txHash;
@@ -508,7 +549,10 @@ class ClaimProgress {
     // failure, or nothing to claim in any pool, which it never says while a
     // pool is unavailable
     if (0 < noId || CodeOf(message) == "not_claimable") read_ = true;
-    if (noId <= 0) return false;
+    if (noId <= 0) {
+      failure_ = message;
+      return false;
+    }
     if (failure == Failure::Unavailable) {
       // the pool could not be read, so nothing was sent for it: its rows not
       // sent say so, a sent or claimed one stays, and a pool without a row
@@ -530,6 +574,7 @@ class ClaimProgress {
       // paid already: nothing to retry, and the read after Done shows it
       row.phase = Phase::Claimed;
       row.message.clear();
+      paid_ = true;
       return true;
     }
     // the runtime's refusal of an amount under its floor is the claim
@@ -649,6 +694,57 @@ class ClaimProgress {
   // named unavailable
   bool read_ = false;
   std::vector<int64_t> reportedUnavailable_;
+  bool paid_ = false;  // this press paid an account (Paid)
+  std::string failure_;  // this press's failure about no account (FailureMessage)
+};
+
+// The v2 claim in flight, the signed-in session's rather than a load's (owner,
+// 2026-11-12). Each visit to Earnings loads the page again, and a load drops
+// every answer armed for the load before it; the claim's answers count by this
+// instead, which only the claim's own end and a sign-out move. So a page that
+// was left during a claim and came back still has it in flight: the tile's
+// Claim opens a sheet on its rows (SectionFor's ledgerClaimInFlight), where
+// Claim waits for it, and its events and its Done land, after which the
+// accounts are read again and the wins on the apps' schedule (WinsAfterClaim).
+// The rows are the sheet's, shared with it, so the sheet pressed again claims
+// on from them. One claim at a time, as the gas key sends one: the page starts
+// one only while none is in flight. Main loop only.
+class ClaimInFlight {
+ public:
+  // Claim pressed on `rows`: the claim in flight from now, its press started.
+  // Each of its answers carries the ticket returned.
+  uint64_t Start(std::shared_ptr<ClaimProgress> rows) {
+    rows_ = std::move(rows);
+    rows_->Start();
+    return ++ticket_;
+  }
+  bool InFlight() const { return rows_ != nullptr; }
+  // Whether an answer of claim `ticket` counts: only while that claim is in
+  // flight, never after its Done, the watchdog's give-up or a sign-out.
+  bool Current(uint64_t ticket) const { return rows_ != nullptr && ticket == ticket_; }
+  // The rows of the claim in flight, which its answers move and a sheet opened
+  // during it draws; null between claims.
+  const std::shared_ptr<ClaimProgress>& Rows() const { return rows_; }
+  // Its Done, or the watchdog's give-up: the press is over, and no later answer
+  // of it counts. Whether it paid an account (ClaimProgress::Paid).
+  bool End() {
+    if (!rows_) return false;
+    rows_->Done();
+    const bool paid = rows_->Paid();
+    rows_.reset();
+    ++ticket_;
+    return paid;
+  }
+  // A sign-out: the claim was the departed account's, and nothing of it counts
+  // any more.
+  void Drop() {
+    rows_.reset();
+    ++ticket_;
+  }
+
+ private:
+  std::shared_ptr<ClaimProgress> rows_;
+  uint64_t ticket_ = 0;
 };
 
 // The Transaction link of URnetwork's claim (the claim relay's 4d): the
@@ -885,6 +981,44 @@ inline std::vector<WonLine> WonLinesFor(std::vector<Win> wins) {
   return lines;
 }
 
+// The wins the lines are drawn from (every app, 2026-11-12). Reads overlap:
+// each visit's load, a claim's Done and the reads after it start at their
+// times, and their answers land in any order. The lines show the newest read's
+// good answer, by the order the reads started: an answer replaces the wins
+// unless they already show a newer read's, so an older answer that lands late
+// never replaces a newer one. A read that failed (the SDK's ctf_unavailable),
+// an answer that cannot be read, or a read that could not be asked (no steady
+// device), all nullopt, changes nothing: it never blanks the lines, nor keeps
+// an older read's good answer still to land from showing. Only a good answer
+// that no longer lists a win takes its line away, or a sign-out (Reset), after
+// which no answer of a read from before shows and the first read shows none
+// until it answers. As Windows' snpayout::CtfWinsLines. Main loop only.
+class WinsLines {
+ public:
+  // A read starts: its number, which its answer carries.
+  uint64_t Start() { return ++started_; }
+  // The answer of read `read`: true when the wins changed.
+  bool Apply(uint64_t read, std::optional<std::vector<Win>> answer) {
+    if (!answer || read <= shown_) return false;
+    shown_ = read;
+    wins_ = std::move(*answer);
+    return true;
+  }
+  // A sign-out: no wins, and no answer of a read from before shows.
+  void Reset() {
+    wins_.clear();
+    shown_ = started_;
+  }
+  const std::vector<Win>& Wins() const { return wins_; }
+
+ private:
+  uint64_t started_ = 0;  // the newest read's number
+  // the read whose good answer the wins are, or, after a sign-out, the newest
+  // read from before it
+  uint64_t shown_ = 0;
+  std::vector<Win> wins_;
+};
+
 // When the wins are read again after a v2 claim that paid an account, in ms
 // after its Done, beside the read at Done (every app's schedule). The SDK's
 // Done comes once the claim is in a block, but the server says a win is
@@ -895,10 +1029,12 @@ constexpr std::array<int, 3> kWinsReadsAfterClaimMs = {30'000, 60'000, 120'000};
 // The reads of the wins after a v2 claim's Done: one at Done, after any claim,
 // and when the claim paid an account (claimed, or claimed already by another)
 // one more at each of kWinsReadsAfterClaimMs, each timer set as the last one
-// fires, so a slow answer moves none of them. Each read replaces the lines, as
-// every read does. The next claim that paid starts the reads over, and one
-// that paid nothing leaves them to run. Stop() drops what is still to come
-// when the user signs out; the page's timers do nothing once the page is gone
+// fires, so a slow answer moves none of them. Each read is as every read: the
+// newest read's good answer shows, and a failure keeps the lines (WinsLines).
+// The next claim that paid starts the reads over, and one that paid nothing
+// leaves them to run. A visit to Earnings, which loads the page again, leaves
+// them to run; Stop() drops what is still to come when the user signs out, and
+// the page's timers do nothing once the page is gone
 // (EarningsPage::WinsAfterClaimPorts). Main loop only.
 class WinsAfterClaim {
  public:
@@ -906,7 +1042,7 @@ class WinsAfterClaim {
   using Schedule = std::function<void(int delayMs, std::function<void()> fire)>;
 
   struct Ports {
-    std::function<void()> read;  // reads the wins; the answer replaces the lines
+    std::function<void()> read;  // reads the wins into the lines (WinsLines)
     Schedule schedule;
   };
 
