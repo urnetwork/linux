@@ -15,8 +15,10 @@ namespace {
 
 constexpr int kSheetWidth = 460;
 
-// A presentation text through the catalog.
+// A presentation text through the catalog. An empty key is no text (a save
+// now has no note line): an empty msgid is never looked up.
 Glib::ustring Tr(const extender::Text& text) {
+  if (text.key.empty()) return {};
   return g_dpgettext2(GETTEXT_PACKAGE, std::string(text.key).c_str(),
                       std::string(text.english).c_str());
 }

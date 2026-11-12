@@ -186,13 +186,14 @@ UR_TEST(ControlDohErrors_AnyOtherIdIsSomethingWentWrong) {
   }
 }
 
-// Saved is the saved line and the next-connect note (urnetworkd takes the
-// space at its next tunnel start); an id is its message alone.
+// Saved is the saved line alone: the app's device remote hands a running
+// urnetworkd tunnel the servers in place, so there is no next-connect note; an
+// id is its message alone.
 UR_TEST(ControlDohSave_TheResultLines) {
   const auto saved = ControlDohSaveOutcomeFor("");
   UR_EXPECT_TRUE(saved.saved);
   UR_EXPECT_TRUE(saved.message.key == "control_doh_urls_saved");
-  UR_EXPECT_TRUE(saved.note.key == "control_doh_urls_next_connect");
+  UR_EXPECT_TRUE(saved.note.key.empty());
   const auto refused = ControlDohSaveOutcomeFor(kControlDohErrorIpRequired);
   UR_EXPECT_FALSE(refused.saved);
   UR_EXPECT_TRUE(refused.message.key == kControlDohErrorIpRequired);
@@ -223,7 +224,8 @@ UR_TEST(ControlDohText_KeysAreTheCatalogs) {
   }
   const auto saved = ControlDohSaveOutcomeFor("");
   texts.push_back(saved.message);
-  texts.push_back(saved.note);
+  // a save has no note line any more (the empty key is no text)
+  UR_EXPECT_TRUE(saved.note.key.empty());
   for (const auto& text : texts) {
     const std::string entry = "msgctxt \"" + std::string(text.key) + "\"\nmsgid \"" +
                               std::string(text.english) + "\"\n";

@@ -163,10 +163,11 @@ inline Text ControlDohErrorText(std::string_view errorId) {
 }
 
 // What the lines under Save say for the SDK's answer to set_control_doh_urls.
-// Only an empty answer is saved, and on this platform the VPN runs in
-// urnetworkd, which imports the network space at its next tunnel start, so the
-// next-connect note goes with it. Any id, URNET_ERROR_ID_INTERNAL included, is
-// that error's message, and nothing was saved.
+// Only an empty answer is saved. The VPN runs in urnetworkd, in its own copy of
+// the network space, but the app's device remote hands a running tunnel the
+// saved servers in place (sdk device_remote_ingress_dns.go), so a save needs no
+// next-connect note. Any id, URNET_ERROR_ID_INTERNAL included, is that error's
+// message, and nothing was saved.
 struct ControlDohSaveOutcome {
   bool saved = false;
   Text message;
@@ -181,8 +182,6 @@ inline ControlDohSaveOutcome ControlDohSaveOutcomeFor(std::string_view errorId) 
   }
   out.saved = true;
   out.message = {"control_doh_urls_saved", "Bootstrap DNS-over-HTTPS servers saved"};
-  out.note = {"control_doh_urls_next_connect",
-              "The VPN uses the new bootstrap servers the next time it connects."};
   return out;
 }
 
