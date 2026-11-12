@@ -608,6 +608,9 @@ void UpgradeSheet::StartCheckout() {
   SetState(State::Launching);
   errorLabel_->set_visible(false);
   purchaseEmitted_ = false;
+  paySheetSubscriptionId_.clear();
+  checkoutSessionId_.clear();
+  cardPaymentReported_ = false;
   purchaseMethod_ = crypto_pay::kMethodCard;
   purchasePlan_.clear();
   EmitPurchase("started");
@@ -658,6 +661,8 @@ void UpgradeSheet::RequestPaymentSheet() {
             RequestSession(/*embedded=*/true);
             return;
           }
+          // what the finished payment is reported by (ReportCardPayment)
+          paySheetSubscriptionId_ = result->subscription_id.value_or(std::string());
           OpenPaySheet(clientSecret, *result->publishable_key);
         });
       });
@@ -698,6 +703,10 @@ void UpgradeSheet::RequestSession(bool embedded) {
             RefuseForGuest();
             return;
           }
+          // the session this attempt goes on with, which the finished payment
+          // is reported by (ReportCardPayment); a fallback's replaces it
+          checkoutSessionId_ =
+              result && result->session_id ? *result->session_id : std::string();
           auto fail = [this](const std::string& message) {
             if (!purchaseEmitted_) {
               EmitPurchase("failed", "transport");
@@ -740,8 +749,9 @@ void UpgradeSheet::RequestSession(bool embedded) {
           }
           if (!result->checkout_url || result->checkout_url->empty()) { fail(""); return; }
 
-          // hosted checkout: hand off to the system browser, then poll so Pro
-          // flips the moment the webhook lands
+          // hosted checkout: hand off to the system browser, then report the
+          // session (the sdk asks again while the browser payment is pending)
+          // and poll so Pro flips the moment the server credits it
           GError* openErr = nullptr;
           if (!g_app_info_launch_default_for_uri(result->checkout_url->c_str(), nullptr,
                                                  &openErr)) {
@@ -754,8 +764,41 @@ void UpgradeSheet::RequestSession(bool embedded) {
               T_("checkout_opened_in_browser",
                  "Complete your purchase in the browser. Your plan updates here automatically "
                  "once payment is confirmed."));
+          ReportCardPayment(/*paySheet=*/false);
           balance_.StartConfirmationPolling();
           SetState(State::Waiting);
+        });
+      });
+}
+
+void UpgradeSheet::ReportCardPayment(bool paySheet) {
+  // once: the pay page can both post its result and navigate to the return url
+  if (cardPaymentReported_ || !host_.IsLoggedIn()) return;
+  // exactly one id; a server that answered none leaves the webhook to credit it
+  urnet::VerifyStripeCheckoutArgs args;
+  if (paySheet) {
+    if (paySheetSubscriptionId_.empty()) return;
+    args.subscription_id = paySheetSubscriptionId_;
+  } else {
+    if (checkoutSessionId_.empty()) return;
+    args.session_id = checkoutSessionId_;
+  }
+  cardPaymentReported_ = true;
+  host_.api().reportStripePurchase(
+      args, [this](std::optional<urnet::VerifyStorePurchaseResult> result,
+                   std::optional<std::string> err) {
+        // once, after the sdk's retries. No epoch check: the payment was made
+        // whatever the sheet shows now, and the sheet lives with its window.
+        PostToMain([this, result = std::move(result), err = std::move(err)] {
+          if (err) std::fprintf(stderr, "[upgrade] card payment report failed: %s\n", err->c_str());
+          if (!result) return;
+          std::fprintf(stderr, "[upgrade] card payment report: %s\n", result->status.c_str());
+          // the server holds the credit: read the balance now, which also
+          // takes a timed-out wait to the success state
+          if (result->status == urnet::PurchaseReportStatusCredited ||
+              result->status == urnet::PurchaseReportStatusAlreadyCredited) {
+            balance_.FetchNow();
+          }
         });
       });
 }
@@ -922,13 +965,16 @@ void UpgradeSheet::HandleCheckoutCallback(const std::string& uri) {
   PostToMain([this, uri] {
     // the checkout bridge's hand-back is the SDK's envelope; the pay page's
     // (urnetwork://pay/done, urnetwork://pay/error?errorMessage=) is this sheet's
+    const bool checkoutRedirect = urnet::isCheckoutRedirect(uri);
     bool complete = false;
+    std::string sessionId;
     std::string errorCode;
     std::string errorMessage;
-    if (urnet::isCheckoutRedirect(uri)) {
+    if (checkoutRedirect) {
       try {
         if (auto redirect = urnet::parseCheckoutRedirect(uri)) {
           complete = redirect->Complete;
+          sessionId = redirect->SessionId;
           errorCode = redirect->ErrorCode;
           errorMessage = redirect->ErrorMessage;
         }
@@ -943,8 +989,12 @@ void UpgradeSheet::HandleCheckoutCallback(const std::string& uri) {
       }
     }
     if (complete) {
-      // paid in the webview — the server only believes the Stripe webhook, so
-      // bridge the gap with the confirmation poll exactly like hosted
+      // paid in the webview — a client saying "I paid" is not evidence, so the
+      // report hands the server the payment's id to read back from Stripe (the
+      // session the bridge names, else the one it was opened with), and the
+      // confirmation poll shows the result exactly like hosted
+      if (!sessionId.empty()) checkoutSessionId_ = sessionId;
+      ReportCardPayment(/*paySheet=*/!checkoutRedirect);
       waitingLabel_->set_text(T_("processing_payment", "Processing payment"));
       balance_.StartConfirmationPolling();
       SetState(State::Waiting);
@@ -994,6 +1044,7 @@ void UpgradeSheet::OnWebProcessTerminated() {
             T_("checkout_interrupted_confirming",
                "The checkout view closed unexpectedly. If your payment went through, your plan "
                "updates here automatically — there's no need to buy again."));
+        ReportCardPayment(/*paySheet=*/paySheetActive_);
         balance_.StartConfirmationPolling();
         SetState(State::Waiting);
         return;
