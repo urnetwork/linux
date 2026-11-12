@@ -510,6 +510,26 @@ providerstatus::NumberWords ProviderStatusNumberWords() {
   words.rate = [](double bytesPerSecond) {
     return FormatByteRate(static_cast<int64_t>(std::llround(bytesPerSecond)));
   };
+  words.reasonLineTcp = [](int64_t count) {
+    return Format(TN_("provider_status_reason_line_tcp",
+                      "{} of these checks failed only over HTTP/3 (UDP), so this device is "
+                      "offered for TCP traffic only. Some app builds and some networks do not "
+                      "route UDP.",
+                      "{} of these checks failed only over HTTP/3 (UDP), so this device is "
+                      "offered for TCP traffic only. Some app builds and some networks do not "
+                      "route UDP.",
+                      static_cast<unsigned long>(count)),
+                  count);
+  };
+  words.reasonLineIpv4 = [](int64_t count) {
+    return Format(TN_("provider_status_reason_line_ipv4",
+                      "{} of these checks failed only over IPv6, so this device is offered for "
+                      "IPv4 traffic only.",
+                      "{} of these checks failed only over IPv6, so this device is offered for "
+                      "IPv4 traffic only.",
+                      static_cast<unsigned long>(count)),
+                  count);
+  };
   words.notYet = T_("provider_status_value_not_yet", "Not yet");
   words.noHistory = T_("provider_status_value_no_history", "No history yet");
   words.notInPool = T_("provider_status_value_not_in_pool", "Not in this pool");
@@ -545,6 +565,11 @@ providerstatus::Poll ProviderStatusPollOf(const SdkHost::ProviderStatusSnapshot&
       out.passes = number.passes;
       out.count = number.count;
       out.total = number.total;
+      if (number.reason_lines) {
+        for (const urnet::ProviderStatusReasonLine& line : *number.reason_lines) {
+          out.reasonLines.push_back({line.label, line.count.value_or(0), line.text.value_or("")});
+        }
+      }
       poll.ranking.push_back(out);
     }
   }
@@ -8200,6 +8225,10 @@ void EarningsPage::RebuildWhyRows() {
     line->append(*value);
     row.content->append(*line);
     row.content->append(*MakeWrappedNote(NumberHelpText(number.label), "ur-row-note"));
+    // why the network checks downgraded this device, in the reader's language
+    for (const std::string& reason : number.reasons) {
+      row.content->append(*MakeWrappedNote(reason, "ur-row-note"));
+    }
     whyRows_->append(*row.root);
   }
 }

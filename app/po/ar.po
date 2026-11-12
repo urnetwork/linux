@@ -8679,6 +8679,28 @@ msgctxt "provider_status_reason_egress_unprobed"
 msgid "The network check hasn't run on this connection yet. Until it passes, clients are offered this device only when checked providers run out."
 msgstr "لم يُجرَ فحص الشبكة على هذا الاتصال بعد. وإلى أن ينجح، لا يُعرض هذا الجهاز على العملاء إلا عند نفاد المزودين الذين تم فحصهم."
 
+#. Provider status 'Why?' list: a line under the network checks when the checks took IPv6 away (FP2-PROTOCOL.md §5.5, the sdk's ProviderStatusReasonLineIpv4). The argument is how many of the checks failed only over IPv6; the device is still offered to clients, but for IPv4 traffic only.
+msgctxt "provider_status_reason_line_ipv4"
+msgid "{} of these checks failed only over IPv6, so this device is offered for IPv4 traffic only."
+msgid_plural "{} of these checks failed only over IPv6, so this device is offered for IPv4 traffic only."
+msgstr[0] "فشل {} من هذه الفحوصات عبر IPv6 فقط، لذا يُعرض هذا الجهاز لحركة مرور IPv4 فقط."
+msgstr[1] "فشل فحص واحد من هذه الفحوصات عبر IPv6 فقط، لذا يُعرض هذا الجهاز لحركة مرور IPv4 فقط."
+msgstr[2] "فشل فحصان من هذه الفحوصات عبر IPv6 فقط، لذا يُعرض هذا الجهاز لحركة مرور IPv4 فقط."
+msgstr[3] "فشلت {} من هذه الفحوصات عبر IPv6 فقط، لذا يُعرض هذا الجهاز لحركة مرور IPv4 فقط."
+msgstr[4] "فشل {} من هذه الفحوصات عبر IPv6 فقط، لذا يُعرض هذا الجهاز لحركة مرور IPv4 فقط."
+msgstr[5] "فشل {} من هذه الفحوصات عبر IPv6 فقط، لذا يُعرض هذا الجهاز لحركة مرور IPv4 فقط."
+
+#. Provider status 'Why?' list: a line under the network checks when the checks took UDP away (FP2-PROTOCOL.md §5.5, the sdk's ProviderStatusReasonLineTcp). The argument is how many of the checks failed only over HTTP/3, which runs over UDP; the device is still offered to clients, but for TCP traffic only.
+msgctxt "provider_status_reason_line_tcp"
+msgid "{} of these checks failed only over HTTP/3 (UDP), so this device is offered for TCP traffic only. Some app builds and some networks do not route UDP."
+msgid_plural "{} of these checks failed only over HTTP/3 (UDP), so this device is offered for TCP traffic only. Some app builds and some networks do not route UDP."
+msgstr[0] "فشل {} من هذه الفحوصات عبر HTTP/3 (UDP) فقط، لذا يُعرض هذا الجهاز لحركة مرور TCP فقط. بعض إصدارات التطبيق وبعض الشبكات لا توجّه UDP."
+msgstr[1] "فشل فحص واحد من هذه الفحوصات عبر HTTP/3 (UDP) فقط، لذا يُعرض هذا الجهاز لحركة مرور TCP فقط. بعض إصدارات التطبيق وبعض الشبكات لا توجّه UDP."
+msgstr[2] "فشل فحصان من هذه الفحوصات عبر HTTP/3 (UDP) فقط، لذا يُعرض هذا الجهاز لحركة مرور TCP فقط. بعض إصدارات التطبيق وبعض الشبكات لا توجّه UDP."
+msgstr[3] "فشلت {} من هذه الفحوصات عبر HTTP/3 (UDP) فقط، لذا يُعرض هذا الجهاز لحركة مرور TCP فقط. بعض إصدارات التطبيق وبعض الشبكات لا توجّه UDP."
+msgstr[4] "فشل {} من هذه الفحوصات عبر HTTP/3 (UDP) فقط، لذا يُعرض هذا الجهاز لحركة مرور TCP فقط. بعض إصدارات التطبيق وبعض الشبكات لا توجّه UDP."
+msgstr[5] "فشل {} من هذه الفحوصات عبر HTTP/3 (UDP) فقط، لذا يُعرض هذا الجهاز لحركة مرور TCP فقط. بعض إصدارات التطبيق وبعض الشبكات لا توجّه UDP."
+
 #. Provider status reason (location_invalid): the device was seen at more than one IP address, or its location is unknown.
 msgctxt "provider_status_reason_location_invalid"
 msgid "This device is connecting from more than one address, or its location is unknown. Clients are offered only devices with one address and a known location."

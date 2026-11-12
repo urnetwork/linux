@@ -8469,6 +8469,18 @@ msgctxt "provider_status_reason_egress_unprobed"
 msgid "The network check hasn't run on this connection yet. Until it passes, clients are offered this device only when checked providers run out."
 msgstr "此連接尚未進行網絡檢查。在檢查通過之前，只有在已檢查的供應商用完時，此裝置才會被推薦給客戶端。"
 
+#. Provider status 'Why?' list: a line under the network checks when the checks took IPv6 away (FP2-PROTOCOL.md §5.5, the sdk's ProviderStatusReasonLineIpv4). The argument is how many of the checks failed only over IPv6; the device is still offered to clients, but for IPv4 traffic only.
+msgctxt "provider_status_reason_line_ipv4"
+msgid "{} of these checks failed only over IPv6, so this device is offered for IPv4 traffic only."
+msgid_plural "{} of these checks failed only over IPv6, so this device is offered for IPv4 traffic only."
+msgstr[0] "這些檢查中有 {} 項僅經 IPv6 時失敗，因此此裝置只會推薦用於 IPv4 流量。"
+
+#. Provider status 'Why?' list: a line under the network checks when the checks took UDP away (FP2-PROTOCOL.md §5.5, the sdk's ProviderStatusReasonLineTcp). The argument is how many of the checks failed only over HTTP/3, which runs over UDP; the device is still offered to clients, but for TCP traffic only.
+msgctxt "provider_status_reason_line_tcp"
+msgid "{} of these checks failed only over HTTP/3 (UDP), so this device is offered for TCP traffic only. Some app builds and some networks do not route UDP."
+msgid_plural "{} of these checks failed only over HTTP/3 (UDP), so this device is offered for TCP traffic only. Some app builds and some networks do not route UDP."
+msgstr[0] "這些檢查中有 {} 項僅經 HTTP/3 (UDP) 時失敗，因此此裝置只會推薦用於 TCP 流量。部分應用程式版本和部分網絡不會路由 UDP。"
+
 #. Provider status reason (location_invalid): the device was seen at more than one IP address, or its location is unknown.
 msgctxt "provider_status_reason_location_invalid"
 msgid "This device is connecting from more than one address, or its location is unknown. Clients are offered only devices with one address and a known location."

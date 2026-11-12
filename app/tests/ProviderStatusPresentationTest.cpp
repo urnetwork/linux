@@ -184,6 +184,8 @@ NumberWords TaggedWords() {
   words.rate = [](double bytesPerSecond) {
     return "rate(" + std::to_string(static_cast<int64_t>(bytesPerSecond)) + ")";
   };
+  words.reasonLineTcp = [](int64_t count) { return "tcp(" + std::to_string(count) + ")"; };
+  words.reasonLineIpv4 = [](int64_t count) { return "ipv4(" + std::to_string(count) + ")"; };
   words.notYet = "NOT_YET";
   words.noHistory = "NO_HISTORY";
   words.notInPool = "NOT_IN_POOL";
@@ -301,6 +303,31 @@ UR_TEST(ProviderStatusWhyRowsSkipUnknownNamesAndEndWithTheCountry) {
   if (codeOnly.size() == 1) UR_EXPECT_TRUE(codeOnly[0] == Row(NumberLabel::Country, "DE"));
   // no numbers and no country: no rows
   UR_EXPECT_TRUE(NumberRowsFor({}, std::nullopt, TaggedWords()).empty());
+}
+
+// a downgraded provider's network checks (server FP2-PROTOCOL.md §5.5): the
+// sdk's lines in its order, tcp and ipv4 in the store's words with their
+// counts, another label's English, and nothing without lines
+UR_TEST(ProviderStatusWhyRowsTellADowngradedDeviceWhy) {
+  using urnw::providerstatus::ReasonLine;
+  RankingNumber urlChecks = WithMinimum(Number("url_checks", true, 0.65, false), 0.8);
+  urlChecks.count = 13;
+  urlChecks.total = 20;
+  urlChecks.reasonLines = {ReasonLine{"tcp", 3, ""}, ReasonLine{"ipv4", 2, ""}};
+  RankingNumber newer = Number("url_checks", true, 0.65, false);
+  newer.reasonLines = {ReasonLine{"text", 0, "A newer server's sentence."},
+                       ReasonLine{"pq", 0, ""}};
+  const std::vector<NumberRow> rows =
+      NumberRowsFor({urlChecks, newer, Number("reliability_5m", true, 0.82)}, std::nullopt,
+                    TaggedWords());
+  UR_EXPECT_EQ(3u, rows.size());
+  if (rows.size() == 3) {
+    NumberRow downgraded = Row(NumberLabel::UrlChecks, "min(of(13,20),80%)", false);
+    downgraded.reasons = {"tcp(3)", "ipv4(2)"};
+    UR_EXPECT_TRUE(rows[0] == downgraded);
+    UR_EXPECT_TRUE(rows[1].reasons == std::vector<std::string>{"A newer server's sentence."});
+    UR_EXPECT_TRUE(rows[2].reasons.empty());
+  }
 }
 
 UR_TEST(ProviderStatusWhyRowsFormatPercentDelayAndWeight) {

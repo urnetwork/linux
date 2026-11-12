@@ -254,6 +254,20 @@ inline Histogram HistogramFor(const std::vector<int64_t>& countsPerMinute) {
 // ---- the controller's state -----------------------------------------------------
 
 // One number the network ranks this device by (the SDK's ProviderRankingNumber).
+// One line the sdk derived from a number's reason (its
+// ProviderStatusReasonLine, server FP2-PROTOCOL.md §5.5): why the network
+// checks downgraded this device, by a label this app has words for and the
+// count of checks behind it, or the server's English for any other label.
+struct ReasonLine {
+  std::string label;  // "tcp", "ipv4", or a label this app does not know
+  int64_t count = 0;  // the checks a tcp or ipv4 line counts
+  std::string text;   // the server's English, for any other label
+
+  bool operator==(const ReasonLine& other) const {
+    return label == other.label && count == other.count && text == other.text;
+  }
+};
+
 struct RankingNumber {
   std::string name;
   bool hasValue = false;
@@ -265,6 +279,8 @@ struct RankingNumber {
   bool passes = true;
   int64_t count = 0;
   int64_t total = 0;
+  // the sdk's lines, in the order they show (url_checks only)
+  std::vector<ReasonLine> reasonLines;
 };
 
 // Where clients find this device (the SDK's ProviderStatusCountry).
@@ -368,6 +384,9 @@ struct NumberWords {
   std::function<std::string(int64_t count, int64_t total)> countOfTotal;
   // the app's byte-rate formatter, for bytes per second
   std::function<std::string(double bytesPerSecond)> rate;
+  // provider_status_reason_line_tcp and _ipv4, plurals on the count
+  std::function<std::string(int64_t count)> reasonLineTcp;
+  std::function<std::string(int64_t count)> reasonLineIpv4;
   std::string notYet;     // provider_status_value_not_yet
   std::string noHistory;  // provider_status_value_no_history
   std::string notInPool;  // provider_status_value_not_in_pool
@@ -377,11 +396,32 @@ struct NumberRow {
   NumberLabel label = NumberLabel::Reliability5m;
   std::string value;
   bool passes = true;  // false tints the value amber
+  // under the help line, why the network checks downgraded this device
+  std::vector<std::string> reasons;
 
   bool operator==(const NumberRow& other) const {
-    return label == other.label && value == other.value && passes == other.passes;
+    return label == other.label && value == other.value && passes == other.passes &&
+           reasons == other.reasons;
   }
 };
+
+// The lines of a number's reason, in the sdk's order: tcp and ipv4 in the
+// store's words with their counts, any other label as the server's English,
+// and a line with neither left out.
+inline std::vector<std::string> ReasonsFor(const std::vector<ReasonLine>& lines,
+                                           const NumberWords& words) {
+  std::vector<std::string> reasons;
+  for (const ReasonLine& line : lines) {
+    if (line.label == "tcp") {
+      reasons.push_back(words.reasonLineTcp(line.count));
+    } else if (line.label == "ipv4") {
+      reasons.push_back(words.reasonLineIpv4(line.count));
+    } else if (!line.text.empty()) {
+      reasons.push_back(line.text);
+    }
+  }
+  return reasons;
+}
 
 // "82%": a 0-1 ratio as a whole percent, the app's percent text (the transport
 // bar's): the store owns the words, the digits are the same in every locale.
@@ -484,6 +524,7 @@ inline std::vector<NumberRow> NumberRowsFor(const std::vector<RankingNumber>& nu
     } else {
       continue;
     }
+    row.reasons = ReasonsFor(number.reasonLines, words);
     rows.push_back(row);
   }
   if (country) {
