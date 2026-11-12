@@ -189,14 +189,20 @@
 >   Earnings during a v1 claim and coming back dropped its Done, and Claim stayed held until the
 >   3-minute watchdog. It now has its own `snledger::ClaimInFlight` (`claim_`, without rows: its
 >   sheet keeps its own), whose ticket only its Done, its watchdog and a sign-out move. `claiming_`
->   is gone: `Claiming()` is either claim in flight, which holds Claim on both tiles and both
->   sheets as before.
+>   is gone: `Claiming()` is either claim in flight. The page keeps the v1 claim's answers
+>   (`snledger::EpochClaimAnswers`), and while it is in flight the v1 tiles' Claim opens a sheet
+>   that replays them, so closing the sheet loses none, as the v2 tile's Claim opens its claim.
+>   Otherwise Claim waits for a claim of either kind, the v2 sheet's too (the relay's "Claim it
+>   yourself" reaches it). The v1 watchdog waits past the SDK's bounds, 6 minutes an epoch and a
+>   minute (`EpochClaimWatchdogMs`): the 3 minutes before gave up while the SDK could still send,
+>   and offered a second claim of a pending epoch.
 > - **The figure during a claim is what it moves** (Apple and Windows show it). The v2 sheet draws
 >   `ClaimProgress::Figure`: while a press is out, the amount its Claim named (the accounts it
 >   sends of a known amount above the floor, `MovingRao`), never an under-floor or unknown
 >   account's amount and never 0; between presses, `TotalKnown`'s figure as before. The v1 sheet
->   showed 0 during a claim; it now shows the epochs the claim sends, and its Claim reads "Claim"
->   rather than "Claim 0" while there is nothing to claim.
+>   showed 0 during a claim; it now shows the epochs the claim sends, none after a give-up while
+>   an epoch it sent has no outcome yet, and its Claim reads "Claim" rather than "Claim 0" while
+>   there is nothing to claim.
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 

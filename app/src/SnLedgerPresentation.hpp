@@ -344,6 +344,74 @@ inline int ClaimWatchdogMs(const std::vector<Account>& accounts,
   return static_cast<int>(std::min<int64_t>(minutes * 60'000, std::numeric_limits<int>::max()));
 }
 
+// How long the page waits for a v1 claim's Done before it gives up on it: past
+// the SDK's own bounds, which claim the epochs one after another, each within 6
+// minutes (its reads, its transaction and up to 4 minutes for the receipt),
+// and a minute more. Giving up sooner would offer Claim again while the SDK
+// still sends with the gas key: a second claim of an epoch whose first
+// transaction is still pending sends again, and reverts.
+inline int EpochClaimWatchdogMs(size_t epochs) {
+  const int64_t minutes = 6 * static_cast<int64_t>(std::max<size_t>(epochs, 1)) + 1;
+  return static_cast<int>(std::min<int64_t>(minutes * 60'000, std::numeric_limits<int>::max()));
+}
+
+// The v1 claim's answers so far, in order (owner, 2026-11-12: a claim in flight
+// is the session's, not its sheet's). The v1 sheet keeps its own rows, so a
+// sheet opened during the claim is given the claim's epochs and every answer
+// since, and draws the claim in progress as a sheet left open would; one
+// closed meanwhile loses none of them. The claim's end drops them (Clear): a
+// sheet opened after it reads the claims again. Main loop only.
+class EpochClaimAnswers {
+ public:
+  struct Answer {
+    enum class Kind { Sent, Confirmed, Failed };
+    Kind kind = Kind::Sent;
+    int64_t epoch = 0;
+    std::string txHash;     // Sent, Confirmed
+    int64_t amountRao = 0;  // Confirmed
+    std::string message;    // Failed
+  };
+
+  // Claim pressed for `epochs`: none of their answers yet.
+  void Start(std::vector<int64_t> epochs) {
+    epochs_ = std::move(epochs);
+    answers_.clear();
+  }
+  void Sent(int64_t epoch, std::string txHash) {
+    Answer answer;
+    answer.kind = Answer::Kind::Sent;
+    answer.epoch = epoch;
+    answer.txHash = std::move(txHash);
+    answers_.push_back(std::move(answer));
+  }
+  void Confirmed(int64_t epoch, std::string txHash, int64_t amountRao) {
+    Answer answer;
+    answer.kind = Answer::Kind::Confirmed;
+    answer.epoch = epoch;
+    answer.txHash = std::move(txHash);
+    answer.amountRao = amountRao;
+    answers_.push_back(std::move(answer));
+  }
+  void Failed(int64_t epoch, std::string message) {
+    Answer answer;
+    answer.kind = Answer::Kind::Failed;
+    answer.epoch = epoch;
+    answer.message = std::move(message);
+    answers_.push_back(std::move(answer));
+  }
+  // The claim is over (its Done, its watchdog's give-up, a sign-out).
+  void Clear() {
+    epochs_.clear();
+    answers_.clear();
+  }
+  const std::vector<int64_t>& Epochs() const { return epochs_; }
+  const std::vector<Answer>& Answers() const { return answers_; }
+
+ private:
+  std::vector<int64_t> epochs_;
+  std::vector<Answer> answers_;
+};
+
 // The stable code a message of the SDK starts with ("code: detail").
 inline std::string CodeOf(const std::string& message) { return message.substr(0, message.find(':')); }
 

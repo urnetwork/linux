@@ -892,7 +892,7 @@ class EarningsPage : public Gtk::Box {
   Flow connectFlow_;   // 330s: the challenge's life, which signing by hand can take all of
   Flow setWalletFlow_; // 20s: POST /sn/wallet
   Flow pointsPublicFlow_;  // 20s: POST /network/points-ranking-visibility
-  Flow claimFlow_;     // 180s: chain round trips
+  Flow claimFlow_;     // 6 min an epoch and a minute: the v1 claim, past the SDK's bounds
   Flow ledgerClaimFlow_;  // 3 min + 6 per account: the v2 claim, past the SDK's bounds
   Flow rankingFlow_;   // 20s
   Flow legacyFlow_;    // 20s: the payout read and POST /account/payout-wallet after a link
@@ -940,9 +940,10 @@ class EarningsPage : public Gtk::Box {
   snledger::ClaimInFlight ledgerClaim_;
   // the v1 claim in flight, the session's as the v2 claim is: whether an
   // answer of it still counts (its rows are its sheet's and the page's
-  // claims_). No load touches it; only its Done, its watchdog and a sign-out
-  // end it
+  // claims_), and its answers so far, which a sheet opened during it draws.
+  // No load touches them; only its Done, its watchdog and a sign-out end them
   snledger::ClaimInFlight claim_;
+  snledger::EpochClaimAnswers claimAnswers_;
 
   // preview + balance relay
   bool previewMode_ = false;

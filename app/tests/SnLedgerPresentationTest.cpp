@@ -1906,13 +1906,14 @@ UR_TEST(SnLedgerCtf_ASignOutOrTheWatchdogEndsTheClaimInFlight) {
   UR_EXPECT_TRUE(RowOf(*next, 3, 5)->phase == Phase::Claimable);
 }
 
-// The v1 claim is the session's as the v2 claim is (owner, 2026-11-12): a
-// ClaimInFlight without rows (its sheet keeps its own), whose answers count by
-// its ticket, never by the load's epoch (SnLedgerCtf_TheV1ClaimIsTheSessions
-// NotALoads). Leaving Earnings and coming back loads the page again and touches
-// nothing of it: its events and its Done land, Claim waits for it meanwhile, on
-// both tiles (the page's Claiming), and comes back at its Done rather than at
-// the 3-minute watchdog. Its watchdog and a sign-out end it too
+// The v1 claim's in-flight state is a ClaimInFlight without rows (its sheet
+// keeps its own): its answers count by its ticket while it is in flight, and
+// only its Done, its watchdog's give-up and a sign-out end it. That no load
+// touches it, so leaving Earnings and coming back keeps it, is the page's
+// wiring's (SnLedgerCtf_TheV1ClaimIsTheSessionsNotALoads: its answers check
+// only the ticket, never the load's epoch, and no load names claim_). Here:
+// in flight it holds the page's Claiming, as a v2 claim does, and its Done
+// ends it, rather than the watchdog
 UR_TEST(SnLedgerCtf_AV1ClaimOutlivesLeavingEarningsAndComingBack) {
   ClaimInFlight claim;
   ClaimInFlight ledgerClaim;
@@ -1921,11 +1922,7 @@ UR_TEST(SnLedgerCtf_AV1ClaimOutlivesLeavingEarningsAndComingBack) {
   const uint64_t ticket = claim.Start();
   UR_EXPECT_TRUE(claim.InFlight() && claim.Current(ticket));
   UR_EXPECT_TRUE(claim.Rows() == nullptr);
-  UR_EXPECT_TRUE(claiming());
-  // the user leaves Earnings and comes back: the page loads again, which moves
-  // its epoch and nothing of the claim, whose Sent, Confirmed and Failed land
-  UR_EXPECT_TRUE(claim.Current(ticket));
-  // Claim waits for it, a v2 Claim too: the gas key sends one claim at a time
+  // a v2 Claim waits for it: the gas key sends one claim at a time
   UR_EXPECT_TRUE(claiming());
   // its Done lands and ends it: Claim is offered again, and a v1 claim pays no
   // v2 account, so the wins are not read on its account
@@ -1947,6 +1944,60 @@ UR_TEST(SnLedgerCtf_AV1ClaimOutlivesLeavingEarningsAndComingBack) {
   ledgerClaim.Start(std::make_shared<ClaimProgress>(CtfSheet(615'000'000)));
   UR_EXPECT_TRUE(claiming() && !claim.InFlight());
 }
+
+// The v1 claim's watchdog waits past the SDK's own bounds, as the v2 claim's
+// does: the SDK claims the epochs one after another, each within 6 minutes (its
+// reads, its transaction and up to 4 minutes for the receipt). The 3 minutes
+// it waited before gave up on a claim of one slow receipt, or of several
+// epochs, while the SDK still sent, and offered Claim again: a second claim of
+// a pending epoch sends again, and reverts
+UR_TEST(SnLedgerCtf_TheV1WatchdogOutlastsEveryEpochTheSdkClaims) {
+  using urnw::snledger::EpochClaimWatchdogMs;
+  constexpr int64_t kSdkEpochMs = 6 * 60'000;
+  for (size_t epochs : {size_t{1}, size_t{2}, size_t{8}, size_t{40}}) {
+    UR_EXPECT_TRUE(EpochClaimWatchdogMs(epochs) > static_cast<int64_t>(epochs) * kSdkEpochMs);
+  }
+  UR_EXPECT_EQ(7 * 60'000, EpochClaimWatchdogMs(1));
+  UR_EXPECT_EQ(49 * 60'000, EpochClaimWatchdogMs(8));
+  // no epoch is the SDK's one pass all the same
+  UR_EXPECT_EQ(EpochClaimWatchdogMs(1), EpochClaimWatchdogMs(0));
+  // never past what a timer takes
+  UR_EXPECT_EQ(std::numeric_limits<int>::max(), EpochClaimWatchdogMs(size_t{1} << 40));
+}
+
+// A v1 sheet opened during the v1 claim draws it in progress (owner,
+// 2026-11-12: a sheet opened again shows the claim; none of its events is
+// lost when its sheet is closed). The sheet keeps its own rows, so the page
+// keeps the claim's epochs and its answers, in order, for a sheet opened
+// later to replay; the claim's end drops them, and the next sheet reads the
+// claims again
+UR_TEST(SnLedgerCtf_AV1SheetOpenedDuringTheClaimDrawsItsAnswers) {
+  using urnw::snledger::EpochClaimAnswers;
+  EpochClaimAnswers answers;
+  answers.Start({1218, 1217});
+  answers.Sent(1218, "0xa1");
+  answers.Confirmed(1218, "0xa1", 3'241'000'000);
+  answers.Failed(1217, "needs_gas: the gas key holds 0.004 TAO");
+  UR_EXPECT_TRUE((answers.Epochs() == std::vector<int64_t>{1218, 1217}));
+  UR_EXPECT_EQ(3u, answers.Answers().size());
+  if (answers.Answers().size() == 3) {
+    const auto& sent = answers.Answers()[0];
+    UR_EXPECT_TRUE(sent.kind == EpochClaimAnswers::Answer::Kind::Sent && sent.epoch == 1218 &&
+                   sent.txHash == "0xa1");
+    const auto& confirmed = answers.Answers()[1];
+    UR_EXPECT_TRUE(confirmed.kind == EpochClaimAnswers::Answer::Kind::Confirmed && confirmed.epoch == 1218 &&
+                   confirmed.txHash == "0xa1" && confirmed.amountRao == 3'241'000'000);
+    const auto& failed = answers.Answers()[2];
+    UR_EXPECT_TRUE(failed.kind == EpochClaimAnswers::Answer::Kind::Failed && failed.epoch == 1217 &&
+                   failed.message == "needs_gas: the gas key holds 0.004 TAO");
+  }
+  // the next claim starts afresh, and the claim's end drops them
+  answers.Start({1217});
+  UR_EXPECT_TRUE(answers.Answers().empty() && answers.Epochs().size() == 1);
+  answers.Clear();
+  UR_EXPECT_TRUE(answers.Answers().empty() && answers.Epochs().empty());
+}
+
 
 // A failure about no account (noId 0) leaves the rows as they are: the sheet
 // says it, and so does a sheet opened on the claim after it (it was closed when
@@ -2236,9 +2287,12 @@ UR_TEST(SnLedgerOneClaimAtATime) {
                      .find("  bool Claiming() const { return claim_.InFlight() || ledgerClaim_.InFlight(); }") !=
                  std::string::npos);
   UR_EXPECT_TRUE(page.find("claiming_") == std::string::npos);
-  UR_EXPECT_TRUE(page.find("claimButton_->set_sensitive(ready && totalClaimableRao_ > 0 && !Claiming());") !=
+  // the v1 tiles' Claim opens the v1 claim in flight, and waits for a v2 one
+  // (SnLedgerCtf_AV1SheetOpenedDuringTheClaimDrawsItsAnswers)
+  UR_EXPECT_TRUE(page.find("claimButton_->set_sensitive(claim_.InFlight() || (ready && totalClaimableRao_ > 0 && "
+                           "!Claiming()));") != std::string::npos);
+  UR_EXPECT_TRUE(page.find("payoutClaimButton_->set_sensitive(view.showClaim && (claim_.InFlight() || !Claiming()));") !=
                  std::string::npos);
-  UR_EXPECT_TRUE(page.find("payoutClaimButton_->set_sensitive(view.showClaim && !Claiming());") != std::string::npos);
   for (const std::string* body : {&v1, &v2}) {
     size_t count = 0;
     for (size_t at = body->find("RebuildLedgerTile();"); at != std::string::npos;
@@ -2660,6 +2714,7 @@ UR_TEST(SnLedgerCtf_TheClaimIsTheSessionsNotALoads) {
   const std::string signOut = LedgerFunctionBody(page, "void EarningsPage::ResetForSignOut()");
   UR_EXPECT_TRUE(signOut.find("  ledgerClaim_.Drop();\n"
                               "  claim_.Drop();\n"
+                              "  claimAnswers_.Clear();\n"
                               "  ++claimFlow_.generation;\n"
                               "  claimFlow_.timer.disconnect();\n"
                               "  ++ledgerClaimFlow_.generation;\n"
@@ -2731,8 +2786,14 @@ UR_TEST(SnLedgerCtf_TheV1ClaimIsTheSessionsNotALoads) {
     }
     UR_EXPECT_EQ(answer.returns, returns);
   }
-  // the watchdog's give-up is final, and the Done after the settle ends it
-  const size_t watchdog = start.find("BeginFlow(claimFlow_, kChainTimeoutMs, [this] {");
+  // the watchdog waits past the SDK's bounds (SnLedgerCtf_TheV1WatchdogOutlasts
+  // EveryEpochTheSdkClaims), its give-up is final, and the Done after the
+  // settle ends the claim
+  UR_EXPECT_TRUE(start.find("const int watchdogMs = snledger::EpochClaimWatchdogMs(epochs.size());\n"
+                            "  const uint32_t generation = BeginFlow(claimFlow_, watchdogMs, [this] {") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(page.find("kChainTimeoutMs") == std::string::npos);
+  const size_t watchdog = start.find("BeginFlow(claimFlow_, watchdogMs, [this] {");
   const size_t ended = start.find("claim_.End();", watchdog);
   UR_EXPECT_TRUE(watchdog != std::string::npos && ended != std::string::npos &&
                  ended < start.find("auto alive = alive_;"));
@@ -2748,6 +2809,70 @@ UR_TEST(SnLedgerCtf_TheV1ClaimIsTheSessionsNotALoads) {
   UR_EXPECT_EQ(1u, count("claim_.Start("));
   UR_EXPECT_EQ(2u, count("claim_.End()"));  // its Done, its watchdog
   UR_EXPECT_EQ(1u, count("claim_.Drop()"));
+}
+
+// The page keeps the v1 claim's answers for a sheet opened during it
+// (SnLedgerCtf_AV1SheetOpenedDuringTheClaimDrawsItsAnswers): each answer, once
+// it counts, is kept before it reaches a sheet; the claim's Done, its watchdog
+// and a sign-out drop them; a sheet opened during the claim replays them; and
+// the v1 tiles' Claim opens it while it is in flight
+UR_TEST(SnLedgerCtf_TheV1ClaimsAnswersAreWired) {
+  // the page: each answer, once it counts, is kept before it reaches a sheet
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  const std::string start = LedgerFunctionBody(page, "void EarningsPage::StartClaim(");
+  UR_EXPECT_TRUE(start.find("const uint64_t claim = claim_.Start();\n  claimAnswers_.Start(epochs);") !=
+                 std::string::npos);
+  const std::string guard = "if (!*alive || !claim_.Current(claim)) return;\n";
+  for (const char* kept : {"claimAnswers_.Sent(claimEpoch, txHash);",
+                           "claimAnswers_.Confirmed(claimEpoch, txHash, amountRao);",
+                           "claimAnswers_.Failed(claimEpoch, message);"}) {
+    const size_t at = start.find(kept);
+    UR_EXPECT_TRUE_MSG(kept, at != std::string::npos && start.rfind(guard, at) != std::string::npos);
+  }
+  // its Done, its watchdog and a sign-out drop them
+  const auto count = [&page](const std::string& what) {
+    size_t n = 0;
+    for (size_t at = page.find(what); at != std::string::npos; at = page.find(what, at + 1)) ++n;
+    return n;
+  };
+  UR_EXPECT_EQ(3u, count("claimAnswers_.Clear();"));
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::ResetForSignOut()").find("claimAnswers_.Clear();") !=
+                 std::string::npos);
+  // a sheet opened during the claim replays them: its epochs sending, then each answer
+  const std::string open = LedgerFunctionBody(page, "void EarningsPage::OpenClaimSheet(bool allowActions)");
+  const size_t replay = open.find("if (claim_.InFlight()) {\n    sheet->OnSending(claimAnswers_.Epochs());\n"
+                                  "    for (const snledger::EpochClaimAnswers::Answer& answer : claimAnswers_.Answers()) {");
+  UR_EXPECT_TRUE(replay != std::string::npos && replay < open.find("PresentSheet(sheet);"));
+  for (const char* drawn : {"sheet->OnSent(answer.epoch, answer.txHash);",
+                            "sheet->OnConfirmed(answer.epoch, answer.txHash, answer.amountRao);",
+                            "sheet->OnFailed(answer.epoch, answer.message);"}) {
+    UR_EXPECT_TRUE_MSG(drawn, open.find(drawn) != std::string::npos);
+  }
+  // and the v1 tiles' Claim opens it while it is in flight (SnLedgerOneClaimAtATime)
+  UR_EXPECT_TRUE(page.find("claimButton_->set_sensitive(claim_.InFlight() || (ready && totalClaimableRao_ > 0 && "
+                           "!Claiming()));") != std::string::npos);
+}
+
+// The v2 sheet's Claim waits for a v1 claim in flight: the relay's "Claim it
+// yourself" opens the v2 sheet whatever the tiles say, and the press would do
+// nothing while the gas key sends the v1 claim. The page redraws an open v2
+// sheet when the v1 claim ends, by its Done or its watchdog
+UR_TEST(SnLedgerCtf_TheV2SheetsClaimWaitsForAV1Claim) {
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  const std::string rebuild = LedgerFunctionBody(page, "void LedgerClaimSheet::Rebuild()");
+  UR_EXPECT_TRUE(rebuild.find("claimButton_->set_sensitive(claimsAvailable_ && !progress_->Busy() && rao > 0 && "
+                              "!NeedsGas() &&\n                              !(claim_held && claim_held()));") !=
+                 std::string::npos);
+  const std::string open = LedgerFunctionBody(page, "void EarningsPage::OnLedgerClaim()");
+  const size_t held = open.find("sheet->claim_held = [this] { return claim_.InFlight(); };\n  sheet->Redraw();");
+  UR_EXPECT_TRUE(held != std::string::npos && held < open.find("PresentSheet(sheet);"));
+  const std::string start = LedgerFunctionBody(page, "void EarningsPage::StartClaim(");
+  size_t redraws = 0;
+  for (size_t at = start.find("if (auto open = ledgerClaimSheet_.lock()) open->Redraw();"); at != std::string::npos;
+       at = start.find("if (auto open = ledgerClaimSheet_.lock()) open->Redraw();", at + 1)) {
+    ++redraws;
+  }
+  UR_EXPECT_EQ(2u, redraws);  // its watchdog, its Done
 }
 
 // The sheet draws ClaimProgress's figure: none while its total is not known,
@@ -2797,7 +2922,13 @@ UR_TEST(SnLedgerCtf_TheV1SheetsFigureDuringAClaim) {
   const std::string page = ReadLedgerSource("EarningsPage.cpp");
   const std::string rows = LedgerFunctionBody(page, "void ClaimAlphaSheet::RebuildRows()");
   UR_EXPECT_TRUE(rows.find("const int64_t figure = busy_ ? movingRao_ : ClaimableRao();\n"
-                           "  totalValue_->set_visible(!busy_ || 0 < movingRao_);") != std::string::npos);
+                           "  const bool shown = busy_ ? 0 < movingRao_ : !unsettled;\n"
+                           "  totalValue_->set_visible(shown);\n"
+                           "  totalCaption_->set_visible(shown);") != std::string::npos);
+  // after the claim no figure while an epoch it sent has no outcome yet (its
+  // watchdog gave up): what may still land is never a 0
+  UR_EXPECT_TRUE(rows.find("if (row.phase == Phase::Sending || row.phase == Phase::Sent) unsettled = true;") !=
+                 std::string::npos);
   UR_EXPECT_TRUE(rows.find("Glib::Markup::escape_text(FormatAlphaRao(figure))") != std::string::npos);
   UR_EXPECT_TRUE(rows.find("FormatAlphaRao(ClaimableRao())") == std::string::npos);
   UR_EXPECT_TRUE(rows.find("const size_t count = busy_ ? movingCount_ : ClaimableEpochs().size();") !=
