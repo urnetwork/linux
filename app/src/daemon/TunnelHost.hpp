@@ -217,11 +217,10 @@ class TunnelHost {
   bool SetMeasurementsEnabled(bool on, std::string* error);
   // The router port mapping switch while no tunnel session's device takes it
   // (set_provide_extender_port_mapping, connect EXTENDER.md S8): writes the
-  // role's router port mapping setting through the device SetProvideExtender
-  // would write through, by the same rule, refused the same way. With neither
-  // device running it is refused too, never written into the space: the sdk
-  // keeps the setting there but writes it only through a device. Main loop
-  // only.
+  // role's router port mapping setting where SetProvideExtender writes the
+  // provider extender setting, by the same rule, refused the same way. With
+  // neither device running it goes into the space the last device ran in,
+  // whose next device reads it as its role starts. Main loop only.
   bool SetProvideExtenderPortMapping(bool on, std::string* error);
 
   // Account > Extenders' Reset extenders (reset_extenders; connect EXTENDER.md

@@ -10,9 +10,10 @@
 //     (provide::PortMappingSwitchSourceFor), and reads off whenever nothing
 //     answers;
 //   * the daemon takes the verb behind set_provide_extender's owner gate,
-//     writes it through the device that runs, refuses with none (the sdk
-//     writes the setting only through a device), and reports it beside the
-//     role;
+//     writes it where set_measurements_enabled writes the speed tests
+//     setting -- through the device that runs, or with none into the space
+//     the last device ran in, which the next device reads -- and reports it
+//     beside the role;
 //   * the page draws it beside the Extender row as just drawn, directly under
 //     the speed tests switch, hidden, never disabled, off until a reading says
 //     otherwise, and never writes it while hidden (N1).
@@ -43,8 +44,8 @@ std::string From(const std::string& text, const std::string& from, const std::st
 }  // namespace
 
 // The daemon: the verb behind set_provide_extender's gate, the write through
-// the device that runs and never into the space, and the setting beside the
-// role.
+// the device that runs or with none into the space the last device ran in, and
+// the setting beside the role.
 UR_TEST(PortMapping_TheDaemonTakesTheSwitch) {
   const std::string server = ReadCode("daemon/ControlServer.cpp");
   const std::string authorized = FunctionBody(server, "void ControlServer::DispatchAuthorized(");
@@ -73,18 +74,33 @@ UR_TEST(PortMapping_TheDaemonTakesTheSwitch) {
   UR_EXPECT_TRUE(Contains(write, "device_->setProvideExtenderPortMapping(on);"));
   UR_EXPECT_FALSE(Contains(write, "setProvideExtender("));
   UR_EXPECT_FALSE(Contains(write, "setMeasurementsEnabled("));
-  // With no device running it is refused, never reported as written: the
-  // sdk's LocalState has no writer for this setting, so nothing writes the
-  // space directly.
-  UR_EXPECT_FALSE(Contains(write, "getLocalState()"));
+  // With no device running it is written into the space the last device ran
+  // in, as the speed tests switch's setting is, and the next device reads it:
+  // a press that lands between two devices is kept, never refused and dropped.
   const std::string spaceCase = From(write, "case provide::ExtenderSettingTarget::NetworkSpace:",
                                      "case provide::ExtenderSettingTarget::None:");
-  UR_EXPECT_TRUE(Before(spaceCase, "*error = ", "return false;"));
-  UR_EXPECT_FALSE(Contains(spaceCase, "break;"));
+  UR_EXPECT_TRUE(Before(
+      spaceCase,
+      "networkSpace_->getAsyncLocalState().getLocalState().setProvideExtenderPortMapping(on);",
+      "break;"));
+  UR_EXPECT_FALSE(Contains(spaceCase, "*error = "));
+  UR_EXPECT_FALSE(Contains(spaceCase, "return false;"));
+  // only there: a running device persists the setting itself and replaces its
+  // role, so the space is never written behind it
+  UR_EXPECT_EQ(1, int(CountOf(write, "getLocalState()")));
+  // the speed tests switch's twin, so the two settings keep one rule
+  const std::string twin =
+      FunctionBody(host, "bool TunnelHost::SetMeasurementsEnabled(bool on, std::string* error)");
+  UR_EXPECT_TRUE(Contains(
+      From(twin, "case provide::ExtenderSettingTarget::NetworkSpace:",
+           "case provide::ExtenderSettingTarget::None:"),
+      "networkSpace_->getAsyncLocalState().getLocalState().setMeasurementsEnabled(on);"));
+  // with no space at all it is still refused, never reported as written
   const std::string noneCase =
       From(write, "case provide::ExtenderSettingTarget::None:", "} catch (");
   UR_EXPECT_TRUE(Before(noneCase, "*error = ", "return false;"));
   UR_EXPECT_FALSE(Contains(noneCase, "return true;"));
+  UR_EXPECT_FALSE(Contains(noneCase, "getLocalState()"));
 
   // reported beside the setting the speed tests switch shows, said to be
   // written only once read, and left off and unwritable when the read throws
