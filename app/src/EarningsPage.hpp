@@ -12,7 +12,9 @@
 // is attached; earlier epochs earned points only. Settlement v2 shows apart
 // from those v1 claims: a tile with the coldkey's v2 ledger accounts and its
 // own claim dialog, claimed the same direct way from the v2 vault
-// (SnLedgerPresentation.hpp).
+// (SnLedgerPresentation.hpp). From capture the flag the coldkey holds an
+// account in the provider pool and one in the capture the flag pool: each is a
+// row of its own, and one claim claims both.
 //
 // USDC payouts continue until the migration to Bittensor completes, so the
 // Solana payout wallet stays reachable from here: a three-dot overflow beside
@@ -240,6 +242,9 @@ class EarningsPage : public Gtk::Box {
   // "claimed" is the Top 200 tile's claimed state);
   // URNETWORK_PREVIEW_MANUAL=1 opens the manual entry on a "new wallet" verdict;
   // URNETWORK_PREVIEW_GAS=low puts the claim dialog in its needs-gas state;
+  // URNETWORK_PREVIEW_CTF=1 adds a capture the flag account beside the v2
+  // tile's pool account and the line of a won slot, and
+  // URNETWORK_PREVIEW_CTF=unavailable that pool as one that could not be read;
   // URNETWORK_PREVIEW_SOLANA=1 adds a Solana payout wallet with 3.87 USDC
   // waiting (the card); URNETWORK_PREVIEW_USDC_WAITING=1 the same figure with no
   // payout wallet (the waiting line above the Bittensor actions).
@@ -378,10 +383,11 @@ class EarningsPage : public Gtk::Box {
                    Fetch state, const Glib::ustring& failure = {},
                    std::optional<snpayout::EpochSchedule> schedule = std::nullopt);
   void ApplyGas(std::optional<SnGasInfo> gas);
-  // the v2 accounts; `claimConfigured` is whether the chain settings name the
-  // v2 vault, read with them
+  // the v2 accounts, and the pools the server could not read just now;
+  // `claimConfigured` is whether the chain settings name the v2 vault, read
+  // with them
   void ApplyLedger(snledger::Load load, std::vector<snledger::Account> accounts,
-                   bool claimConfigured);
+                   std::vector<snledger::UnavailablePool> unavailable, bool claimConfigured);
   void ApplyReliability(std::optional<urnet::ReliabilityWindow> window, Fetch state);
   void ApplyRanking(std::optional<urnet::NetworkRanking> ranking, bool ok);
   void ApplyLeaderboard(std::optional<urnet::LeaderboardEarnersList> earners, Fetch state);
@@ -521,6 +527,16 @@ class EarningsPage : public Gtk::Box {
   void OnRelayClaimNow();  // Claim now on the tile: the sheet
   void StartClaimNow();    // Claim now on the sheet: the relay is asked
   void ApplyClaimRelaySheet();
+  // The least a claim can move, in rao of α, from what the relay said last; 0
+  // without an answer or a price: then no row says it waits below the claim
+  // minimum.
+  int64_t TransferFloorRao() const;
+
+  // ---- capture the flag: the won slot's line (GET /sn/ctf/client) -----------
+  // This device's latest win, read on every load: the line with the capture
+  // the flag account names the role and the country (snledger::WonSlotFor).
+  void LoadCtfWin();
+  void ApplyCtfWin(std::optional<snledger::Win> win);
 
   // ---- the Solana payout wallet (USDC until the Bittensor migration) ---------
   // The three-dot overflow (icon-only, named "Wallet options") over `menu`.
@@ -778,6 +794,8 @@ class EarningsPage : public Gtk::Box {
   Glib::ustring claimsFailure_;
   std::optional<snpayout::EpochSchedule> schedule_;
   std::vector<snledger::Account> ledgerAccounts_;
+  // the pools the ledger's answer left out: each an unavailable row, never a zero
+  std::vector<snledger::UnavailablePool> ledgerUnavailable_;
   snledger::Load ledgerLoad_ = snledger::Load::Loading;
   bool ledgerConfigured_ = false;  // the chain settings name the v2 vault: v2 Claim shows
   std::optional<SnGasInfo> gas_;
@@ -894,6 +912,10 @@ class EarningsPage : public Gtk::Box {
   ClaimNowOutcome claimNowOutcome_;
   bool claimingNow_ = false;
   std::weak_ptr<ClaimRelaySheet> claimRelaySheet_;
+
+  // this device's latest capture the flag win (nullopt: none, not read yet, or
+  // its read failed: no line, never "no wins")
+  std::optional<snledger::Win> ctfWin_;
 
   // preview + balance relay
   bool previewMode_ = false;

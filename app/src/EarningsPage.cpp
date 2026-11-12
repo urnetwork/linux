@@ -8,6 +8,7 @@
 #include <gtk/gtk.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <utility>
@@ -16,6 +17,7 @@
 #include "BittensorKeyText.hpp"
 #include "BittensorWalletChooser.hpp"
 #include "BittensorWalletFlow.hpp"
+#include "ConnectionRegionSheet.hpp"
 #include "DisplayText.hpp"
 #include "EmojiKeyboard.hpp"
 #include "EmojiTagSheet.hpp"
@@ -294,6 +296,18 @@ Gtk::Label* MakeStatusChip(const Glib::ustring& text) {
   chip->add_css_class("ur-earn-tag");
   chip->set_valign(Gtk::Align::CENTER);
   return chip;
+}
+
+// A country's name in the reader's language, as the app's country lists name
+// it (iso-codes), else its code in capitals: the won slot's line names the
+// country bare, as the store's strings expect.
+std::string CountryNameOrCode(const std::string& countryCode) {
+  const std::string name = CountryDisplayName(countryCode);
+  if (!name.empty()) return name;
+  std::string upper = countryCode;
+  std::transform(upper.begin(), upper.end(), upper.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+  return upper;
 }
 
 // The provide control mode's label; the mode strings are the store keys of
@@ -997,12 +1011,17 @@ void Claim(SdkHost& host, const std::vector<int64_t>& epochs, ClaimEvents events
 // synced, as for the v1 claims: the read is the cached coldkey's. The chain
 // settings say whether the release configures v2 claims: the v2 vault's
 // address, which the release pins and no server sets. Any failure is the
-// ledger unavailable: the page shows no balance rather than a zero.
+// ledger unavailable: the page shows no balance rather than a zero. Each
+// account comes with its pool's kind (the operator's pool, or its capture the
+// flag pool), and an answer may leave out a pool the server could not read
+// just now (the SDK asks with partial=true): that pool is unavailable, and the
+// other accounts are read as usual.
 using LedgerDone = std::function<void(std::optional<std::vector<snledger::Account>> accounts,
+                                      std::vector<snledger::UnavailablePool> unavailable,
                                       bool claimConfigured, std::string err)>;
 void FetchLedger(SdkHost& host, LedgerDone done) {
   if (!host.DeviceSteady()) {
-    done(std::nullopt, false, kNoDevice);
+    done(std::nullopt, {}, false, kNoDevice);
     return;
   }
   urnet::DeviceRemote& device = host.device();
@@ -1016,7 +1035,7 @@ void FetchLedger(SdkHost& host, LedgerDone done) {
       const bool configured = settings && !settings->vault2_address.empty();
       // a result without its list is as unreadable as an error: never a zero
       if (err || !result || result->error || !result->accounts) {
-        done(std::nullopt, configured,
+        done(std::nullopt, {}, configured,
              ErrorText(result ? result->error : std::nullopt, err, "no accounts"));
         return;
       }
@@ -1025,6 +1044,7 @@ void FetchLedger(SdkHost& host, LedgerDone done) {
         snledger::Account row;
         row.vault = account.vault;
         row.noId = account.no_id;
+        row.kind = account.kind;
         row.index = account.index;
         row.finalizedRao = account.finalized_rao;
         row.claimableRao = account.claimable_rao;
@@ -1033,14 +1053,18 @@ void FetchLedger(SdkHost& host, LedgerDone done) {
         row.pendingRao = account.pending_rao;
         accounts.push_back(row);
       }
-      done(std::move(accounts), configured, std::string());
+      done(std::move(accounts), UnavailablePoolsOf(result->unavailable_pools), configured,
+           std::string());
     });
   });
 }
 
 // The v2 claim: the SDK claims every finalized v2 account of the coldkey whose
-// claimable it verified against the v2 vault, one transaction each, signed with
-// the gas key, and reports each as the receipts arrive, then Done.
+// claimable it verified against the v2 vault, its pool's and its capture the
+// flag account alike, signed with the gas key: one transaction for one account,
+// one STClaimBatcher transaction for two or more. It reports each account as
+// the receipts arrive (every account of a batch with the batch's transaction),
+// then Done.
 void LedgerClaim(SdkHost& host, urnet::SnLedgerClaimCallback callback) {
   if (!host.DeviceSteady()) {
     if (callback.done) callback.done();
@@ -1092,6 +1116,29 @@ void ClaimNow(SdkHost& host, const std::string& coldkeySs58, ClaimNowDone done) 
       outcome.nextAtMillis = result->next_at_millis.value_or(0);
     }
     done(std::move(outcome));
+  });
+}
+
+// This device's latest capture the flag win (GET /sn/ctf/client, read by the
+// SDK with the device's client JWT): the role that won one of a country's
+// slots, and the country. An answer that could not be read, like one with no
+// win, is nullopt: no line, never "no wins".
+using CtfWinDone = std::function<void(std::optional<snledger::Win> win)>;
+void FetchCtfWin(SdkHost& host, CtfWinDone done) {
+  if (!host.DeviceSteady()) {
+    done(std::nullopt);
+    return;
+  }
+  host.device().snCtfClient([done](std::optional<urnet::SnCtfClientResult> result,
+                                   std::optional<std::string> err) {
+    if (err || !result || result->error || !result->latest_win) {
+      done(std::nullopt);
+      return;
+    }
+    snledger::Win win;
+    win.role = result->latest_win->role;
+    win.country = result->latest_win->country;
+    done(std::move(win));
   });
 }
 
@@ -1625,14 +1672,17 @@ void ClaimAlphaSheet::ShowError(const Glib::ustring& message) {
 // row per account (its pool, the amount, the progress and, once sent, the
 // transaction's explorer link), where the alpha lands, the gas key with the
 // needs-gas top-up, and the one action, which claims every claimable account
-// (SnLedgerClaim). What the rows say is snledger::ClaimProgress's. Like the v1
-// dialog it opens and reads with no session, and every failure renders ON THE
-// SHEET.
+// (SnLedgerClaim). What the rows say is snledger::ClaimProgress's: beside a
+// capture the flag account, Capture the flag and Provider pool, a row below the
+// claim minimum, and Claim both while the press claims both; a pool that could
+// not be read is a row of its own, without an amount. Like the v1 dialog it
+// opens and reads with no session, and every failure renders ON THE SHEET.
 class LedgerClaimSheet : public Gtk::Window {
  public:
   LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
-                   const std::vector<snledger::Account>& accounts, std::optional<SnGasInfo> gas,
-                   bool claimsAvailable);
+                   const std::vector<snledger::Account>& accounts,
+                   const std::vector<snledger::UnavailablePool>& unavailable,
+                   int64_t transferFloorRao, std::optional<SnGasInfo> gas, bool claimsAvailable);
   ~LedgerClaimSheet() override;
 
   std::function<void()> on_claim;  // page: StartLedgerClaim
@@ -1666,9 +1716,11 @@ class LedgerClaimSheet : public Gtk::Window {
 
 LedgerClaimSheet::LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
                                    const std::vector<snledger::Account>& accounts,
-                                   std::optional<SnGasInfo> gas, bool claimsAvailable)
+                                   const std::vector<snledger::UnavailablePool>& unavailable,
+                                   int64_t transferFloorRao, std::optional<SnGasInfo> gas,
+                                   bool claimsAvailable)
     : coldkey_(std::move(coldkey)),
-      progress_(accounts),
+      progress_(accounts, unavailable, transferFloorRao),
       gas_(std::move(gas)),
       claimsAvailable_(claimsAvailable) {
   set_transient_for(parent);
@@ -1761,8 +1813,7 @@ void LedgerClaimSheet::Rebuild() {
     line->set_margin_bottom(6);
     auto* left = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
     left->set_hexpand(true);
-    left->append(*MakeSizedLabel(Format(T_("sn_ledger_pool", "Pool {}"), row.noId), 13,
-                                 "ur-value"));
+    left->append(*MakeSizedLabel(LedgerPoolName(progress_.NameOf(row), row.noId), 13, "ur-value"));
     if (row.phase == snledger::Phase::Failed) {
       // needs_gas reads "Add TAO for gas", with the top-up below
       left->append(*MakeSizedLabel(SnErrorMessage(row.message, T_("claim_failed", "Failed")), 12,
@@ -1781,15 +1832,25 @@ void LedgerClaimSheet::Rebuild() {
       }
     }
     line->append(*left);
-    auto* amount = MakeSizedLabel(FormatAlphaRao(row.amountRao), 13, "ur-value");
-    amount->set_valign(Gtk::Align::CENTER);
-    amount->set_wrap(false);
-    line->append(*amount);
+    // a pool that could not be read has no amount, nor has an account the SDK
+    // claims before its amount is known: never a zero
+    if (row.phase != snledger::Phase::Unavailable && 0 < row.amountRao) {
+      auto* amount = MakeSizedLabel(FormatAlphaRao(row.amountRao), 13, "ur-value");
+      amount->set_valign(Gtk::Align::CENTER);
+      amount->set_wrap(false);
+      line->append(*amount);
+    }
     Glib::ustring chipText;
     const char* chipClass = nullptr;
     switch (row.phase) {
       case snledger::Phase::Claimable:
         chipText = T_("unclaimed", "Unclaimed");
+        break;
+      case snledger::Phase::UnderFloor:
+        chipText = T_("sn_ledger_pool_under_floor", "Below the claim minimum");
+        break;
+      case snledger::Phase::Unavailable:
+        chipText = T_("sn_ledger_pool_unavailable", "Unavailable right now");
         break;
       case snledger::Phase::Sending:
         chipText = T_("claim_sending_linux", "Sending…");
@@ -1816,7 +1877,11 @@ void LedgerClaimSheet::Rebuild() {
                           std::to_string(36 * PANGO_SCALE) + "'>" +
                           Glib::Markup::escape_text(FormatAlphaRao(rao)) + "</span>");
   BuildGasPanel(*gasPanel_, *this, gas_, NeedsGas(), snledger::kClaimGasTao, copiedReset_);
-  claimButton_->set_label(Format(T_("claim_amount_button", "Claim {}"), FormatAlphaRao(rao)));
+  // the pool's account and the capture the flag account in one transaction
+  claimButton_->set_label(progress_.ClaimsBoth()
+                              ? Glib::ustring(T_("sn_ledger_claim_both", "Claim both"))
+                              : Glib::ustring(Format(T_("claim_amount_button", "Claim {}"),
+                                                     FormatAlphaRao(rao))));
   claimButton_->set_sensitive(claimsAvailable_ && !progress_.Busy() && rao > 0 && !NeedsGas());
   closeButton_->set_label(progress_.AnyClaimed() && !progress_.Busy() ? T_("done", "Done")
                                                                        : T_("close", "Close"));
@@ -2178,6 +2243,7 @@ void EarningsPage::SettleAllEmpty() {
   keys_->SignedOut();
   claimStatus_.reset();
   claimNowOutcome_ = ClaimNowOutcome{};
+  ctfWin_.reset();
   ApplyPoints(urnet::AccountPointsList{}, Fetch::Ready);
   ApplyEpochs(std::vector<AccountEpochRow>{}, Fetch::Ready);
   ApplySnWallet(std::nullopt, Fetch::Ready);
@@ -3055,6 +3121,8 @@ void EarningsPage::LoadEarnings() {
   //     claim relay says of the network's settlement v2 balance
   VisitKeys();
   LoadClaimStatus();
+  // 4d. this device's latest capture the flag win, for its line on the tile
+  LoadCtfWin();
 
   // 5. the Top 200 tile and the Protocol card: this network's own place on
   // the board (GET /sn/top/me). A failure only hides the tile: it must not
@@ -3084,7 +3152,7 @@ void EarningsPage::LoadEarnings() {
 void EarningsPage::LoadWalletLayer() {
   if (!wallet_ || !CanCallApi()) return;
   ApplyClaims(std::nullopt, 0, Fetch::Loading);
-  ApplyLedger(snledger::Load::Loading, {}, ledgerConfigured_);
+  ApplyLedger(snledger::Load::Loading, {}, {}, ledgerConfigured_);
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
   sn::FetchClaims(host_, [this, epoch, seen](std::optional<std::vector<SnClaimRow>> claims,
@@ -3117,16 +3185,17 @@ void EarningsPage::LoadWalletLayer() {
     });
   });
   sn::FetchLedger(host_, [this, epoch, seen](std::optional<std::vector<snledger::Account>> accounts,
+                                              std::vector<snledger::UnavailablePool> unavailable,
                                               bool configured, std::string err) {
-    PostToMain([this, epoch, seen, accounts = std::move(accounts), configured,
-                err = std::move(err)] {
+    PostToMain([this, epoch, seen, accounts = std::move(accounts),
+                unavailable = std::move(unavailable), configured, err = std::move(err)] {
       if (*epoch != seen) return;
       if (!accounts) {
         g_warning("earnings: sn ledger accounts failed: %s", err.c_str());
-        ApplyLedger(snledger::Load::Unavailable, {}, configured);
+        ApplyLedger(snledger::Load::Unavailable, {}, {}, configured);
         return;
       }
-      ApplyLedger(snledger::Load::Ready, *accounts, configured);
+      ApplyLedger(snledger::Load::Ready, *accounts, unavailable, configured);
     });
   });
   LoadGas();
@@ -3267,6 +3336,7 @@ void EarningsPage::ApplySnWallet(std::optional<SnWalletInfo> wallet, Fetch state
     claimsFailure_.clear();
     schedule_.reset();
     ledgerAccounts_.clear();
+    ledgerUnavailable_.clear();
     ledgerLoad_ = snledger::Load::Ready;
   }
   RebuildWalletBlock();
@@ -3304,9 +3374,11 @@ void EarningsPage::ApplyGas(std::optional<SnGasInfo> gas) {
 }
 
 void EarningsPage::ApplyLedger(snledger::Load load, std::vector<snledger::Account> accounts,
+                               std::vector<snledger::UnavailablePool> unavailable,
                                bool claimConfigured) {
   ledgerLoad_ = load;
   ledgerAccounts_ = std::move(accounts);
+  ledgerUnavailable_ = std::move(unavailable);
   ledgerConfigured_ = claimConfigured;
   RebuildLedgerTile();
   FeedKeyEarnings();
@@ -3486,13 +3558,16 @@ void EarningsPage::RebuildUnclaimedTile() {
 // decision, with the alpha in the app's formatting. Claim opens the v2 claim
 // dialog. URnetwork's claim relay (ClaimRelay.hpp) takes the Claim's place
 // while it says something, and a network with no wallet here sees the balance
-// the relay claims for its consent.
+// the relay claims for its consent. Each pool's account is its own row, named
+// by its kind beside a capture the flag account; a pool the server could not
+// read says so in its row, and the line of this device's latest capture the
+// flag win closes the rows.
 void EarningsPage::RebuildLedgerTile() {
   if (ledgerCard_ == nullptr) return;
   const bool connected = wallet_.has_value() && walletState_ == Fetch::Ready;
   const snledger::SectionView view =
-      snledger::SectionFor(connected, ledgerLoad_, ledgerAccounts_, ledgerConfigured_, claiming_,
-                           FormatAlphaRao);
+      snledger::SectionFor(connected, ledgerLoad_, ledgerAccounts_, ledgerUnavailable_,
+                           TransferFloorRao(), ledgerConfigured_, claiming_, FormatAlphaRao);
   const bool relayOnly = !view.visible && LedgerTileShowsRelayOnly();
   ledgerCard_->set_visible(view.visible || relayOnly);
   if (!view.visible && !relayOnly) return;
@@ -3506,12 +3581,27 @@ void EarningsPage::RebuildLedgerTile() {
     kit::SetAccessibleLabel(*value, claimableLabel + ", " + claimable);
     block->append(*value);
     ledgerRows_->append(*block);
+    // what the sum adds up, pool by pool, and the pools it leaves out, so it is
+    // not read as theirs too
+    AppendRelayRows(*ledgerRows_,
+                    snledger::RelayTileRowsFor(RelayAccountsOf(*claimStatus_),
+                                               claimStatus_->coldkey_ss58.value_or(std::string()),
+                                               UnavailablePoolsOf(claimStatus_->unavailable_pools),
+                                               claimStatus_->transfer_floor_rao),
+                    [this](const std::string& url) { OpenLink(url); });
   }
   for (const snledger::AccountView& account : view.accounts) {
     auto* block = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
-    if (view.showPools) {
-      block->append(*MakeSizedLabel(Format(T_("sn_ledger_pool", "Pool {}"), account.noId), 12,
-                                    "ur-caption"));
+    if (account.pool != snledger::PoolName::None) {
+      block->append(*MakeSizedLabel(LedgerPoolName(account.pool, account.noId), 12, "ur-caption"));
+    }
+    if (account.unavailable) {
+      // its pool could not be read: no figure, never a zero, and the other
+      // rows as usual
+      block->append(*MakeWrappedNote(
+          T_("sn_ledger_pool_unavailable", "Unavailable right now"), "ur-row-note"));
+      ledgerRows_->append(*block);
+      continue;
     }
     const Glib::ustring claimableLabel = T_("sn_ledger_claimable", "Claimable");
     block->append(*MakeSizedLabel(claimableLabel, 12, "ur-caption"));
@@ -3528,7 +3618,22 @@ void EarningsPage::RebuildLedgerTile() {
                  account.pendingIncrease),
           "ur-row-note"));
     }
+    if (account.underFloor) {
+      // no claim moves it until it rises: it counts for no Claim
+      block->append(*MakeWrappedNote(
+          T_("sn_ledger_pool_under_floor", "Below the claim minimum"), "ur-row-note"));
+    }
     ledgerRows_->append(*block);
+  }
+  // this device's latest capture the flag win: one of a country's slots, by role
+  const snledger::WonSlot won = snledger::WonSlotFor(ctfWin_);
+  if (won != snledger::WonSlot::None) {
+    const std::string country = CountryNameOrCode(ctfWin_->country);
+    ledgerRows_->append(*MakeWrappedNote(
+        won == snledger::WonSlot::Provider
+            ? Format(T_("sn_ctf_won_provider_slot", "You won one of the {} provider slots"), country)
+            : Format(T_("sn_ctf_won_extender_slot", "You won one of the {} extender slots"), country),
+        "ur-row-note"));
   }
   Glib::ustring status;
   switch (view.status) {
@@ -3560,6 +3665,9 @@ void EarningsPage::RebuildLedgerTile() {
   }
   ledgerClaimButton_->set_visible(!relay && view.showClaim);
   ledgerClaimButton_->set_sensitive(view.claimEnabled);
+  // the pool's account and the capture the flag account, claimed together
+  ledgerClaimButton_->set_label(view.claimBoth ? T_("sn_ledger_claim_both", "Claim both")
+                                               : T_("claim", "Claim"));
   // the claim card's disclaimer when this is the first claim tile on Earnings:
   // with a wallet here the unclaimed tile above carries it
   SetBittensorFundsDisclaimer(*ledgerDisclaimer_,
@@ -5193,6 +5301,29 @@ void EarningsPage::ApplyClaimRelaySheet() {
                keys_->FundsDisclaimerAt(urnet::BittensorFundsDisclaimerPlaceClaimSheet));
 }
 
+int64_t EarningsPage::TransferFloorRao() const {
+  return claimStatus_ && !claimStatus_->error ? claimStatus_->transfer_floor_rao : 0;
+}
+
+// ---- capture the flag: the won slot's line -------------------------------------------
+
+void EarningsPage::LoadCtfWin() {
+  if (!CanCallApi()) return;
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  sn::FetchCtfWin(host_, [this, epoch, seen](std::optional<snledger::Win> win) {
+    PostToMain([this, epoch, seen, win = std::move(win)]() mutable {
+      if (*epoch != seen) return;
+      ApplyCtfWin(std::move(win));
+    });
+  });
+}
+
+void EarningsPage::ApplyCtfWin(std::optional<snledger::Win> win) {
+  ctfWin_ = std::move(win);
+  RebuildLedgerTile();
+}
+
 // ---- the Solana payout wallet --------------------------------------------------
 // USDC payouts continue to a Solana payout wallet until the migration to
 // Bittensor completes, and a network whose payouts are held for want of one is
@@ -5747,8 +5878,9 @@ void EarningsPage::OnLedgerClaim() {
   }
   // the preview shows the dialog as it would be with a device that can claim;
   // the action itself is gated in StartLedgerClaim
-  auto sheet = std::make_shared<LedgerClaimSheet>(*root, wallet_->coldkeySs58, ledgerAccounts_,
-                                                  gas_, sn::ClaimsAvailable(host_) || previewMode_);
+  auto sheet = std::make_shared<LedgerClaimSheet>(
+      *root, wallet_->coldkeySs58, ledgerAccounts_, ledgerUnavailable_, TransferFloorRao(), gas_,
+      sn::ClaimsAvailable(host_) || previewMode_);
   sheet->on_claim = [this] { StartLedgerClaim(); };
   sheet->on_open_link = [this](const std::string& url) { OpenLink(url); };
   sheet->explorer_url = [this](const std::string& txHash) {
@@ -5779,8 +5911,9 @@ void EarningsPage::StartLedgerClaim() {
   if (sheet) sheet->OnSending();
   RebuildUnclaimedTile();
   RebuildLedgerTile();
-  // past the SDK's own bounds for every account it may claim
-  const int watchdogMs = snledger::ClaimWatchdogMs(ledgerAccounts_);
+  // past the SDK's own bounds for every account it may claim, in an unavailable
+  // pool too: the SDK reads the ledger again
+  const int watchdogMs = snledger::ClaimWatchdogMs(ledgerAccounts_, ledgerUnavailable_);
   const uint32_t generation = BeginFlow(ledgerClaimFlow_, watchdogMs, [this] {
     claiming_ = false;
     if (auto open = ledgerClaimSheet_.lock()) {
@@ -6138,7 +6271,29 @@ void EarningsPage::ApplyPreviewSample() {
   ledger.claimableRao = 3241000000;
   ledger.pending = true;
   ledger.pendingRao = 5870000000;
-  ApplyLedger(snledger::Load::Ready, {ledger}, /*claimConfigured=*/true);
+  std::vector<snledger::Account> accounts = {ledger};
+  std::vector<snledger::UnavailablePool> unavailable;
+  // URNETWORK_PREVIEW_CTF=1: the capture the flag account beside it (Claim
+  // both) and the line of a won provider slot; =unavailable: that pool could
+  // not be read
+  const char* ctfPreview = g_getenv("URNETWORK_PREVIEW_CTF");
+  if (ctfPreview && std::string(ctfPreview) == "unavailable") {
+    snledger::UnavailablePool ctf;
+    ctf.noId = snledger::kCtfPoolIdBase + 1;
+    ctf.kind = snledger::kKindCtf;
+    unavailable.push_back(ctf);
+  } else if (ctfPreview && std::string(ctfPreview) == "1") {
+    snledger::Account ctf;
+    ctf.vault = ledger.vault;
+    ctf.noId = snledger::kCtfPoolIdBase + 1;
+    ctf.kind = snledger::kKindCtf;
+    ctf.index = 7;
+    ctf.finalizedRao = 615000000;
+    ctf.claimableRao = 615000000;
+    accounts.push_back(ctf);
+    ApplyCtfWin(snledger::Win{snledger::kRoleProvider, "is"});
+  }
+  ApplyLedger(snledger::Load::Ready, accounts, unavailable, /*claimConfigured=*/true);
 }
 
 void EarningsPage::ShowPreviewClaimDialog() {
