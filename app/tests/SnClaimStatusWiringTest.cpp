@@ -128,8 +128,10 @@ UR_TEST(SnClaimStatusTheSheetsCountSaysClaimableEpochs) {
   UR_EXPECT_EQ(size_t{1}, fallbacks.size());
   for (const std::string& english : fallbacks) UR_EXPECT_TRUE(english == "Claimable epochs: {}");
   UR_EXPECT_TRUE(InCatalog(catalog, "claim_across_epochs", "Claimable epochs: {}"));
-  // the count is the sheet's claimable epochs
-  UR_EXPECT_TRUE(page.find("const size_t count = ClaimableEpochs().size();\n"
+  // the count is the sheet's claimable epochs, and while a claim runs the
+  // epochs it sends, which the figure over it adds up
+  // (SnLedgerCtf_TheV1SheetsFigureDuringAClaim)
+  UR_EXPECT_TRUE(page.find("const size_t count = busy_ ? movingCount_ : ClaimableEpochs().size();\n"
                            "  totalCaption_->set_text(\n"
                            "      Format(T_(\"claim_across_epochs\", \"Claimable epochs: {}\"), "
                            "static_cast<int64_t>(count)));") != std::string::npos);

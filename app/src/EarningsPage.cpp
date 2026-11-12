@@ -39,7 +39,6 @@ constexpr int kPaneCWidth = 380;
 constexpr int kThreePaneDip = 1500;  // earnings | history | network
 constexpr int kTwoPaneDip = 900;     // earnings | history
 constexpr int kApiTimeoutMs = 20000;      // plain api calls
-constexpr int kChainTimeoutMs = 180000;   // a claim waits for a receipt
 constexpr int kValidateDebounceMs = 300;
 constexpr int kSheetMinWidth = 480;
 constexpr int kClaimSheetMaxHeight = 560;
@@ -1121,14 +1120,16 @@ void ClaimNow(SdkHost& host, const std::string& coldkeySs58, ClaimNowDone done) 
 
 // The capture the flag wins whose awards are not claimed yet (GET
 // /sn/ctf/client, read by the SDK in the daemon with the network's credential,
-// else the device's client token, as ur.io reads them; no answer of the route
-// signs anyone out): each the role that won one of a country's slots in an
-// epoch's auction, and the country, newest first, of all of the network's
-// clients. nullopt for a read that failed (ctf_unavailable among others), an
-// answer that could not be read, or no read at all (no steady device to ask):
-// never "no wins", so the lines the last answer drew stay
-// (snledger::WinsAfterRead).
-using CtfWinsDone = std::function<void(std::optional<std::vector<snledger::Win>> wins)>;
+// and with the device's client token when that read fails, as ur.io reads
+// them; no answer of the route signs anyone out): each the role that won one
+// of a country's slots in an epoch's auction, and the country, newest first,
+// of all of the network's clients, or of this client alone when the answer is
+// the client token's (its ClientId set). nullopt for a read that failed
+// (ctf_unavailable among others), an answer that could not be read, or no read
+// at all (no steady device to ask): never "no wins", so the lines the last
+// answer drew stay (snledger::WinsLines, where a network's answer also beats a
+// client's).
+using CtfWinsDone = std::function<void(std::optional<snledger::WinsAnswer> answer)>;
 void FetchCtfWins(SdkHost& host, CtfWinsDone done) {
   if (!host.DeviceSteady()) {
     done(std::nullopt);
@@ -1140,16 +1141,18 @@ void FetchCtfWins(SdkHost& host, CtfWinsDone done) {
       done(std::nullopt);
       return;
     }
-    std::vector<snledger::Win> wins;
+    snledger::WinsAnswer answer;
+    // "" for the network's answer, the client's id for the client token's
+    answer.clientId = result->client_id;
     for (const urnet::SnCtfWin& unclaimed : *result->unclaimed_wins) {
       snledger::Win win;
       win.role = unclaimed.role;
       win.country = unclaimed.country;
       win.epoch = unclaimed.epoch;
       win.claimState = unclaimed.claim_state;
-      wins.push_back(std::move(win));
+      answer.wins.push_back(std::move(win));
     }
-    done(std::move(wins));
+    done(std::move(answer));
   });
 }
 
@@ -1287,6 +1290,19 @@ void BuildGasPanel(Gtk::Box& panel, Gtk::Window& sheet, const std::optional<SnGa
 
 }  // namespace
 
+namespace {
+
+// The claims of `epochs` among `claims`: a v1 claim's own rows.
+std::vector<SnClaimRow> ClaimRowsOf(const std::vector<SnClaimRow>& claims, const std::vector<int64_t>& epochs) {
+  std::vector<SnClaimRow> out;
+  for (const SnClaimRow& claim : claims) {
+    if (std::find(epochs.begin(), epochs.end(), claim.epoch) != epochs.end()) out.push_back(claim);
+  }
+  return out;
+}
+
+}  // namespace
+
 // ---- ClaimAlphaSheet ---------------------------------------------------------
 // The claim dialog. It OPENS AND READS with no session (the preview harness
 // needs that); the one action is the claim, which the page gates. Every
@@ -1305,7 +1321,15 @@ class ClaimAlphaSheet : public Gtk::Window {
   std::function<void(const std::string& url)> on_open_link;
   std::function<std::string(const std::string& txHash)> explorer_url;  // page: the chain settings
 
+  // page: a v2 claim is in flight, which holds Claim (the page redraws the
+  // sheet at its end)
+  std::function<bool()> claim_held;
+
+  // the claims of `epochs` as this sheet lists them: what its press claims
+  std::vector<SnClaimRow> ClaimsOf(const std::vector<int64_t>& epochs) const;
   void SetGas(std::optional<SnGasInfo> gas);
+  // the page's state moved (a claim of the other kind ended): draw again
+  void Redraw();
   void OnSending(const std::vector<int64_t>& epochs);
   void OnSent(int64_t epoch, const std::string& txHash);
   void OnConfirmed(int64_t epoch, const std::string& txHash, int64_t amountRao);
@@ -1339,6 +1363,10 @@ class ClaimAlphaSheet : public Gtk::Window {
   std::optional<SnGasInfo> gas_;
   bool claimsAvailable_ = false;
   bool busy_ = false;
+  // what the claim in flight is moving: the epochs it sends and their amount,
+  // the figure while it runs (every app, 2026-11-12)
+  int64_t movingRao_ = 0;
+  size_t movingCount_ = 0;
   bool gasFailure_ = false;  // a claim came back "needs gas"
   sigc::connection copiedReset_;
   Gtk::Label* totalValue_ = nullptr;
@@ -1561,10 +1589,22 @@ void ClaimAlphaSheet::RebuildRows() {
     rowsPanel_->append(*line);
   }
   openNote_->set_visible(anyOpen);
+  // the figure: while a claim runs, what it is moving, the epochs it sends, as
+  // Claim named them (every app, 2026-11-12), never a zero; between claims,
+  // what Claim would claim, and none while an epoch the claim sent has no
+  // outcome yet (its watchdog gave up): never a 0 for what may still land
+  bool unsettled = false;
+  for (const auto& row : rows_) {
+    if (row.phase == Phase::Sending || row.phase == Phase::Sent) unsettled = true;
+  }
+  const int64_t figure = busy_ ? movingRao_ : ClaimableRao();
+  const bool shown = busy_ ? 0 < movingRao_ : !unsettled;
+  totalValue_->set_visible(shown);
+  totalCaption_->set_visible(shown);
   totalValue_->set_markup("<span foreground='" + HexForMarkup(kReferralGoldLight) + "' size='" +
                           std::to_string(36 * PANGO_SCALE) + "'>" +
-                          Glib::Markup::escape_text(FormatAlphaRao(ClaimableRao())) + "</span>");
-  const size_t count = ClaimableEpochs().size();
+                          Glib::Markup::escape_text(FormatAlphaRao(figure)) + "</span>");
+  const size_t count = busy_ ? movingCount_ : ClaimableEpochs().size();
   totalCaption_->set_text(
       Format(T_("claim_across_epochs", "Claimable epochs: {}"), static_cast<int64_t>(count)));
 }
@@ -1575,8 +1615,13 @@ void ClaimAlphaSheet::RebuildGas() {
 
 void ClaimAlphaSheet::RebuildAction() {
   const int64_t rao = ClaimableRao();
-  claimButton_->set_label(Format(T_("claim_amount_button", "Claim {}"), FormatAlphaRao(rao)));
-  claimButton_->set_sensitive(claimsAvailable_ && !busy_ && rao > 0 && !NeedsGas());
+  // with nothing Claim would claim (a claim out, or nothing left) it names no
+  // amount, never "Claim 0"
+  claimButton_->set_label(0 < rao ? Glib::ustring(Format(T_("claim_amount_button", "Claim {}"),
+                                                         FormatAlphaRao(rao)))
+                                  : Glib::ustring(T_("claim", "Claim")));
+  claimButton_->set_sensitive(claimsAvailable_ && !busy_ && rao > 0 && !NeedsGas() &&
+                              !(claim_held && claim_held()));
   bool anyConfirmed = false;
   for (const auto& row : rows_) {
     if (row.phase == Phase::Confirmed) anyConfirmed = true;
@@ -1596,6 +1641,14 @@ void ClaimAlphaSheet::OnClaimPressed() {
   on_claim(epochs);
 }
 
+std::vector<SnClaimRow> ClaimAlphaSheet::ClaimsOf(const std::vector<int64_t>& epochs) const {
+  std::vector<SnClaimRow> out;
+  for (const auto& row : rows_) {
+    if (std::find(epochs.begin(), epochs.end(), row.claim.epoch) != epochs.end()) out.push_back(row.claim);
+  }
+  return out;
+}
+
 void ClaimAlphaSheet::SetGas(std::optional<SnGasInfo> gas) {
   gas_ = std::move(gas);
   RebuildRows();  // the explorer resolver may have been wired after construction
@@ -1603,13 +1656,23 @@ void ClaimAlphaSheet::SetGas(std::optional<SnGasInfo> gas) {
   RebuildAction();
 }
 
+void ClaimAlphaSheet::Redraw() {
+  RebuildRows();
+  RebuildGas();
+  RebuildAction();
+}
+
 void ClaimAlphaSheet::OnSending(const std::vector<int64_t>& epochs) {
   busy_ = true;
   gasFailure_ = false;
+  movingRao_ = 0;
+  movingCount_ = 0;
   for (const int64_t epoch : epochs) {
     if (Row* row = FindRow(epoch)) {
       row->phase = Phase::Sending;
       row->message.clear();
+      movingRao_ += row->claim.amountRao;
+      ++movingCount_;
     }
   }
   RebuildRows();
@@ -1670,6 +1733,8 @@ void ClaimAlphaSheet::OnFailed(int64_t epoch, const std::string& message) {
 
 void ClaimAlphaSheet::OnDone() {
   busy_ = false;
+  // the figure is what Claim would claim again
+  RebuildRows();
   RebuildAction();
 }
 
@@ -1704,6 +1769,9 @@ class LedgerClaimSheet : public Gtk::Window {
   std::function<void()> on_claim;  // page: StartLedgerClaim
   std::function<void(const std::string& url)> on_open_link;
   std::function<std::string(const std::string& txHash)> explorer_url;  // page: the chain settings
+  // page: a v1 claim is in flight, which holds Claim (the page redraws the
+  // sheet at its end)
+  std::function<bool()> claim_held;
 
   // the rows it draws, which the page's claim takes when Claim is pressed
   const std::shared_ptr<snledger::ClaimProgress>& Progress() const { return progress_; }
@@ -1890,16 +1958,17 @@ void LedgerClaimSheet::Rebuild() {
     rowsPanel_->append(*line);
   }
   const int64_t rao = progress_->ClaimableRao();
-  // the figure, as on the other apps' sheets: what a press claims, or a true
-  // zero once nothing is left; none while the rows left are below the claim
-  // minimum, unavailable, of an amount not known yet or in flight, which say
-  // what they are, never a zero
-  const bool totalKnown = progress_->TotalKnown();
-  totalValue_->set_visible(totalKnown);
-  if (totalKnown) {
+  // the figure, as on the other apps' sheets: while a press is out, what it is
+  // moving, the amount Claim named; between presses, what a press claims, or a
+  // true zero once nothing is left; none while the rows left are below the
+  // claim minimum, unavailable or of an amount not known yet, which say what
+  // they are, never a zero (snledger::ClaimProgress::Figure)
+  const std::optional<int64_t> figure = progress_->Figure();
+  totalValue_->set_visible(figure.has_value());
+  if (figure) {
     totalValue_->set_markup("<span foreground='" + HexForMarkup(kReferralGoldLight) + "' size='" +
                             std::to_string(36 * PANGO_SCALE) + "'>" +
-                            Glib::Markup::escape_text(FormatAlphaRao(rao)) + "</span>");
+                            Glib::Markup::escape_text(FormatAlphaRao(*figure)) + "</span>");
   }
   BuildGasPanel(*gasPanel_, *this, gas_, NeedsGas(), snledger::kClaimGasTao, copiedReset_);
   // the pool's account and the capture the flag account in one transaction;
@@ -1909,7 +1978,8 @@ void LedgerClaimSheet::Rebuild() {
                           : 0 < rao ? Glib::ustring(Format(T_("claim_amount_button", "Claim {}"),
                                                            FormatAlphaRao(rao)))
                                     : Glib::ustring(T_("claim", "Claim")));
-  claimButton_->set_sensitive(claimsAvailable_ && !progress_->Busy() && rao > 0 && !NeedsGas());
+  claimButton_->set_sensitive(claimsAvailable_ && !progress_->Busy() && rao > 0 && !NeedsGas() &&
+                              !(claim_held && claim_held()));
   closeButton_->set_label(progress_->AnyClaimed() && !progress_->Busy() ? T_("done", "Done")
                                                                          : T_("close", "Close"));
 }
@@ -2180,16 +2250,18 @@ void EarningsPage::ResetForSignOut() {
   winsAfterClaim_.Stop();
   ctfWins_.Reset();
   // ...and its claims in flight end here, v1's and v2's: no answer of either
-  // counts any more (v1's by the load below, which moves the epoch, v2's by
-  // ledgerClaim_, the session's), and their watchdogs go, so neither can give
-  // up on the next account's claim; Claim is the next account's. Their sheets,
-  // the departed account's, close, as Android's dialogs do.
+  // counts any more (claim_ and ledgerClaim_, the session's), and their
+  // watchdogs go, so neither can give up on the next account's claim; Claim
+  // is the next account's. Their sheets, the departed account's, close, as
+  // Android's dialogs do.
   ledgerClaim_.Drop();
+  claim_.Drop();
+  claimAnswers_.Clear();
+  claimRows_.clear();
   ++claimFlow_.generation;
   claimFlow_.timer.disconnect();
   ++ledgerClaimFlow_.generation;
   ledgerClaimFlow_.timer.disconnect();
-  claiming_ = false;
   if (auto open = claimSheet_.lock()) open->set_visible(false);
   if (auto open = ledgerClaimSheet_.lock()) open->set_visible(false);
   // A switch's set still in flight was the departed account's. Load's epoch
@@ -3542,7 +3614,7 @@ void EarningsPage::RebuildPayoutLine() {
           : Glib::ustring());
   setColdkeyButton_->set_visible(setColdkey);
   payoutClaimButton_->set_visible(view.showClaim);
-  payoutClaimButton_->set_sensitive(view.showClaim && !claiming_);
+  payoutClaimButton_->set_sensitive(view.showClaim && (claim_.InFlight() || !Claiming()));
 }
 
 void EarningsPage::RebuildUnclaimedTile() {
@@ -3571,7 +3643,10 @@ void EarningsPage::RebuildUnclaimedTile() {
                 "Nothing to claim yet. Alpha accrues from the next finalized epoch.");
   }
   kit::SetTextOrCollapse(*unclaimedStatus_, status);
-  claimButton_->set_sensitive(ready && totalClaimableRao_ > 0 && !claiming_);
+  // Claim waits while a claim is in flight, but the v1 claim's own opens its
+  // sheet on the claim in progress, whatever the read says, as the v2 tile's
+  // does for its claim
+  claimButton_->set_sensitive(claim_.InFlight() || (ready && totalClaimableRao_ > 0 && !Claiming()));
   // the first claim tile shown carries the claim card's disclaimer
   SetBittensorFundsDisclaimer(*unclaimedDisclaimer_, keys_->Card().claim_funds_disclaimer);
 }
@@ -3590,7 +3665,7 @@ void EarningsPage::RebuildLedgerTile() {
   // while the v2 claim is in flight, Claim opens its sheet on its rows
   const snledger::SectionView view =
       snledger::SectionFor(connected, ledgerLoad_, ledgerAccounts_, ledgerUnavailable_,
-                           TransferFloorRao(), ledgerConfigured_, claiming_, FormatAlphaRao,
+                           TransferFloorRao(), ledgerConfigured_, Claiming(), FormatAlphaRao,
                            ledgerClaim_.InFlight());
   const bool relayOnly = !view.visible && LedgerTileShowsRelayOnly();
   ledgerCard_->set_visible(view.visible || relayOnly);
@@ -5352,16 +5427,17 @@ void EarningsPage::LoadCtfWins() {
   // and nothing lands once the page is gone.
   const uint64_t read = ctfWins_.Start();
   auto alive = alive_;
-  sn::FetchCtfWins(host_, [this, alive, read](std::optional<std::vector<snledger::Win>> wins) {
-    PostToMain([this, alive, read, wins = std::move(wins)]() mutable {
+  sn::FetchCtfWins(host_, [this, alive, read](std::optional<snledger::WinsAnswer> answer) {
+    PostToMain([this, alive, read, answer = std::move(answer)]() mutable {
       if (!*alive) return;
-      ApplyCtfWins(read, std::move(wins));
+      ApplyCtfWins(read, std::move(answer));
     });
   });
 }
 
-void EarningsPage::ApplyCtfWins(uint64_t read, std::optional<std::vector<snledger::Win>> answer) {
-  // the newest read's good answer; a failure, or an older answer, changes nothing
+void EarningsPage::ApplyCtfWins(uint64_t read, std::optional<snledger::WinsAnswer> answer) {
+  // the newest read's good answer, a network's over a client's; a failure, an
+  // older answer, or a client's once a network's has shown, changes nothing
   if (ctfWins_.Apply(read, std::move(answer))) RebuildLedgerTile();
 }
 
@@ -5825,15 +5901,41 @@ void EarningsPage::OpenClaimSheet(bool allowActions) {
     return;
   }
   // the preview shows the dialog as it would be with a device that can claim;
-  // the action itself is gated in StartClaim
-  auto sheet = std::make_shared<ClaimAlphaSheet>(*root, wallet_->coldkeySs58, claims_, gas_,
+  // the action itself is gated in StartClaim. During the v1 claim the sheet
+  // lists the claim's own rows, as its press took them, whatever the claims
+  // read since (it may have failed, which leaves no rows); else the claims as
+  // last read
+  const std::vector<SnClaimRow>& rows = claim_.InFlight() ? claimRows_ : claims_;
+  auto sheet = std::make_shared<ClaimAlphaSheet>(*root, wallet_->coldkeySs58, rows, gas_,
                                                  sn::ClaimsAvailable(host_) || previewMode_);
   sheet->on_claim = [this](std::vector<int64_t> epochs) { StartClaim(std::move(epochs)); };
+  // a v2 claim in flight holds this sheet's Claim: the gas key sends one claim
+  // at a time
+  sheet->claim_held = [this] { return ledgerClaim_.InFlight(); };
   sheet->on_open_link = [this](const std::string& url) { OpenLink(url); };
   sheet->explorer_url = [this](const std::string& txHash) {
     return sn::ExplorerTxUrl(host_, txHash);
   };
   sheet->SetGas(gas_);  // re-renders the rows with the explorer resolver in place
+  // A sheet opened during the v1 claim (the tile's Claim opens it, as the v2
+  // tile's does) draws the claim in progress: its epochs sending, then every
+  // answer since, as a sheet left open drew them (snledger::EpochClaimAnswers)
+  if (claim_.InFlight()) {
+    sheet->OnSending(claimAnswers_.Epochs());
+    for (const snledger::EpochClaimAnswers::Answer& answer : claimAnswers_.Answers()) {
+      switch (answer.kind) {
+        case snledger::EpochClaimAnswers::Answer::Kind::Sent:
+          sheet->OnSent(answer.epoch, answer.txHash);
+          break;
+        case snledger::EpochClaimAnswers::Answer::Kind::Confirmed:
+          sheet->OnConfirmed(answer.epoch, answer.txHash, answer.amountRao);
+          break;
+        case snledger::EpochClaimAnswers::Answer::Kind::Failed:
+          sheet->OnFailed(answer.epoch, answer.message);
+          break;
+      }
+    }
+  }
   claimSheet_ = sheet;
   PresentSheet(sheet);
   if (allowActions && !gas_) LoadGas();
@@ -5841,7 +5943,7 @@ void EarningsPage::OpenClaimSheet(bool allowActions) {
 
 void EarningsPage::StartClaim(std::vector<int64_t> epochs) {
   auto sheet = claimSheet_.lock();
-  if (epochs.empty() || claiming_) return;
+  if (epochs.empty() || Claiming()) return;
   if (!CanCallApi()) {
     // the sheet is modal: the refusal renders ON it
     g_warning("earnings: refusing a claim with no session");
@@ -5855,35 +5957,58 @@ void EarningsPage::StartClaim(std::vector<int64_t> epochs) {
     }
     return;
   }
-  claiming_ = true;
+  // The claim is the session's from here, not this load's (owner,
+  // 2026-11-12), as the v2 claim is: its answers count by claim_, which no
+  // Load touches. Each visit to Earnings loads the page again, so a user who
+  // leaves during the claim and comes back still gets its events and its
+  // Done, and the tile's Claim waits for it meanwhile. Only its Done, its
+  // watchdog and a sign-out end it.
+  const uint64_t claim = claim_.Start();
+  claimAnswers_.Start(epochs);
+  // the claim's own rows, as the sheet that pressed it lists them: a sheet
+  // opened during the claim is built from them
+  claimRows_ = sheet ? sheet->ClaimsOf(epochs) : ClaimRowsOf(claims_, epochs);
   if (sheet) sheet->OnSending(epochs);
+  RebuildPayoutLine();
   RebuildUnclaimedTile();
   RebuildLedgerTile();
-  const uint32_t generation = BeginFlow(claimFlow_, kChainTimeoutMs, [this] {
-    claiming_ = false;
+  // past the SDK's own bounds for every epoch, which it claims one at a time
+  const int watchdogMs = snledger::EpochClaimWatchdogMs(epochs.size());
+  const uint32_t generation = BeginFlow(claimFlow_, watchdogMs, [this] {
+    // the give-up is final: no later answer of the claim counts
+    claim_.End();
+    claimAnswers_.Clear();
+    claimRows_.clear();
     if (auto open = claimSheet_.lock()) {
       open->ShowError(T_("chain_rpc_unreachable", "The chain RPC is unreachable. Try again."));
       open->OnDone();
     }
+    // a v2 sheet open meanwhile offers its Claim again
+    if (auto open = ledgerClaimSheet_.lock()) open->Redraw();
+    RebuildPayoutLine();
     RebuildUnclaimedTile();
     RebuildLedgerTile();
   });
-  auto epoch = epoch_;
-  const uint64_t seen = *epoch_;
+  // Each answer lands on the main loop while the page lives and the claim is
+  // still the one in flight, into the page's rows and a v1 sheet open
+  // meanwhile.
+  auto alive = alive_;
   sn::ClaimEvents events;
-  events.sent = [this, epoch, seen](int64_t claimEpoch, std::string txHash) {
-    PostToMain([this, epoch, seen, claimEpoch, txHash = std::move(txHash)] {
-      if (*epoch != seen) return;
+  events.sent = [this, alive, claim](int64_t claimEpoch, std::string txHash) {
+    PostToMain([this, alive, claim, claimEpoch, txHash = std::move(txHash)] {
+      if (!*alive || !claim_.Current(claim)) return;
+      claimAnswers_.Sent(claimEpoch, txHash);
       for (auto& row : claims_) {
         if (row.epoch == claimEpoch) row.txHash = txHash;
       }
       if (auto open = claimSheet_.lock()) open->OnSent(claimEpoch, txHash);
     });
   };
-  events.confirmed = [this, epoch, seen](int64_t claimEpoch, std::string txHash,
-                                         int64_t amountRao) {
-    PostToMain([this, epoch, seen, claimEpoch, txHash = std::move(txHash), amountRao] {
-      if (*epoch != seen) return;
+  events.confirmed = [this, alive, claim](int64_t claimEpoch, std::string txHash,
+                                          int64_t amountRao) {
+    PostToMain([this, alive, claim, claimEpoch, txHash = std::move(txHash), amountRao] {
+      if (!*alive || !claim_.Current(claim)) return;
+      claimAnswers_.Confirmed(claimEpoch, txHash, amountRao);
       totalClaimableRao_ = 0;
       for (auto& row : claims_) {
         if (row.epoch == claimEpoch) {
@@ -5898,20 +6023,26 @@ void EarningsPage::StartClaim(std::vector<int64_t> epochs) {
       if (auto open = claimSheet_.lock()) open->OnConfirmed(claimEpoch, txHash, amountRao);
     });
   };
-  events.failed = [this, epoch, seen](int64_t claimEpoch, std::string message) {
-    PostToMain([this, epoch, seen, claimEpoch, message = std::move(message)] {
-      if (*epoch != seen) return;
+  events.failed = [this, alive, claim](int64_t claimEpoch, std::string message) {
+    PostToMain([this, alive, claim, claimEpoch, message = std::move(message)] {
+      if (!*alive || !claim_.Current(claim)) return;
       g_warning("earnings: claim for epoch %lld failed: %s",
                 static_cast<long long>(claimEpoch), message.c_str());
+      claimAnswers_.Failed(claimEpoch, message);
       if (auto open = claimSheet_.lock()) open->OnFailed(claimEpoch, message);
     });
   };
-  events.done = [this, epoch, seen, generation] {
-    PostToMain([this, epoch, seen, generation] {
-      if (*epoch != seen) return;
+  events.done = [this, alive, claim, generation] {
+    PostToMain([this, alive, claim, generation] {
+      if (!*alive || !claim_.Current(claim)) return;
       if (!SettleFlow(claimFlow_, generation, "claim")) return;
-      claiming_ = false;
+      claim_.End();
+      claimAnswers_.Clear();
+      claimRows_.clear();
       if (auto open = claimSheet_.lock()) open->OnDone();
+      // a v2 sheet open meanwhile offers its Claim again
+      if (auto open = ledgerClaimSheet_.lock()) open->Redraw();
+      RebuildPayoutLine();
       RebuildUnclaimedTile();
       RebuildLedgerTile();
       LoadWalletLayer();  // the chain's answer replaces the optimistic rows
@@ -5960,6 +6091,11 @@ void EarningsPage::OnLedgerClaim() {
   sheet->explorer_url = [this](const std::string& txHash) {
     return sn::ExplorerTxUrl(host_, txHash);
   };
+  // a v1 claim in flight holds this sheet's Claim (the relay's "Claim it
+  // yourself" opens it whatever the tiles say): the gas key sends one claim
+  // at a time
+  sheet->claim_held = [this] { return claim_.InFlight(); };
+  sheet->Redraw();
   ledgerClaimSheet_ = sheet;
   PresentSheet(sheet);
   if (CanCallApi() && !gas_) LoadGas();
@@ -5967,7 +6103,7 @@ void EarningsPage::OnLedgerClaim() {
 
 void EarningsPage::StartLedgerClaim() {
   auto sheet = ledgerClaimSheet_.lock();
-  if (claiming_) return;
+  if (Claiming()) return;
   if (!CanCallApi()) {
     // the sheet is modal: the refusal renders ON it
     g_warning("earnings: refusing a v2 claim with no session");
@@ -5981,7 +6117,6 @@ void EarningsPage::StartLedgerClaim() {
     }
     return;
   }
-  claiming_ = true;
   // The claim is the session's from here, not this load's (owner,
   // 2026-11-12): it takes the sheet's rows, and its answers count by
   // ledgerClaim_, which no Load touches. Each visit to Earnings loads the
@@ -5993,19 +6128,22 @@ void EarningsPage::StartLedgerClaim() {
             : std::make_shared<snledger::ClaimProgress>(ledgerAccounts_, ledgerUnavailable_,
                                                         TransferFloorRao()));
   if (sheet) sheet->Redraw();
+  RebuildPayoutLine();
   RebuildUnclaimedTile();
   RebuildLedgerTile();
   // past the SDK's own bounds for every account it may claim, in an unavailable
   // pool too: the SDK reads the ledger again
   const int watchdogMs = snledger::ClaimWatchdogMs(ledgerAccounts_, ledgerUnavailable_);
   const uint32_t generation = BeginFlow(ledgerClaimFlow_, watchdogMs, [this] {
-    claiming_ = false;
     // the give-up is final: no later answer of the claim counts
     ledgerClaim_.End();
     if (auto open = ledgerClaimSheet_.lock()) {
       open->ShowError(T_("chain_rpc_unreachable", "The chain RPC is unreachable. Try again."));
       open->Redraw();
     }
+    // a v1 sheet open meanwhile offers its Claim again
+    if (auto open = claimSheet_.lock()) open->Redraw();
+    RebuildPayoutLine();
     RebuildUnclaimedTile();
     RebuildLedgerTile();
   });
@@ -6048,11 +6186,13 @@ void EarningsPage::StartLedgerClaim() {
     PostToMain([this, alive, claim, generation] {
       if (!*alive || !ledgerClaim_.Current(claim)) return;
       if (!SettleFlow(ledgerClaimFlow_, generation, "v2 claim")) return;
-      claiming_ = false;
       // the press is over; whether it paid an account: claimed, or claimed
       // already by another claim, which vault2 paid to the same coldkey
       const bool paid = ledgerClaim_.End();
       if (auto open = ledgerClaimSheet_.lock()) open->Redraw();
+      // a v1 sheet open meanwhile offers its Claim again
+      if (auto open = claimSheet_.lock()) open->Redraw();
+      RebuildPayoutLine();
       RebuildUnclaimedTile();
       RebuildLedgerTile();
       LoadWalletLayer();  // the accounts again, as the chain now has them
@@ -6404,7 +6544,7 @@ void EarningsPage::ApplyPreviewSample() {
     extender.role = snledger::kRoleExtender;
     extender.country = "ke";
     extender.epoch = 8;
-    ApplyCtfWins(ctfWins_.Start(), std::vector<snledger::Win>{extender, provider});
+    ApplyCtfWins(ctfWins_.Start(), snledger::WinsAnswer(std::vector<snledger::Win>{extender, provider}));
   }
   ApplyLedger(snledger::Load::Ready, accounts, unavailable, /*claimConfigured=*/true);
 }
