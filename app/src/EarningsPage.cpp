@@ -1124,21 +1124,23 @@ void ClaimNow(SdkHost& host, const std::string& coldkeySs58, ClaimNowDone done) 
 // else the device's client token, as ur.io reads them; no answer of the route
 // signs anyone out): each the role that won one of a country's slots in an
 // epoch's auction, and the country, newest first, of all of the network's
-// clients. An answer that could not be read (ctf_unavailable among others) is
-// no wins to show: no line, never "no wins".
-using CtfWinsDone = std::function<void(std::vector<snledger::Win> wins)>;
+// clients. nullopt for a read that failed (ctf_unavailable among others), an
+// answer that could not be read, or no read at all (no steady device to ask):
+// never "no wins", so the lines the last answer drew stay
+// (snledger::WinsAfterRead).
+using CtfWinsDone = std::function<void(std::optional<std::vector<snledger::Win>> wins)>;
 void FetchCtfWins(SdkHost& host, CtfWinsDone done) {
   if (!host.DeviceSteady()) {
-    done({});
+    done(std::nullopt);
     return;
   }
   host.device().snCtfClient([done](std::optional<urnet::SnCtfClientResult> result,
                                    std::optional<std::string> err) {
-    std::vector<snledger::Win> wins;
     if (err || !result || result->error || !result->unclaimed_wins) {
-      done(std::move(wins));
+      done(std::nullopt);
       return;
     }
+    std::vector<snledger::Win> wins;
     for (const urnet::SnCtfWin& unclaimed : *result->unclaimed_wins) {
       snledger::Win win;
       win.role = unclaimed.role;
@@ -1690,22 +1692,24 @@ void ClaimAlphaSheet::ShowError(const Glib::ustring& message) {
 // THE SHEET.
 class LedgerClaimSheet : public Gtk::Window {
  public:
+  // `progress`: the rows the sheet draws, the page's. A sheet opened between
+  // claims gets rows of the accounts as the page last read them; one opened
+  // during a claim gets the claim in flight's (snledger::ClaimInFlight), which
+  // the claim's answers move whatever the page loaded since.
   LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
-                   const std::vector<snledger::Account>& accounts,
-                   const std::vector<snledger::UnavailablePool>& unavailable,
-                   int64_t transferFloorRao, std::optional<SnGasInfo> gas, bool claimsAvailable);
+                   std::shared_ptr<snledger::ClaimProgress> progress,
+                   std::optional<SnGasInfo> gas, bool claimsAvailable);
   ~LedgerClaimSheet() override;
 
   std::function<void()> on_claim;  // page: StartLedgerClaim
   std::function<void(const std::string& url)> on_open_link;
   std::function<std::string(const std::string& txHash)> explorer_url;  // page: the chain settings
 
+  // the rows it draws, which the page's claim takes when Claim is pressed
+  const std::shared_ptr<snledger::ClaimProgress>& Progress() const { return progress_; }
   void SetGas(std::optional<SnGasInfo> gas);
-  void OnSending();
-  void OnSent(int64_t noId, int64_t index, const std::string& txHash);
-  void OnConfirmed(int64_t noId, int64_t index, const std::string& txHash, int64_t amountRao);
-  void OnFailed(int64_t noId, int64_t index, const std::string& message);
-  void OnDone();
+  // the page moved the rows: draw them again
+  void Redraw();
   void ShowError(const Glib::ustring& message);
 
  private:
@@ -1713,7 +1717,7 @@ class LedgerClaimSheet : public Gtk::Window {
   void Rebuild();
 
   std::string coldkey_;
-  snledger::ClaimProgress progress_;
+  std::shared_ptr<snledger::ClaimProgress> progress_;
   std::optional<SnGasInfo> gas_;
   bool claimsAvailable_ = false;
   sigc::connection copiedReset_;
@@ -1726,12 +1730,10 @@ class LedgerClaimSheet : public Gtk::Window {
 };
 
 LedgerClaimSheet::LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
-                                   const std::vector<snledger::Account>& accounts,
-                                   const std::vector<snledger::UnavailablePool>& unavailable,
-                                   int64_t transferFloorRao, std::optional<SnGasInfo> gas,
-                                   bool claimsAvailable)
+                                   std::shared_ptr<snledger::ClaimProgress> progress,
+                                   std::optional<SnGasInfo> gas, bool claimsAvailable)
     : coldkey_(std::move(coldkey)),
-      progress_(accounts, unavailable, transferFloorRao),
+      progress_(std::move(progress)),
       gas_(std::move(gas)),
       claimsAvailable_(claimsAvailable) {
   set_transient_for(parent);
@@ -1773,7 +1775,7 @@ LedgerClaimSheet::LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
   // 4. the action and the plain statement of what it does
   claimButton_ = MakeGoldButton({});
   claimButton_->signal_clicked().connect([this] {
-    if (progress_.Busy() || progress_.ClaimableRao() <= 0) return;
+    if (progress_->Busy() || progress_->ClaimableRao() <= 0) return;
     ShowError({});
     if (!on_claim) {
       ShowError(T_("something_went_wrong", "Something went wrong."));
@@ -1812,19 +1814,19 @@ LedgerClaimSheet::LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
 LedgerClaimSheet::~LedgerClaimSheet() { copiedReset_.disconnect(); }
 
 bool LedgerClaimSheet::NeedsGas() const {
-  return snledger::NeedsGas(progress_.NeedsGas(), gas_ && gas_->balanceKnown,
+  return snledger::NeedsGas(progress_->NeedsGas(), gas_ && gas_->balanceKnown,
                             gas_ ? gas_->tao : 0.0);
 }
 
 void LedgerClaimSheet::Rebuild() {
   RemoveAllChildren(*rowsPanel_);
-  for (const snledger::ClaimRow& row : progress_.Rows()) {
+  for (const snledger::ClaimRow& row : progress_->Rows()) {
     auto* line = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 12);
     line->set_margin_top(6);
     line->set_margin_bottom(6);
     auto* left = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
     left->set_hexpand(true);
-    left->append(*MakeSizedLabel(LedgerPoolName(progress_.NameOf(row), row.noId), 13, "ur-value"));
+    left->append(*MakeSizedLabel(LedgerPoolName(progress_->NameOf(row), row.noId), 13, "ur-value"));
     if (row.phase == snledger::Phase::Failed) {
       // needs_gas reads "Add TAO for gas", with the top-up below
       left->append(*MakeSizedLabel(SnErrorMessage(row.message, T_("claim_failed", "Failed")), 12,
@@ -1883,19 +1885,19 @@ void LedgerClaimSheet::Rebuild() {
     line->append(*chip);
     rowsPanel_->append(*line);
   }
-  const int64_t rao = progress_.ClaimableRao();
+  const int64_t rao = progress_->ClaimableRao();
   totalValue_->set_markup("<span foreground='" + HexForMarkup(kReferralGoldLight) + "' size='" +
                           std::to_string(36 * PANGO_SCALE) + "'>" +
                           Glib::Markup::escape_text(FormatAlphaRao(rao)) + "</span>");
   BuildGasPanel(*gasPanel_, *this, gas_, NeedsGas(), snledger::kClaimGasTao, copiedReset_);
   // the pool's account and the capture the flag account in one transaction
-  claimButton_->set_label(progress_.ClaimsBoth()
+  claimButton_->set_label(progress_->ClaimsBoth()
                               ? Glib::ustring(T_("sn_ledger_claim_both", "Claim both"))
                               : Glib::ustring(Format(T_("claim_amount_button", "Claim {}"),
                                                      FormatAlphaRao(rao))));
-  claimButton_->set_sensitive(claimsAvailable_ && !progress_.Busy() && rao > 0 && !NeedsGas());
-  closeButton_->set_label(progress_.AnyClaimed() && !progress_.Busy() ? T_("done", "Done")
-                                                                       : T_("close", "Close"));
+  claimButton_->set_sensitive(claimsAvailable_ && !progress_->Busy() && rao > 0 && !NeedsGas());
+  closeButton_->set_label(progress_->AnyClaimed() && !progress_->Busy() ? T_("done", "Done")
+                                                                         : T_("close", "Close"));
 }
 
 void LedgerClaimSheet::SetGas(std::optional<SnGasInfo> gas) {
@@ -1903,33 +1905,7 @@ void LedgerClaimSheet::SetGas(std::optional<SnGasInfo> gas) {
   Rebuild();
 }
 
-void LedgerClaimSheet::OnSending() {
-  progress_.Start();
-  Rebuild();
-}
-
-void LedgerClaimSheet::OnSent(int64_t noId, int64_t index, const std::string& txHash) {
-  progress_.Sent(noId, index, txHash);
-  Rebuild();
-}
-
-void LedgerClaimSheet::OnConfirmed(int64_t noId, int64_t index, const std::string& txHash,
-                                   int64_t amountRao) {
-  progress_.Confirmed(noId, index, txHash, amountRao);
-  Rebuild();
-}
-
-void LedgerClaimSheet::OnFailed(int64_t noId, int64_t index, const std::string& message) {
-  if (!progress_.Failed(noId, index, message)) {
-    ShowError(SnErrorMessage(message, T_("something_went_wrong", "Something went wrong.")));
-  }
-  Rebuild();
-}
-
-void LedgerClaimSheet::OnDone() {
-  progress_.Done();
-  Rebuild();
-}
+void LedgerClaimSheet::Redraw() { Rebuild(); }
 
 void LedgerClaimSheet::ShowError(const Glib::ustring& message) {
   if (!errorText_) return;
@@ -2187,6 +2163,17 @@ void EarningsPage::ResetForSignOut() {
   ownNetworkId_.clear();
   // the departed account's wins are not read again after its claim
   winsAfterClaim_.Stop();
+  // ...and its v2 claim in flight, the session's, ends here: no answer of it
+  // counts any more, and its watchdog goes, so it cannot give up on the next
+  // account's claim; Claim is the next account's. The v2 claim sheet, the
+  // departed account's, closes, as Android's dialog does.
+  if (ledgerClaim_.InFlight()) {
+    ledgerClaim_.Drop();
+    ++ledgerClaimFlow_.generation;
+    ledgerClaimFlow_.timer.disconnect();
+    claiming_ = false;
+  }
+  if (auto open = ledgerClaimSheet_.lock()) open->set_visible(false);
   // A switch's set still in flight was the departed account's. Load's epoch
   // drops its answer, so it is abandoned here: its watchdog would otherwise
   // report it failed to whoever signs in next, and the switch would stay
@@ -5340,7 +5327,7 @@ void EarningsPage::LoadCtfWins() {
   if (!CanCallApi()) return;
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
-  sn::FetchCtfWins(host_, [this, epoch, seen](std::vector<snledger::Win> wins) {
+  sn::FetchCtfWins(host_, [this, epoch, seen](std::optional<std::vector<snledger::Win>> wins) {
     PostToMain([this, epoch, seen, wins = std::move(wins)]() mutable {
       if (*epoch != seen) return;
       ApplyCtfWins(std::move(wins));
@@ -5348,8 +5335,10 @@ void EarningsPage::LoadCtfWins() {
   });
 }
 
-void EarningsPage::ApplyCtfWins(std::vector<snledger::Win> wins) {
-  ctfWins_ = std::move(wins);
+void EarningsPage::ApplyCtfWins(std::optional<std::vector<snledger::Win>> answer) {
+  // an answer's wins, or for a read that failed the last answer's: a failure
+  // takes no line away
+  ctfWins_ = snledger::WinsAfterRead(std::move(ctfWins_), std::move(answer));
   RebuildLedgerTile();
 }
 
@@ -5920,11 +5909,17 @@ void EarningsPage::OnLedgerClaim() {
     g_message("earnings: v2 claim dialog suppressed — a modal is already open");
     return;
   }
+  // a sheet opened during a claim draws the claim in flight, the session's,
+  // whatever the page loaded since; otherwise the accounts as last read
+  std::shared_ptr<snledger::ClaimProgress> rows = ledgerClaim_.Rows();
+  if (!rows) {
+    rows = std::make_shared<snledger::ClaimProgress>(ledgerAccounts_, ledgerUnavailable_,
+                                                     TransferFloorRao());
+  }
   // the preview shows the dialog as it would be with a device that can claim;
   // the action itself is gated in StartLedgerClaim
-  auto sheet = std::make_shared<LedgerClaimSheet>(
-      *root, wallet_->coldkeySs58, ledgerAccounts_, ledgerUnavailable_, TransferFloorRao(), gas_,
-      sn::ClaimsAvailable(host_) || previewMode_);
+  auto sheet = std::make_shared<LedgerClaimSheet>(*root, wallet_->coldkeySs58, std::move(rows),
+                                                  gas_, sn::ClaimsAvailable(host_) || previewMode_);
   sheet->on_claim = [this] { StartLedgerClaim(); };
   sheet->on_open_link = [this](const std::string& url) { OpenLink(url); };
   sheet->explorer_url = [this](const std::string& txHash) {
@@ -5952,8 +5947,17 @@ void EarningsPage::StartLedgerClaim() {
     return;
   }
   claiming_ = true;
-  ledgerClaimPaid_ = false;
-  if (sheet) sheet->OnSending();
+  // The claim is the session's from here, not this load's (owner,
+  // 2026-11-12): it takes the sheet's rows, and its answers count by
+  // ledgerClaim_, which no Load touches. Each visit to Earnings loads the
+  // page again, so a user who leaves during the claim and comes back still
+  // gets its events and its Done; a sheet opened meanwhile draws the same
+  // rows. Only its Done, its watchdog and a sign-out end it.
+  const uint64_t claim = ledgerClaim_.Start(
+      sheet ? sheet->Progress()
+            : std::make_shared<snledger::ClaimProgress>(ledgerAccounts_, ledgerUnavailable_,
+                                                        TransferFloorRao()));
+  if (sheet) sheet->Redraw();
   RebuildUnclaimedTile();
   RebuildLedgerTile();
   // past the SDK's own bounds for every account it may claim, in an unavailable
@@ -5961,53 +5965,66 @@ void EarningsPage::StartLedgerClaim() {
   const int watchdogMs = snledger::ClaimWatchdogMs(ledgerAccounts_, ledgerUnavailable_);
   const uint32_t generation = BeginFlow(ledgerClaimFlow_, watchdogMs, [this] {
     claiming_ = false;
+    // the give-up is final: no later answer of the claim counts
+    ledgerClaim_.End();
     if (auto open = ledgerClaimSheet_.lock()) {
       open->ShowError(T_("chain_rpc_unreachable", "The chain RPC is unreachable. Try again."));
-      open->OnDone();
+      open->Redraw();
     }
     RebuildUnclaimedTile();
     RebuildLedgerTile();
   });
-  auto epoch = epoch_;
-  const uint64_t seen = *epoch_;
+  // Each answer lands on the main loop while the page lives and the claim is
+  // still the one in flight; a v2 sheet open meanwhile draws its rows (one
+  // opened during the claim was given them), so it draws them again.
+  auto alive = alive_;
   urnet::SnLedgerClaimCallback callback;
-  callback.sent = [this, epoch, seen](int64_t noId, int64_t index, std::string txHash) {
-    PostToMain([this, epoch, seen, noId, index, txHash = std::move(txHash)] {
-      if (*epoch != seen) return;
-      if (auto open = ledgerClaimSheet_.lock()) open->OnSent(noId, index, txHash);
+  callback.sent = [this, alive, claim](int64_t noId, int64_t index, std::string txHash) {
+    PostToMain([this, alive, claim, noId, index, txHash = std::move(txHash)] {
+      if (!*alive || !ledgerClaim_.Current(claim)) return;
+      ledgerClaim_.Rows()->Sent(noId, index, txHash);
+      if (auto open = ledgerClaimSheet_.lock()) open->Redraw();
     });
   };
-  callback.confirmed = [this, epoch, seen](int64_t noId, int64_t index, std::string txHash,
-                                           int64_t amountRao) {
-    PostToMain([this, epoch, seen, noId, index, txHash = std::move(txHash), amountRao] {
-      if (*epoch != seen) return;
-      ledgerClaimPaid_ = true;
-      if (auto open = ledgerClaimSheet_.lock()) open->OnConfirmed(noId, index, txHash, amountRao);
+  callback.confirmed = [this, alive, claim](int64_t noId, int64_t index, std::string txHash,
+                                            int64_t amountRao) {
+    PostToMain([this, alive, claim, noId, index, txHash = std::move(txHash), amountRao] {
+      if (!*alive || !ledgerClaim_.Current(claim)) return;
+      ledgerClaim_.Rows()->Confirmed(noId, index, txHash, amountRao);
+      if (auto open = ledgerClaimSheet_.lock()) open->Redraw();
     });
   };
-  callback.failed = [this, epoch, seen](int64_t noId, int64_t index, std::string message) {
-    PostToMain([this, epoch, seen, noId, index, message = std::move(message)] {
-      if (*epoch != seen) return;
+  callback.failed = [this, alive, claim](int64_t noId, int64_t index, std::string message) {
+    PostToMain([this, alive, claim, noId, index, message = std::move(message)] {
+      if (!*alive || !ledgerClaim_.Current(claim)) return;
       g_warning("earnings: v2 claim for pool %lld account %lld failed: %s",
                 static_cast<long long>(noId), static_cast<long long>(index), message.c_str());
-      // another claim paid it first, to the same coldkey: paid all the same
-      if (snledger::FailureFor(message) == snledger::Failure::AlreadyClaimed) ledgerClaimPaid_ = true;
-      if (auto open = ledgerClaimSheet_.lock()) open->OnFailed(noId, index, message);
+      // a failure about no account leaves the rows as they are: the sheet says it
+      const bool aboutAnAccount = ledgerClaim_.Rows()->Failed(noId, index, message);
+      if (auto open = ledgerClaimSheet_.lock()) {
+        if (!aboutAnAccount) {
+          open->ShowError(SnErrorMessage(message, T_("something_went_wrong", "Something went wrong.")));
+        }
+        open->Redraw();
+      }
     });
   };
-  callback.done = [this, epoch, seen, generation] {
-    PostToMain([this, epoch, seen, generation] {
-      if (*epoch != seen) return;
+  callback.done = [this, alive, claim, generation] {
+    PostToMain([this, alive, claim, generation] {
+      if (!*alive || !ledgerClaim_.Current(claim)) return;
       if (!SettleFlow(ledgerClaimFlow_, generation, "v2 claim")) return;
       claiming_ = false;
-      if (auto open = ledgerClaimSheet_.lock()) open->OnDone();
+      // the press is over; whether it paid an account: claimed, or claimed
+      // already by another claim, which vault2 paid to the same coldkey
+      const bool paid = ledgerClaim_.End();
+      if (auto open = ledgerClaimSheet_.lock()) open->Redraw();
       RebuildUnclaimedTile();
       RebuildLedgerTile();
       LoadWalletLayer();  // the accounts again, as the chain now has them
       // and the wins: one this claim paid reads claimed once the finalized
       // head covers the claim, so after a claim that paid they are read again
       // on the apps' schedule
-      winsAfterClaim_.Done(ledgerClaimPaid_);
+      winsAfterClaim_.Done(paid);
     });
   };
   sn::LedgerClaim(host_, std::move(callback));
@@ -6352,7 +6369,7 @@ void EarningsPage::ApplyPreviewSample() {
     extender.role = snledger::kRoleExtender;
     extender.country = "ke";
     extender.epoch = 8;
-    ApplyCtfWins({extender, provider});
+    ApplyCtfWins(std::vector<snledger::Win>{extender, provider});
   }
   ApplyLedger(snledger::Load::Ready, accounts, unavailable, /*claimConfigured=*/true);
 }

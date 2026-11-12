@@ -31,7 +31,8 @@
 // the claim minimum. The tile ends with a line for every capture the flag win
 // whose award is not claimed yet: "You won one of the Kenya provider slots",
 // read again after a claim until the server reads the wins it paid claimed
-// (WinsAfterClaim).
+// (WinsAfterClaim); a read that fails keeps the lines (WinsAfterRead). A claim
+// in flight is the session's, not a load's (ClaimInFlight).
 //
 // The claim minimum (owner, 2026-11-11, for every app): any account whose
 // claimable is under the claim relay's transfer floor, alone or beside others,
@@ -53,6 +54,8 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -470,6 +473,11 @@ class ClaimProgress {
     }
     return false;
   }
+  // This press paid an account: claimed, or claimed already by another claim,
+  // which vault2 paid to the same coldkey (Android's snLedgerClaimPaid). The
+  // capture the flag wins it paid read claimed once the finalized head covers
+  // it, so the page reads them again on the apps' schedule (WinsAfterClaim).
+  bool Paid() const { return paid_; }
 
   // Claim pressed: every row the press claims is sending. One under the
   // sheet's floor that the last press left claimable or failed waits below
@@ -479,6 +487,7 @@ class ClaimProgress {
     busy_ = true;
     needsGas_ = false;
     read_ = false;
+    paid_ = false;
     reportedUnavailable_.clear();
     for (ClaimRow& row : rows_) {
       if (row.phase != Phase::Claimable && row.phase != Phase::Failed) continue;
@@ -494,6 +503,7 @@ class ClaimProgress {
   }
   void Confirmed(int64_t noId, int64_t index, const std::string& txHash, int64_t amountRao) {
     read_ = true;
+    paid_ = true;
     ClaimRow& row = Find(noId, index);
     row.phase = Phase::Claimed;
     if (!txHash.empty()) row.txHash = txHash;
@@ -530,6 +540,7 @@ class ClaimProgress {
       // paid already: nothing to retry, and the read after Done shows it
       row.phase = Phase::Claimed;
       row.message.clear();
+      paid_ = true;
       return true;
     }
     // the runtime's refusal of an amount under its floor is the claim
@@ -649,6 +660,55 @@ class ClaimProgress {
   // named unavailable
   bool read_ = false;
   std::vector<int64_t> reportedUnavailable_;
+  bool paid_ = false;  // this press paid an account (Paid)
+};
+
+// The v2 claim in flight, the signed-in session's rather than a load's (owner,
+// 2026-11-12). Each visit to Earnings loads the page again, and a load drops
+// every answer armed for the load before it; the claim's answers count by this
+// instead, which only the claim's own end and a sign-out move. So a page that
+// was left during a claim and came back still has it in flight: Claim waits
+// for it, a sheet opened then draws its rows, and its events and its Done
+// land, after which the accounts are read again and the wins on the apps'
+// schedule (WinsAfterClaim). The rows are the sheet's, shared with it, so the
+// sheet pressed again claims on from them. One claim at a time, as the gas key
+// sends one: the page starts one only while none is in flight. Main loop only.
+class ClaimInFlight {
+ public:
+  // Claim pressed on `rows`: the claim in flight from now, its press started.
+  // Each of its answers carries the ticket returned.
+  uint64_t Start(std::shared_ptr<ClaimProgress> rows) {
+    rows_ = std::move(rows);
+    rows_->Start();
+    return ++ticket_;
+  }
+  bool InFlight() const { return rows_ != nullptr; }
+  // Whether an answer of claim `ticket` counts: only while that claim is in
+  // flight, never after its Done, the watchdog's give-up or a sign-out.
+  bool Current(uint64_t ticket) const { return rows_ != nullptr && ticket == ticket_; }
+  // The rows of the claim in flight, which its answers move and a sheet opened
+  // during it draws; null between claims.
+  const std::shared_ptr<ClaimProgress>& Rows() const { return rows_; }
+  // Its Done, or the watchdog's give-up: the press is over, and no later answer
+  // of it counts. Whether it paid an account (ClaimProgress::Paid).
+  bool End() {
+    if (!rows_) return false;
+    rows_->Done();
+    const bool paid = rows_->Paid();
+    rows_.reset();
+    ++ticket_;
+    return paid;
+  }
+  // A sign-out: the claim was the departed account's, and nothing of it counts
+  // any more.
+  void Drop() {
+    rows_.reset();
+    ++ticket_;
+  }
+
+ private:
+  std::shared_ptr<ClaimProgress> rows_;
+  uint64_t ticket_ = 0;
 };
 
 // The Transaction link of URnetwork's claim (the claim relay's 4d): the
@@ -885,6 +945,17 @@ inline std::vector<WonLine> WonLinesFor(std::vector<Win> wins) {
   return lines;
 }
 
+// The wins the lines are drawn from after a read (every app, 2026-11-12): an
+// answer's, which may list fewer than before; or, for a read that failed (the
+// SDK's ctf_unavailable), an answer that cannot be read, or a read that could
+// not be asked (no steady device), the wins `shown`, the last answer's, so a
+// failure never takes a line away. Only an answer that no longer lists a win,
+// and a sign-out (the page's SettleAllEmpty), take one away; the next session's
+// first read draws none until it answers.
+inline std::vector<Win> WinsAfterRead(std::vector<Win> shown, std::optional<std::vector<Win>> answer) {
+  return answer ? std::move(*answer) : std::move(shown);
+}
+
 // When the wins are read again after a v2 claim that paid an account, in ms
 // after its Done, beside the read at Done (every app's schedule). The SDK's
 // Done comes once the claim is in a block, but the server says a win is
@@ -895,10 +966,12 @@ constexpr std::array<int, 3> kWinsReadsAfterClaimMs = {30'000, 60'000, 120'000};
 // The reads of the wins after a v2 claim's Done: one at Done, after any claim,
 // and when the claim paid an account (claimed, or claimed already by another)
 // one more at each of kWinsReadsAfterClaimMs, each timer set as the last one
-// fires, so a slow answer moves none of them. Each read replaces the lines, as
-// every read does. The next claim that paid starts the reads over, and one
-// that paid nothing leaves them to run. Stop() drops what is still to come
-// when the user signs out; the page's timers do nothing once the page is gone
+// fires, so a slow answer moves none of them. Each read is as every read: an
+// answer replaces the lines, and a failure keeps them (WinsAfterRead). The
+// next claim that paid starts the reads over, and one that paid nothing leaves
+// them to run. A visit to Earnings, which loads the page again, leaves them to
+// run; Stop() drops what is still to come when the user signs out, and the
+// page's timers do nothing once the page is gone
 // (EarningsPage::WinsAfterClaimPorts). Main loop only.
 class WinsAfterClaim {
  public:
@@ -906,7 +979,7 @@ class WinsAfterClaim {
   using Schedule = std::function<void(int delayMs, std::function<void()> fire)>;
 
   struct Ports {
-    std::function<void()> read;  // reads the wins; the answer replaces the lines
+    std::function<void()> read;  // reads the wins: an answer replaces the lines, a failure keeps them
     Schedule schedule;
   };
 

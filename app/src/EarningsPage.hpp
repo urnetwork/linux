@@ -159,13 +159,16 @@ class EarningsPage : public Gtk::Box {
 
   // nav-select + auth-change: the independent earnings-pane fetches. Bumps the
   // stale-async epoch first, so every completion armed for the previous
-  // session is dropped before it touches a widget.
+  // load is dropped before it touches a widget. A v2 claim in flight is the
+  // session's, not a load's: its answers still land (ledgerClaim_).
   void Load();
 
-  // Sign-out: forgets the own-account facts of the network that left, then
-  // Loads, whose no-session path empties the boards, the history and the
-  // points board. Those facts survive a Load, and the points header and both
-  // public switches read them until the next account's answers land.
+  // Sign-out: forgets the own-account facts of the network that left, ends
+  // its v2 claim in flight (no answer of it counts any more, its watchdog
+  // goes and its sheet closes), then Loads, whose no-session path empties the
+  // boards, the history and the points board. Those facts survive a Load, and
+  // the points header and both public switches read them until the next
+  // account's answers land.
   void ResetForSignOut();
 
   // The provide-mode row (the connect page's indicator + label with the
@@ -535,9 +538,11 @@ class EarningsPage : public Gtk::Box {
   // ---- capture the flag: the won slots' lines (GET /sn/ctf/client) ---------
   // Every win whose award is not claimed yet, read on every load and after a
   // v2 claim (snledger::WinsAfterClaim): a line each, newest first, naming
-  // the role and the country (snledger::WonLinesFor).
+  // the role and the country (snledger::WonLinesFor). `answer` is nullopt for
+  // a read that failed or could not be asked, which keeps the lines the last
+  // answer drew (snledger::WinsAfterRead).
   void LoadCtfWins();
-  void ApplyCtfWins(std::vector<snledger::Win> wins);
+  void ApplyCtfWins(std::optional<std::vector<snledger::Win>> answer);
   // The schedule's reads go through LoadCtfWins, on the main loop's timers.
   snledger::WinsAfterClaim::Ports WinsAfterClaimPorts();
 
@@ -863,7 +868,8 @@ class EarningsPage : public Gtk::Box {
   // the wallet the current coldkey connect signs with (its refusal names it)
   bool changingWallet_ = false;  // "Change" opened the connect affordances
   bool manualEntryOpen_ = false;
-  // a v1 or a v2 claim in flight: the gas key sends one claim at a time
+  // a v1 or a v2 claim in flight: the gas key sends one claim at a time. A v2
+  // claim's is the session's, as ledgerClaim_ is: no load clears it
   bool claiming_ = false;
   bool settingRankingPublic_ = false;
   bool applyingRankingToggle_ = false;  // ECHO GUARD on the public switch
@@ -916,15 +922,18 @@ class EarningsPage : public Gtk::Box {
   bool claimingNow_ = false;
   std::weak_ptr<ClaimRelaySheet> claimRelaySheet_;
 
-  // the capture the flag wins not claimed yet (none: none, not read yet, or
-  // their read failed: no line, never "no wins")
+  // the capture the flag wins not claimed yet, as the last read that answered
+  // listed them: a read that failed keeps them (none before the first answer
+  // after a sign-in, and none without one)
   std::vector<snledger::Win> ctfWins_;
   // their reads after a v2 claim's Done: at Done, and on the apps' schedule
   // after a claim that paid an account; stopped on sign-out
   snledger::WinsAfterClaim winsAfterClaim_;
-  // the v2 claim in flight paid an account: claimed, or claimed already by
-  // another claim, which vault2 paid to the same coldkey
-  bool ledgerClaimPaid_ = false;
+  // the v2 claim in flight, the signed-in session's: its rows, which a sheet
+  // opened during it draws, and whether an answer of it still counts. A visit
+  // to Earnings (Load) leaves it be; only its Done, its watchdog and a
+  // sign-out end it
+  snledger::ClaimInFlight ledgerClaim_;
 
   // preview + balance relay
   bool previewMode_ = false;
