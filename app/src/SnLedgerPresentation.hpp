@@ -894,10 +894,12 @@ constexpr std::array<int, 3> kWinsReadsAfterClaimMs = {30'000, 60'000, 120'000};
 
 // The reads of the wins after a v2 claim's Done: one at Done, after any claim,
 // and when the claim paid an account (claimed, or claimed already by another)
-// one more at each of kWinsReadsAfterClaimMs. Each read replaces the lines, as
-// every read does. The next claim's Done starts over, and Stop() drops what is
-// still to come when the user signs out; the page's timers do nothing once the
-// page is gone (EarningsPage::WinsAfterClaimPorts). Main loop only.
+// one more at each of kWinsReadsAfterClaimMs, each timer set as the last one
+// fires, so a slow answer moves none of them. Each read replaces the lines, as
+// every read does. The next claim that paid starts the reads over, and one
+// that paid nothing leaves them to run. Stop() drops what is still to come
+// when the user signs out; the page's timers do nothing once the page is gone
+// (EarningsPage::WinsAfterClaimPorts). Main loop only.
 class WinsAfterClaim {
  public:
   // Runs `fire` once, `delayMs` from now, on the main loop.
@@ -913,7 +915,7 @@ class WinsAfterClaim {
   WinsAfterClaim& operator=(const WinsAfterClaim&) = delete;
 
   void Done(bool paid) {
-    ++run_;
+    if (paid) ++run_;
     Read();
     if (paid) Next(run_, 0);
   }

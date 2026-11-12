@@ -1499,7 +1499,8 @@ UR_TEST(SnLedgerCtf_TheWinsAClaimPaidAreReadAgainUntilTheServerReadsThemClaimed)
   UR_EXPECT_TRUE((clock.delays == std::vector<int>{30'000, 30'000, 60'000}));
 }
 
-// a claim that paid nothing reads the wins once, at Done, as before
+// a claim that paid nothing reads the wins once, at Done, as before, and
+// leaves the reads an earlier claim that paid is still owed
 UR_TEST(SnLedgerCtf_TheWinsAfterAClaimThatPaidNothingAreReadOnce) {
   FakeWinsRoute route;
   route.answers = {{WonIn(10, "provider", "is")}};
@@ -1511,6 +1512,27 @@ UR_TEST(SnLedgerCtf_TheWinsAfterAClaimThatPaidNothingAreReadOnce) {
   clock.AdvanceTo(600'000);
   UR_EXPECT_EQ(1u, route.reads);
   UR_EXPECT_TRUE(clock.delays.empty());
+  // a claim that paid at 600 s, then one 10 s later that failed before it
+  // reached any account: its own read at Done, and the first one's reads at
+  // 630, 660 and 720 s go on, the line going once the win reads claimed
+  FakeWinsRoute paid;
+  paid.answers = {{WonIn(10, "provider", "is")}, {WonIn(10, "provider", "is")},
+                  {WonIn(10, "provider", "is")}, {}};
+  WinsAfterClaim later({[&paid] { paid.Read(); }, clock.Port()});
+  later.Done(/*paid=*/true);
+  clock.AdvanceTo(610'000);
+  later.Done(/*paid=*/false);
+  UR_EXPECT_EQ(2u, paid.reads);
+  clock.AdvanceTo(630'000);
+  UR_EXPECT_EQ(3u, paid.reads);
+  UR_EXPECT_EQ(1u, paid.lines.size());
+  clock.AdvanceTo(660'000);
+  UR_EXPECT_EQ(4u, paid.reads);
+  UR_EXPECT_TRUE(paid.lines.empty());
+  clock.AdvanceTo(720'000);
+  UR_EXPECT_EQ(5u, paid.reads);
+  clock.AdvanceTo(3'600'000);
+  UR_EXPECT_EQ(5u, paid.reads);
 }
 
 // a sign-out stops the reads still to come, and the next claim's Done starts

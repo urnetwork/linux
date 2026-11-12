@@ -136,8 +136,9 @@
 >   reads vault2's `claimed` at the finalized head, so the read at Done can still list a win the
 >   claim paid. After a claim that paid an account (claimed, or `already_claimed`) the wins are read
 >   at Done and again about 30 s, 60 s and 120 s after it (`snledger::WinsAfterClaim`, the apps'
->   shared schedule); each read replaces the lines. A sign-out stops the reads; the next claim's
->   Done starts them over. A claim that paid nothing reads them once, at Done, as before.
+>   shared schedule); each read replaces the lines. A sign-out stops the reads; the next claim that
+>   paid starts them over. A claim that paid nothing reads them once, at Done, as before, and leaves
+>   the reads an earlier claim is owed.
 > - **An account the sheet lists below the claim minimum, which the SDK still tries** (it claims
 >   every account with something to claim): its row shows what came of it, as Android's do. Only
 >   `not_claimable: AmountTooLow` reads `sn_ledger_pool_under_floor`; `needs_gas` leaves it
