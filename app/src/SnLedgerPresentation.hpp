@@ -297,19 +297,22 @@ inline bool NeedsGas(bool claimNeededGas, bool balanceKnown, double balanceTao) 
 
 // How long the page waits for a claim's Done before it gives up on it: past the
 // SDK's own bounds, 2 minutes to read the ledger and vault2, then up to 6 to
-// send and confirm each transaction in turn, and a minute more. One account is
-// one transaction. Two or more go in one batch, and an account the batch did
-// not reach is then sent alone, so the SDK sends at most one transaction more
-// than there are accounts. The SDK reads the ledger again, so a pool that was
-// unavailable may have an account to claim by then: each counts as one. Giving
-// up sooner would offer Claim again while the SDK still sends with the gas key.
+// send and confirm each account's claim alone in turn, and a minute more. Two
+// or more accounts go in one batch first, which takes up to 6 to prepare and
+// send and up to 6 more for its receipt (sdk 5b401282: each on its own
+// deadline); an account the batch did not reach is then sent alone, so the
+// SDK may still send each account alone after it. The SDK reads the ledger
+// again, so a pool that was unavailable may have an account to claim by then:
+// each counts as one. Giving up sooner would offer Claim again while the SDK
+// still sends with the gas key.
 inline int ClaimWatchdogMs(const std::vector<Account>& accounts,
                            const std::vector<UnavailablePool>& unavailable) {
   int64_t claims = static_cast<int64_t>(unavailable.size());
   for (const Account& account : accounts) {
     if (account.claimableRao > 0) ++claims;
   }
-  const int64_t sends = claims < 2 ? 1 : claims + 1;
+  // in claim times of 6 minutes: each account alone, and the batch's two
+  const int64_t sends = claims < 2 ? 1 : claims + 2;
   const int64_t minutes = 2 + 6 * sends + 1;
   return static_cast<int>(std::min<int64_t>(minutes * 60'000, std::numeric_limits<int>::max()));
 }

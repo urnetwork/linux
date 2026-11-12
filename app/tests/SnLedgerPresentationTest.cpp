@@ -593,25 +593,27 @@ UR_TEST(SnLedgerAV2ClaimNeedsItsGasLimitInTheGasKey) {
 }
 
 // APPS-SPEC.md claim (CL-4): the page gives up on a claim only past the SDK's
-// bounds, 2 minutes to read and 6 per transaction sent in turn, plus a minute,
-// so it never offers Claim again while the SDK still sends. Two or more
-// accounts go in one batch, after which each account the batch did not reach
-// is sent alone: one transaction more than the accounts. The SDK reads the
-// ledger again, so an unavailable pool may hold one more account by then
+// bounds, 2 minutes to read and 6 per account sent alone in turn, plus a
+// minute, so it never offers Claim again while the SDK still sends. Two or
+// more accounts go in one batch first, 6 minutes to prepare and send it and 6
+// for its receipt, after which each account the batch did not reach is sent
+// alone. The SDK reads the ledger again, so an unavailable pool may hold one
+// more account by then
 UR_TEST(SnLedgerTheWatchdogOutlastsEveryClaimTheSdkSends) {
   using urnw::snledger::ClaimWatchdogMs;
   constexpr int kMinute = 60'000;
   UR_EXPECT_EQ(9 * kMinute, ClaimWatchdogMs({}, {}));
   UR_EXPECT_EQ(9 * kMinute, ClaimWatchdogMs({OnePool()}, {}));
-  // the paid-out pool sends nothing: two accounts, a batch and each alone
-  UR_EXPECT_EQ(21 * kMinute, ClaimWatchdogMs({LedgerAccount(1, 42, 5'120'000'000, 1'879'000'000),
+  // the paid-out pool sends nothing: two accounts, the batch's 12 minutes and
+  // each alone
+  UR_EXPECT_EQ(27 * kMinute, ClaimWatchdogMs({LedgerAccount(1, 42, 5'120'000'000, 1'879'000'000),
                                               LedgerAccount(2, 9, 1'000'000'000, 1'000'000'000),
                                               LedgerAccount(3, 5, 700'000'000, 0)},
                                              {}));
-  UR_EXPECT_EQ(21 * kMinute, ClaimWatchdogMs({OnePool(), CtfAccount(615'000'000)}, {}));
+  UR_EXPECT_EQ(27 * kMinute, ClaimWatchdogMs({OnePool(), CtfAccount(615'000'000)}, {}));
   // the capture the flag pool unreadable at the read: its account may be
   // claimed too, so it counts as one
-  UR_EXPECT_EQ(21 * kMinute,
+  UR_EXPECT_EQ(27 * kMinute,
                ClaimWatchdogMs({OnePool()}, {Unreadable(kCtfPool, urnw::snledger::kKindCtf)}));
   UR_EXPECT_EQ(9 * kMinute, ClaimWatchdogMs({}, {Unreadable(kCtfPool, urnw::snledger::kKindCtf)}));
   // an absurd answer saturates instead of overflowing the timer
