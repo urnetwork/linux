@@ -235,10 +235,11 @@ UR_TEST(SnLedgerClaimWaitsForAClaimInFlight) {
 }
 
 // While the v2 claim is in flight (the session's, owner 2026-11-12), Claim
-// stays enabled, as Android's tile: it opens the claim's sheet on its rows,
-// where Claim waits for it, so a page left during the claim and come back to
-// shows it, whatever the page's read says meanwhile (loading, unavailable, or
-// the accounts the claim already paid). A v1 claim in flight still holds it.
+// stays enabled (Android's reopens its claim too, though there Claim follows
+// the last read): it opens the claim's sheet on its rows, where Claim waits
+// for it, so a page left during the claim and come back to shows it, whatever
+// the page's read says meanwhile (loading, unavailable, or the accounts the
+// claim already paid). A v1 claim in flight still holds it.
 UR_TEST(SnLedgerCtf_ClaimOpensTheV2ClaimInFlight) {
   const Account paidOut = LedgerAccount(1, 42, 5'120'000'000, 5'120'000'000);
   for (const Load load : {Load::Ready, Load::Loading, Load::Unavailable}) {
@@ -1883,7 +1884,8 @@ UR_TEST(SnLedgerCtf_TheSheetHasNoFigureWhileNothingAboveTheFloorIsLeft) {
   UR_EXPECT_EQ(int64_t{0}, lone.ClaimableRao());
   const ClaimProgress unread({}, {Unreadable(kCtfPool, urnw::snledger::kKindCtf)}, kFloor);
   UR_EXPECT_FALSE(unread.TotalKnown());
-  // nothing at all: a true zero
+  // nothing at all, as a read that answered says: a true zero (the page opens
+  // no sheet before a read answers: SnLedgerCtf_TheSheetsFigureIsWired)
   const ClaimProgress none({}, {}, kFloor);
   UR_EXPECT_TRUE(none.TotalKnown());
   UR_EXPECT_EQ(int64_t{0}, none.ClaimableRao());
@@ -2512,7 +2514,9 @@ UR_TEST(SnLedgerCtf_TheClaimIsTheSessionsNotALoads) {
 // and Claim names an amount only while a press claims one, never "Claim 0"
 // (SnLedgerCtf_TheSheetHasNoFigureWhileNothingAboveTheFloorIsLeft). A sheet
 // opened on a claim that failed about no account says why
-// (SnLedgerCtf_AFailureAboutNoAccountStaysWithTheClaim)
+// (SnLedgerCtf_AFailureAboutNoAccountStaysWithTheClaim). Between claims a sheet
+// opens only on a read that answered: while one is out or failed it has no
+// rows, which would read as a true zero, so "Claim it yourself" says so instead
 UR_TEST(SnLedgerCtf_TheSheetsFigureIsWired) {
   const std::string page = ReadLedgerSource("EarningsPage.cpp");
   const std::string rebuild = LedgerFunctionBody(page, "void LedgerClaimSheet::Rebuild()");
@@ -2534,6 +2538,13 @@ UR_TEST(SnLedgerCtf_TheSheetsFigureIsWired) {
   UR_EXPECT_TRUE(sheet.find("} else if (!progress_->FailureMessage().empty()) {\n"
                             "    // opened on a claim that failed about no account: why nothing moved\n"
                             "    ShowError(SnErrorMessage(progress_->FailureMessage(),") != std::string::npos);
+  const std::string open = LedgerFunctionBody(page, "void EarningsPage::OnLedgerClaim()");
+  const size_t wait = open.find("if (!rows && ledgerLoad_ != snledger::Load::Ready) {");
+  UR_EXPECT_TRUE(wait != std::string::npos && wait < open.find("std::make_shared<LedgerClaimSheet>("));
+  UR_EXPECT_TRUE(open.find("Notify(T_(\"loading\", \"Loading...\"), kit::Snackbar::Severity::Info);") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(open.find("Notify(T_(\"sn_ledger_unavailable\", \"Unavailable\"), "
+                           "kit::Snackbar::Severity::Error);") != std::string::npos);
 }
 
 // The Transaction link of URnetwork's claim (the claim relay's 4d): the SDK's

@@ -162,12 +162,15 @@
 >   the wins were not read on the schedule, and Claim stayed disabled until the watchdog said the
 >   chain RPC was unreachable. The claim's rows and its answers now count by
 >   `snledger::ClaimInFlight`, which only the claim's Done, its watchdog and a sign-out move. While
->   it is in flight the tile's Claim stays enabled, as Android's tile, and opens the sheet on the
+>   it is in flight the tile's Claim stays enabled whatever the read says (Android's tile reopens
+>   its claim from Claim too, though there Claim follows the last read) and opens the sheet on the
 >   claim's rows, where Claim waits for it; a failure about no account stays with the rows, so a
->   sheet opened after it says why. A user who leaves during a claim and comes back finds it in
->   flight, and its Done lands (the accounts and the wins read again). A sign-out drops it and ends
->   the v1 claim's watch too (the v1 claim's answers keep the load's guard), frees Claim and closes
->   both claims' sheets, as Android's `setupDevice` does.
+>   sheet opened after it says why. Between claims the sheet opens only on a read that answered:
+>   while one is out or failed, "Claim it yourself" says so instead of drawing no rows as a 0. A
+>   user who leaves during a claim and comes back finds it in flight, and its Done lands (the
+>   accounts and the wins read again). A sign-out drops it and ends the v1 claim's watch too (the v1
+>   claim's answers keep the load's guard), frees Claim and closes both claims' sheets, as Android's
+>   `setupDevice` does.
 > - **The v2 claim sheet's figure** (Apple, Windows and Android): what a press claims while an
 >   account above the floor is left, or a true 0 once nothing is left; no figure while the rows left
 >   are below the claim minimum, in a pool that could not be read, of an amount not known yet, or in

@@ -215,9 +215,11 @@ struct SectionView {
 // Claim, enabled while the read is in, something is claimable and no claim is
 // in flight (v1 or v2: the gas key sends one claim at a time). While a v2
 // claim is in flight (`ledgerClaimInFlight`, the session's) Claim stays
-// enabled whatever the read says, as Android's tile: it opens the claim's sheet
-// on its rows, where Claim waits for it, so a page left during the claim and
-// come back to can show it.
+// enabled whatever the read says: it opens the claim's sheet on its rows,
+// where Claim waits for it, so a page left during the claim and come back to
+// can show it. (Android's tile reopens its claim in flight from Claim too, but
+// there Claim follows the last read, which a refresh during the claim may find
+// with nothing left to claim.)
 //
 // Each pool in `unavailable` is a row among the accounts, by its pool, and
 // hides none of them. An account under `transferFloorRao`, alone or beside

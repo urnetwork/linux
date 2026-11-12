@@ -5935,6 +5935,18 @@ void EarningsPage::OnLedgerClaim() {
   // a sheet opened during a claim draws the claim in flight, the session's,
   // whatever the page loaded since; otherwise the accounts as last read
   std::shared_ptr<snledger::ClaimProgress> rows = ledgerClaim_.Rows();
+  if (!rows && ledgerLoad_ != snledger::Load::Ready) {
+    // No read has answered (one is out, after a visit or a claim's Done, or
+    // it failed): there are no rows to draw, and an empty sheet would read as
+    // a true zero. The relay's "Claim it yourself" link reaches here while
+    // the tile's own Claim waits; it says what the tile says.
+    if (ledgerLoad_ == snledger::Load::Loading) {
+      Notify(T_("loading", "Loading..."), kit::Snackbar::Severity::Info);
+    } else {
+      Notify(T_("sn_ledger_unavailable", "Unavailable"), kit::Snackbar::Severity::Error);
+    }
+    return;
+  }
   if (!rows) {
     rows = std::make_shared<snledger::ClaimProgress>(ledgerAccounts_, ledgerUnavailable_,
                                                      TransferFloorRao());
