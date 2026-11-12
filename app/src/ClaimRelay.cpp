@@ -317,6 +317,12 @@ static_assert(std::string_view(snledger::kRoleProvider) == urnet::SnCtfRoleProvi
               "snledger::kRoleProvider is the SDK's SnCtfRoleProvider");
 static_assert(std::string_view(snledger::kRoleExtender) == urnet::SnCtfRoleExtender,
               "snledger::kRoleExtender is the SDK's SnCtfRoleExtender");
+static_assert(std::string_view(snledger::kClaimStateUnclaimed) == urnet::SnCtfWinClaimStateUnclaimed,
+              "snledger::kClaimStateUnclaimed is the SDK's SnCtfWinClaimStateUnclaimed");
+static_assert(std::string_view(snledger::kClaimStateClaimed) == urnet::SnCtfWinClaimStateClaimed,
+              "snledger::kClaimStateClaimed is the SDK's SnCtfWinClaimStateClaimed");
+static_assert(std::string_view(snledger::kClaimStateUnknown) == urnet::SnCtfWinClaimStateUnknown,
+              "snledger::kClaimStateUnknown is the SDK's SnCtfWinClaimStateUnknown");
 
 std::vector<snledger::UnavailablePool> UnavailablePoolsOf(
     const std::optional<urnet::SnLedgerUnavailablePoolList>& pools) {
@@ -349,7 +355,8 @@ std::vector<snledger::RelayAccount> RelayAccountsOf(const urnet::SnClaimStatusRe
 }
 
 void AppendRelayRows(Gtk::Box& into, const std::vector<snledger::RelayRow>& rows,
-                     const std::function<void(const std::string& url)>& openLink) {
+                     const std::function<void(const std::string& url)>& openLink,
+                     bool pendingPill) {
   if (rows.empty()) return;
   auto* list = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 6);
   for (const snledger::RelayRow& row : rows) {
@@ -369,7 +376,7 @@ void AppendRelayRows(Gtk::Box& into, const std::vector<snledger::RelayRow>& rows
     Glib::ustring status;
     switch (row.status) {
       case snledger::RelayStatus::Pending:
-        status = T_("pending_data_key", "Pending");
+        if (pendingPill) status = T_("pending_data_key", "Pending");
         break;
       case snledger::RelayStatus::UnderFloor:
         status = T_("sn_ledger_pool_under_floor", "Below the claim minimum");
@@ -381,10 +388,12 @@ void AppendRelayRows(Gtk::Box& into, const std::vector<snledger::RelayRow>& rows
         status = T_("sn_ledger_pool_unavailable", "Unavailable right now");
         break;
     }
-    auto* pill = Gtk::make_managed<Gtk::Label>(status);
-    pill->add_css_class("ur-earn-tag");
-    pill->set_valign(Gtk::Align::CENTER);
-    line->append(*pill);
+    if (!status.empty()) {
+      auto* pill = Gtk::make_managed<Gtk::Label>(status);
+      pill->add_css_class("ur-earn-tag");
+      pill->set_valign(Gtk::Align::CENTER);
+      line->append(*pill);
+    }
     list->append(*line);
     const std::string link =
         row.status == snledger::RelayStatus::Claimed ? RowTransactionLink(row.txUrl) : std::string();
@@ -483,15 +492,22 @@ void ClaimRelaySheet::Apply(const std::optional<urnet::SnClaimStatusResult>& sta
     content_->append(*MakeText(T_("sn_ledger_unavailable", "Unavailable"), "ur-step-heading"));
     return;
   }
-  content_->append(*MakeText(T_("sn_ledger_claimable", "Claimable"), "ur-caption"));
-  auto* amount = Gtk::make_managed<Gtk::Label>();
-  amount->add_css_class("ur-stat-value");
-  amount->set_xalign(0);
-  amount->set_markup("<span size='" + std::to_string(36 * PANGO_SCALE) + "'>" +
-                     Glib::Markup::escape_text(urnet::formatAlpha(status->claimable_rao)) +
-                     "</span>");
-  content_->append(*amount);
   const std::string coldkey = status->coldkey_ss58.value_or(std::string());
+  const std::vector<snledger::RelayAccount> accounts = RelayAccountsOf(*status);
+  const std::vector<snledger::UnavailablePool> unavailable =
+      UnavailablePoolsOf(status->unavailable_pools);
+  // with none of the coldkey's pools read there is no total, only the
+  // unavailable rows below: never a zero
+  if (snledger::RelayTotalKnown(accounts, coldkey, unavailable)) {
+    content_->append(*MakeText(T_("sn_ledger_claimable", "Claimable"), "ur-caption"));
+    auto* amount = Gtk::make_managed<Gtk::Label>();
+    amount->add_css_class("ur-stat-value");
+    amount->set_xalign(0);
+    amount->set_markup("<span size='" + std::to_string(36 * PANGO_SCALE) + "'>" +
+                       Glib::Markup::escape_text(urnet::formatAlpha(status->claimable_rao)) +
+                       "</span>");
+    content_->append(*amount);
+  }
   if (!coldkey.empty()) {
     auto* lands = MakeText(Format(T_("sn_claim_relay_lands_on",
                                      "URnetwork claims this for you. It pays the gas, and your "
@@ -504,10 +520,9 @@ void ClaimRelaySheet::Apply(const std::optional<urnet::SnClaimStatusResult>& sta
   const auto openLink = [this](const std::string& url) {
     if (on_open_link) on_open_link(url);
   };
-  // each pool's account, beside capture the flag or a pool that could not be read
+  // each account, alone or beside others, and each pool that could not be read
   const std::vector<snledger::RelayRow> rows =
-      snledger::RelayRowsFor(RelayAccountsOf(*status), UnavailablePoolsOf(status->unavailable_pools),
-                             status->transfer_floor_rao);
+      snledger::RelayRowsFor(accounts, unavailable, status->transfer_floor_rao);
   AppendRelayRows(*content_, rows, openLink);
   if (claimed) {
     // the claim with its transaction, where no row links it, Done, and when
