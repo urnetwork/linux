@@ -23,6 +23,7 @@
 #include "CheckoutCrashRoute.hpp"
 #include "CheckoutSessionMode.hpp"
 #include "ClientEvents.hpp"
+#include "DisplayText.hpp"
 #include "GuestConversion.hpp"
 #include "I18n.hpp"
 #include "PricePresentation.hpp"
@@ -392,6 +393,15 @@ void UpgradeSheet::BuildUi() {
   thanks->set_wrap(true);
   thanks->set_xalign(0);
   successBox_->append(*thanks);
+  // the account the plan is on (SetState fills it in); hidden for a guest and
+  // without a name
+  successAccount_ = Gtk::make_managed<Gtk::Label>();
+  successAccount_->add_css_class("dim-label");
+  successAccount_->set_wrap(true);
+  successAccount_->set_wrap_mode(Pango::WrapMode::WORD_CHAR);
+  successAccount_->set_xalign(0);
+  successAccount_->set_visible(false);
+  successBox_->append(*successAccount_);
   auto* successClose = Gtk::make_managed<Gtk::Button>(T_("close", "Close"));
   successClose->add_css_class("suggested-action");
   successClose->add_css_class("pill");
@@ -440,6 +450,22 @@ void UpgradeSheet::SetState(State state) {
   if (state == State::Success && state_ != State::Success && !purchaseEmitted_) {
     purchaseEmitted_ = true;
     EmitPurchase("completed");
+  }
+  if (state == State::Success) {
+    // the account the plan is on, read now: the sheet outlives a sign-in. The
+    // sdk's rule gives "" for a guest or without a name.
+    const std::optional<urnet::ByJwt> jwt =
+        host_.IsLoggedIn() ? host_.ParseByJwt() : std::nullopt;
+    const std::string account =
+        jwt ? urnet::planAccountName(SanitizeExternalDisplayText(jwt->NetworkName),
+                                     jwt->GuestMode || balance_.IsGuest())
+            : std::string();
+    if (account.empty()) {
+      successAccount_->set_text({});
+    } else {
+      successAccount_->set_text(Format(T_("plan_account_name", "Account: {}"), account));
+    }
+    successAccount_->set_visible(!account.empty());
   }
   state_ = state;
   optionsBox_->set_visible(state == State::Options || state == State::Launching);

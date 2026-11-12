@@ -156,6 +156,8 @@ class UpgradeSheet : public Gtk::Window {
   Gtk::Box* optionsBox_ = nullptr;
   Gtk::Box* waitingBox_ = nullptr;
   Gtk::Box* successBox_ = nullptr;
+  // the account the plan is on, under the thanks; read when the success shows
+  Gtk::Label* successAccount_ = nullptr;
   Gtk::Box* timedOutBox_ = nullptr;
   PlanPicker* plans_ = nullptr;  // the onboarding plan picker, shared
   Gtk::Button* joinBtn_ = nullptr;
