@@ -12,24 +12,31 @@
 // Vault2Address; until then the tile shows only the balances the ledger
 // returns, and no Claim. Claim opens the v2 claim sheet, whose rows follow the
 // SDK's progress (SnLedgerClaim): sent with the transaction, claimed with the
-// amount the vault paid, or failed, where needs_gas turns on the sheet's gas
-// top-up and already_claimed is paid. The top-up also shows while the gas key
-// holds less than a v2 claim needs. The page reads the accounts again after
-// Done.
+// amount the vault paid, or failed, where already_claimed is paid and
+// needs_gas leaves the account claimable, nothing having been sent for it, with
+// the sheet's gas top-up. The top-up also shows while the gas key holds less
+// than a v2 claim needs. The page reads the accounts again after Done.
 //
 // Capture the flag (sn CAPTURETHEFLAG.md §10) gives the operator a second pool,
 // and the coldkey an account there beside its pool account (kind ctf, pool
 // 2^32 + n). Each account is then its own row, named by its kind: "Capture the
 // flag", and "Provider pool" beside it. A pool the server could not read just
 // now (the SDK's unavailable pools) is a row that says so, with no figure,
-// never a zero, and the other rows show as usual. Beside a capture the flag
-// account a row under the claim relay's transfer floor says it is below the
-// claim minimum, and the one Claim, which claims every pool (the SDK sends them
-// in one transaction), reads "Claim both" while it claims the pool's account
-// and the capture the flag account. URnetwork's claim relay lists the same
-// per-pool rows on its sheet, and on the tile of a network with no wallet
-// here. Without a capture the flag account, as with every server before it,
-// the tile and the sheets read as before.
+// never a zero, and the other rows show as usual. The one Claim, which claims
+// every pool (the SDK sends them in one transaction), reads "Claim both" while
+// it claims the pool's account and the capture the flag account. URnetwork's
+// claim relay lists the same per-pool rows on its sheet, and on the tile of a
+// network with no wallet here. Without a capture the flag account, as with
+// every server before it, the tile and the v2 sheet read as before, but for
+// the claim minimum. The tile ends with a line for every capture the flag win
+// whose award is not claimed yet: "You won one of the Kenya provider slots".
+//
+// The claim minimum (owner, 2026-11-11, for every app): any account whose
+// claimable is under the claim relay's transfer floor, alone or beside others,
+// says it is below the claim minimum, and no Claim counts it: the runtime
+// refuses a transfer that small, so the app never offers a claim the chain
+// will refuse. The runtime's own refusal of one (not_claimable, AmountTooLow)
+// reads the same.
 //
 // Header-only and free of GTK and the SDK so the unit tests need no vendored
 // headers (tests/SnLedgerPresentationTest.cpp).
@@ -40,7 +47,6 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -199,10 +205,10 @@ struct SectionView {
 // in flight (v1 or v2: the gas key sends one claim at a time).
 //
 // Each pool in `unavailable` is a row among the accounts, by its pool, and
-// hides none of them. Beside a capture the flag account an account under
-// `transferFloorRao` says so and counts for no Claim, and Claim, which claims
-// every pool, reads Claim both while it claims exactly the pool's account and
-// the capture the flag account.
+// hides none of them. An account under `transferFloorRao`, alone or beside
+// others, says so and counts for no Claim, and Claim, which claims every pool,
+// reads Claim both while it claims exactly the pool's account and the capture
+// the flag account.
 inline SectionView SectionFor(bool hasColdkey, Load load, const std::vector<Account>& accounts,
                               const std::vector<UnavailablePool>& unavailable,
                               int64_t transferFloorRao, bool claimConfigured, bool claiming,
@@ -264,7 +270,7 @@ inline SectionView SectionFor(bool hasColdkey, Load load, const std::vector<Acco
     row.earned = formatAlpha(account.finalizedRao);
     const int64_t increase = PendingIncreaseRao(account);
     if (increase > 0) row.pendingIncrease = formatAlpha(increase);
-    row.underFloor = naming.ctf && UnderFloor(account.claimableRao, transferFloorRao);
+    row.underFloor = UnderFloor(account.claimableRao, transferFloorRao);
     if (0 < account.claimableRao && !row.underFloor) {
       claimableRao += account.claimableRao;
       if (IsCtf(account.kind)) {
@@ -317,10 +323,13 @@ inline int ClaimWatchdogMs(const std::vector<Account>& accounts,
   return static_cast<int>(std::min<int64_t>(minutes * 60'000, std::numeric_limits<int>::max()));
 }
 
+// The stable code a message of the SDK starts with ("code: detail").
+inline std::string CodeOf(const std::string& message) { return message.substr(0, message.find(':')); }
+
 // How the sheet reads a failed claim. The SDK's messages start with one of its
 // stable codes ("code: detail").
 enum class Failure {
-  NeedsGas,        // needs_gas: the gas key cannot pay; the sheet's top-up shows
+  NeedsGas,        // needs_gas: the gas key cannot pay for it; nothing was sent, so it is still claimable
   AlreadyClaimed,  // already_claimed: a third party claimed it, so it is paid
   Unavailable,     // ledger_unavailable: the pool could not be read; nothing was sent for it
   UnderFloor,      // not_claimable, AmountTooLow: the runtime refuses an amount under its floor
@@ -328,7 +337,7 @@ enum class Failure {
 };
 
 inline Failure FailureFor(const std::string& message) {
-  const std::string code = message.substr(0, message.find(':'));
+  const std::string code = CodeOf(message);
   if (code == "needs_gas") return Failure::NeedsGas;
   if (code == "already_claimed") return Failure::AlreadyClaimed;
   if (code == "ledger_unavailable") return Failure::Unavailable;
@@ -371,16 +380,19 @@ struct ClaimRow {
 // account by (noId, index): Sent (every account of a batch with the batch's
 // transaction), then Confirmed or Failed; then Done once. The SDK reads the
 // ledger again, so it may report an account the sheet did not list. A pool the
-// server could not read fails with ledger_unavailable, its noId and index 0. A
-// failure about no single account (no wallet, v2 claims not configured, the
-// ledger or the chain unreachable, nothing to claim) comes with noId 0.
+// server could not read fails with ledger_unavailable, its noId and index 0,
+// before any account's event. A failure about no single account (no wallet, v2
+// claims not configured, the ledger or the chain unreachable, nothing to
+// claim) comes with noId 0. Whenever the SDK claims accounts alone, the
+// largest goes first, and an account the gas key cannot pay for fails
+// needs_gas with nothing sent for it (sdk-ctf-v2 §2.1): it stays claimable.
 class ClaimProgress {
  public:
   ClaimProgress() = default;
   // One row per account with something to claim, in the SDK's order, and one
   // per pool the server could not read, before the first account of a later
-  // pool. Beside a capture the flag account, an account under
-  // `transferFloorRao` waits below the claim minimum.
+  // pool. An account under `transferFloorRao`, alone or beside others, waits
+  // below the claim minimum.
   ClaimProgress(const std::vector<Account>& accounts, const std::vector<UnavailablePool>& unavailable,
                 int64_t transferFloorRao) {
     for (const Account& account : accounts) refs_.push_back(PoolRef{account.noId, account.kind});
@@ -393,9 +405,7 @@ class ClaimProgress {
       row.index = account.index;
       row.kind = account.kind;
       row.amountRao = account.claimableRao;
-      if (naming_.ctf && UnderFloor(account.claimableRao, transferFloorRao)) {
-        row.phase = Phase::UnderFloor;
-      }
+      if (UnderFloor(account.claimableRao, transferFloorRao)) row.phase = Phase::UnderFloor;
       rows_.push_back(row);
     }
     for (const UnavailablePool& pool : unavailable) {
@@ -427,7 +437,8 @@ class ClaimProgress {
   }
   bool Busy() const { return busy_; }
   // A claim came back needs_gas: the top-up shows, and Claim waits for the
-  // next sheet, as on the v1 sheet.
+  // next sheet, as on the v1 sheet. The accounts it could not pay for are
+  // still claimable.
   bool NeedsGas() const { return needsGas_; }
   // What a press claims: every row not claimed yet, short of one below the
   // claim minimum or of a pool that could not be read. A failed claim stays
@@ -450,6 +461,8 @@ class ClaimProgress {
   void Start() {
     busy_ = true;
     needsGas_ = false;
+    read_ = false;
+    reportedUnavailable_.clear();
     for (ClaimRow& row : rows_) {
       if (row.phase == Phase::Claimable || row.phase == Phase::Failed) {
         row.phase = Phase::Sending;
@@ -458,11 +471,13 @@ class ClaimProgress {
     }
   }
   void Sent(int64_t noId, int64_t index, const std::string& txHash) {
+    read_ = true;
     ClaimRow& row = Find(noId, index);
     row.phase = Phase::Sent;
     row.txHash = txHash;
   }
   void Confirmed(int64_t noId, int64_t index, const std::string& txHash, int64_t amountRao) {
+    read_ = true;
     ClaimRow& row = Find(noId, index);
     row.phase = Phase::Claimed;
     if (!txHash.empty()) row.txHash = txHash;
@@ -473,11 +488,16 @@ class ClaimProgress {
   bool Failed(int64_t noId, int64_t index, const std::string& message) {
     const Failure failure = FailureFor(message);
     if (failure == Failure::NeedsGas) needsGas_ = true;
+    // the SDK's own read of the ledger answered: an account's or a pool's
+    // failure, or nothing to claim in any pool, which it never says while a
+    // pool is unavailable
+    if (0 < noId || CodeOf(message) == "not_claimable") read_ = true;
     if (noId <= 0) return false;
     if (failure == Failure::Unavailable) {
       // the pool could not be read, so nothing was sent for it: its rows not
       // sent say so, a sent or claimed one stays, and a pool without a row
       // gets one
+      reportedUnavailable_.push_back(noId);
       bool listed = false;
       for (ClaimRow& row : rows_) {
         if (row.noId != noId) continue;
@@ -496,11 +516,22 @@ class ClaimProgress {
       row.message.clear();
       return true;
     }
-    // beside a capture the flag account the runtime's refusal of an amount
-    // under its floor is the claim minimum, which the relay's price may not
-    // have shown: the row waits, out of the next press
-    if (naming_.ctf && failure == Failure::UnderFloor) {
+    // the runtime's refusal of an amount under its floor is the claim
+    // minimum, which the relay's price may not have shown: the row waits, out
+    // of the next press, alone or beside others
+    if (failure == Failure::UnderFloor) {
       row.phase = Phase::UnderFloor;
+      row.message.clear();
+      return true;
+    }
+    // the gas key could not pay for its claim, so nothing was sent for it:
+    // it is still claimable, no transaction claims it now, and the sheet's
+    // top-up says what to add. One below the claim minimum keeps saying so
+    if (failure == Failure::NeedsGas) {
+      if (row.phase != Phase::UnderFloor && row.phase != Phase::Claimed) {
+        row.phase = Phase::Claimable;
+        row.txHash.clear();
+      }
       row.message.clear();
       return true;
     }
@@ -512,12 +543,25 @@ class ClaimProgress {
     return true;
   }
   // The press is over. A row the SDK did not claim (nothing it verified was
-  // claimable) is as it was before the press.
+  // claimable) is as it was before the press. A pool the sheet's read could
+  // not read keeps its row while the press stopped before the SDK's own read;
+  // once that read answered (Android's snLedgerClaimSettled) without naming
+  // the pool unavailable or reporting an account of it, the pool was read and
+  // held nothing to claim, and its row goes.
   void Done() {
     busy_ = false;
     for (ClaimRow& row : rows_) {
       if (row.phase == Phase::Sending) row.phase = Phase::Claimable;
     }
+    if (!read_) return;
+    rows_.erase(std::remove_if(rows_.begin(), rows_.end(),
+                               [this](const ClaimRow& row) {
+                                 return row.placeholder && row.phase == Phase::Unavailable &&
+                                        std::find(reportedUnavailable_.begin(),
+                                                  reportedUnavailable_.end(),
+                                                  row.noId) == reportedUnavailable_.end();
+                               }),
+                rows_.end());
   }
 
  private:
@@ -575,6 +619,10 @@ class ClaimProgress {
   PoolNaming naming_;
   bool busy_ = false;
   bool needsGas_ = false;
+  // this press: the SDK's own read of the ledger answered, and the pools it
+  // named unavailable
+  bool read_ = false;
+  std::vector<int64_t> reportedUnavailable_;
 };
 
 // The Transaction link of URnetwork's claim (the claim relay's 4d): the
@@ -631,11 +679,12 @@ struct RelayRow {
 };
 
 // The relay sheet's per-pool rows (Android's snClaimRelayRows): each account
-// with something to claim, Pending or, beside a capture the flag account, below
-// the claim minimum; each URnetwork claimed with nothing claimable since,
-// Claimed with its transaction; then one row per pool the server could not
-// read. Only beside a capture the flag account or an unavailable pool: without
-// either, the sheet's balance says it all, as before capture the flag.
+// with something to claim, Pending or below the claim minimum; each URnetwork
+// claimed with nothing claimable since, Claimed with its transaction; then one
+// row per pool the server could not read. Every account the relay reports is
+// listed, alone or beside others, on every server, as Android has listed them
+// since the claimed state: the sheet's balance adds up only the primary
+// coldkey's accounts, and a lone account below the claim minimum says so.
 inline std::vector<RelayRow> RelayRowsFor(const std::vector<RelayAccount>& accounts,
                                           const std::vector<UnavailablePool>& unavailable,
                                           int64_t transferFloorRao) {
@@ -644,7 +693,6 @@ inline std::vector<RelayRow> RelayRowsFor(const std::vector<RelayAccount>& accou
   for (const UnavailablePool& pool : unavailable) refs.push_back(PoolRef{pool.noId, pool.kind});
   const PoolNaming naming = PoolNaming::Of(refs);
   std::vector<RelayRow> rows;
-  if (!naming.ctf && unavailable.empty()) return rows;
   std::vector<std::string> coldkeys;
   for (const RelayAccount& account : accounts) {
     const bool claimed = !account.claimTxHash.empty() && account.claimableRao <= 0;
@@ -658,9 +706,8 @@ inline std::vector<RelayRow> RelayRowsFor(const std::vector<RelayAccount>& accou
       row.amountRao = account.claimAmountRao;
       row.txUrl = TransactionLink(account.claimTxUrl);
     } else {
-      row.status = naming.ctf && UnderFloor(account.claimableRao, transferFloorRao)
-                       ? RelayStatus::UnderFloor
-                       : RelayStatus::Pending;
+      row.status = UnderFloor(account.claimableRao, transferFloorRao) ? RelayStatus::UnderFloor
+                                                                      : RelayStatus::Pending;
       row.amountRao = account.claimableRao;
     }
     if (std::find(coldkeys.begin(), coldkeys.end(), account.coldkeySs58) == coldkeys.end()) {
@@ -681,13 +728,25 @@ inline std::vector<RelayRow> RelayRowsFor(const std::vector<RelayAccount>& accou
   return rows;
 }
 
+// Whether the relay's claimable is a total to show (Android's
+// snClaimRelayTotalKnown): it adds up the primary coldkey's accounts, leaving
+// out the pools the server could not read. With none of the coldkey's pools
+// read there is nothing to add up: the unavailable rows say so, never a zero.
+inline bool RelayTotalKnown(const std::vector<RelayAccount>& accounts, const std::string& coldkeySs58,
+                            const std::vector<UnavailablePool>& unavailable) {
+  if (unavailable.empty()) return true;
+  return std::any_of(accounts.begin(), accounts.end(), [&coldkeySs58](const RelayAccount& account) {
+    return account.coldkeySs58 == coldkeySs58;
+  });
+}
+
 // The tile's rows for a network with no wallet on this device, under the sum
 // the relay claims (Android's snClaimRelayTileRows): the primary coldkey's
-// accounts with something to claim, Pending or, beside a capture the flag
-// account, below the claim minimum; then one row per pool the server could not
-// read. Only with a capture the flag account among them or an unavailable pool:
-// with the pool's account alone the sum says it all, as before capture the
-// flag.
+// accounts with something to claim, once there are two or one of them is a
+// capture the flag account, or beside a pool the server could not read; then
+// one row per such pool. With one pool's account alone the sum says it all
+// (RelayTileSumUnderFloor says when it is below the claim minimum). Each row
+// is Pending or below the claim minimum.
 inline std::vector<RelayRow> RelayTileRowsFor(const std::vector<RelayAccount>& accounts,
                                               const std::string& coldkeySs58,
                                               const std::vector<UnavailablePool>& unavailable,
@@ -704,13 +763,12 @@ inline std::vector<RelayRow> RelayTileRowsFor(const std::vector<RelayAccount>& a
     row.noId = account.noId;
     row.pool = naming.NameOf(account.kind);
     row.amountRao = account.claimableRao;
-    row.status = naming.ctf && UnderFloor(account.claimableRao, transferFloorRao)
-                     ? RelayStatus::UnderFloor
-                     : RelayStatus::Pending;
+    row.status = UnderFloor(account.claimableRao, transferFloorRao) ? RelayStatus::UnderFloor
+                                                                    : RelayStatus::Pending;
     ctf = ctf || IsCtf(account.kind);
     rows.push_back(row);
   }
-  if (!ctf && unavailable.empty()) return {};
+  if (rows.size() < 2 && !ctf && unavailable.empty()) return {};
   for (const UnavailablePool& pool : unavailable) {
     RelayRow row;
     row.noId = pool.noId;
@@ -721,30 +779,84 @@ inline std::vector<RelayRow> RelayTileRowsFor(const std::vector<RelayAccount>& a
   return rows;
 }
 
-// ---- capture the flag: the line of a won slot ---------------------------------------
+// Whether the tile's sum, drawn without rows (RelayTileRowsFor has none), is
+// one account below the claim minimum: it says so under the sum, as the
+// wallet's tile says it under a lone account's figures.
+inline bool RelayTileSumUnderFloor(const std::vector<RelayAccount>& accounts,
+                                   const std::string& coldkeySs58,
+                                   const std::vector<UnavailablePool>& unavailable,
+                                   int64_t transferFloorRao) {
+  if (!RelayTileRowsFor(accounts, coldkeySs58, unavailable, transferFloorRao).empty()) return false;
+  return std::any_of(accounts.begin(), accounts.end(),
+                     [&coldkeySs58, transferFloorRao](const RelayAccount& account) {
+                       return account.coldkeySs58 == coldkeySs58 &&
+                              UnderFloor(account.claimableRao, transferFloorRao);
+                     });
+}
+
+// ---- capture the flag: the lines of won slots ---------------------------------------
 
 // The roles that win a country's slots (the SDK's SnCtfRole*).
 constexpr const char* kRoleProvider = "provider";
 constexpr const char* kRoleExtender = "extender";
 
-// This device's latest capture the flag win (GET /sn/ctf/client, the SDK's
-// SnCtfWin): the role that won one of a country's five slots, and the country.
+// Whether a win's award has been claimed (the SDK's SnCtfWinClaimState*, the
+// route's claimed false / true / null). Only an unclaimed win has a line; an
+// unknown one reads neither as claimed nor as unclaimed.
+constexpr const char* kClaimStateUnclaimed = "unclaimed";
+constexpr const char* kClaimStateClaimed = "claimed";
+constexpr const char* kClaimStateUnknown = "unknown";
+
+// One capture the flag win (GET /sn/ctf/client, the SDK's SnCtfWin): the role
+// that won one of a country's five slots in the epoch's auction, and the
+// country. The SDK asks with the network's credential, so the wins are those
+// of all of the network's clients, as ur.io shows them.
 struct Win {
-  std::string role;     // kRoleProvider or kRoleExtender
+  std::string role;     // kRoleProvider or kRoleExtender; a later server may add another
   std::string country;  // lowercase ISO 3166-1 alpha-2
+  int64_t epoch = 0;
+  std::string claimState = kClaimStateUnclaimed;  // kClaimState*
 };
 
-// The line with the capture the flag account: "You won one of the Kenya
-// provider slots" (sn_ctf_won_provider_slot) or the extender's
-// (sn_ctf_won_extender_slot), by the role that won. None without a win, its
-// country or a role this build knows: the line never guesses.
+// A win's line: "You won one of the Kenya provider slots"
+// (sn_ctf_won_provider_slot) or the extender's (sn_ctf_won_extender_slot), by
+// the role that won. None without its country or a role this build knows: the
+// line never guesses.
 enum class WonSlot { None, Provider, Extender };
 
-inline WonSlot WonSlotFor(const std::optional<Win>& win) {
-  if (!win || win->country.empty()) return WonSlot::None;
-  if (win->role == kRoleProvider) return WonSlot::Provider;
-  if (win->role == kRoleExtender) return WonSlot::Extender;
+inline WonSlot WonSlotFor(const Win& win) {
+  if (win.country.empty()) return WonSlot::None;
+  if (win.role == kRoleProvider) return WonSlot::Provider;
+  if (win.role == kRoleExtender) return WonSlot::Extender;
   return WonSlot::None;
+}
+
+// One line on the tile.
+struct WonLine {
+  WonSlot slot = WonSlot::None;
+  std::string country;
+
+  bool operator==(const WonLine& other) const {
+    return slot == other.slot && country == other.country;
+  }
+};
+
+// The tile's lines (owner, 2026-11-11): one for every win whose award is not
+// claimed yet (the SDK's UnclaimedWins), newest first, and within an epoch in
+// the SDK's order, providers before extenders. A win claimed or of unknown
+// claim, or one the line would have to guess at, has none. Two wins of one
+// role and country (two epochs, or two of the network's clients) are two
+// lines.
+inline std::vector<WonLine> WonLinesFor(std::vector<Win> wins) {
+  std::stable_sort(wins.begin(), wins.end(),
+                   [](const Win& a, const Win& b) { return a.epoch > b.epoch; });
+  std::vector<WonLine> lines;
+  for (const Win& win : wins) {
+    const WonSlot slot = WonSlotFor(win);
+    if (win.claimState != kClaimStateUnclaimed || slot == WonSlot::None) continue;
+    lines.push_back(WonLine{slot, win.country});
+  }
+  return lines;
 }
 
 }  // namespace urnw::snledger

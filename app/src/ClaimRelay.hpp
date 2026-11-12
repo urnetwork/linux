@@ -17,9 +17,11 @@
 //
 // Capture the flag (sn CAPTURETHEFLAG.md §10): Claim now claims every pool of
 // the coldkey, its pool's account and its capture the flag account, and the
-// SDK's status sums them. The sheet lists each pool's account under the total,
-// as Android does (snledger::RelayRowsFor), and a pool the server could not
-// read as unavailable, never zero.
+// SDK's status sums them. The sheet lists each account under the total, as
+// Android does (snledger::RelayRowsFor), one below the claim minimum saying so,
+// alone or not, and a pool the server could not read as unavailable, never
+// zero. With none of the coldkey's pools read there is no total, only those
+// rows (snledger::RelayTotalKnown).
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
@@ -86,9 +88,12 @@ std::vector<snledger::RelayAccount> RelayAccountsOf(const urnet::SnClaimStatusRe
 // snledger::RelayTileRowsFor on the tile): each pool by name, with its coldkey
 // while the rows are of more than one, its amount, and Pending, Below the claim
 // minimum, Claimed with its transaction, or Unavailable right now in place of
-// an amount. Nothing for no rows.
+// an amount. Without `pendingPill` a Pending row says nothing of it, which the
+// relay's part under the tile says with why (Android's tile rows). Nothing for
+// no rows.
 void AppendRelayRows(Gtk::Box& into, const std::vector<snledger::RelayRow>& rows,
-                     const std::function<void(const std::string& url)>& openLink);
+                     const std::function<void(const std::string& url)>& openLink,
+                     bool pendingPill = true);
 
 // Claim now's sheet (4b, 4c, 4d): the balance, where it lands, why it waits,
 // and Claim now or why it can't act, with the device's own claim as the

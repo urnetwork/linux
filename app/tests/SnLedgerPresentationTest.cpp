@@ -10,12 +10,15 @@
 // the sheets need GTK and the SDK, so their wiring and their English fallbacks
 // (which must be the catalog's msgids) are read from the sources and po/en.po.
 //
-// Capture the flag (sn CAPTURETHEFLAG.md §10): a server before it reads exactly
-// as before; beside a capture the flag account each row is named by its kind,
-// a row below the claim minimum says so, Claim reads Claim both while both
-// kinds have something to claim, and one press claims both; a pool the server
-// could not read is a row of its own and hides no other; the relay sheet's
-// per-pool rows; and the line of a won slot.
+// Capture the flag (sn CAPTURETHEFLAG.md §10): a server before it reads as
+// before, but for the claim minimum; beside a capture the flag account each row
+// is named by its kind, Claim reads Claim both while both kinds have something
+// to claim, and one press claims both; a row below the claim minimum says so,
+// alone or beside others (owner, 2026-11-11); an account the gas key could not
+// pay for stays claimable; a pool the server could not read is a row of its
+// own and hides no other, and leaves the sheet once the SDK's read finds it
+// with nothing to claim; the relay's per-pool rows and total, as Android's;
+// and a line for every win not claimed yet.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -51,6 +54,8 @@ using urnw::snledger::SectionView;
 using urnw::snledger::Status;
 using urnw::snledger::UnavailablePool;
 using urnw::snledger::Win;
+using urnw::snledger::WonLine;
+using urnw::snledger::WonLinesFor;
 using urnw::snledger::WonSlot;
 using urnw::snledger::WonSlotFor;
 
@@ -237,13 +242,12 @@ UR_TEST(SnLedgerSeveralPoolsNameTheirPool) {
 // ---- capture the flag on the tile ------------------------------------------------
 
 // A server before capture the flag sends no kind, which the SDK reads as a pool
-// (the Account's default): with the floor known, the tile reads exactly as
-// before: no name over the one pool, no row below the claim minimum, Claim on
-// for whatever is claimable, and never Claim both
+// (the Account's default): the tile reads as before: no name over the one
+// pool, numbered pools beside each other, Claim on for whatever is claimable
+// above the claim minimum, and never Claim both
 UR_TEST(SnLedgerCtf_AServerBeforeItReadsAsBefore) {
-  const Account tiny = LedgerAccount(1, 42, 10'000'000, 0);  // under the 0.03 α floor
   for (const int64_t floor : {int64_t{0}, kFloor}) {
-    const SectionView one = Tile(true, Load::Ready, {tiny}, true, false, {}, floor);
+    const SectionView one = Tile(true, Load::Ready, {OnePool()}, true, false, {}, floor);
     UR_EXPECT_TRUE(one.status == Status::None);
     UR_EXPECT_EQ(1u, one.accounts.size());
     UR_EXPECT_TRUE(one.accounts.front().pool == PoolName::None);
@@ -251,14 +255,51 @@ UR_TEST(SnLedgerCtf_AServerBeforeItReadsAsBefore) {
     UR_EXPECT_FALSE(one.accounts.front().unavailable);
     UR_EXPECT_TRUE(one.claimEnabled);
     UR_EXPECT_FALSE(one.claimBoth);
-    UR_EXPECT_TRUE(one == Tile(true, Load::Ready, {tiny}, true));
-    const SectionView two = Tile(true, Load::Ready, {OnePool(), LedgerAccount(3, 5, 10'000'000, 0)},
+    UR_EXPECT_TRUE(one == Tile(true, Load::Ready, {OnePool()}, true));
+    const SectionView two = Tile(true, Load::Ready, {OnePool(), LedgerAccount(3, 5, 700'000'000, 0)},
                                  true, false, {}, floor);
     UR_EXPECT_TRUE(two.accounts[0].pool == PoolName::Numbered);
     UR_EXPECT_TRUE(two.accounts[1].pool == PoolName::Numbered);
     UR_EXPECT_FALSE(two.accounts[1].underFloor);
+    UR_EXPECT_TRUE(two.claimEnabled);
     UR_EXPECT_FALSE(two.claimBoth);
   }
+}
+
+// the claim minimum holds for every account, alone or beside others, from
+// every server (owner, 2026-11-11, as in every app): a lone pool account under
+// the floor says so under its figures, which stay, and counts for no Claim,
+// so the tile never offers a claim the runtime refuses; without a price
+// (floor 0) nothing is under it, and at the floor it is claimable
+UR_TEST(SnLedgerCtf_ALoneAccountBelowTheClaimMinimumSaysSo) {
+  const Account tiny = LedgerAccount(1, 42, 10'000'000, 0);  // under the 0.03 α floor
+  const SectionView lone = Tile(true, Load::Ready, {tiny}, true, false, {}, kFloor);
+  UR_EXPECT_EQ(1u, lone.accounts.size());
+  UR_EXPECT_TRUE(lone.accounts.front().pool == PoolName::None);  // still unnamed
+  UR_EXPECT_TRUE(lone.accounts.front().underFloor);
+  UR_EXPECT_TRUE(lone.accounts.front().claimable == "a10000000");
+  UR_EXPECT_TRUE(lone.showClaim);
+  UR_EXPECT_FALSE(lone.claimEnabled);
+  UR_EXPECT_FALSE(lone.claimBoth);
+  const SectionView unpriced = Tile(true, Load::Ready, {tiny}, true, false, {}, 0);
+  UR_EXPECT_FALSE(unpriced.accounts.front().underFloor);
+  UR_EXPECT_TRUE(unpriced.claimEnabled);
+  const SectionView at =
+      Tile(true, Load::Ready, {LedgerAccount(1, 42, kFloor, 0)}, true, false, {}, kFloor);
+  UR_EXPECT_FALSE(at.accounts.front().underFloor);
+  UR_EXPECT_TRUE(at.claimEnabled);
+  // two operators' pools, one of them small: it says so, and Claim claims the other
+  const SectionView two =
+      Tile(true, Load::Ready, {OnePool(), LedgerAccount(3, 5, 10'000'000, 0)}, true, false, {}, kFloor);
+  UR_EXPECT_FALSE(two.accounts[0].underFloor);
+  UR_EXPECT_TRUE(two.accounts[1].underFloor);
+  UR_EXPECT_TRUE(two.claimEnabled);
+  // beside a pool the server could not read too
+  const SectionView partial = Tile(true, Load::Ready, {tiny}, true, false,
+                                   {Unreadable(kCtfPool, urnw::snledger::kKindCtf)}, kFloor);
+  UR_EXPECT_TRUE(partial.accounts[0].underFloor);
+  UR_EXPECT_TRUE(partial.accounts[0].pool == PoolName::Provider);
+  UR_EXPECT_FALSE(partial.claimEnabled);
 }
 
 // CAPTURETHEFLAG.md §10: the capture the flag account is its own row, Capture
@@ -470,15 +511,16 @@ UR_TEST(SnLedgerConfirmedWithoutAnAmountKeepsTheClaimable) {
   UR_EXPECT_TRUE(RowOf(progress, 3, 5)->txHash == "0xdef2");
 }
 
-// APPS-SPEC.md claim (CL-4): needs_gas fails the row, keeps it claimable and
-// turns on the top-up until the next press
+// APPS-SPEC.md claim (CL-4), sdk-ctf-v2 §2.1: needs_gas sent nothing for the
+// account, which stays claimable, not failed, and turns on the top-up until
+// the next press
 UR_TEST(SnLedgerNeedsGasTurnsOnTheTopUp) {
   ClaimProgress progress = TwoPoolSheet();
   progress.Start();
   UR_EXPECT_TRUE(progress.Failed(1, 42, "needs_gas: the gas key holds 0.004 TAO"));
   UR_EXPECT_TRUE(progress.NeedsGas());
-  UR_EXPECT_TRUE(RowOf(progress, 1, 42)->phase == Phase::Failed);
-  UR_EXPECT_TRUE(RowOf(progress, 1, 42)->message == "needs_gas: the gas key holds 0.004 TAO");
+  UR_EXPECT_TRUE(RowOf(progress, 1, 42)->phase == Phase::Claimable);
+  UR_EXPECT_TRUE(RowOf(progress, 1, 42)->message.empty());
   progress.Done();
   UR_EXPECT_EQ(int64_t{3'941'000'000}, progress.ClaimableRao());
   progress.Start();
@@ -702,11 +744,19 @@ UR_TEST(SnLedgerCtf_BelowTheClaimMinimumOnTheSheet) {
   ClaimProgress paid = CtfSheet(12'000'000);
   UR_EXPECT_TRUE(paid.Failed(kCtfPool, 7, "already_claimed: NothingToClaim"));
   UR_EXPECT_TRUE(RowOf(paid, kCtfPool, 7)->phase == Phase::Claimed);
-  // a server before capture the flag: a small pool account is claimable, as before
-  const ClaimProgress before({LedgerAccount(1, 42, 12'000'000, 0)}, {}, kFloor);
-  UR_EXPECT_TRUE(before.Rows().front().phase == Phase::Claimable);
-  UR_EXPECT_EQ(int64_t{12'000'000}, before.ClaimableRao());
+  // a lone pool account, as from a server before capture the flag, waits
+  // below the claim minimum too (owner, 2026-11-11): nothing for a press
+  ClaimProgress before({LedgerAccount(1, 42, 12'000'000, 0)}, {}, kFloor);
+  UR_EXPECT_TRUE(before.Rows().front().phase == Phase::UnderFloor);
+  UR_EXPECT_EQ(int64_t{12'000'000}, before.Rows().front().amountRao);
+  UR_EXPECT_EQ(int64_t{0}, before.ClaimableRao());
   UR_EXPECT_TRUE(before.NameOf(before.Rows().front()) == PoolName::Numbered);
+  before.Start();
+  UR_EXPECT_TRUE(before.Rows().front().phase == Phase::UnderFloor);
+  // without a price it is claimable
+  const ClaimProgress unpriced({LedgerAccount(1, 42, 12'000'000, 0)}, {}, 0);
+  UR_EXPECT_TRUE(unpriced.Rows().front().phase == Phase::Claimable);
+  UR_EXPECT_EQ(int64_t{12'000'000}, unpriced.ClaimableRao());
 }
 
 // CAPTURETHEFLAG.md §10: a pool the server could not read is a row of its own,
@@ -809,8 +859,8 @@ UR_TEST(SnLedgerCtf_AnUnavailablePoolReadAtTheClaimTakesItsRow) {
 
 // the runtime's refusal of an amount under its floor (not_claimable,
 // AmountTooLow) is the claim minimum, where the relay's price did not show it
-// (no price, or no relay): beside capture the flag the row waits below it, out
-// of the total and the next press; before capture the flag it fails as before
+// (no price, or no relay): the row waits below it, out of the total and the
+// next press, beside capture the flag or not
 UR_TEST(SnLedgerCtf_TheRuntimesFloorIsTheClaimMinimum) {
   const std::string tooLow =
       "not_claimable: AmountTooLow: the claim is below the runtime's transfer floor";
@@ -831,12 +881,14 @@ UR_TEST(SnLedgerCtf_TheRuntimesFloorIsTheClaimMinimum) {
   pool.Start();
   UR_EXPECT_TRUE(pool.Failed(1, 42, tooLow));
   UR_EXPECT_TRUE(RowOf(pool, 1, 42)->phase == Phase::UnderFloor);
-  // a server before capture the flag: the refusal is a failure, as before
+  // a lone pool account, as from a server before capture the flag, waits too
   ClaimProgress before = ClaimProgress({LedgerAccount(1, 42, 12'000'000, 0)}, {}, 0);
   before.Start();
   UR_EXPECT_TRUE(before.Failed(1, 42, tooLow));
-  UR_EXPECT_TRUE(RowOf(before, 1, 42)->phase == Phase::Failed);
-  UR_EXPECT_TRUE(RowOf(before, 1, 42)->message == tooLow);
+  UR_EXPECT_TRUE(RowOf(before, 1, 42)->phase == Phase::UnderFloor);
+  UR_EXPECT_TRUE(RowOf(before, 1, 42)->message.empty());
+  before.Done();
+  UR_EXPECT_EQ(int64_t{0}, before.ClaimableRao());
 }
 
 // ledger_unavailable for a pool changes only its rows not sent yet: a row the
@@ -883,6 +935,110 @@ UR_TEST(SnLedgerCtf_AnAccountTheBatchDidNotAttemptIsSentAlone) {
   UR_EXPECT_TRUE(RowOf(progress, 1, 42)->txHash == "0xba7c");
 }
 
+// sdk-ctf-v2 §2.1: a gas key that cannot pay for the batch has the largest
+// account claimed alone first; an account it then cannot pay for fails
+// needs_gas with nothing sent: it stays claimable, in the total and the next
+// press, the top-up shows, and a retry claims what is left
+UR_TEST(SnLedgerCtf_TheLargestIsClaimedAndTheOthersStayClaimable) {
+  ClaimProgress progress = CtfSheet(615'000'000);
+  progress.Start();
+  progress.Sent(1, 42, "0x1a96");
+  progress.Confirmed(1, 42, "0x1a96", 3'241'000'000);
+  UR_EXPECT_TRUE(progress.Failed(kCtfPool, 7,
+                                 "needs_gas: this claim needs up to 0.0130 TAO of gas, the gas key "
+                                 "0x9a1c has 0.0040; send TAO to 5Gh…"));
+  progress.Done();
+  UR_EXPECT_TRUE(RowOf(progress, 1, 42)->phase == Phase::Claimed);
+  const ClaimRow* ctf = RowOf(progress, kCtfPool, 7);
+  UR_EXPECT_TRUE(ctf->phase == Phase::Claimable);
+  UR_EXPECT_TRUE(ctf->message.empty());
+  UR_EXPECT_EQ(int64_t{615'000'000}, ctf->amountRao);
+  UR_EXPECT_TRUE(progress.NeedsGas());
+  UR_EXPECT_EQ(int64_t{615'000'000}, progress.ClaimableRao());
+  UR_EXPECT_TRUE(progress.AnyClaimed());
+  progress.Start();
+  UR_EXPECT_TRUE(RowOf(progress, kCtfPool, 7)->phase == Phase::Sending);
+  UR_EXPECT_FALSE(progress.NeedsGas());
+  // an account a batch sent but did not attempt, then not paid for alone: no
+  // transaction claims it, so it links none
+  ClaimProgress batch = CtfSheet(615'000'000);
+  batch.Start();
+  batch.Sent(1, 42, "0xba7c");
+  batch.Sent(kCtfPool, 7, "0xba7c");
+  batch.Confirmed(1, 42, "0xba7c", 3'241'000'000);
+  UR_EXPECT_TRUE(batch.Failed(kCtfPool, 7, "needs_gas: the gas key cannot pay for this claim"));
+  UR_EXPECT_TRUE(RowOf(batch, kCtfPool, 7)->phase == Phase::Claimable);
+  UR_EXPECT_TRUE(RowOf(batch, kCtfPool, 7)->txHash.empty());
+  UR_EXPECT_TRUE(RowOf(batch, 1, 42)->txHash == "0xba7c");
+  // one below the claim minimum keeps saying so
+  ClaimProgress small = CtfSheet(12'000'000);
+  small.Start();
+  UR_EXPECT_TRUE(small.Failed(kCtfPool, 7, "needs_gas: the gas key cannot pay for this claim"));
+  UR_EXPECT_TRUE(RowOf(small, kCtfPool, 7)->phase == Phase::UnderFloor);
+}
+
+// Android's snLedgerClaimSettled: a pool the sheet's read could not read keeps
+// its row while the press stopped before the SDK's own read; once that read
+// answered without naming the pool unavailable or reporting an account of it,
+// the pool was read with nothing to claim, and its row goes at Done
+UR_TEST(SnLedgerCtf_AnUnavailablePoolTheClaimFoundEmptyLeaves) {
+  const std::vector<UnavailablePool> ctf = {Unreadable(kCtfPool, urnw::snledger::kKindCtf)};
+  // the SDK claimed the pool's account and said nothing of capture the flag's pool
+  ClaimProgress read({OnePool()}, ctf, kFloor);
+  read.Start();
+  read.Sent(1, 42, "0x0001");
+  read.Confirmed(1, 42, "0x0001", 3'241'000'000);
+  UR_EXPECT_EQ(2u, read.Rows().size());  // not before Done
+  read.Done();
+  UR_EXPECT_EQ(1u, read.Rows().size());
+  UR_EXPECT_TRUE(RowOf(read, kCtfPool, 0) == nullptr);
+  // the name the read gave stays: the pool is still there
+  UR_EXPECT_TRUE(read.NameOf(*RowOf(read, 1, 42)) == PoolName::Provider);
+  // nothing to claim in any pool, which the SDK never says while one is unavailable
+  ClaimProgress nothing({}, ctf, kFloor);
+  nothing.Start();
+  UR_EXPECT_FALSE(nothing.Failed(0, 0, "not_claimable: no settlement v2 account has anything to claim"));
+  nothing.Done();
+  UR_EXPECT_TRUE(nothing.Rows().empty());
+  // still unavailable to the SDK's read: the row stays
+  ClaimProgress still({OnePool()}, ctf, kFloor);
+  still.Start();
+  UR_EXPECT_TRUE(still.Failed(kCtfPool, 0, "ledger_unavailable: the pool could not be read"));
+  still.Sent(1, 42, "0x0001");
+  still.Done();
+  UR_EXPECT_TRUE(RowOf(still, kCtfPool, 0) != nullptr);
+  UR_EXPECT_TRUE(RowOf(still, kCtfPool, 0)->phase == Phase::Unavailable);
+  // stopped before the SDK's read (the chain, the ledger, a watchdog): the row stays
+  ClaimProgress stopped({OnePool()}, ctf, kFloor);
+  stopped.Start();
+  UR_EXPECT_FALSE(stopped.Failed(0, 0, "ledger_unavailable: the ledger could not be read"));
+  UR_EXPECT_FALSE(stopped.Failed(0, 0, "chain_rpc_unreachable: timeout"));
+  stopped.Done();
+  UR_EXPECT_TRUE(RowOf(stopped, kCtfPool, 0) != nullptr);
+  ClaimProgress silent({OnePool()}, ctf, kFloor);
+  silent.Start();
+  silent.Done();
+  UR_EXPECT_TRUE(RowOf(silent, kCtfPool, 0) != nullptr);
+  // its account found at the claim took the row: it stays, as that account
+  ClaimProgress found({OnePool()}, ctf, kFloor);
+  found.Start();
+  UR_EXPECT_TRUE(found.Failed(kCtfPool, 7, "not_claimable: AmountTooLow: below the runtime's floor"));
+  found.Done();
+  UR_EXPECT_TRUE(RowOf(found, kCtfPool, 7) != nullptr);
+  UR_EXPECT_TRUE(RowOf(found, kCtfPool, 7)->phase == Phase::UnderFloor);
+  // a second press reads again: a pool unavailable in it keeps its row
+  ClaimProgress again({OnePool()}, ctf, kFloor);
+  again.Start();
+  UR_EXPECT_TRUE(again.Failed(kCtfPool, 0, "ledger_unavailable: the pool could not be read"));
+  again.Failed(1, 42, "claim_failed: reverted");
+  again.Done();
+  again.Start();
+  UR_EXPECT_TRUE(again.Failed(kCtfPool, 0, "ledger_unavailable: the pool could not be read"));
+  again.Sent(1, 42, "0x0002");
+  again.Done();
+  UR_EXPECT_TRUE(RowOf(again, kCtfPool, 0) != nullptr);
+}
+
 // Claim both is the pool's account and the capture the flag account, exactly
 UR_TEST(SnLedgerCtf_ClaimBothIsExactlyThoseTwo) {
   UR_EXPECT_TRUE(CtfSheet(615'000'000).ClaimsBoth());
@@ -905,15 +1061,63 @@ RelayAccount Relay(int64_t noId, const char* kind, int64_t claimableRao,
   return account;
 }
 
-// a server before capture the flag: no per-pool rows, as before
-UR_TEST(SnLedgerCtf_RelayRowsOnlyBesideCaptureTheFlag) {
+// Android's snClaimRelayRows, on every server: Claim now's sheet lists every
+// account the relay reports, a lone pool account too, so one below the claim
+// minimum says so, and a network paid to two coldkeys shows the balance its
+// total leaves out
+UR_TEST(SnLedgerCtf_RelayRowsListEveryAccount) {
   using urnw::snledger::kKindPool;
-  UR_EXPECT_TRUE(RelayRowsFor({Relay(1, kKindPool, 3'241'000'000)}, {}, kFloor).empty());
-  UR_EXPECT_TRUE(RelayRowsFor({Relay(1, kKindPool, 3'241'000'000),
-                               Relay(1, kKindPool, 500'000'000, "5GxOtherColdkey")},
-                              {}, kFloor)
-                     .empty());
+  const std::vector<RelayRow> lone = RelayRowsFor({Relay(1, kKindPool, 3'241'000'000)}, {}, kFloor);
+  UR_EXPECT_EQ(1u, lone.size());
+  RelayRow pool;
+  pool.noId = 1;
+  pool.pool = PoolName::Numbered;
+  pool.amountRao = 3'241'000'000;
+  pool.status = RelayStatus::Pending;
+  UR_EXPECT_TRUE(lone.size() == 1 && lone[0] == pool);
+  const std::vector<RelayRow> small = RelayRowsFor({Relay(1, kKindPool, 12'000'000)}, {}, kFloor);
+  UR_EXPECT_EQ(1u, small.size());
+  UR_EXPECT_TRUE(small.size() == 1 && small[0].status == RelayStatus::UnderFloor);
+  UR_EXPECT_TRUE(small.size() == 1 && small[0].amountRao == 12'000'000);
+  const std::vector<RelayRow> unpriced = RelayRowsFor({Relay(1, kKindPool, 12'000'000)}, {}, 0);
+  UR_EXPECT_TRUE(unpriced.size() == 1 && unpriced[0].status == RelayStatus::Pending);
+  const std::vector<RelayRow> two = RelayRowsFor(
+      {Relay(1, kKindPool, 3'241'000'000), Relay(1, kKindPool, 500'000'000, "5GxOtherColdkey")}, {},
+      kFloor);
+  UR_EXPECT_EQ(2u, two.size());
+  UR_EXPECT_TRUE(two.size() == 2 && two[0].coldkeySs58 == "5F3sColdkey");
+  UR_EXPECT_TRUE(two.size() == 2 && two[1].coldkeySs58 == "5GxOtherColdkey");
+  UR_EXPECT_TRUE(two.size() == 2 && two[1].pool == PoolName::Numbered);
+  // URnetwork's claim of a lone account: Claimed with its transaction
+  RelayAccount claimed = Relay(1, kKindPool, 0);
+  claimed.claimTxHash = "0x" + std::string(64, 'c');
+  claimed.claimTxUrl = "https://evm.taostats.io/tx/" + claimed.claimTxHash;
+  claimed.claimAmountRao = 3'241'000'000;
+  const std::vector<RelayRow> paid = RelayRowsFor({claimed}, {}, kFloor);
+  UR_EXPECT_EQ(1u, paid.size());
+  UR_EXPECT_TRUE(paid.size() == 1 && paid[0].status == RelayStatus::Claimed);
+  UR_EXPECT_TRUE(paid.size() == 1 && paid[0].txUrl == claimed.claimTxUrl);
+  // nothing to claim and no claim of URnetwork's: no row
+  UR_EXPECT_TRUE(RelayRowsFor({Relay(1, kKindPool, 0)}, {}, kFloor).empty());
   UR_EXPECT_TRUE(RelayRowsFor({}, {}, kFloor).empty());
+}
+
+// Android's snClaimRelayTotalKnown: the relay's claimable adds up the primary
+// coldkey's accounts, so it is a total to show while one of them was read, or
+// nothing is unavailable; with none of its pools read there is no total,
+// never a zero
+UR_TEST(SnLedgerCtf_TheRelaysTotalNeedsOneOfTheColdkeysPools) {
+  using urnw::snledger::kKindCtf;
+  using urnw::snledger::kKindPool;
+  using urnw::snledger::RelayTotalKnown;
+  UR_EXPECT_TRUE(RelayTotalKnown({Relay(1, kKindPool, 3'241'000'000)}, "5F3sColdkey", {}));
+  UR_EXPECT_TRUE(RelayTotalKnown({}, "5F3sColdkey", {}));  // nothing at all: a zero that is one
+  UR_EXPECT_TRUE(RelayTotalKnown({Relay(1, kKindPool, 0)}, "5F3sColdkey",
+                                 {Unreadable(kCtfPool, kKindCtf)}));
+  UR_EXPECT_FALSE(RelayTotalKnown({}, "5F3sColdkey", {Unreadable(1, kKindPool)}));
+  // another coldkey's account is not the primary's
+  UR_EXPECT_FALSE(RelayTotalKnown({Relay(1, kKindPool, 500'000'000, "5GxOtherColdkey")}, "5F3sColdkey",
+                                  {Unreadable(1, kKindPool), Unreadable(kCtfPool, kKindCtf)}));
 }
 
 // Android's snClaimRelayRows: each pool with something to claim, Pending, or
@@ -1016,6 +1220,14 @@ UR_TEST(SnLedgerCtf_TheRelayTileListsThePrimaryColdkeysPools) {
                                    Relay(1, kKindPool, 500'000'000, "5GxOtherColdkey")},
                                   "5F3sColdkey", {}, kFloor)
                      .empty());
+  // two operators' pools of the primary coldkey: the sum adds up two, so each
+  // is a row (Android's snLedgerNamesPools), one below the minimum saying so
+  const std::vector<RelayRow> pools = RelayTileRowsFor(
+      {Relay(1, kKindPool, 3'241'000'000), Relay(3, kKindPool, 12'000'000)}, "5F3sColdkey", {}, kFloor);
+  UR_EXPECT_EQ(2u, pools.size());
+  UR_EXPECT_TRUE(pools.size() == 2 && pools[0].pool == PoolName::Numbered);
+  UR_EXPECT_TRUE(pools.size() == 2 && pools[0].status == RelayStatus::Pending);
+  UR_EXPECT_TRUE(pools.size() == 2 && pools[1].status == RelayStatus::UnderFloor);
   // the pool's and the capture the flag account of the primary coldkey, the
   // other coldkey's left to Claim now's sheet
   const std::vector<RelayRow> rows =
@@ -1048,17 +1260,81 @@ UR_TEST(SnLedgerCtf_TheRelayTileListsThePrimaryColdkeysPools) {
   UR_EXPECT_TRUE(partial[1].pool == PoolName::Ctf);
 }
 
+// the tile's sum, drawn without rows, is one account: below the claim minimum
+// it says so under the sum, as the wallet tile's lone account does, on every
+// server; rows say it for themselves
+UR_TEST(SnLedgerCtf_TheRelayTilesLoneSumBelowTheClaimMinimumSaysSo) {
+  using urnw::snledger::kKindCtf;
+  using urnw::snledger::kKindPool;
+  using urnw::snledger::RelayTileSumUnderFloor;
+  UR_EXPECT_TRUE(RelayTileSumUnderFloor({Relay(1, kKindPool, 12'000'000)}, "5F3sColdkey", {}, kFloor));
+  UR_EXPECT_FALSE(RelayTileSumUnderFloor({Relay(1, kKindPool, 12'000'000)}, "5F3sColdkey", {}, 0));
+  UR_EXPECT_FALSE(
+      RelayTileSumUnderFloor({Relay(1, kKindPool, 3'241'000'000)}, "5F3sColdkey", {}, kFloor));
+  UR_EXPECT_FALSE(RelayTileSumUnderFloor({Relay(1, kKindPool, 0)}, "5F3sColdkey", {}, kFloor));
+  // another coldkey's small account is not the sum's
+  UR_EXPECT_FALSE(RelayTileSumUnderFloor(
+      {Relay(1, kKindPool, 3'241'000'000), Relay(1, kKindPool, 12'000'000, "5GxOtherColdkey")},
+      "5F3sColdkey", {}, kFloor));
+  // with rows, each says it itself
+  UR_EXPECT_FALSE(RelayTileSumUnderFloor({Relay(kCtfPool, kKindCtf, 12'000'000)}, "5F3sColdkey", {},
+                                         kFloor));
+  UR_EXPECT_FALSE(RelayTileSumUnderFloor({Relay(1, kKindPool, 12'000'000)}, "5F3sColdkey",
+                                         {Unreadable(kCtfPool, kKindCtf)}, kFloor));
+}
+
 // ---- capture the flag: the line of a won slot ---------------------------------------
 
-// GET /sn/ctf/client's latest win picks the line by the role that won; none
-// without a win, a country or a role this build knows
+Win WonIn(int64_t epoch, const char* role, const char* country,
+          const char* claimState = urnw::snledger::kClaimStateUnclaimed) {
+  Win win;
+  win.role = role;
+  win.country = country;
+  win.epoch = epoch;
+  win.claimState = claimState;
+  return win;
+}
+
+// a win's line follows the role that won; none without a country or a role
+// this build knows
 UR_TEST(SnLedgerCtf_TheWonSlotLineFollowsTheRole) {
-  UR_EXPECT_TRUE(WonSlotFor(Win{"provider", "ke"}) == WonSlot::Provider);
-  UR_EXPECT_TRUE(WonSlotFor(Win{"extender", "is"}) == WonSlot::Extender);
-  UR_EXPECT_TRUE(WonSlotFor(std::nullopt) == WonSlot::None);
-  UR_EXPECT_TRUE(WonSlotFor(Win{"provider", ""}) == WonSlot::None);
-  UR_EXPECT_TRUE(WonSlotFor(Win{"head", "ke"}) == WonSlot::None);
-  UR_EXPECT_TRUE(WonSlotFor(Win{"", "ke"}) == WonSlot::None);
+  UR_EXPECT_TRUE(WonSlotFor(WonIn(8, "provider", "ke")) == WonSlot::Provider);
+  UR_EXPECT_TRUE(WonSlotFor(WonIn(8, "extender", "is")) == WonSlot::Extender);
+  UR_EXPECT_TRUE(WonSlotFor(WonIn(8, "provider", "")) == WonSlot::None);
+  UR_EXPECT_TRUE(WonSlotFor(WonIn(8, "head", "ke")) == WonSlot::None);
+  UR_EXPECT_TRUE(WonSlotFor(WonIn(8, "", "ke")) == WonSlot::None);
+}
+
+// owner, 2026-11-11: a line for every win not claimed yet (the SDK's
+// UnclaimedWins), one each, newest first, providers before extenders within
+// an epoch as the SDK lists them; none for no wins, a win claimed or of
+// unknown claim, or one the line would guess at
+UR_TEST(SnLedgerCtf_EveryUnclaimedWinIsALine) {
+  using urnw::snledger::kClaimStateClaimed;
+  using urnw::snledger::kClaimStateUnknown;
+  UR_EXPECT_TRUE(WonLinesFor({}).empty());
+  const std::vector<WonLine> lines =
+      WonLinesFor({WonIn(8, "provider", "ke"), WonIn(10, "provider", "is"), WonIn(10, "extender", "is"),
+                   WonIn(9, "extender", "ke")});
+  UR_EXPECT_EQ(4u, lines.size());
+  if (lines.size() == 4) {
+    UR_EXPECT_TRUE(lines[0] == (WonLine{WonSlot::Provider, "is"}));
+    UR_EXPECT_TRUE(lines[1] == (WonLine{WonSlot::Extender, "is"}));
+    UR_EXPECT_TRUE(lines[2] == (WonLine{WonSlot::Extender, "ke"}));
+    UR_EXPECT_TRUE(lines[3] == (WonLine{WonSlot::Provider, "ke"}));
+  }
+  // one role's slot of one country twice (two epochs, or two of the network's
+  // clients): two wins, two lines
+  UR_EXPECT_EQ(2u, WonLinesFor({WonIn(9, "provider", "ke"), WonIn(8, "provider", "ke")}).size());
+  UR_EXPECT_EQ(2u, WonLinesFor({WonIn(9, "provider", "ke"), WonIn(9, "provider", "ke")}).size());
+  // a win claimed or of unknown claim has none; nor one without a country or a
+  // role this build knows
+  const std::vector<WonLine> left =
+      WonLinesFor({WonIn(10, "provider", "is", kClaimStateClaimed), WonIn(10, "extender", "is", kClaimStateUnknown),
+                   WonIn(9, "provider", ""), WonIn(9, "head", "ke"), WonIn(8, "extender", "ke")});
+  UR_EXPECT_EQ(1u, left.size());
+  if (left.size() == 1) UR_EXPECT_TRUE(left[0] == (WonLine{WonSlot::Extender, "ke"}));
+  UR_EXPECT_TRUE(WonLinesFor({WonIn(9, "provider", "ke", "")}).empty());
 }
 
 // ---- the page's wiring and English, read from the sources ----------------------
@@ -1316,14 +1592,27 @@ UR_TEST(SnLedgerCtf_TheTileDrawsEachRow) {
   UR_EXPECT_TRUE(LedgerFunctionBody(page, "int64_t EarningsPage::TransferFloorRao() const")
                      .find("claimStatus_ && !claimStatus_->error ? claimStatus_->transfer_floor_rao "
                            ": 0;") != std::string::npos);
-  // a network with no wallet here: the relay's sum, what it adds up pool by
-  // pool, and the pools it leaves out
+  // a network with no wallet here: the relay's sum, while one of the
+  // coldkey's pools was read, saying when it is one account below the claim
+  // minimum; what it adds up pool by pool, and the pools it leaves out, with
+  // Pending left to the relay's part below (Android's tile rows)
+  const size_t known = tile.find("if (snledger::RelayTotalKnown(relayAccounts, coldkey, unavailable)) {");
+  UR_EXPECT_TRUE(known != std::string::npos);
+  UR_EXPECT_TRUE(known < tile.find("FormatAlphaRao(claimStatus_->claimable_rao)"));
+  UR_EXPECT_TRUE(tile.find("if (snledger::RelayTileSumUnderFloor(relayAccounts, coldkey, unavailable, "
+                           "floorRao)) {\n"
+                           "        block->append(*MakeWrappedNote(\n"
+                           "            T_(\"sn_ledger_pool_under_floor\", \"Below the claim minimum\")") !=
+                 std::string::npos);
   UR_EXPECT_TRUE(tile.find("AppendRelayRows(*ledgerRows_,\n"
-                           "                    snledger::RelayTileRowsFor(RelayAccountsOf(*claimStatus_),\n"
-                           "                                               claimStatus_->coldkey_ss58."
-                           "value_or(std::string()),\n"
-                           "                                               UnavailablePoolsOf(claimStatus_->"
-                           "unavailable_pools),") != std::string::npos);
+                           "                    snledger::RelayTileRowsFor(relayAccounts, coldkey, "
+                           "unavailable, floorRao),\n"
+                           "                    [this](const std::string& url) { OpenLink(url); }, "
+                           "/*pendingPill=*/false);") != std::string::npos);
+  UR_EXPECT_TRUE(tile.find("RelayAccountsOf(*claimStatus_)") != std::string::npos);
+  UR_EXPECT_TRUE(tile.find("UnavailablePoolsOf(claimStatus_->unavailable_pools)") != std::string::npos);
+  UR_EXPECT_TRUE(tile.find("const int64_t floorRao = claimStatus_->transfer_floor_rao;") !=
+                 std::string::npos);
 }
 
 // CAPTURETHEFLAG.md §10: one action claims both pools: the sheet's one Claim is
@@ -1365,13 +1654,23 @@ UR_TEST(SnLedgerCtf_OneActionClaimsBothPools) {
 UR_TEST(SnLedgerCtf_TheRelaySheetListsEachPool) {
   const std::string relay = ReadLedgerSource("ClaimRelay.cpp");
   const std::string sheet = LedgerFunctionBody(relay, "void ClaimRelaySheet::Apply(");
-  UR_EXPECT_TRUE(sheet.find("snledger::RelayRowsFor(RelayAccountsOf(*status), "
-                            "UnavailablePoolsOf(status->unavailable_pools),\n"
-                            "                             status->transfer_floor_rao);") !=
+  UR_EXPECT_TRUE(sheet.find("const std::vector<snledger::RelayAccount> accounts = "
+                            "RelayAccountsOf(*status);") != std::string::npos);
+  UR_EXPECT_TRUE(sheet.find("UnavailablePoolsOf(status->unavailable_pools);") != std::string::npos);
+  UR_EXPECT_TRUE(sheet.find("snledger::RelayRowsFor(accounts, unavailable, status->transfer_floor_rao);") !=
                  std::string::npos);
   UR_EXPECT_TRUE(sheet.find("AppendRelayRows(*content_, rows, openLink);") != std::string::npos);
+  // the total only while one of the coldkey's pools was read: never a zero
+  const size_t known = sheet.find("if (snledger::RelayTotalKnown(accounts, coldkey, unavailable)) {");
+  UR_EXPECT_TRUE(known != std::string::npos);
+  UR_EXPECT_TRUE(known < sheet.find("T_(\"sn_ledger_claimable\", \"Claimable\")"));
+  UR_EXPECT_TRUE(known < sheet.find("urnet::formatAlpha(status->claimable_rao)"));
   UR_EXPECT_TRUE(sheet.find("/*transaction=*/!RowsLinkATransaction(rows)") != std::string::npos);
   const std::string rows = LedgerFunctionBody(relay, "void AppendRelayRows(");
+  // the tile's rows leave Pending to the relay's part under them
+  UR_EXPECT_TRUE(rows.find("if (pendingPill) status = T_(\"pending_data_key\", \"Pending\");") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(rows.find("if (!status.empty()) {") != std::string::npos);
   for (const char* lookup :
        {"T_(\"pending_data_key\", \"Pending\")",
         "T_(\"sn_ledger_pool_under_floor\", \"Below the claim minimum\")",
@@ -1387,25 +1686,42 @@ UR_TEST(SnLedgerCtf_TheRelaySheetListsEachPool) {
   UR_EXPECT_TRUE(names.find("Format(T_(\"sn_ledger_pool\", \"Pool {}\"), noId)") != std::string::npos);
 }
 
-// the won slot's line: GET /sn/ctf/client through the device, read on every
-// load and forgotten on sign-out, worded by the role that won with the
+// the won slots' lines: GET /sn/ctf/client through the device, every win the
+// SDK lists as not claimed yet, read on every load and after a v2 claim's
+// Done, forgotten on sign-out, each worded by the role that won with the
 // country's name
 UR_TEST(SnLedgerCtf_TheWonSlotLineIsWired) {
   const std::string page = ReadLedgerSource("EarningsPage.cpp");
-  const std::string fetch = LedgerFunctionBody(page, "void FetchCtfWin(SdkHost& host, CtfWinDone done)");
+  const std::string fetch = LedgerFunctionBody(page, "void FetchCtfWins(SdkHost& host, CtfWinsDone done)");
   UR_EXPECT_TRUE(fetch.find("host.device().snCtfClient(") != std::string::npos);
   // an answer that could not be read draws no line, never "no wins"
-  UR_EXPECT_TRUE(fetch.find("if (err || !result || result->error || !result->latest_win) {") !=
+  UR_EXPECT_TRUE(fetch.find("if (err || !result || result->error || !result->unclaimed_wins) {") !=
                  std::string::npos);
-  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::LoadEarnings()").find("LoadCtfWin();") !=
+  UR_EXPECT_TRUE(fetch.find("for (const urnet::SnCtfWin& unclaimed : *result->unclaimed_wins) {") !=
                  std::string::npos);
-  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::SettleAllEmpty()").find("ctfWin_.reset();") !=
+  for (const char* field : {"win.role = unclaimed.role;", "win.country = unclaimed.country;",
+                            "win.epoch = unclaimed.epoch;", "win.claimState = unclaimed.claim_state;"}) {
+    UR_EXPECT_TRUE_MSG(field, fetch.find(field) != std::string::npos);
+  }
+  UR_EXPECT_TRUE(fetch.find("latest_win") == std::string::npos);
+  // the claim states are the SDK's
+  const std::string relay = ReadLedgerSource("ClaimRelay.cpp");
+  UR_EXPECT_TRUE(relay.find("static_assert(std::string_view(snledger::kClaimStateUnclaimed) == "
+                            "urnet::SnCtfWinClaimStateUnclaimed,") != std::string::npos);
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::LoadEarnings()").find("LoadCtfWins();") !=
                  std::string::npos);
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::SettleAllEmpty()").find("ctfWins_.clear();") !=
+                 std::string::npos);
+  // a win the claim paid is claimed now: the lines are read again after Done
+  const std::string start = LedgerFunctionBody(page, "void EarningsPage::StartLedgerClaim()");
+  const size_t settle = start.find("if (!SettleFlow(ledgerClaimFlow_, generation, \"v2 claim\")) return;");
+  UR_EXPECT_TRUE(settle != std::string::npos && start.find("LoadCtfWins();", settle) != std::string::npos);
   const std::string tile = LedgerFunctionBody(page, "void EarningsPage::RebuildLedgerTile()");
-  UR_EXPECT_TRUE(tile.find("const snledger::WonSlot won = snledger::WonSlotFor(ctfWin_);") !=
+  UR_EXPECT_TRUE(tile.find("for (const snledger::WonLine& won : snledger::WonLinesFor(ctfWins_)) {") !=
                  std::string::npos);
-  UR_EXPECT_TRUE(tile.find("const std::string country = CountryNameOrCode(ctfWin_->country);") !=
+  UR_EXPECT_TRUE(tile.find("const std::string country = CountryNameOrCode(won.country);") !=
                  std::string::npos);
+  UR_EXPECT_TRUE(tile.find("won.slot == snledger::WonSlot::Provider") != std::string::npos);
   UR_EXPECT_TRUE(tile.find("Format(T_(\"sn_ctf_won_provider_slot\", \"You won one of the {} provider "
                            "slots\"), country)") != std::string::npos);
   UR_EXPECT_TRUE(tile.find("Format(T_(\"sn_ctf_won_extender_slot\", \"You won one of the {} extender "

@@ -532,11 +532,12 @@ class EarningsPage : public Gtk::Box {
   // minimum.
   int64_t TransferFloorRao() const;
 
-  // ---- capture the flag: the won slot's line (GET /sn/ctf/client) -----------
-  // This device's latest win, read on every load: the line with the capture
-  // the flag account names the role and the country (snledger::WonSlotFor).
-  void LoadCtfWin();
-  void ApplyCtfWin(std::optional<snledger::Win> win);
+  // ---- capture the flag: the won slots' lines (GET /sn/ctf/client) ---------
+  // Every win whose award is not claimed yet, read on every load and after a
+  // v2 claim: a line each, newest first, naming the role and the country
+  // (snledger::WonLinesFor).
+  void LoadCtfWins();
+  void ApplyCtfWins(std::vector<snledger::Win> wins);
 
   // ---- the Solana payout wallet (USDC until the Bittensor migration) ---------
   // The three-dot overflow (icon-only, named "Wallet options") over `menu`.
@@ -913,9 +914,9 @@ class EarningsPage : public Gtk::Box {
   bool claimingNow_ = false;
   std::weak_ptr<ClaimRelaySheet> claimRelaySheet_;
 
-  // this device's latest capture the flag win (nullopt: none, not read yet, or
-  // its read failed: no line, never "no wins")
-  std::optional<snledger::Win> ctfWin_;
+  // the capture the flag wins not claimed yet (none: none, not read yet, or
+  // their read failed: no line, never "no wins")
+  std::vector<snledger::Win> ctfWins_;
 
   // preview + balance relay
   bool previewMode_ = false;
