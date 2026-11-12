@@ -565,7 +565,7 @@ class SdkHost {
   static std::vector<std::string> IngressCountryCodes();
   static std::vector<std::string> IngressDohUrls(const std::string& countryCode);
   static std::vector<std::string> IngressPlainDnsServers(const std::string& countryCode);
-  // A call to URnetwork failed at the network level (region::IsCantReachError):
+  // A call to URnetwork failed at the network level (urnet::isCantReachError):
   // the handler runs, off the main loop, with the error. The window offers the
   // connection region picker; nothing changes the region by itself.
   using ApiUnreachableHandler = std::function<void(const std::string& error)>;
@@ -2310,7 +2310,7 @@ class SdkHost {
   JwtRefreshedHandler onJwtRefreshed_;
   ApiUnreachableHandler onApiUnreachable_;
   // Hands a failed call's transport error to onApiUnreachable_ when it is a
-  // network-level failure (region::IsCantReachError).
+  // network-level failure (urnet::isCantReachError, the SDK's one rule).
   void NoteApiError(const std::optional<std::string>& err);
   ConnectReadingHandler onReading_;
   // The last KNOWN connect-controller status of the CURRENT session, held as

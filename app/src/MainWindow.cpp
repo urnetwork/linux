@@ -1483,9 +1483,22 @@ void MainWindow::RefreshConnectionRegionControl() {
                                          ConnectionRegionName(host_)));
 }
 
+// SdkHost hands over only a failure the SDK's rule found unreachable
+// (urnet::isCantReachError).
 void MainWindow::OnApiUnreachable(const std::string& error) {
-  cantReach_.OnFailure(error);
-  if (!cantReach_.visible()) return;
+  (void)error;
+  ShowCantReachPrompt();
+}
+
+// Signed in, the connect window's diagnosis has just turned to the platform
+// being unreachable (urnet::cantReachOnStall): the same prompt as a failed
+// call, as Windows raises it (support inbox 7956, 7973).
+void MainWindow::OnPlatformUnreachable() {
+  ShowCantReachPrompt();
+}
+
+void MainWindow::ShowCantReachPrompt() {
+  cantReach_.Raise();
   const Glib::ustring prompt = T_("cant_reach_urnetwork_choose_region",
                                   "Can't reach URnetwork — choose where you're connecting from");
   // The login page's line alone left a sign-in step past it (the password or
@@ -2809,6 +2822,11 @@ void MainWindow::ApplyConnectReading(const ConnectReading& reading) {
     return health::SessionUp(r.ToSignals(/*disconnectRequested=*/false));
   };
   const bool sessionChanged = !readingApplied_ || sessionUp(reading) != sessionUp(reading_);
+  // Can't reach URnetwork while signed in: the SDK's rule says whether the
+  // window's diagnosis has just turned to the platform being unreachable,
+  // once per turn (reading_ is the reading before this one).
+  const bool platformTurnedUnreachable =
+      urnet::cantReachOnStall(reading_.stallReason, reading.stallReason);
   readingApplied_ = true;
   const bool wasConnected = connected_;
   reading_ = reading;
@@ -2852,6 +2870,9 @@ void MainWindow::ApplyConnectReading(const ConnectReading& reading) {
   ApplySlowInternet();
   // and the client limit notice only while a connection is requested
   ObserveClientLimit();
+  // signed in, a connect that just found the platform unreachable offers the
+  // connection region picker
+  if (platformTurnedUnreachable && signedIn_) OnPlatformUnreachable();
 }
 
 void MainWindow::NoteTap(connect_tap::Pending pending) {

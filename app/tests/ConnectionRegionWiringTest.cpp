@@ -82,7 +82,9 @@ UR_TEST(ConnectionRegionWiring_SignInFailuresReportCantReach) {
     UR_EXPECT_TRUE_MSG(signature, Has(Body(host, signature), "NoteApiError(err);"));
   }
   const std::string note = Body(host, "void SdkHost::NoteApiError(");
-  UR_EXPECT_TRUE(Has(note, "region::IsCantReachError(*err)"));
+  // the SDK's one rule for every app (sdk cant_reach.go; support inbox 7956, 7973)
+  UR_EXPECT_TRUE(Has(note, "urnet::isCantReachError(*err)"));
+  UR_EXPECT_FALSE(Has(note, "region::IsCantReachError"));
   UR_EXPECT_TRUE(Has(note, "onApiUnreachable_(*err)"));
 }
 
@@ -92,8 +94,9 @@ UR_TEST(ConnectionRegionWiring_ThePromptOpensThePickerAndSetsNothing) {
   const std::string window = Source("MainWindow.cpp");
   UR_EXPECT_TRUE(Has(window, "host_.SetApiUnreachableHandler("));
   UR_EXPECT_TRUE(Has(window, "PostToMain([this, error] { OnApiUnreachable(error); });"));
-  const std::string unreachable = Body(window, "void MainWindow::OnApiUnreachable(");
-  UR_EXPECT_TRUE(Has(unreachable, "cantReach_.OnFailure(error);"));
+  UR_EXPECT_TRUE(Has(Body(window, "void MainWindow::OnApiUnreachable("), "ShowCantReachPrompt();"));
+  const std::string unreachable = Body(window, "void MainWindow::ShowCantReachPrompt(");
+  UR_EXPECT_TRUE(Has(unreachable, "cantReach_.Raise();"));
   UR_EXPECT_TRUE(Has(unreachable, "cantReachBtn_->set_visible(true);"));
   UR_EXPECT_TRUE(Has(unreachable, "[this] { OpenConnectionRegion(); }"));
   UR_EXPECT_FALSE(Has(unreachable, "SetIngressCountryCode"));
@@ -105,13 +108,29 @@ UR_TEST(ConnectionRegionWiring_ThePromptOpensThePickerAndSetsNothing) {
 // page, the toast never reached a sign-in step past the login page, whose
 // failure then showed only on the login page's line, out of sight.
 UR_TEST(ConnectionRegionWiring_ThePromptIsPlacedByTheVisiblePage) {
-  const std::string unreachable = Body(Source("MainWindow.cpp"), "void MainWindow::OnApiUnreachable(");
+  const std::string unreachable = Body(Source("MainWindow.cpp"), "void MainWindow::ShowCantReachPrompt(");
   UR_EXPECT_TRUE(Has(unreachable, "region::PlaceCantReachPrompt(stack_.get_visible_child_name().raw())"));
   UR_EXPECT_TRUE(Has(unreachable, "if (placement.loginLine) cantReachBtn_->set_visible(true);"));
   UR_EXPECT_FALSE(Has(unreachable, "!= \"home\""));
   const size_t gate = unreachable.find("if (!placement.toast) return;");
   const size_t toast = unreachable.find("cantReachToast_.Show(stack_");
   UR_EXPECT_TRUE(gate != std::string::npos && toast != std::string::npos && gate < toast);
+}
+
+// Support inbox 7956, 7973: signed in, Windows alone raised the prompt as the
+// connect window's diagnosis turned to the platform being unreachable. The
+// window asks the SDK's rule with the reading before this one, ahead of
+// replacing it, and a turn raises the same prompt a failed call does.
+UR_TEST(ConnectionRegionWiring_ASignedInStallRaisesThePromptByTheSdksRule) {
+  const std::string window = Source("MainWindow.cpp");
+  const std::string apply = Body(window, "void MainWindow::ApplyConnectReading(");
+  const size_t ask = apply.find("urnet::cantReachOnStall(reading_.stallReason, reading.stallReason)");
+  const size_t replace = apply.find("reading_ = reading;");
+  UR_EXPECT_TRUE(ask != std::string::npos && replace != std::string::npos && ask < replace);
+  UR_EXPECT_TRUE(Has(apply, "if (platformTurnedUnreachable && signedIn_) OnPlatformUnreachable();"));
+  UR_EXPECT_TRUE(Has(Body(window, "void MainWindow::OnPlatformUnreachable("), "ShowCantReachPrompt();"));
+  // the reading carries the SDK's diagnosis of the forming window
+  UR_EXPECT_TRUE(Has(Source("SdkHost.cpp"), "r.stallReason = windowStatus->StallReason;"));
 }
 
 // Both doors open ConnectionRegionSheet over SdkHost, the one store.

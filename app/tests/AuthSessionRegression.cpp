@@ -58,6 +58,17 @@ struct AuthNetworkClientArgs { std::string description, device_spec; };
 struct AuthNetworkClientResult { std::optional<Error> error; std::optional<std::string> by_client_jwt; };
 template<class T> using Callback = std::function<void(std::optional<T>, std::optional<std::string>)>;
 using AuthNetworkClientCallback = Callback<AuthNetworkClientResult>;
+// The SDK's one can't-reach rule (sdk cant_reach.go isCantReachError), which
+// NoteApiError asks, faked for the cases below: an http status answer is the
+// platform answering; a dial or lookup failure got no answer.
+inline bool isCantReachError(const std::string& error) {
+  if (4 <= error.size() && std::isdigit(static_cast<unsigned char>(error[0])) &&
+      std::isdigit(static_cast<unsigned char>(error[1])) &&
+      std::isdigit(static_cast<unsigned char>(error[2])) && error[3] == ' ') {
+    return false;
+  }
+  return error.find("dial tcp") != std::string::npos || error.find("no such host") != std::string::npos;
+}
 }
 
 struct Api {
