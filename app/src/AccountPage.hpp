@@ -118,6 +118,10 @@ struct AccountBalance {
   int64_t availableByteCount = 0;
   int64_t startBalanceByteCount = 0;
   bool isPro = false;
+  // ShownPlan and PlanReadFailed: the plan value (account_plan::PlanViewFor),
+  // never Free before the server says so; "unknown" until a relay lands
+  std::string shownPlan = "unknown";
+  bool planReadFailed = false;
   bool guest = false;
   // SubscriptionStoreFamily: Manage Subscription shows only for "stripe", and
   // "crypto" (a one-time crypto year) reads "does not renew"
@@ -201,6 +205,9 @@ class AccountPage : public Gtk::Box {
   // A Pro network's plan label ("Pro") replays the Pro celebration (android
   // AccountRootSubscription onPlanLabelTap); free and guest labels are inert.
   std::function<void()> on_plan_label_tap;
+  // The plan value's Try again, after a balance read failed with no answer
+  // since: the window reads the balance again (the store it owns).
+  std::function<void()> on_retry_plan;
   // The Redeem row: the existing RedeemCodeSheet (linux-reuse §2.15), which
   // needs the balance store the window owns.
   std::function<void()> on_open_redeem;
@@ -325,6 +332,7 @@ class AccountPage : public Gtk::Box {
   // ---- pane A ----------------------------------------------------------------
   Gtk::Spinner* planRing_ = nullptr;  // active + visible ONLY while confirming
   Gtk::Label* planValue_ = nullptr;
+  Gtk::Button* planRetry_ = nullptr;  // shown only after a failed balance read
   AccountUsageBar* usageBar_ = nullptr;
   Gtk::Button* upgradeButton_ = nullptr;
   // a renewal whose payment did not go through: the past-due notice and its

@@ -7,12 +7,14 @@
 
 #include "GuestConversion.hpp"
 
+#include "AccountPlanRows.hpp"
 #include "AppPrefs.hpp"
 #include "CryptoPay.hpp"
 #include "PaymentPastDue.hpp"
 
 #include <algorithm>
 #include <cstdio>
+#include <string_view>
 #include <utility>
 
 #include <glib.h>
@@ -20,6 +22,12 @@
 #include "Ui.hpp"  // PostToMain
 
 namespace urnw {
+
+// AccountPlanRows.hpp reads the sdk's plan values by their text
+static_assert(std::string_view(urnet::ShownPlanPro) == account_plan::kShownPlanPro);
+static_assert(std::string_view(urnet::ShownPlanFree) == account_plan::kShownPlanFree);
+static_assert(std::string_view(urnet::ShownPlanUnknown) == account_plan::kShownPlanUnknown);
+
 namespace {
 constexpr unsigned kBackgroundPollingSeconds = 30;   // mac backgroundPollingInterval
 // mac pollingInterval. The give-up budget (kConfirmationBudgetMillis, mac
@@ -65,8 +73,9 @@ void SubscriptionBalanceStore::Start() {
   paymentPastDue_ = false;
 
   // Offline Pro: the jwt's Pro (and GuestMode) claims are readable without a
-  // network call — the plan label is right even before the first fetch. The
-  // sdk's decision reads the Pro claim until the first fetch lands.
+  // network call — a Pro label is right even before the first fetch. The
+  // sdk's decision reads the Pro claim until the first fetch lands; a claim
+  // of Free is not shown as Free until the server says so (ShownPlan).
   serverGuest_ = false;
   proTracker_.reset();
   TrackStoredJwt();
@@ -184,6 +193,7 @@ void SubscriptionBalanceStore::OnJwtRefreshed() {
   if (!byJwt) return;
   const bool before = isPro_;
   const bool guestBefore = isGuest_;
+  const std::string planBefore = proTracker_.getShownPlan();
   // The refresh renewed the client token; the stored jwt is usually the one
   // read before, and the sdk's decision keeps Pro the server's once a fetch
   // answered. Re-deriving Pro from its claim here flipped Pro back, and the
@@ -193,7 +203,11 @@ void SubscriptionBalanceStore::OnJwtRefreshed() {
   // a refresh signs the jwt without GuestMode; the server's guest still holds
   jwtGuest_ = byJwt->GuestMode;
   isGuest_ = IsGuestNetwork(jwtGuest_, serverGuest_);
-  if (isPro_ != before || isGuest_ != guestBefore) Emit();
+  // the plan can change without Pro (another network's jwt starts over)
+  if (isPro_ != before || isGuest_ != guestBefore ||
+      proTracker_.getShownPlan() != planBefore) {
+    Emit();
+  }
 }
 
 void SubscriptionBalanceStore::TrackStoredJwt() {
@@ -230,6 +244,10 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
           if (err || !result) {
             if (err) std::fprintf(stderr, "[balance] fetch failed: %s\n", err->c_str());
             errorFetching_ = true;
+            // the plan stays the server's last answer, and before one it
+            // reads failed with Try again, never Free (support inbox 4074);
+            // the Emit below repaints it
+            proTracker_.balanceFailed();
           } else {
             errorFetching_ = false;
             hasFetched_ = true;
