@@ -1119,26 +1119,35 @@ void ClaimNow(SdkHost& host, const std::string& coldkeySs58, ClaimNowDone done) 
   });
 }
 
-// This device's latest capture the flag win (GET /sn/ctf/client, read by the
-// SDK with the device's client JWT): the role that won one of a country's
-// slots, and the country. An answer that could not be read, like one with no
-// win, is nullopt: no line, never "no wins".
-using CtfWinDone = std::function<void(std::optional<snledger::Win> win)>;
-void FetchCtfWin(SdkHost& host, CtfWinDone done) {
+// The capture the flag wins whose awards are not claimed yet (GET
+// /sn/ctf/client, read by the SDK in the daemon with the network's credential,
+// else the device's client token, as ur.io reads them; no answer of the route
+// signs anyone out): each the role that won one of a country's slots in an
+// epoch's auction, and the country, newest first, of all of the network's
+// clients. An answer that could not be read (ctf_unavailable among others) is
+// no wins to show: no line, never "no wins".
+using CtfWinsDone = std::function<void(std::vector<snledger::Win> wins)>;
+void FetchCtfWins(SdkHost& host, CtfWinsDone done) {
   if (!host.DeviceSteady()) {
-    done(std::nullopt);
+    done({});
     return;
   }
   host.device().snCtfClient([done](std::optional<urnet::SnCtfClientResult> result,
                                    std::optional<std::string> err) {
-    if (err || !result || result->error || !result->latest_win) {
-      done(std::nullopt);
+    std::vector<snledger::Win> wins;
+    if (err || !result || result->error || !result->unclaimed_wins) {
+      done(std::move(wins));
       return;
     }
-    snledger::Win win;
-    win.role = result->latest_win->role;
-    win.country = result->latest_win->country;
-    done(std::move(win));
+    for (const urnet::SnCtfWin& unclaimed : *result->unclaimed_wins) {
+      snledger::Win win;
+      win.role = unclaimed.role;
+      win.country = unclaimed.country;
+      win.epoch = unclaimed.epoch;
+      win.claimState = unclaimed.claim_state;
+      wins.push_back(std::move(win));
+    }
+    done(std::move(wins));
   });
 }
 
@@ -1673,10 +1682,12 @@ void ClaimAlphaSheet::ShowError(const Glib::ustring& message) {
 // transaction's explorer link), where the alpha lands, the gas key with the
 // needs-gas top-up, and the one action, which claims every claimable account
 // (SnLedgerClaim). What the rows say is snledger::ClaimProgress's: beside a
-// capture the flag account, Capture the flag and Provider pool, a row below the
-// claim minimum, and Claim both while the press claims both; a pool that could
-// not be read is a row of its own, without an amount. Like the v1 dialog it
-// opens and reads with no session, and every failure renders ON THE SHEET.
+// capture the flag account, Capture the flag and Provider pool, and Claim both
+// while the press claims both; a row below the claim minimum, alone or not; an
+// account the gas key could not pay for, still claimable under the top-up; a
+// pool that could not be read is a row of its own, without an amount. Like the
+// v1 dialog it opens and reads with no session, and every failure renders ON
+// THE SHEET.
 class LedgerClaimSheet : public Gtk::Window {
  public:
   LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
@@ -2243,7 +2254,7 @@ void EarningsPage::SettleAllEmpty() {
   keys_->SignedOut();
   claimStatus_.reset();
   claimNowOutcome_ = ClaimNowOutcome{};
-  ctfWin_.reset();
+  ctfWins_.clear();
   ApplyPoints(urnet::AccountPointsList{}, Fetch::Ready);
   ApplyEpochs(std::vector<AccountEpochRow>{}, Fetch::Ready);
   ApplySnWallet(std::nullopt, Fetch::Ready);
@@ -3121,8 +3132,8 @@ void EarningsPage::LoadEarnings() {
   //     claim relay says of the network's settlement v2 balance
   VisitKeys();
   LoadClaimStatus();
-  // 4d. this device's latest capture the flag win, for its line on the tile
-  LoadCtfWin();
+  // 4d. the capture the flag wins not claimed yet, a line each on the tile
+  LoadCtfWins();
 
   // 5. the Top 200 tile and the Protocol card: this network's own place on
   // the board (GET /sn/top/me). A failure only hides the tile: it must not
@@ -3560,8 +3571,8 @@ void EarningsPage::RebuildUnclaimedTile() {
 // while it says something, and a network with no wallet here sees the balance
 // the relay claims for its consent. Each pool's account is its own row, named
 // by its kind beside a capture the flag account; a pool the server could not
-// read says so in its row, and the line of this device's latest capture the
-// flag win closes the rows.
+// read says so in its row, an account below the claim minimum says so too,
+// and a line for each capture the flag win not claimed yet closes the rows.
 void EarningsPage::RebuildLedgerTile() {
   if (ledgerCard_ == nullptr) return;
   const bool connected = wallet_.has_value() && walletState_ == Fetch::Ready;
@@ -3573,22 +3584,34 @@ void EarningsPage::RebuildLedgerTile() {
   if (!view.visible && !relayOnly) return;
   RemoveAllChildren(*ledgerRows_);
   if (relayOnly) {
-    const Glib::ustring claimableLabel = T_("sn_ledger_claimable", "Claimable");
-    const std::string claimable = FormatAlphaRao(claimStatus_->claimable_rao);
-    auto* block = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
-    block->append(*MakeSizedLabel(claimableLabel, 12, "ur-caption"));
-    auto* value = MakeGoldLabel(claimable, 34, /*condensed=*/true);
-    kit::SetAccessibleLabel(*value, claimableLabel + ", " + claimable);
-    block->append(*value);
-    ledgerRows_->append(*block);
+    const std::vector<snledger::RelayAccount> relayAccounts = RelayAccountsOf(*claimStatus_);
+    const std::string coldkey = claimStatus_->coldkey_ss58.value_or(std::string());
+    const std::vector<snledger::UnavailablePool> unavailable =
+        UnavailablePoolsOf(claimStatus_->unavailable_pools);
+    const int64_t floorRao = claimStatus_->transfer_floor_rao;
+    // with none of the coldkey's pools read there is no sum to show, only the
+    // unavailable rows: never a zero
+    if (snledger::RelayTotalKnown(relayAccounts, coldkey, unavailable)) {
+      const Glib::ustring claimableLabel = T_("sn_ledger_claimable", "Claimable");
+      const std::string claimable = FormatAlphaRao(claimStatus_->claimable_rao);
+      auto* block = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
+      block->append(*MakeSizedLabel(claimableLabel, 12, "ur-caption"));
+      auto* value = MakeGoldLabel(claimable, 34, /*condensed=*/true);
+      kit::SetAccessibleLabel(*value, claimableLabel + ", " + claimable);
+      block->append(*value);
+      // the sum is one account below the claim minimum: it says so, as the
+      // wallet's lone account does
+      if (snledger::RelayTileSumUnderFloor(relayAccounts, coldkey, unavailable, floorRao)) {
+        block->append(*MakeWrappedNote(
+            T_("sn_ledger_pool_under_floor", "Below the claim minimum"), "ur-row-note"));
+      }
+      ledgerRows_->append(*block);
+    }
     // what the sum adds up, pool by pool, and the pools it leaves out, so it is
-    // not read as theirs too
+    // not read as theirs too; Pending, with why, is the relay's part below
     AppendRelayRows(*ledgerRows_,
-                    snledger::RelayTileRowsFor(RelayAccountsOf(*claimStatus_),
-                                               claimStatus_->coldkey_ss58.value_or(std::string()),
-                                               UnavailablePoolsOf(claimStatus_->unavailable_pools),
-                                               claimStatus_->transfer_floor_rao),
-                    [this](const std::string& url) { OpenLink(url); });
+                    snledger::RelayTileRowsFor(relayAccounts, coldkey, unavailable, floorRao),
+                    [this](const std::string& url) { OpenLink(url); }, /*pendingPill=*/false);
   }
   for (const snledger::AccountView& account : view.accounts) {
     auto* block = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
@@ -3625,12 +3648,12 @@ void EarningsPage::RebuildLedgerTile() {
     }
     ledgerRows_->append(*block);
   }
-  // this device's latest capture the flag win: one of a country's slots, by role
-  const snledger::WonSlot won = snledger::WonSlotFor(ctfWin_);
-  if (won != snledger::WonSlot::None) {
-    const std::string country = CountryNameOrCode(ctfWin_->country);
+  // every capture the flag win not claimed yet, newest first: one of a
+  // country's slots, by role
+  for (const snledger::WonLine& won : snledger::WonLinesFor(ctfWins_)) {
+    const std::string country = CountryNameOrCode(won.country);
     ledgerRows_->append(*MakeWrappedNote(
-        won == snledger::WonSlot::Provider
+        won.slot == snledger::WonSlot::Provider
             ? Format(T_("sn_ctf_won_provider_slot", "You won one of the {} provider slots"), country)
             : Format(T_("sn_ctf_won_extender_slot", "You won one of the {} extender slots"), country),
         "ur-row-note"));
@@ -5305,22 +5328,22 @@ int64_t EarningsPage::TransferFloorRao() const {
   return claimStatus_ && !claimStatus_->error ? claimStatus_->transfer_floor_rao : 0;
 }
 
-// ---- capture the flag: the won slot's line -------------------------------------------
+// ---- capture the flag: the won slots' lines -------------------------------------------
 
-void EarningsPage::LoadCtfWin() {
+void EarningsPage::LoadCtfWins() {
   if (!CanCallApi()) return;
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
-  sn::FetchCtfWin(host_, [this, epoch, seen](std::optional<snledger::Win> win) {
-    PostToMain([this, epoch, seen, win = std::move(win)]() mutable {
+  sn::FetchCtfWins(host_, [this, epoch, seen](std::vector<snledger::Win> wins) {
+    PostToMain([this, epoch, seen, wins = std::move(wins)]() mutable {
       if (*epoch != seen) return;
-      ApplyCtfWin(std::move(win));
+      ApplyCtfWins(std::move(wins));
     });
   });
 }
 
-void EarningsPage::ApplyCtfWin(std::optional<snledger::Win> win) {
-  ctfWin_ = std::move(win);
+void EarningsPage::ApplyCtfWins(std::vector<snledger::Win> wins) {
+  ctfWins_ = std::move(wins);
   RebuildLedgerTile();
 }
 
@@ -5956,6 +5979,7 @@ void EarningsPage::StartLedgerClaim() {
       RebuildUnclaimedTile();
       RebuildLedgerTile();
       LoadWalletLayer();  // the accounts again, as the chain now has them
+      LoadCtfWins();      // and the wins: one this claim paid is claimed now
     });
   };
   sn::LedgerClaim(host_, std::move(callback));
@@ -6274,8 +6298,8 @@ void EarningsPage::ApplyPreviewSample() {
   std::vector<snledger::Account> accounts = {ledger};
   std::vector<snledger::UnavailablePool> unavailable;
   // URNETWORK_PREVIEW_CTF=1: the capture the flag account beside it (Claim
-  // both) and the line of a won provider slot; =unavailable: that pool could
-  // not be read
+  // both) and the lines of two won slots; =unavailable: that pool could not be
+  // read
   const char* ctfPreview = g_getenv("URNETWORK_PREVIEW_CTF");
   if (ctfPreview && std::string(ctfPreview) == "unavailable") {
     snledger::UnavailablePool ctf;
@@ -6291,7 +6315,16 @@ void EarningsPage::ApplyPreviewSample() {
     ctf.finalizedRao = 615000000;
     ctf.claimableRao = 615000000;
     accounts.push_back(ctf);
-    ApplyCtfWin(snledger::Win{snledger::kRoleProvider, "is"});
+    // two wins not claimed yet: a line each, newest first
+    snledger::Win provider;
+    provider.role = snledger::kRoleProvider;
+    provider.country = "is";
+    provider.epoch = 9;
+    snledger::Win extender;
+    extender.role = snledger::kRoleExtender;
+    extender.country = "ke";
+    extender.epoch = 8;
+    ApplyCtfWins({extender, provider});
   }
   ApplyLedger(snledger::Load::Ready, accounts, unavailable, /*claimConfigured=*/true);
 }

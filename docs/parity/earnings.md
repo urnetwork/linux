@@ -111,6 +111,25 @@
 > Android, which also marks a lone pool account under the floor).
 > The rules are `SnLedgerPresentation.hpp`, host-tested; `URNETWORK_PREVIEW_CTF=1` (the account beside
 > the pool's, and a won slot) and `URNETWORK_PREVIEW_CTF=unavailable` extend the wallet sample.
+>
+> **2026-11-11 (later) — capture the flag, the owner's follow-ups, as in every app (needs sdk with
+> `UnclaimedWins`, sdk-ctf-v2).**
+> - **Every unclaimed win:** the tile ends with one line per win in the SDK's `UnclaimedWins`, newest
+>   first, with the same two strings; the wins are read again after a v2 claim's Done.
+> - **The claim minimum, alone or not:** any account under the relay's `TransferFloorRao`, or that the
+>   runtime refuses as `not_claimable: AmountTooLow`, reads `sn_ledger_pool_under_floor` and counts
+>   for no claim, on every server, a lone pool account included (the earlier note's exception is
+>   gone). On the no-wallet tile a sum that is one such account says so under the sum.
+> - **The gas key short of the batch:** the SDK claims the largest account alone first, and an
+>   account it could not pay for fails `needs_gas` with nothing sent: its row stays claimable under
+>   the sheet's top-up, not Failed.
+> - **Aligned with Android:** Claim now's sheet lists every account the relay reports, on every server
+>   (`snClaimRelayRows`); the no-wallet tile lists the pools once there are two, one is capture the
+>   flag's, or one is unavailable, and leaves Pending to the relay's part (`snClaimRelayTileRows`);
+>   with none of the coldkey's pools read neither shows a total, never a zero
+>   (`snClaimRelayTotalKnown`); and a pool the claim sheet showed unavailable leaves it at Done once
+>   the SDK's own read found it with nothing to claim (`snLedgerClaimSettled`).
+> `URNETWORK_PREVIEW_CTF=1` now shows two won slots.
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 
