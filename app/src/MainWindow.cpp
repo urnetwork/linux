@@ -321,6 +321,9 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
       snapshot.availableByteCount = balance_.AvailableByteCount();
       snapshot.startBalanceByteCount = balance_.StartBalanceByteCount();
       snapshot.isPro = balance_.IsPro();
+      // the plan to show: never Free before the server says so (4074)
+      snapshot.shownPlan = balance_.ShownPlan();
+      snapshot.planReadFailed = balance_.PlanReadFailed();
       snapshot.guest = balance_.IsGuest();
       snapshot.subscriptionStoreFamily = balance_.SubscriptionStoreFamily();
       // a one-time crypto year: due for renewal, and by when
@@ -1976,6 +1979,8 @@ void MainWindow::BuildHome() {
   };
   // a Pro network's plan label replays the Pro celebration
   accountPage_->on_plan_label_tap = [this] { LaunchProCelebration(); };
+  // the plan value's Try again after a failed balance read: read it now
+  accountPage_->on_retry_plan = [this] { balance_.FetchNow(); };
   // the data-usage group's info button: the sheet reads the balance store
   accountPage_->on_open_data_info = [this] { OpenDataInfo(); };
   // The redeem sheet needs the balance store (it starts confirmation polling),

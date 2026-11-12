@@ -1613,7 +1613,8 @@ AccountPage::AccountPage(SdkHost& host)
   // the account card, the referral summary and the codes table already carry
   // NoSession, so the screen is never blank and never a dash.
   SettleNoSession();
-  // ...and the plan pane seeds "Free" before the first balance snapshot.
+  // ...and the plan pane its state before the first balance snapshot (Loading,
+  // or Please login without a session), never "Free" (support inbox 4074).
   ApplyBalance(balance_);
 }
 
@@ -1786,8 +1787,9 @@ void AccountPage::SettleNoSession() {
   // retained snapshot left the departed account's entitlement, usage bar and
   // daily figure on screen beside a pane B correctly reading "Please login" —
   // on a shared machine that is the previous user's plan and consumption,
-  // readable by whoever sits down next. A default snapshot re-seeds "Free",
-  // the faint full-width track and the not-yet-known daily figure.
+  // readable by whoever sits down next. A default snapshot re-seeds the plan's
+  // unknown state (never "Free"), the faint full-width track and the
+  // not-yet-known daily figure.
   ApplyBalance(AccountBalance{});
 }
 
@@ -1796,12 +1798,37 @@ void AccountPage::SettleNoSession() {
 void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   balance_ = snapshot;
 
-  // 1. the plan value. Gold iff Pro — the ONE entitlement colour.
-  const Glib::ustring plan = balance_.guest ? Glib::ustring(T_("guest", "Guest"))
-                             : balance_.isPro ? Glib::ustring(T_("supporter", "Pro"))
-                                              : Glib::ustring(T_("free", "Free"));
-  SetToned(*planValue_, balance_.isPro ? kProGold : kOffWhite, plan);
-  kit::SetAccessibleLabel(*planValue_, Glib::ustring(T_("plan", "Plan")) + ", " + plan);
+  // 1. the plan value. Gold iff Pro — the ONE entitlement colour. Until the
+  //    server answers, the plan is unknown and the value shows its state:
+  //    Loading, Something went wrong with Try again once a read failed, or
+  //    Please login without a session — never "Free" (AccountPlanRows.hpp;
+  //    support inbox 4074).
+  const account_plan::PlanView planView =
+      account_plan::PlanViewFor(balance_.shownPlan, balance_.planReadFailed, CanCallApi());
+  if (balance_.guest) {
+    SetToned(*planValue_, kOffWhite, T_("guest", "Guest"));
+  } else {
+    switch (planView) {
+      case account_plan::PlanView::Pro:
+        SetToned(*planValue_, kProGold, T_("supporter", "Pro"));
+        break;
+      case account_plan::PlanView::Free:
+        SetToned(*planValue_, kOffWhite, T_("free", "Free"));
+        break;
+      case account_plan::PlanView::Loading:
+        ApplyFieldState(*planValue_, AccountFieldState::Loading);
+        break;
+      case account_plan::PlanView::Failed:
+        ApplyFieldState(*planValue_, AccountFieldState::Failed);
+        break;
+      case account_plan::PlanView::NoSession:
+        ApplyFieldState(*planValue_, AccountFieldState::NoSession);
+        break;
+    }
+  }
+  kit::SetAccessibleLabel(*planValue_,
+                          Glib::ustring(T_("plan", "Plan")) + ", " + planValue_->get_text());
+  planRetry_->set_visible(account_plan::OffersRetry(planView, balance_.guest));
   // the Pro label is a button that replays the celebration: say so with the
   // cursor (free and guest labels stay plain text)
   if (balance_.isPro && !balance_.guest) {
@@ -1850,8 +1877,10 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
                      balance_.availableByteCount);
 
   // 4. the primary action: guests ALWAYS get "Create an account"; a signed-in
-  //    free account gets "Upgrade"; Pro gets nothing to buy.
-  upgradeButton_->set_visible(balance_.guest || !balance_.isPro);
+  //    account the server said is free gets "Upgrade"; Pro gets nothing to
+  //    buy, and neither does a plan not known yet (support inbox 4074).
+  upgradeButton_->set_visible(balance_.guest ||
+                              account_plan::OffersUpgrade(planView, balance_.guest));
   upgradeButton_->set_label(balance_.guest
                                 ? T_("create_an_account", "Create an account")
                                 : T_("upgrade", "Upgrade"));
@@ -1860,8 +1889,9 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   //    HasFetched, and this is where it earns its keep: before any snapshot has
   //    landed there is no balance to report, and printing "0 B" asserts a
   //    figure the server never gave (§0.4 — an async field renders its state,
-  //    never a fabricated value). The plan value above deliberately still seeds
-  //    "Free": the spec says so in as many words.
+  //    never a fabricated value). The plan value above follows the same rule
+  //    now: it seeded "Free", which a paying network read while its balance
+  //    reads failed.
   const bool canCallApi = CanCallApi();
   ApplyBalanceFigure(*dailyValue_, T_("daily_data_balance", "Daily Data Balance"),
                      balance_.startBalanceByteCount, balance_.loaded, canCallApi);
@@ -1945,7 +1975,18 @@ void AccountPage::BuildPlanPane() {
       if (balance_.isPro && !balance_.guest && on_plan_label_tap) on_plan_label_tap();
     });
     planValue_->add_controller(planTap);
-    row.content->append(*planValue_);
+    // the value, and beside it Try again after a failed balance read with no
+    // answer since (ApplyBalance, account_plan::OffersRetry)
+    auto* valueLine = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    valueLine->append(*planValue_);
+    planRetry_ = Gtk::make_managed<Gtk::Button>(T_("try_again", "Try again"));
+    planRetry_->set_valign(Gtk::Align::CENTER);
+    planRetry_->set_visible(false);
+    planRetry_->signal_clicked().connect([this] {
+      if (on_retry_plan) on_retry_plan();
+    });
+    valueLine->append(*planRetry_);
+    row.content->append(*valueLine);
     content->append(*row.root);
   }
 

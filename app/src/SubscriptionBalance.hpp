@@ -106,6 +106,13 @@ class SubscriptionBalanceStore {
   void ClearPurchaseConfirmationTimeout();
 
   bool IsPro() const { return isPro_; }
+  // The plan to show, the sdk's decision (urnet::SubscriptionProTracker
+  // getShownPlan): "pro" or "free" as the server answered (Pro also by a Pro
+  // claim before it does), else "unknown", while the first read is on its
+  // way and after it failed, never Free (account_plan::PlanViewFor; support
+  // inbox 4074). PlanReadFailed: the last read failed with none loaded since.
+  std::string ShownPlan() const { return proTracker_.getShownPlan(); }
+  bool PlanReadFailed() const { return proTracker_.getLastReadFailed(); }
   bool IsGuest() const { return isGuest_; }
   // the current subscription's store family (urnet::classifySubscriptionStore:
   // "stripe", "apple", "google", "crypto" for a one-time USDC, Zcash or
@@ -216,7 +223,9 @@ class SubscriptionBalanceStore {
   bool errorFetching_ = false;
   bool hasFetched_ = false;
 
-  // the sdk's Pro and jwt refresh decision; isPro_ is its GetIsPro
+  // the sdk's Pro and jwt refresh decision; isPro_ is its GetIsPro, and
+  // ShownPlan its GetShownPlan, which a failed read (BalanceFailed) moves
+  // from loading to failed before the server's first answer
   urnet::SubscriptionProTracker proTracker_ = urnet::newSubscriptionProTracker();
   bool isPro_ = false;
   // IsGuestNetwork(jwtGuest_, serverGuest_): the jwt's GuestMode claim (a
