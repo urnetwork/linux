@@ -176,6 +176,27 @@
 >   are below the claim minimum, in a pool that could not be read, of an amount not known yet, or in
 >   flight (`ClaimProgress::TotalKnown`). An account under the floor never counts. Claim names an
 >   amount only while a press claims one: "Claim", never "Claim 0".
+>
+> **2026-11-12 (last round) — the owner's three shared decisions, as in every native app.**
+> - **A network's answer beats a client's.** The SDK reads the wins with the network's credential
+>   and, when that read fails, with the client token; a server before the network's answer answers
+>   the client token alone. Such an answer (`SnCtfClientResult.ClientId` set) lists one client's
+>   wins. `snledger::WinsLines` now takes a `WinsAnswer` with its client: once a network's answer
+>   has shown since the sign-in, a client's answer replaces nothing, as a read that failed; while
+>   none has, a client's answer shows as before, and a network's answer replaces it whichever read
+>   started first. A sign-out starts over.
+> - **The v1 claim is the session's too.** Its answers counted by the load's epoch, so leaving
+>   Earnings during a v1 claim and coming back dropped its Done, and Claim stayed held until the
+>   3-minute watchdog. It now has its own `snledger::ClaimInFlight` (`claim_`, without rows: its
+>   sheet keeps its own), whose ticket only its Done, its watchdog and a sign-out move. `claiming_`
+>   is gone: `Claiming()` is either claim in flight, which holds Claim on both tiles and both
+>   sheets as before.
+> - **The figure during a claim is what it moves** (Apple and Windows show it). The v2 sheet draws
+>   `ClaimProgress::Figure`: while a press is out, the amount its Claim named (the accounts it
+>   sends of a known amount above the floor, `MovingRao`), never an under-floor or unknown
+>   account's amount and never 0; between presses, `TotalKnown`'s figure as before. The v1 sheet
+>   showed 0 during a claim; it now shows the epochs the claim sends, and its Claim reads "Claim"
+>   rather than "Claim 0" while there is nothing to claim.
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 
