@@ -14,6 +14,12 @@
 // 4d's banner is the store's one sentence for it on every app,
 // sn_claim_relay_claimed ("Claimed by URnetwork. 0.8420 SN25α is on your key,
 // 5F3s…"), drawn in AppendClaimedBanner.
+//
+// Capture the flag (sn CAPTURETHEFLAG.md §10): Claim now claims every pool of
+// the coldkey, its pool's account and its capture the flag account, and the
+// SDK's status sums them. The sheet lists each pool's account under the total,
+// as Android does (snledger::RelayRowsFor), and a pool the server could not
+// read as unavailable, never zero.
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
@@ -21,10 +27,13 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <gtkmm.h>
 
 #include <urnetwork_sdk.hpp>
+
+#include "SnLedgerPresentation.hpp"
 
 namespace urnw {
 
@@ -59,6 +68,27 @@ void AppendClaimRelaySection(Gtk::Box& into, const urnet::SnClaimStatusResult& s
 // The transaction link of URnetwork's claim: the SDK's explorer page, when it
 // names a web page. "" when there is none to open.
 std::string ClaimTransactionLink(const urnet::SnClaimStatusResult& status);
+
+// The name over a pool's row in the Settlement v2 tile and the claim sheets:
+// Capture the flag, Provider pool or Pool {no_id} (snledger::PoolName); "" for
+// none.
+Glib::ustring LedgerPoolName(snledger::PoolName pool, int64_t noId);
+
+// The pools the server could not read just now, as the SDK lists them (its
+// unavailable_pools); none for a whole answer.
+std::vector<snledger::UnavailablePool> UnavailablePoolsOf(
+    const std::optional<urnet::SnLedgerUnavailablePoolList>& pools);
+
+// The relay's accounts, as its per-pool rows read them.
+std::vector<snledger::RelayAccount> RelayAccountsOf(const urnet::SnClaimStatusResult& status);
+
+// The relay's per-pool rows (snledger::RelayRowsFor on Claim now's sheet,
+// snledger::RelayTileRowsFor on the tile): each pool by name, with its coldkey
+// while the rows are of more than one, its amount, and Pending, Below the claim
+// minimum, Claimed with its transaction, or Unavailable right now in place of
+// an amount. Nothing for no rows.
+void AppendRelayRows(Gtk::Box& into, const std::vector<snledger::RelayRow>& rows,
+                     const std::function<void(const std::string& url)>& openLink);
 
 // Claim now's sheet (4b, 4c, 4d): the balance, where it lands, why it waits,
 // and Claim now or why it can't act, with the device's own claim as the
