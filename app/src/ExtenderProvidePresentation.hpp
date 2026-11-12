@@ -242,6 +242,37 @@ SpeedTestsRow SpeedTestsRowOf(const ProvideRow& extenderRow, bool writable,
   return row;
 }
 
+// ---- the router port mapping switch (connect EXTENDER.md S8) ----------------
+// The switch under the speed tests switch: whether this device's extender role
+// asks the router, by UPnP, NAT-PMP or PCP, to forward its ports (tcp 443, udp
+// 443 and udp 4053) to this device. Off by default on every app (owner,
+// 2026-11-11). It rides on the role, so it shows exactly while the Extender row
+// does and its own write has a taker (provide::PortMappingSwitchSourceFor):
+// hidden, never disabled (N1).
+struct PortMappingRow {
+  bool visible = false;
+  // the setting, read beside the Extender row only when this row will show
+  bool on = false;
+
+  friend bool operator==(const PortMappingRow& a, const PortMappingRow& b) {
+    return a.visible == b.visible && a.on == b.on;
+  }
+  friend bool operator!=(const PortMappingRow& a, const PortMappingRow& b) { return !(a == b); }
+};
+
+// `extenderRow` is the Extender row as drawn, `writable` whether the switch's
+// write has a taker, and `readSetting` the router port mapping setting, asked
+// only of a row that will show.
+template <typename ReadSetting>
+PortMappingRow PortMappingRowOf(const ProvideRow& extenderRow, bool writable,
+                                const ReadSetting& readSetting) {
+  PortMappingRow row;
+  if (!extenderRow.visible || !writable) return row;
+  row.visible = true;
+  row.on = readSetting();
+  return row;
+}
+
 // The row's one line of state text. `lookup(key, english)` is the catalog --
 // T_ in the widgets, the English source in the tests -- and
 // `format(pattern, argument)` the store's {} substitution (I18n.hpp's Format).

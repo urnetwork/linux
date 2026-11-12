@@ -1987,6 +1987,16 @@ ctl::ProviderStatsReply TunnelHost::ProviderStats(bool pollStatus) {
   } catch (const std::exception& e) {
     noteReadFailure("measurements setting", e);
   }
+  // And the router port mapping setting beside them, the switch under the
+  // speed tests switch, which this daemon writes too
+  // (SetProvideExtenderPortMapping): never said without a setting to show, and
+  // off and unwritable when the read fails.
+  try {
+    reply.provide_extender_port_mapping = providerDevice_->getProvideExtenderPortMapping();
+    reply.provide_extender_port_mapping_writable = true;
+  } catch (const std::exception& e) {
+    noteReadFailure("router port mapping setting", e);
+  }
   if (providerContractVc_) {
     try {
       if (auto points = providerContractVc_->getProviderThroughputPoints()) {
@@ -2160,6 +2170,58 @@ bool TunnelHost::SetMeasurementsEnabled(bool on, std::string* error) {
     return false;
   }
   DaemonLogf("[provide] lag.dev measurements %s (%s)\n", on ? "on" : "off",
+             provide::ToString(target));
+  return true;
+}
+
+bool TunnelHost::SetProvideExtenderPortMapping(bool on, std::string* error) {
+  std::unique_lock<std::mutex> lock(opMutex_, std::try_to_lock);
+  if (!lock.owns_lock()) {
+    // A bring-up owns the session. The GUI reads the setting again, so the
+    // switch shows it as it stands.
+    if (error) *error = "a tunnel start is in progress";
+    return false;
+  }
+  // the provider extender setting's rule: the same space holds both, and the
+  // same devices read them
+  const provide::ExtenderSettingTarget target = provide::ExtenderSettingTargetFor(
+      providerDevice_.has_value(), device_.has_value(), networkSpace_.has_value());
+  try {
+    switch (target) {
+      case provide::ExtenderSettingTarget::ProviderDevice:
+        // persisted in its space and applied at once: the running role is
+        // replaced, so turning it off removes what the router forwards here
+        providerDevice_->setProvideExtenderPortMapping(on);
+        break;
+      case provide::ExtenderSettingTarget::SessionDevice:
+        device_->setProvideExtenderPortMapping(on);
+        break;
+      case provide::ExtenderSettingTarget::NetworkSpace:
+        // The sdk keeps this setting in the space as well, but its LocalState
+        // has no writer for it: only a device writes it. Refused rather than
+        // reported as written; the GUI reads the setting again, and with no
+        // device running the switch hides.
+        if (error) {
+          *error = "no device runs in this daemon to take the router port mapping setting";
+        }
+        return false;
+      case provide::ExtenderSettingTarget::None:
+        if (error) {
+          *error = "no device has run in this daemon yet, so there is no network space to keep "
+                   "the setting in";
+        }
+        return false;
+    }
+  } catch (const std::exception& e) {
+    if (error) {
+      *error = std::string("the router port mapping setting could not be written to ") +
+               provide::ToString(target);
+    }
+    DaemonLogf("[provide] writing the router port mapping setting to %s failed: %s\n",
+               provide::ToString(target), e.what());
+    return false;
+  }
+  DaemonLogf("[provide] router port mapping %s (%s)\n", on ? "on" : "off",
              provide::ToString(target));
   return true;
 }

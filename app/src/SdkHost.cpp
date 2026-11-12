@@ -4375,6 +4375,11 @@ void SdkHost::PollDaemonProviderStatsLocked() {
   // that it takes the speed tests switch's write
   stats.measurementsEnabled = reply->measurements_enabled;
   stats.measurementsEnabledWritable = reply->measurements_enabled_writable;
+  // and the router port mapping setting, with the daemon's word that it takes
+  // that switch's write; a daemon that predates them sends neither, which
+  // reads as off and no writer
+  stats.provideExtenderPortMapping = reply->provide_extender_port_mapping;
+  stats.provideExtenderPortMappingWritable = reply->provide_extender_port_mapping_writable;
   const bool statusChanged = !daemonProviderStats_ ||
                              daemonProviderStats_->status.open != stats.status.open ||
                              daemonProviderStats_->status.loaded != stats.status.loaded ||
@@ -4387,7 +4392,10 @@ void SdkHost::PollDaemonProviderStatsLocked() {
       daemonProviderStats_->provideExtender != stats.provideExtender ||
       daemonProviderStats_->provideExtenderWritable != stats.provideExtenderWritable ||
       daemonProviderStats_->measurementsEnabled != stats.measurementsEnabled ||
-      daemonProviderStats_->measurementsEnabledWritable != stats.measurementsEnabledWritable;
+      daemonProviderStats_->measurementsEnabledWritable != stats.measurementsEnabledWritable ||
+      daemonProviderStats_->provideExtenderPortMapping != stats.provideExtenderPortMapping ||
+      daemonProviderStats_->provideExtenderPortMappingWritable !=
+          stats.provideExtenderPortMappingWritable;
   daemonProviderStats_ = std::move(stats);
   // the events the DeviceRemote and its controllers raise for the same facts
   EmitDrawerEvent(DrawerEvent::Throughput);
@@ -5323,6 +5331,13 @@ provide::ExtenderSwitchSource SdkHost::MeasurementsSwitchSourceLocked() const {
       daemonProviderStats_ && daemonProviderStats_->measurementsEnabledWritable);
 }
 
+provide::ExtenderSwitchSource SdkHost::PortMappingSwitchSourceLocked() const {
+  return provide::PortMappingSwitchSourceFor(
+      device_.has_value(), daemonProviderStats_.has_value(),
+      daemonProviderStats_ && daemonProviderStats_->provideExtenderWritable,
+      daemonProviderStats_ && daemonProviderStats_->provideExtenderPortMappingWritable);
+}
+
 std::optional<urnet::ExtenderProvideStatus> SdkHost::GetExtenderProvideStatus() {
   return ReadOnMain<std::optional<urnet::ExtenderProvideStatus>>("GetExtenderProvideStatus", [&]() -> std::optional<urnet::ExtenderProvideStatus> {
     switch (ExtenderSwitchSourceLocked()) {
@@ -5430,6 +5445,53 @@ void SdkHost::SetMeasurementsEnabled(bool on) {
       break;
   }
   g_warning("extender: dropping a measurements write with no device");
+}
+
+bool SdkHost::PortMappingSwitchWritable() {
+  return ReadOnMain<bool>("PortMappingSwitchWritable", [&]() -> bool {
+    return PortMappingSwitchSourceLocked() != provide::ExtenderSwitchSource::None;
+  });
+}
+
+bool SdkHost::GetProvideExtenderPortMapping() {
+  return ReadOnMain<bool>("GetProvideExtenderPortMapping", [&]() -> bool {
+    switch (PortMappingSwitchSourceLocked()) {
+      case provide::ExtenderSwitchSource::Device:
+        return device_->getProvideExtenderPortMapping();
+      case provide::ExtenderSwitchSource::Daemon:
+        return daemonProviderStats_->provideExtenderPortMapping;
+      case provide::ExtenderSwitchSource::None:
+        break;
+    }
+    // the setting's default on every app, off (owner, 2026-11-11); the switch
+    // is hidden then
+    return false;
+  });
+}
+
+void SdkHost::SetProvideExtenderPortMapping(bool on) {
+  std::scoped_lock lock(mutex_);
+  switch (PortMappingSwitchSourceLocked()) {
+    case provide::ExtenderSwitchSource::Device:
+      device_->setProvideExtenderPortMapping(on);
+      return;
+    case provide::ExtenderSwitchSource::Daemon: {
+      std::string error;
+      if (!control_.SetProvideExtenderPortMapping(on, &error)) {
+        g_warning("extender: the system service did not write the router port mapping "
+                  "setting: %s",
+                  error.empty() ? "no detail" : error.c_str());
+      }
+      // Read back at once, written or refused: the switch shows the setting as
+      // it stands.
+      PollDaemonProviderStatsLocked();
+      EmitDrawerEvent(DrawerEvent::ExtenderProvideStatus);
+      return;
+    }
+    case provide::ExtenderSwitchSource::None:
+      break;
+  }
+  g_warning("extender: dropping a router port mapping write with no device");
 }
 
 std::optional<urnet::ExtenderSettings> SdkHost::GetExtenderSettings() {

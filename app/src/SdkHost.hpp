@@ -1353,6 +1353,18 @@ class SdkHost {
   bool MeasurementsSwitchWritable();
   bool GetMeasurementsEnabled();
   void SetMeasurementsEnabled(bool on);
+  // The router port mapping switch under the speed tests switch (connect
+  // EXTENDER.md S8): whether its write has a taker now
+  // (provide::PortMappingSwitchSourceFor), the role's router port mapping
+  // setting, and its write. Read and written as the measurements setting is:
+  // through the device, or with no device through the daemon
+  // (set_provide_extender_port_mapping) while provider_stats said it takes it.
+  // The page shows the switch only beside the Extender row and while it has a
+  // taker, and never writes it hidden (N1). The setting's default on every app
+  // is off (owner, 2026-11-11), and it reads off whenever nothing answers.
+  bool PortMappingSwitchWritable();
+  bool GetProvideExtenderPortMapping();
+  void SetProvideExtenderPortMapping(bool on);
 
   // The SDK's shared ExtenderViewController (K7: "encoding, decoding and
   // applying live in the sdk, one implementation for every app"). Opened with
@@ -1696,6 +1708,9 @@ class SdkHost {
   // What the lag.dev speed tests switch reads and writes now
   // (provide::MeasurementsSwitchSourceFor). Requires mutex_.
   provide::ExtenderSwitchSource MeasurementsSwitchSourceLocked() const;
+  // What the router port mapping switch reads and writes now
+  // (provide::PortMappingSwitchSourceFor). Requires mutex_.
+  provide::ExtenderSwitchSource PortMappingSwitchSourceLocked() const;
   void EmitDrawerEvent(DrawerEvent event);
   LiveStats ReadStats();  // read the current snapshot from the SDK getters
   void PublishStats();    // ReadStats() -> onStats_
@@ -2029,6 +2044,11 @@ class SdkHost {
     // them, which keeps that switch hidden
     bool measurementsEnabled = true;
     bool measurementsEnabledWritable = false;
+    // the router port mapping setting beside them, the switch under the speed
+    // tests switch, and that the daemon takes its write; off and false from a
+    // daemon that predates them, which keeps that switch hidden
+    bool provideExtenderPortMapping = false;
+    bool provideExtenderPortMappingWritable = false;
   };
   // Requires mutex_. One tick of the poll (provide::DaemonProviderStatsStep).
   void PollDaemonProviderStatsLocked();

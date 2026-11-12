@@ -302,6 +302,40 @@ UR_TEST(provideMeasurementsSwitchShowsOnlyWhereItsWriteIsTaken) {
   }
 }
 
+// The router port mapping switch under the speed tests switch (connect
+// EXTENDER.md S8), by the same rule: a bound device whenever there is one, and
+// with none the provider-only device only while the daemon said it takes both
+// the Extender switch's write and this one. A daemon that takes only the
+// Extender switch's, or the speed tests switch's too, leaves this switch hidden
+// (N1), never dead.
+UR_TEST(providePortMappingSwitchShowsOnlyWhereItsWriteIsTaken) {
+  for (const bool reading : {false, true}) {
+    for (const bool extender : {false, true}) {
+      for (const bool portMapping : {false, true}) {
+        UR_EXPECT_TRUE(provide::PortMappingSwitchSourceFor(/*sessionDevice=*/true, reading,
+                                                           extender, portMapping) ==
+                       provide::ExtenderSwitchSource::Device);
+        const bool daemon = reading && extender && portMapping;
+        UR_EXPECT_TRUE(provide::PortMappingSwitchSourceFor(false, reading, extender,
+                                                           portMapping) ==
+                       (daemon ? provide::ExtenderSwitchSource::Daemon
+                               : provide::ExtenderSwitchSource::None));
+        // never with no Extender switch to sit under
+        if (provide::PortMappingSwitchSourceFor(false, reading, extender, portMapping) !=
+            provide::ExtenderSwitchSource::None) {
+          UR_EXPECT_TRUE(provide::ExtenderSwitchSourceFor(false, reading, extender) !=
+                         provide::ExtenderSwitchSource::None);
+        }
+      }
+    }
+  }
+  // a daemon that takes the speed tests switch's write but predates this one
+  UR_EXPECT_TRUE(provide::MeasurementsSwitchSourceFor(false, true, true, true) ==
+                 provide::ExtenderSwitchSource::Daemon);
+  UR_EXPECT_TRUE(provide::PortMappingSwitchSourceFor(false, true, true, false) ==
+                 provide::ExtenderSwitchSource::None);
+}
+
 // ---- one device across connect and disconnect -------------------------------
 
 // A Connect takes the provider-only device only when it was built for the

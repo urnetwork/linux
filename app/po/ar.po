@@ -5825,6 +5825,16 @@ msgctxt "extender_not_providing"
 msgid "Not providing"
 msgstr "لا يوفّر"
 
+#. Title of the toggle under the Extender setting that has the extender ask the router (UPnP, NAT-PMP or PCP) to forward its ports to this device. Off by default on every app.
+msgctxt "extender_port_mapping"
+msgid "Open a port on my router"
+msgstr "فتح منفذ على جهاز التوجيه الخاص بي"
+
+#. Secondary text under the Open a port on my router toggle: what turning it on does. It must say plainly that it opens a port on the user's router.
+msgctxt "extender_port_mapping_description"
+msgid "Asks your router, by UPnP, NAT-PMP or PCP, to forward TCP and UDP 443 and UDP 4053 to this device, so the extender can be reached from the internet. This opens a port on your router."
+msgstr "يطلب من جهاز التوجيه، عبر UPnP أو NAT-PMP أو PCP، إعادة توجيه TCP و UDP 443 و UDP 4053 إلى هذا الجهاز، حتى يمكن الوصول إلى الموسّع من الإنترنت. يفتح هذا منفذًا على جهاز التوجيه الخاص بك."
+
 #. Extender status when the operator revoked this device's extender key.
 msgctxt "extender_revoked"
 msgid "Revoked by the operator"

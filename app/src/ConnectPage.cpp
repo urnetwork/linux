@@ -1077,6 +1077,59 @@ void ConnectPage::BuildPaneA() {
   speedTestsRow_->set_visible(false);
   moreOptionsHost_->append(*speedTestsRow_);
 
+  // The router port mapping switch (connect EXTENDER.md S8): whether the
+  // extender role asks the router, by UPnP, NAT-PMP or PCP, to forward its
+  // ports to this device. Off by default on every app (owner, 2026-11-11). It
+  // rides on the role as the speed tests switch does, so it sits directly under
+  // that switch and shows only beside the Extender switch, hidden, never
+  // disabled (DrawPortMappingRow). Built like the speed tests row: its title
+  // starting under the Extender title, its description under the title.
+  portMappingRow_ = kit::MakePaneRow(44);
+  {
+    auto* line = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    line->set_hexpand(true);
+    // the Extender dot's glyph, never shown, so the titles line up
+    auto* inset = Gtk::make_managed<Gtk::Label>("●");
+    inset->set_opacity(0);
+    inset->set_valign(Gtk::Align::CENTER);
+    kit::MarkDecorative(*inset);
+    line->append(*inset);
+    auto* text = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 1);
+    text->set_hexpand(true);
+    text->set_valign(Gtk::Align::CENTER);
+    auto* title =
+        Gtk::make_managed<Gtk::Label>(T_("extender_port_mapping", "Open a port on my router"));
+    title->add_css_class("ur-row-title");
+    title->set_xalign(0);
+    text->append(*title);
+    auto* note = Gtk::make_managed<Gtk::Label>(T_(
+        "extender_port_mapping_description",
+        "Asks your router, by UPnP, NAT-PMP or PCP, to forward TCP and UDP 443 and UDP 4053 to "
+        "this device, so the extender can be reached from the internet. This opens a port on "
+        "your router."));
+    note->add_css_class("ur-row-note");
+    note->set_xalign(0);
+    note->set_wrap(true);
+    CapNatural(note, 30);
+    text->append(*note);
+    line->append(*text);
+    portMappingToggle_ = Gtk::make_managed<Gtk::Switch>();
+    portMappingToggle_->set_valign(Gtk::Align::CENTER);
+    // the setting's default on every app, off, until the first reading draws it
+    portMappingToggle_->set_active(false);
+    kit::SetAccessibleLabel(*portMappingToggle_,
+                            T_("extender_port_mapping", "Open a port on my router"));
+    portMappingToggle_->property_active().signal_changed().connect([this] {
+      // echo guard: a feed-driven write must not travel back to the SDK
+      if (updatingControls_) return;
+      OnPortMappingToggled();
+    });
+    line->append(*portMappingToggle_);
+    if (auto* inner = RowInner(portMappingRow_)) inner->append(*line);
+  }
+  portMappingRow_->set_visible(false);
+  moreOptionsHost_->append(*portMappingRow_);
+
   // connect options: the four toggle rows, each writing through SdkHost with
   // an echo guard (the load writes the same control)
   auto optionsHeader = kit::MakePaneGroupHeader(T_("connect_options", "Connect options"));
@@ -3441,6 +3494,11 @@ void ConnectPage::ApplyExtenderProvideState() {
   DrawSpeedTestsRow(extender::SpeedTestsRowOf(extenderRowDrawn_,
                                               host_.MeasurementsSwitchWritable(),
                                               [this] { return host_.GetMeasurementsEnabled(); }));
+  // and the router port mapping switch under that, beside the same row: its
+  // setting is read only when it will show
+  DrawPortMappingRow(extender::PortMappingRowOf(
+      extenderRowDrawn_, host_.PortMappingSwitchWritable(),
+      [this] { return host_.GetProvideExtenderPortMapping(); }));
 }
 
 void ConnectPage::DrawSpeedTestsRow(const extender::SpeedTestsRow& row) {
@@ -3469,6 +3527,34 @@ void ConnectPage::OnSpeedTestsToggled() {
   const bool on = speedTestsToggle_->get_active();
   host_.SetMeasurementsEnabled(on);
   speedTestsDrawn_.on = on;
+}
+
+void ConnectPage::DrawPortMappingRow(const extender::PortMappingRow& row) {
+  if (!portMappingRow_ || !portMappingToggle_) return;
+  // a reading that changes nothing is dropped
+  if (portMappingApplied_ && row == portMappingDrawn_) return;
+  portMappingApplied_ = true;
+  portMappingDrawn_ = row;
+  portMappingRow_->set_visible(row.visible);
+  if (!row.visible) return;
+  // the switch shows the setting, written under the echo guard
+  if (portMappingToggle_->get_active() != row.on) {
+    updatingControls_ = true;
+    portMappingToggle_->set_active(row.on);
+    updatingControls_ = false;
+  }
+}
+
+// The switch writes the router port mapping setting at once and holds its new
+// position; the next reading of the setting replaces it.
+void ConnectPage::OnPortMappingToggled() {
+  if (!portMappingToggle_) return;
+  // never while hidden: a device or daemon that cannot take the write shows no
+  // switch (N1)
+  if (!portMappingDrawn_.visible) return;
+  const bool on = portMappingToggle_->get_active();
+  host_.SetProvideExtenderPortMapping(on);
+  portMappingDrawn_.on = on;
 }
 
 void ConnectPage::DrawExtenderRow(const extender::ProvideRow& row) {

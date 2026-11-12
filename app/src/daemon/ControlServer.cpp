@@ -1867,6 +1867,27 @@ void ControlServer::DispatchAuthorized(uint64_t connId, int64_t id, ctl::Verb ve
         return;
       }
 
+      case ctl::Verb::SetProvideExtenderPortMapping: {
+        // The router port mapping switch the same way, behind the same owner
+        // gate as set_provide_extender. A request without the value throws out
+        // of the get<> as an error reply, so no default opens a port.
+        nlohmann::json denied;
+        bool crossUid = false;
+        if (!CheckTunnelOwner(conn, id, &denied, &crossUid, authorizedCrossUid)) {
+          reply(std::move(denied));
+          return;
+        }
+        const auto req = request.get<ctl::SetProvideExtenderPortMappingRequest>();
+        std::string error;
+        if (!tunnel_.SetProvideExtenderPortMapping(req.provide_extender_port_mapping, &error)) {
+          reply(ctl::MakeErrorReply(
+              id, error.empty() ? "the port mapping setting could not be written" : error));
+          return;
+        }
+        reply(ctl::MakeReply(id, true));
+        return;
+      }
+
       case ctl::Verb::ResetExtenders: {
         // A reset the GUI made in its own space, applied to the space this
         // daemon holds under the same key, behind the same owner gate as

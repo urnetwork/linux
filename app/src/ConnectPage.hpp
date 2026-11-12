@@ -266,6 +266,12 @@ class ConnectPage : public Gtk::Box {
   // new position until the next reading.
   void DrawSpeedTestsRow(const extender::SpeedTestsRow& row);
   void OnSpeedTestsToggled();
+  // The router port mapping switch under that (connect EXTENDER.md S8): drawn
+  // beside the Extender row by ApplyExtenderProvideState the same way; the
+  // switch writes the role's router port mapping setting and holds its new
+  // position until the next reading.
+  void DrawPortMappingRow(const extender::PortMappingRow& row);
+  void OnPortMappingToggled();
   // the selected-provider row (§2.3): stats.locationName with a selected peer
   // resolved to its device name; empty => "Best available provider"
   void ApplyLocationRow();
@@ -642,6 +648,13 @@ class ConnectPage : public Gtk::Box {
   Gtk::Switch* speedTestsToggle_ = nullptr;
   extender::SpeedTestsRow speedTestsDrawn_;
   bool speedTestsApplied_ = false;
+  // the router port mapping row and its switch directly under the speed tests
+  // row: hidden, never disabled, while the Extender row is hidden or the
+  // switch's write has no taker, and off until a reading says otherwise
+  Gtk::Box* portMappingRow_ = nullptr;
+  Gtk::Switch* portMappingToggle_ = nullptr;
+  extender::PortMappingRow portMappingDrawn_;
+  bool portMappingApplied_ = false;
   // connect options (§2.8): the 3-item connection-mode segmented control and
   // the three PerformanceProfile toggles, all echo-guarded
   Gtk::ToggleButton* modeAuto_ = nullptr;

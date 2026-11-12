@@ -391,4 +391,22 @@ constexpr ExtenderSwitchSource MeasurementsSwitchSourceFor(bool sessionDevice,
   return ExtenderSwitchSource::None;
 }
 
+// What the router port mapping switch under the speed tests switch reads and
+// writes (SdkHost::GetProvideExtenderPortMapping, SetProvideExtenderPortMapping;
+// connect EXTENDER.md S8): the role's router port mapping setting, another
+// setting of the same space that rides on the role. The Extender switch's
+// source, and with no session the daemon only when provider_stats said it takes
+// this write too (set_provide_extender_port_mapping); otherwise nothing, and
+// that switch hides (N1).
+constexpr ExtenderSwitchSource PortMappingSwitchSourceFor(bool sessionDevice,
+                                                          bool providerOnlyRead,
+                                                          bool daemonWritesExtender,
+                                                          bool daemonWritesPortMapping) {
+  if (sessionDevice) return ExtenderSwitchSource::Device;
+  if (providerOnlyRead && daemonWritesExtender && daemonWritesPortMapping) {
+    return ExtenderSwitchSource::Daemon;
+  }
+  return ExtenderSwitchSource::None;
+}
+
 }  // namespace urnw::provide

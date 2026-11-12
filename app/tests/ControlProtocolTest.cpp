@@ -137,6 +137,7 @@ UR_TEST(controlVerbNamesRoundTrip) {
       ctl::Verb::StopTunnel,     ctl::Verb::SetProvide,
       ctl::Verb::StartProvider,  ctl::Verb::ProviderStats,
       ctl::Verb::SetProvideExtender, ctl::Verb::SetMeasurementsEnabled,
+      ctl::Verb::SetProvideExtenderPortMapping,
       ctl::Verb::ResetExtenders,
       ctl::Verb::LocationOverrideAvailable,
       ctl::Verb::LocationOverrideWrite, ctl::Verb::LocationOverrideClear,
@@ -157,6 +158,8 @@ UR_TEST(controlVerbNamesRoundTrip) {
   UR_EXPECT_TRUE(ctl::VerbFromString("set_provide_extender") == ctl::Verb::SetProvideExtender);
   UR_EXPECT_TRUE(ctl::VerbFromString("set_measurements_enabled") ==
                  ctl::Verb::SetMeasurementsEnabled);
+  UR_EXPECT_TRUE(ctl::VerbFromString("set_provide_extender_port_mapping") ==
+                 ctl::Verb::SetProvideExtenderPortMapping);
   UR_EXPECT_TRUE(ctl::VerbFromString("reset_extenders") == ctl::Verb::ResetExtenders);
   UR_EXPECT_TRUE(ctl::VerbFromString("location_override_available") ==
                  ctl::Verb::LocationOverrideAvailable);
@@ -1289,6 +1292,117 @@ UR_TEST(controlProviderStatsFromAnOlderDaemonHasNoSpeedTestsWriter) {
   UR_EXPECT_TRUE(back.measurements_enabled);
   UR_EXPECT_FALSE(ctl::ProviderStatsReply().measurements_enabled_writable);
   UR_EXPECT_TRUE(ctl::ProviderStatsReply().measurements_enabled);
+}
+
+// ---- set_provide_extender_port_mapping: the router port mapping switch ------
+
+UR_TEST(controlSetProvideExtenderPortMappingRoundTrip) {
+  for (const bool on : {false, true}) {
+    ctl::SetProvideExtenderPortMappingRequest req;
+    req.provide_extender_port_mapping = on;
+    const auto back = ctl::DecodeFrame(ctl::EncodeFrame(
+        ctl::MakeRequest(ctl::Verb::SetProvideExtenderPortMapping, 27, nlohmann::json(req))));
+    UR_EXPECT_TRUE(ctl::RequestVerb(*back) == ctl::Verb::SetProvideExtenderPortMapping);
+    UR_EXPECT_TRUE(
+        back->get<ctl::SetProvideExtenderPortMappingRequest>().provide_extender_port_mapping == on);
+  }
+  // the request's own default is the apps' default, off
+  UR_EXPECT_FALSE(ctl::SetProvideExtenderPortMappingRequest().provide_extender_port_mapping);
+}
+
+// A write whose value did not arrive writes nothing, not a default the user
+// never chose, so nothing opens a port on the router unasked; and neither the
+// Extender switch's value nor the speed tests switch's is this switch's.
+UR_TEST(controlSetProvideExtenderPortMappingWithoutAValueIsRefused) {
+  for (const char* malformed :
+       {R"({})", R"({"provide_extender_port_mapping":null})",
+        R"({"provide_extender_port_mapping":"true"})", R"({"provide_extender_port_mapping":1})",
+        R"({"provide_extender":true})", R"({"measurements_enabled":true})",
+        R"({"port_mapping":true})"}) {
+    bool threw = false;
+    try {
+      (void)nlohmann::json::parse(malformed).get<ctl::SetProvideExtenderPortMappingRequest>();
+    } catch (const std::exception&) {
+      threw = true;
+    }
+    UR_EXPECT_TRUE_MSG(malformed, threw);
+  }
+}
+
+// Priced like set_provide_extender, the switch it sits under: control-tunnel,
+// take-over across uids, and a press, so it may prompt. It needs a grant.
+UR_TEST(controlSetProvideExtenderPortMappingIsGatedLikeSetProvideExtender) {
+  for (const bool crossUid : {false, true}) {
+    UR_EXPECT_TRUE(std::string(ctl::ActionIdForVerb(ctl::Verb::SetProvideExtenderPortMapping,
+                                                    false, crossUid)) ==
+                   ctl::ActionIdForVerb(ctl::Verb::SetProvideExtender, false, crossUid));
+  }
+  UR_EXPECT_TRUE(std::string(ctl::ActionIdForVerb(ctl::Verb::SetProvideExtenderPortMapping, false,
+                                                  false)) == ctl::kActionControlTunnel);
+  UR_EXPECT_TRUE(std::string(ctl::ActionIdForVerb(ctl::Verb::SetProvideExtenderPortMapping, false,
+                                                  true)) == ctl::kActionTakeOverTunnel);
+  UR_EXPECT_TRUE(
+      ctl::VerbWantsInteraction(ctl::Verb::SetProvideExtenderPortMapping, /*is_log_tail=*/false));
+}
+
+// provider_stats carries the router port mapping setting beside the role, and
+// the daemon's word that it takes that switch's write.
+UR_TEST(controlProviderStatsCarriesThePortMappingSwitch) {
+  ctl::ProviderStatsReply stats;
+  stats.running = true;
+  stats.extender_provide_status_json = R"({"Supported":true,"State":"active","Enabled":true})";
+  stats.provide_extender = true;
+  stats.provide_extender_writable = true;
+  stats.measurements_enabled = false;
+  stats.measurements_enabled_writable = true;
+  stats.provide_extender_port_mapping = true;
+  stats.provide_extender_port_mapping_writable = true;
+  const auto back =
+      ctl::DecodeFrame(ctl::EncodeFrame(ctl::MakeReply(28, true, nlohmann::json(stats))))
+          ->get<ctl::ProviderStatsReply>();
+  UR_EXPECT_TRUE(back.provide_extender_port_mapping_writable);
+  UR_EXPECT_TRUE(back.provide_extender_port_mapping);
+  // the settings beside it stay their own
+  UR_EXPECT_TRUE(back.provide_extender);
+  UR_EXPECT_FALSE(back.measurements_enabled);
+
+  stats.provide_extender_port_mapping = false;
+  const auto off =
+      ctl::DecodeFrame(ctl::EncodeFrame(ctl::MakeReply(29, true, nlohmann::json(stats))))
+          ->get<ctl::ProviderStatsReply>();
+  UR_EXPECT_TRUE(off.provide_extender_port_mapping_writable);
+  UR_EXPECT_FALSE(off.provide_extender_port_mapping);
+}
+
+// A daemon from before the verb: no writer, so the switch stays hidden while
+// disconnected, and the setting reads as its default on every app, off. A
+// null reads the same as an absent field.
+UR_TEST(controlProviderStatsFromAnOlderDaemonHasNoPortMappingWriter) {
+  const nlohmann::json older = {
+      {"running", true},
+      {"extender_provide_status_json", R"({"Supported":true,"State":"active","Enabled":true})"},
+      {"provide_extender", true},
+      {"provide_extender_writable", true},
+      {"measurements_enabled", true},
+      {"measurements_enabled_writable", true},
+  };
+  const auto back = ctl::DecodeFrame(ctl::EncodeFrame(ctl::MakeReply(30, true, older)))
+                        ->get<ctl::ProviderStatsReply>();
+  UR_EXPECT_TRUE(back.provide_extender_writable);
+  UR_EXPECT_TRUE(back.measurements_enabled_writable);
+  UR_EXPECT_FALSE(back.provide_extender_port_mapping_writable);
+  UR_EXPECT_FALSE(back.provide_extender_port_mapping);
+
+  nlohmann::json nulls = older;
+  nulls["provide_extender_port_mapping"] = nullptr;
+  nulls["provide_extender_port_mapping_writable"] = nullptr;
+  const auto nulled = ctl::DecodeFrame(ctl::EncodeFrame(ctl::MakeReply(31, true, nulls)))
+                          ->get<ctl::ProviderStatsReply>();
+  UR_EXPECT_FALSE(nulled.provide_extender_port_mapping_writable);
+  UR_EXPECT_FALSE(nulled.provide_extender_port_mapping);
+
+  UR_EXPECT_FALSE(ctl::ProviderStatsReply().provide_extender_port_mapping_writable);
+  UR_EXPECT_FALSE(ctl::ProviderStatsReply().provide_extender_port_mapping);
 }
 
 // logout names the account's network space; an absent one parses empty (the
