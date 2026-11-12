@@ -145,21 +145,34 @@
 >   claimable under the sheet's top-up; any other failure is Failed, with the SDK's message. A press
 >   never counts it, as Android's dialog never offers a claim for it.
 >
-> **2026-11-12 (later) — a failed wins read, and a claim that outlives a visit, as in every app.**
-> - **A wins read that fails keeps the lines** (owner, 2026-11-12, every app): an answer replaces
->   them, but a read that failed (`ctf_unavailable`), an answer that cannot be read, or a read that
->   could not be asked (no steady device) keeps the lines of the last answer
->   (`snledger::WinsAfterRead`). Only an answer that no longer lists a win, and a sign-out, take a
->   line away; after a sign-in there is none until the first answer. So the reads after a claim
->   never blank the lines.
+> **2026-11-12 (later) — the wins reads, a claim that outlives a visit, and the claim sheet's figure,
+> as in every app.**
+> - **A wins read that fails keeps the lines, and the newest good answer shows** (owner,
+>   2026-11-12, every app; Apple's and Windows' too). Reads overlap (each visit's load, a claim's
+>   Done and the reads after it), and their answers land in any order. Each read is numbered as it
+>   starts (`snledger::WinsLines`, Windows' `CtfWinsLines`): a good answer replaces the lines
+>   unless they already show a newer read's, so an older answer that lands late never replaces a
+>   newer one. A read that failed (`ctf_unavailable`), an answer that cannot be read, or a read that
+>   could not be asked (no steady device) changes nothing, so it never blanks the lines nor keeps an
+>   older good answer still to land from showing. This replaces the load's epoch on the wins reads,
+>   which dropped an older read's answer behind a newer load. Only an answer that no longer lists a
+>   win, and a sign-out, take a line away; after a sign-in there is none until the first answer.
 > - **The v2 claim is the session's, not a load's.** Every visit to Earnings loads the page again,
 >   which drops the answers armed for the last load, and so dropped a claim's: its Done was lost,
 >   the wins were not read on the schedule, and Claim stayed disabled until the watchdog said the
 >   chain RPC was unreachable. The claim's rows and its answers now count by
->   `snledger::ClaimInFlight`, which only the claim's Done, its watchdog and a sign-out move: a user
->   who leaves during a claim and comes back finds it in flight, a sheet opened then draws its rows,
->   and its Done lands (the accounts and the wins read again). A sign-out drops it, its watchdog and
->   its sheet, as Android's `SnLedgerFlow.reset` does. The v1 claim keeps the load's guard.
+>   `snledger::ClaimInFlight`, which only the claim's Done, its watchdog and a sign-out move. While
+>   it is in flight the tile's Claim stays enabled, as Android's tile, and opens the sheet on the
+>   claim's rows, where Claim waits for it; a failure about no account stays with the rows, so a
+>   sheet opened after it says why. A user who leaves during a claim and comes back finds it in
+>   flight, and its Done lands (the accounts and the wins read again). A sign-out drops it and ends
+>   the v1 claim's watch too (the v1 claim's answers keep the load's guard), frees Claim and closes
+>   both claims' sheets, as Android's `setupDevice` does.
+> - **The v2 claim sheet's figure** (Apple, Windows and Android): what a press claims while an
+>   account above the floor is left, or a true 0 once nothing is left; no figure while the rows left
+>   are below the claim minimum, in a pool that could not be read, of an amount not known yet, or in
+>   flight (`ClaimProgress::TotalKnown`). An account under the floor never counts. Claim names an
+>   amount only while a press claims one: "Claim", never "Claim 0".
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 

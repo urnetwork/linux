@@ -1808,6 +1808,10 @@ LedgerClaimSheet::LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
   Rebuild();
   if (!claimsAvailable_) {
     ShowError(T_("claim_unavailable_linux", "Claiming is not available on this device yet."));
+  } else if (!progress_->FailureMessage().empty()) {
+    // opened on a claim that failed about no account: why nothing moved
+    ShowError(SnErrorMessage(progress_->FailureMessage(),
+                             T_("something_went_wrong", "Something went wrong.")));
   }
 }
 
@@ -1886,15 +1890,25 @@ void LedgerClaimSheet::Rebuild() {
     rowsPanel_->append(*line);
   }
   const int64_t rao = progress_->ClaimableRao();
-  totalValue_->set_markup("<span foreground='" + HexForMarkup(kReferralGoldLight) + "' size='" +
-                          std::to_string(36 * PANGO_SCALE) + "'>" +
-                          Glib::Markup::escape_text(FormatAlphaRao(rao)) + "</span>");
+  // the figure, as on the other apps' sheets: what a press claims, or a true
+  // zero once nothing is left; none while the rows left are below the claim
+  // minimum, unavailable, of an amount not known yet or in flight, which say
+  // what they are, never a zero
+  const bool totalKnown = progress_->TotalKnown();
+  totalValue_->set_visible(totalKnown);
+  if (totalKnown) {
+    totalValue_->set_markup("<span foreground='" + HexForMarkup(kReferralGoldLight) + "' size='" +
+                            std::to_string(36 * PANGO_SCALE) + "'>" +
+                            Glib::Markup::escape_text(FormatAlphaRao(rao)) + "</span>");
+  }
   BuildGasPanel(*gasPanel_, *this, gas_, NeedsGas(), snledger::kClaimGasTao, copiedReset_);
-  // the pool's account and the capture the flag account in one transaction
+  // the pool's account and the capture the flag account in one transaction;
+  // with nothing a press claims, Claim names no amount, never "Claim 0"
   claimButton_->set_label(progress_->ClaimsBoth()
                               ? Glib::ustring(T_("sn_ledger_claim_both", "Claim both"))
-                              : Glib::ustring(Format(T_("claim_amount_button", "Claim {}"),
-                                                     FormatAlphaRao(rao))));
+                          : 0 < rao ? Glib::ustring(Format(T_("claim_amount_button", "Claim {}"),
+                                                           FormatAlphaRao(rao)))
+                                    : Glib::ustring(T_("claim", "Claim")));
   claimButton_->set_sensitive(claimsAvailable_ && !progress_->Busy() && rao > 0 && !NeedsGas());
   closeButton_->set_label(progress_->AnyClaimed() && !progress_->Busy() ? T_("done", "Done")
                                                                          : T_("close", "Close"));
@@ -2161,18 +2175,22 @@ void EarningsPage::Load() {
 void EarningsPage::ResetForSignOut() {
   // what marks the own row on the boards; the next load reads it from the jwt
   ownNetworkId_.clear();
-  // the departed account's wins are not read again after its claim
+  // the departed account's wins are not read again after its claim, its lines
+  // go, and no answer of a read from before shows
   winsAfterClaim_.Stop();
-  // ...and its v2 claim in flight, the session's, ends here: no answer of it
-  // counts any more, and its watchdog goes, so it cannot give up on the next
-  // account's claim; Claim is the next account's. The v2 claim sheet, the
-  // departed account's, closes, as Android's dialog does.
-  if (ledgerClaim_.InFlight()) {
-    ledgerClaim_.Drop();
-    ++ledgerClaimFlow_.generation;
-    ledgerClaimFlow_.timer.disconnect();
-    claiming_ = false;
-  }
+  ctfWins_.Reset();
+  // ...and its claims in flight end here, v1's and v2's: no answer of either
+  // counts any more (v1's by the load below, which moves the epoch, v2's by
+  // ledgerClaim_, the session's), and their watchdogs go, so neither can give
+  // up on the next account's claim; Claim is the next account's. Their sheets,
+  // the departed account's, close, as Android's dialogs do.
+  ledgerClaim_.Drop();
+  ++claimFlow_.generation;
+  claimFlow_.timer.disconnect();
+  ++ledgerClaimFlow_.generation;
+  ledgerClaimFlow_.timer.disconnect();
+  claiming_ = false;
+  if (auto open = claimSheet_.lock()) open->set_visible(false);
   if (auto open = ledgerClaimSheet_.lock()) open->set_visible(false);
   // A switch's set still in flight was the departed account's. Load's epoch
   // drops its answer, so it is abandoned here: its watchdog would otherwise
@@ -2247,7 +2265,7 @@ void EarningsPage::SettleAllEmpty() {
   keys_->SignedOut();
   claimStatus_.reset();
   claimNowOutcome_ = ClaimNowOutcome{};
-  ctfWins_.clear();
+  ctfWins_.Reset();
   ApplyPoints(urnet::AccountPointsList{}, Fetch::Ready);
   ApplyEpochs(std::vector<AccountEpochRow>{}, Fetch::Ready);
   ApplySnWallet(std::nullopt, Fetch::Ready);
@@ -3569,9 +3587,11 @@ void EarningsPage::RebuildUnclaimedTile() {
 void EarningsPage::RebuildLedgerTile() {
   if (ledgerCard_ == nullptr) return;
   const bool connected = wallet_.has_value() && walletState_ == Fetch::Ready;
+  // while the v2 claim is in flight, Claim opens its sheet on its rows
   const snledger::SectionView view =
       snledger::SectionFor(connected, ledgerLoad_, ledgerAccounts_, ledgerUnavailable_,
-                           TransferFloorRao(), ledgerConfigured_, claiming_, FormatAlphaRao);
+                           TransferFloorRao(), ledgerConfigured_, claiming_, FormatAlphaRao,
+                           ledgerClaim_.InFlight());
   const bool relayOnly = !view.visible && LedgerTileShowsRelayOnly();
   ledgerCard_->set_visible(view.visible || relayOnly);
   if (!view.visible && !relayOnly) return;
@@ -3643,7 +3663,7 @@ void EarningsPage::RebuildLedgerTile() {
   }
   // every capture the flag win not claimed yet, newest first: one of a
   // country's slots, by role
-  for (const snledger::WonLine& won : snledger::WonLinesFor(ctfWins_)) {
+  for (const snledger::WonLine& won : snledger::WonLinesFor(ctfWins_.Wins())) {
     const std::string country = CountryNameOrCode(won.country);
     ledgerRows_->append(*MakeWrappedNote(
         won.slot == snledger::WonSlot::Provider
@@ -5325,21 +5345,24 @@ int64_t EarningsPage::TransferFloorRao() const {
 
 void EarningsPage::LoadCtfWins() {
   if (!CanCallApi()) return;
-  auto epoch = epoch_;
-  const uint64_t seen = *epoch_;
-  sn::FetchCtfWins(host_, [this, epoch, seen](std::optional<std::vector<snledger::Win>> wins) {
-    PostToMain([this, epoch, seen, wins = std::move(wins)]() mutable {
-      if (*epoch != seen) return;
-      ApplyCtfWins(std::move(wins));
+  // Reads overlap (each visit's load, a claim's Done and the reads after it):
+  // the read's number orders its answer among theirs, in place of the load's
+  // epoch, which would drop an older read's good answer behind a newer read
+  // that fails. A sign-out (ctfWins_.Reset) drops every read from before it,
+  // and nothing lands once the page is gone.
+  const uint64_t read = ctfWins_.Start();
+  auto alive = alive_;
+  sn::FetchCtfWins(host_, [this, alive, read](std::optional<std::vector<snledger::Win>> wins) {
+    PostToMain([this, alive, read, wins = std::move(wins)]() mutable {
+      if (!*alive) return;
+      ApplyCtfWins(read, std::move(wins));
     });
   });
 }
 
-void EarningsPage::ApplyCtfWins(std::optional<std::vector<snledger::Win>> answer) {
-  // an answer's wins, or for a read that failed the last answer's: a failure
-  // takes no line away
-  ctfWins_ = snledger::WinsAfterRead(std::move(ctfWins_), std::move(answer));
-  RebuildLedgerTile();
+void EarningsPage::ApplyCtfWins(uint64_t read, std::optional<std::vector<snledger::Win>> answer) {
+  // the newest read's good answer; a failure, or an older answer, changes nothing
+  if (ctfWins_.Apply(read, std::move(answer))) RebuildLedgerTile();
 }
 
 // Built in the constructor's initializer list, which runs it after alive_.
@@ -6369,7 +6392,7 @@ void EarningsPage::ApplyPreviewSample() {
     extender.role = snledger::kRoleExtender;
     extender.country = "ke";
     extender.epoch = 8;
-    ApplyCtfWins(std::vector<snledger::Win>{extender, provider});
+    ApplyCtfWins(ctfWins_.Start(), std::vector<snledger::Win>{extender, provider});
   }
   ApplyLedger(snledger::Load::Ready, accounts, unavailable, /*claimConfigured=*/true);
 }

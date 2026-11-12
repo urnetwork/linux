@@ -64,7 +64,7 @@ using urnw::snledger::ClaimInFlight;
 using urnw::snledger::kWinsReadsAfterClaimMs;
 using urnw::snledger::Win;
 using urnw::snledger::WinsAfterClaim;
-using urnw::snledger::WinsAfterRead;
+using urnw::snledger::WinsLines;
 using urnw::snledger::WonLine;
 using urnw::snledger::WonLinesFor;
 using urnw::snledger::WonSlot;
@@ -232,6 +232,26 @@ UR_TEST(SnLedgerClaimWaitsForAClaimInFlight) {
   UR_EXPECT_TRUE(Tile(true, Load::Ready, {OnePool()}, true, true).showClaim);
   const Account paidOut = LedgerAccount(1, 42, 5'120'000'000, 5'120'000'000);
   UR_EXPECT_FALSE(Tile(true, Load::Ready, {paidOut}, true).claimEnabled);
+}
+
+// While the v2 claim is in flight (the session's, owner 2026-11-12), Claim
+// stays enabled, as Android's tile: it opens the claim's sheet on its rows,
+// where Claim waits for it, so a page left during the claim and come back to
+// shows it, whatever the page's read says meanwhile (loading, unavailable, or
+// the accounts the claim already paid). A v1 claim in flight still holds it.
+UR_TEST(SnLedgerCtf_ClaimOpensTheV2ClaimInFlight) {
+  const Account paidOut = LedgerAccount(1, 42, 5'120'000'000, 5'120'000'000);
+  for (const Load load : {Load::Ready, Load::Loading, Load::Unavailable}) {
+    const SectionView view =
+        SectionFor(true, load, {paidOut}, {}, 0, /*claimConfigured=*/true, /*claiming=*/true, Tag,
+                   /*ledgerClaimInFlight=*/true);
+    UR_EXPECT_TRUE(view.visible && view.showClaim && view.claimEnabled);
+  }
+  UR_EXPECT_TRUE(SectionFor(true, Load::Ready, {OnePool()}, {}, 0, true, true, Tag, true).claimEnabled);
+  // a v1 claim in flight: the v2 Claim waits, as before
+  UR_EXPECT_FALSE(SectionFor(true, Load::Ready, {OnePool()}, {}, 0, true, true, Tag, false).claimEnabled);
+  // and without v2 claims configured there is no Claim to open it with
+  UR_EXPECT_FALSE(SectionFor(true, Load::Ready, {OnePool()}, {}, 0, false, true, Tag, true).claimEnabled);
 }
 
 // CL-2: with more than one pool each account names its pool, and Claim
@@ -1423,22 +1443,24 @@ UR_TEST(SnLedgerCtf_EveryUnclaimedWinIsALine) {
 
 // GET /sn/ctf/client as the SDK reads it: one answer per read in turn, the last
 // one for every read after it, except the reads in `failing` (counted from 0),
-// which fail (ctf_unavailable). As the page's LoadCtfWins and ApplyCtfWins do,
-// an answer replaces the lines and a failure keeps them (WinsAfterRead).
+// which fail (ctf_unavailable). Each read answers at once, through the page's
+// WinsLines as its LoadCtfWins and ApplyCtfWins use it: the newest good answer
+// shows, and a failure keeps the lines.
 struct FakeWinsRoute {
   std::vector<std::vector<Win>> answers;
   std::vector<size_t> failing;
   size_t reads = 0;
-  std::vector<Win> shown;
+  WinsLines wins;
   std::vector<WonLine> lines;
 
   void Read() {
+    const uint64_t read = wins.Start();
     std::optional<std::vector<Win>> answer;
     if (std::find(failing.begin(), failing.end(), reads) == failing.end()) {
       answer = answers[std::min(reads, answers.size() - 1)];
     }
-    shown = WinsAfterRead(std::move(shown), std::move(answer));
-    lines = WonLinesFor(shown);
+    wins.Apply(read, std::move(answer));
+    lines = WonLinesFor(wins.Wins());
     ++reads;
   }
 };
@@ -1579,17 +1601,20 @@ UR_TEST(SnLedgerCtf_TheWinsAfterAClaimStopOnSignOutAndStartOverWithTheNextClaim)
   UR_EXPECT_EQ(7u, route.reads);
 }
 
-// ---- a wins read that fails (every app, 2026-11-12) ------------------------------------
+// ---- a wins read that fails, and reads that overlap (every app, 2026-11-12) ---------------
 
 // A read that fails keeps the lines of the last read that answered: only an
 // answer that no longer lists a win takes its line away (and a sign-out, the
-// page's SettleAllEmpty). A session's first read draws none until it answers
+// page's ResetForSignOut and SettleAllEmpty). A session's first read draws
+// none until it answers
 UR_TEST(SnLedgerCtf_AWinsReadThatFailsKeepsTheLines) {
   const std::vector<Win> both = {WonIn(10, "provider", "is"), WonIn(9, "extender", "ke")};
-  UR_EXPECT_EQ(2u, WinsAfterRead({}, both).size());
-  UR_EXPECT_EQ(2u, WinsAfterRead(both, std::nullopt).size());
-  UR_EXPECT_TRUE(WinsAfterRead(both, std::vector<Win>{}).empty());
-  UR_EXPECT_TRUE(WinsAfterRead({}, std::nullopt).empty());
+  WinsLines wins;
+  UR_EXPECT_TRUE(wins.Apply(wins.Start(), both));
+  UR_EXPECT_FALSE(wins.Apply(wins.Start(), std::nullopt));
+  UR_EXPECT_EQ(2u, wins.Wins().size());
+  UR_EXPECT_TRUE(wins.Apply(wins.Start(), std::vector<Win>{}));
+  UR_EXPECT_TRUE(wins.Wins().empty());
   // a failure between two reads that answer leaves the lines as they were
   FakeWinsRoute route;
   route.answers = {both, both, {WonIn(10, "provider", "is")}};
@@ -1640,6 +1665,76 @@ UR_TEST(SnLedgerCtf_TheReadsAfterAClaimThatFailKeepTheLines) {
   UR_EXPECT_TRUE(route.lines.empty());
 }
 
+// Reads overlap (each visit's load, a claim's Done and the reads after it) and
+// their answers land in any order. The lines show the newest read's good
+// answer, by the order the reads started (Apple's and Windows' too): an older
+// answer that lands late never replaces a newer one, and a newer read that
+// fails never keeps an older good answer still to land from showing. A sign-out
+// drops every read from before it
+UR_TEST(SnLedgerCtf_OverlappingWinsReadsShowTheNewestGoodAnswer) {
+  const std::vector<Win> both = {WonIn(10, "provider", "is"), WonIn(9, "extender", "ke")};
+  const std::vector<Win> iceland = {WonIn(10, "provider", "is")};
+  WinsLines wins;
+  // an older read's answer lands after a newer one's, in each order
+  const uint64_t older = wins.Start();
+  const uint64_t newer = wins.Start();
+  UR_EXPECT_TRUE(wins.Apply(newer, iceland));
+  UR_EXPECT_FALSE(wins.Apply(older, both));
+  UR_EXPECT_EQ(1u, wins.Wins().size());
+  const uint64_t first = wins.Start();
+  const uint64_t second = wins.Start();
+  UR_EXPECT_TRUE(wins.Apply(first, both));
+  UR_EXPECT_TRUE(wins.Apply(second, iceland));
+  UR_EXPECT_EQ(1u, wins.Wins().size());
+  // a newer read fails first, then the older read's good answer lands: it shows
+  const uint64_t slow = wins.Start();
+  const uint64_t failed = wins.Start();
+  UR_EXPECT_FALSE(wins.Apply(failed, std::nullopt));
+  UR_EXPECT_TRUE(wins.Apply(slow, std::vector<Win>{}));
+  UR_EXPECT_TRUE(wins.Wins().empty());
+  // a read from before a sign-out shows nowhere after it, and the next
+  // session's first read shows none until it answers
+  UR_EXPECT_TRUE(wins.Apply(wins.Start(), both));
+  const uint64_t departed = wins.Start();
+  wins.Reset();
+  UR_EXPECT_TRUE(wins.Wins().empty());
+  UR_EXPECT_FALSE(wins.Apply(departed, both));
+  UR_EXPECT_TRUE(wins.Wins().empty());
+  UR_EXPECT_TRUE(wins.Apply(wins.Start(), iceland));
+  UR_EXPECT_EQ(1u, wins.Wins().size());
+}
+
+// The read at Done waits on a slow route; the read 30 s after Done finds the
+// win claimed and its line goes; the read at Done's late answer, which still
+// lists it, is older and brings nothing back
+UR_TEST(SnLedgerCtf_ASlowReadAtDoneNeverBringsAPaidLineBack) {
+  const std::vector<Win> unclaimed = {WonIn(10, "provider", "is")};
+  WinsLines wins;
+  std::vector<std::pair<uint64_t, std::optional<std::vector<Win>>>> outstanding;
+  FakeClock clock;
+  size_t reads = 0;
+  // the read at Done answers last; every other read answers at once, claimed
+  WinsAfterClaim after({[&] {
+                          const uint64_t read = wins.Start();
+                          if (reads++ == 0) {
+                            outstanding.emplace_back(read, unclaimed);
+                            return;
+                          }
+                          wins.Apply(read, std::vector<Win>{});
+                        },
+                        clock.Port()});
+  UR_EXPECT_TRUE(wins.Apply(wins.Start(), unclaimed));  // the page's load
+  after.Done(/*paid=*/true);
+  UR_EXPECT_EQ(1u, wins.Wins().size());
+  clock.AdvanceTo(30'000);
+  UR_EXPECT_TRUE(wins.Wins().empty());
+  UR_EXPECT_EQ(1u, outstanding.size());
+  if (outstanding.size() == 1) {
+    UR_EXPECT_FALSE(wins.Apply(outstanding[0].first, outstanding[0].second));
+  }
+  UR_EXPECT_TRUE(wins.Wins().empty());
+}
+
 // ---- the v2 claim in flight: the session's, not a load's (owner, 2026-11-12) -----------
 
 // what a press paid (Android's snLedgerClaimPaid): an account claimed, or
@@ -1668,16 +1763,15 @@ UR_TEST(SnLedgerCtf_APressPaysWhenAnAccountIsClaimed) {
 
 // Each visit to Earnings loads the page again, and a load drops every answer
 // armed for the load before it, as a claim's answers were. They count by the
-// session's ClaimInFlight instead, which no load touches: a user who closes
-// the sheet during a claim, leaves Earnings and comes back still has the claim
-// in flight, a sheet opened then draws its rows, and its events and its Done
-// land, after which the wins are read on the apps' schedule
+// session's ClaimInFlight instead, which no load touches (the page's gate is
+// SnLedgerCtf_TheClaimIsTheSessionsNotALoads): the claim's calls through a
+// user who closes the sheet during a claim, leaves Earnings and comes back. The
+// claim is still in flight, a sheet opened then draws its rows, and its events
+// and its Done land, after which the wins are read on the apps' schedule
 UR_TEST(SnLedgerCtf_AClaimOutlivesLeavingEarningsAndComingBack) {
   ClaimInFlight claim;
   UR_EXPECT_FALSE(claim.InFlight());
   UR_EXPECT_TRUE(claim.Rows() == nullptr);
-  // the page's loads: each drops what the load before it armed
-  uint64_t load = 1;
   FakeWinsRoute route;
   route.answers = {{WonIn(10, "provider", "is")},
                    {WonIn(10, "provider", "is")},
@@ -1689,16 +1783,14 @@ UR_TEST(SnLedgerCtf_AClaimOutlivesLeavingEarningsAndComingBack) {
   // the sheet on the accounts as read, and its Claim
   auto sheet = std::make_shared<ClaimProgress>(CtfSheet(615'000'000));
   const uint64_t ticket = claim.Start(sheet);
-  const uint64_t armedIn = load;
   UR_EXPECT_TRUE(claim.InFlight() && claim.Current(ticket));
   UR_EXPECT_TRUE(claim.Rows() == sheet && sheet->Busy());
   claim.Rows()->Sent(1, 42, "0xba7c");
-  // the user closes the sheet, leaves Earnings and comes back: another load
+  // the user closes the sheet, leaves Earnings and comes back: the page loads
+  // again, which reads the wins and touches nothing of the claim
   sheet.reset();
-  ++load;
   route.Read();
-  UR_EXPECT_TRUE(load != armedIn);  // a load's guard drops every answer from here on
-  UR_EXPECT_TRUE(claim.InFlight() && claim.Current(ticket));  // the session's keeps them
+  UR_EXPECT_TRUE(claim.InFlight() && claim.Current(ticket));
   claim.Rows()->Sent(kCtfPool, 7, "0xba7c");
   claim.Rows()->Confirmed(1, 42, "0xba7c", 3'241'000'000);
   // a sheet opened now draws the claim in flight: its rows, and no Claim yet
@@ -1754,6 +1846,79 @@ UR_TEST(SnLedgerCtf_ASignOutOrTheWatchdogEndsTheClaimInFlight) {
   UR_EXPECT_TRUE(RowOf(*next, 3, 5)->phase == Phase::Claimable);
 }
 
+// A failure about no account (noId 0) leaves the rows as they are: the sheet
+// says it, and so does a sheet opened on the claim after it (it was closed when
+// the failure came); the next press starts without it
+UR_TEST(SnLedgerCtf_AFailureAboutNoAccountStaysWithTheClaim) {
+  ClaimProgress progress = CtfSheet(615'000'000);
+  progress.Start();
+  UR_EXPECT_TRUE(progress.FailureMessage().empty());
+  UR_EXPECT_FALSE(progress.Failed(0, 0, "chain_rpc_unreachable: dial tcp: i/o timeout"));
+  UR_EXPECT_TRUE(progress.FailureMessage() == "chain_rpc_unreachable: dial tcp: i/o timeout");
+  UR_EXPECT_TRUE(RowOf(progress, 1, 42)->phase == Phase::Sending);
+  progress.Done();
+  UR_EXPECT_TRUE(progress.FailureMessage() == "chain_rpc_unreachable: dial tcp: i/o timeout");
+  progress.Start();
+  UR_EXPECT_TRUE(progress.FailureMessage().empty());
+  // an account's failure is its row's, not the sheet's
+  UR_EXPECT_TRUE(progress.Failed(1, 42, "claim_failed: the claim transaction reverted"));
+  UR_EXPECT_TRUE(progress.FailureMessage().empty());
+}
+
+// ---- the claim sheet's figure (as Apple's, Windows' and Android's) ----------------------
+
+// The figure is what a press claims while an account above the floor is left,
+// or a true zero once nothing is left at all; there is none while the rows left
+// are below the claim minimum, in a pool that could not be read, of an amount
+// not known yet, or in flight, and then Claim names no amount (ClaimableRao is
+// 0), never "Claim 0". An account under the floor never counts, whatever the
+// SDK said of it since
+UR_TEST(SnLedgerCtf_TheSheetHasNoFigureWhileNothingAboveTheFloorIsLeft) {
+  ClaimProgress above = CtfSheet(615'000'000);
+  UR_EXPECT_TRUE(above.TotalKnown());
+  UR_EXPECT_EQ(int64_t{3'241'000'000 + 615'000'000}, above.ClaimableRao());
+  // a lone account under the floor, and a lone pool that could not be read
+  const ClaimProgress lone({CtfAccount(20'000'000)}, {}, kFloor);
+  UR_EXPECT_FALSE(lone.TotalKnown());
+  UR_EXPECT_EQ(int64_t{0}, lone.ClaimableRao());
+  const ClaimProgress unread({}, {Unreadable(kCtfPool, urnw::snledger::kKindCtf)}, kFloor);
+  UR_EXPECT_FALSE(unread.TotalKnown());
+  // nothing at all: a true zero
+  const ClaimProgress none({}, {}, kFloor);
+  UR_EXPECT_TRUE(none.TotalKnown());
+  UR_EXPECT_EQ(int64_t{0}, none.ClaimableRao());
+  // the pool's account above the floor, capture the flag's under it
+  ClaimProgress claim = CtfSheet(20'000'000);
+  UR_EXPECT_TRUE(claim.TotalKnown());
+  UR_EXPECT_EQ(int64_t{3'241'000'000}, claim.ClaimableRao());
+  claim.Start();
+  UR_EXPECT_FALSE(claim.TotalKnown());  // in flight
+  claim.Sent(1, 42, "0xba7c");
+  claim.Confirmed(1, 42, "0xba7c", 3'241'000'000);
+  // the SDK tried the one under the floor too, and the gas key fell short:
+  // claimable again, and still under the floor
+  UR_EXPECT_TRUE(claim.Failed(kCtfPool, 7, "needs_gas: the gas key holds 0.004 TAO"));
+  claim.Done();
+  UR_EXPECT_TRUE(RowOf(claim, kCtfPool, 7)->phase == Phase::Claimable);
+  UR_EXPECT_FALSE(claim.TotalKnown());
+  UR_EXPECT_EQ(int64_t{0}, claim.ClaimableRao());
+  // every row claimed: a true zero
+  ClaimProgress all = CtfSheet(615'000'000);
+  all.Start();
+  all.Confirmed(1, 42, "0xba7c", 3'241'000'000);
+  all.Confirmed(kCtfPool, 7, "0xba7c", 615'000'000);
+  all.Done();
+  UR_EXPECT_TRUE(all.TotalKnown());
+  UR_EXPECT_EQ(int64_t{0}, all.ClaimableRao());
+  // an account the SDK reported that the sheet did not list: amount not known
+  ClaimProgress unknown({}, {}, kFloor);
+  unknown.Start();
+  UR_EXPECT_TRUE(unknown.Failed(2, 9, "needs_gas: the gas key holds 0.004 TAO"));
+  unknown.Done();
+  UR_EXPECT_TRUE(RowOf(unknown, 2, 9) != nullptr);
+  UR_EXPECT_FALSE(unknown.TotalKnown());
+}
+
 // ---- the page's wiring and English, read from the sources ----------------------
 
 std::string ReadLedgerSource(const std::string& relative) {
@@ -1806,6 +1971,10 @@ UR_TEST(SnLedgerPageDrawsTheDecision) {
   UR_EXPECT_TRUE(!page.empty());
   const std::string tile = LedgerFunctionBody(page, "void EarningsPage::RebuildLedgerTile()");
   UR_EXPECT_TRUE(tile.find("snledger::SectionFor(") != std::string::npos);
+  // a v2 claim in flight leaves Claim enabled, to open its sheet
+  // (SnLedgerCtf_ClaimOpensTheV2ClaimInFlight)
+  UR_EXPECT_TRUE(tile.find("TransferFloorRao(), ledgerConfigured_, claiming_, FormatAlphaRao,\n"
+                           "                           ledgerClaim_.InFlight());") != std::string::npos);
   UR_EXPECT_TRUE(page.find("ledgerClaimButton_->signal_clicked().connect(\n"
                            "        sigc::mem_fun(*this, &EarningsPage::OnLedgerClaim));") !=
                  std::string::npos);
@@ -2123,8 +2292,12 @@ UR_TEST(SnLedgerCtf_TheWonSlotLineIsWired) {
   UR_EXPECT_TRUE(fetch.find("if (!host.DeviceSteady()) {\n    done(std::nullopt);") != std::string::npos);
   UR_EXPECT_TRUE(fetch.find("if (err || !result || result->error || !result->unclaimed_wins) {\n"
                             "      done(std::nullopt);") != std::string::npos);
+  // the newest read's good answer shows (SnLedgerCtf_OverlappingWinsReadsShow
+  // TheNewestGoodAnswer)
   UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::ApplyCtfWins(")
-                     .find("ctfWins_ = snledger::WinsAfterRead(std::move(ctfWins_), std::move(answer));") !=
+                     .find("if (ctfWins_.Apply(read, std::move(answer))) RebuildLedgerTile();") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(ReadLedgerSource("EarningsPage.hpp").find("  snledger::WinsLines ctfWins_;") !=
                  std::string::npos);
   UR_EXPECT_TRUE(fetch.find("for (const urnet::SnCtfWin& unclaimed : *result->unclaimed_wins) {") !=
                  std::string::npos);
@@ -2139,7 +2312,10 @@ UR_TEST(SnLedgerCtf_TheWonSlotLineIsWired) {
                             "urnet::SnCtfWinClaimStateUnclaimed,") != std::string::npos);
   UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::LoadEarnings()").find("LoadCtfWins();") !=
                  std::string::npos);
-  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::SettleAllEmpty()").find("ctfWins_.clear();") !=
+  // a sign-out, and no session: no lines, and no answer of a read from before
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::SettleAllEmpty()").find("ctfWins_.Reset();") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::ResetForSignOut()").find("ctfWins_.Reset();") !=
                  std::string::npos);
   // a win the claim paid reads claimed once the finalized head covers the
   // claim: the lines are read again after Done (SnLedgerCtf_TheWinsAfterA
@@ -2149,7 +2325,7 @@ UR_TEST(SnLedgerCtf_TheWonSlotLineIsWired) {
   UR_EXPECT_TRUE(settle != std::string::npos &&
                  start.find("winsAfterClaim_.Done(paid);", settle) != std::string::npos);
   const std::string tile = LedgerFunctionBody(page, "void EarningsPage::RebuildLedgerTile()");
-  UR_EXPECT_TRUE(tile.find("for (const snledger::WonLine& won : snledger::WonLinesFor(ctfWins_)) {") !=
+  UR_EXPECT_TRUE(tile.find("for (const snledger::WonLine& won : snledger::WonLinesFor(ctfWins_.Wins())) {") !=
                  std::string::npos);
   UR_EXPECT_TRUE(tile.find("const std::string country = CountryNameOrCode(won.country);") !=
                  std::string::npos);
@@ -2208,19 +2384,28 @@ UR_TEST(SnLedgerCtf_TheWinsAfterAClaimAreWired) {
                  std::string::npos);
   UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::SettleAllEmpty()").find("winsAfterClaim_.Stop();") !=
                  std::string::npos);
-  // a read needs a session, and its answer the load it was asked in
+  // a read needs a session; its number, taken as it starts, orders its answer
+  // among the others', in place of the load's epoch, which would drop an older
+  // read's good answer behind a newer read that fails; nothing lands once the
+  // page is gone
   const std::string load = LedgerFunctionBody(page, "void EarningsPage::LoadCtfWins()");
   UR_EXPECT_TRUE(load.find("if (!CanCallApi()) return;") != std::string::npos);
-  UR_EXPECT_TRUE(load.find("if (*epoch != seen) return;") != std::string::npos);
+  const size_t number = load.find("const uint64_t read = ctfWins_.Start();");
+  UR_EXPECT_TRUE(number != std::string::npos && number < load.find("sn::FetchCtfWins("));
+  UR_EXPECT_TRUE(load.find("if (!*alive) return;\n      ApplyCtfWins(read, std::move(wins));") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(load.find("*epoch") == std::string::npos && load.find("epoch_") == std::string::npos);
 }
 
 // The v2 claim is the session's, not a load's (owner, 2026-11-12;
 // SnLedgerCtf_AClaimOutlivesLeavingEarningsAndComingBack runs ClaimInFlight):
 // every answer of it counts by the page's ClaimInFlight while the page lives,
-// never by the load's epoch, which each visit to Earnings bumps; no load
-// touches the claim; a sheet opened during it draws its rows; its watchdog
-// ends it; and a sign-out drops it, its watchdog and Claim's wait, and closes
-// its sheet
+// never by the load's epoch, which each visit to Earnings bumps, nor by any
+// other gate: each answer captures only the page, its life and the claim's
+// ticket, and its one guard comes first. No load touches the claim; a sheet
+// opened during it draws its rows; its watchdog ends it; and a sign-out drops
+// it and the v1 claim, their watchdogs and Claim's wait, and closes their
+// sheets
 UR_TEST(SnLedgerCtf_TheClaimIsTheSessionsNotALoads) {
   const std::string page = ReadLedgerSource("EarningsPage.cpp");
   const std::string start = LedgerFunctionBody(page, "void EarningsPage::StartLedgerClaim()");
@@ -2228,10 +2413,44 @@ UR_TEST(SnLedgerCtf_TheClaimIsTheSessionsNotALoads) {
   UR_EXPECT_TRUE(start.find("const uint64_t claim = ledgerClaim_.Start(\n      sheet ? sheet->Progress()") !=
                  std::string::npos);
   UR_EXPECT_TRUE(start.find("auto alive = alive_;") != std::string::npos);
-  size_t guards = 0;
-  const std::string guard = "if (!*alive || !ledgerClaim_.Current(claim)) return;";
-  for (size_t at = start.find(guard); at != std::string::npos; at = start.find(guard, at + 1)) ++guards;
-  UR_EXPECT_EQ(4u, guards);  // sent, confirmed, failed, done
+  const std::string guard = "      if (!*alive || !ledgerClaim_.Current(claim)) return;\n";
+  // each answer: what it captures, its guard first, and no other way out
+  struct Answer {
+    const char* at;
+    const char* opening;
+    size_t returns;
+  };
+  const Answer answers[] = {
+      {"callback.sent =",
+       "callback.sent = [this, alive, claim](int64_t noId, int64_t index, std::string txHash) {\n"
+       "    PostToMain([this, alive, claim, noId, index, txHash = std::move(txHash)] {\n",
+       1},
+      {"callback.confirmed =",
+       "callback.confirmed = [this, alive, claim](int64_t noId, int64_t index, std::string txHash,\n"
+       "                                            int64_t amountRao) {\n"
+       "    PostToMain([this, alive, claim, noId, index, txHash = std::move(txHash), amountRao] {\n",
+       1},
+      {"callback.failed =",
+       "callback.failed = [this, alive, claim](int64_t noId, int64_t index, std::string message) {\n"
+       "    PostToMain([this, alive, claim, noId, index, message = std::move(message)] {\n",
+       1},
+      // and the watchdog's settle, which only a give-up already final fails
+      {"callback.done =",
+       "callback.done = [this, alive, claim, generation] {\n"
+       "    PostToMain([this, alive, claim, generation] {\n",
+       2},
+  };
+  for (const Answer& answer : answers) {
+    const size_t from = start.find(answer.at);
+    const size_t next = start.find("callback.", from + 1);
+    const std::string body = from == std::string::npos ? std::string() : start.substr(from, next - from);
+    UR_EXPECT_TRUE_MSG(answer.at, body.find(std::string(answer.opening) + guard) == 0);
+    size_t returns = 0;
+    for (size_t at = body.find("return;"); at != std::string::npos; at = body.find("return;", at + 1)) {
+      ++returns;
+    }
+    UR_EXPECT_EQ(answer.returns, returns);
+  }
   UR_EXPECT_TRUE(start.find("ledgerClaim_.Rows()->Sent(noId, index, txHash);") != std::string::npos);
   // the watchdog's give-up is final: no later answer of the claim counts
   const size_t watchdog = start.find("BeginFlow(ledgerClaimFlow_, watchdogMs, [this] {");
@@ -2265,15 +2484,20 @@ UR_TEST(SnLedgerCtf_TheClaimIsTheSessionsNotALoads) {
                            "LedgerClaimSheet::OnDone("}) {
     UR_EXPECT_TRUE_MSG(gone, page.find(gone) == std::string::npos);
   }
-  // a sign-out drops the claim, its watchdog and Claim's wait, and closes its sheet
+  // a sign-out drops the v2 claim, ends the v1 claim's watch (its answers fall
+  // to the load's epoch), frees Claim, and closes both claims' sheets
   const std::string signOut = LedgerFunctionBody(page, "void EarningsPage::ResetForSignOut()");
-  UR_EXPECT_TRUE(signOut.find("if (ledgerClaim_.InFlight()) {\n"
-                              "    ledgerClaim_.Drop();\n"
-                              "    ++ledgerClaimFlow_.generation;\n"
-                              "    ledgerClaimFlow_.timer.disconnect();\n"
-                              "    claiming_ = false;\n"
-                              "  }\n"
+  UR_EXPECT_TRUE(signOut.find("  ledgerClaim_.Drop();\n"
+                              "  ++claimFlow_.generation;\n"
+                              "  claimFlow_.timer.disconnect();\n"
+                              "  ++ledgerClaimFlow_.generation;\n"
+                              "  ledgerClaimFlow_.timer.disconnect();\n"
+                              "  claiming_ = false;\n"
+                              "  if (auto open = claimSheet_.lock()) open->set_visible(false);\n"
                               "  if (auto open = ledgerClaimSheet_.lock()) open->set_visible(false);") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(signOut.find("Load();") != std::string::npos);
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::StartClaim(").find("if (*epoch != seen) return;") !=
                  std::string::npos);
   // the page's end: nothing of the claim lands once alive_ is false
   const std::string end = LedgerFunctionBody(page, "EarningsPage::~EarningsPage()");
@@ -2282,6 +2506,34 @@ UR_TEST(SnLedgerCtf_TheClaimIsTheSessionsNotALoads) {
   const std::string header = ReadLedgerSource("EarningsPage.hpp");
   UR_EXPECT_TRUE(header.find("snledger::ClaimInFlight ledgerClaim_;") != std::string::npos);
   UR_EXPECT_TRUE(header.find("ledgerClaimPaid_") == std::string::npos);
+}
+
+// The sheet draws ClaimProgress's figure: none while its total is not known,
+// and Claim names an amount only while a press claims one, never "Claim 0"
+// (SnLedgerCtf_TheSheetHasNoFigureWhileNothingAboveTheFloorIsLeft). A sheet
+// opened on a claim that failed about no account says why
+// (SnLedgerCtf_AFailureAboutNoAccountStaysWithTheClaim)
+UR_TEST(SnLedgerCtf_TheSheetsFigureIsWired) {
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  const std::string rebuild = LedgerFunctionBody(page, "void LedgerClaimSheet::Rebuild()");
+  const size_t known = rebuild.find("const bool totalKnown = progress_->TotalKnown();\n"
+                                    "  totalValue_->set_visible(totalKnown);\n"
+                                    "  if (totalKnown) {\n"
+                                    "    totalValue_->set_markup(");
+  UR_EXPECT_TRUE(known != std::string::npos);
+  size_t markups = 0;
+  for (size_t at = rebuild.find("set_markup("); at != std::string::npos; at = rebuild.find("set_markup(", at + 1)) {
+    ++markups;
+  }
+  UR_EXPECT_EQ(1u, markups);
+  UR_EXPECT_TRUE(rebuild.find(": 0 < rao ? Glib::ustring(Format(T_(\"claim_amount_button\", \"Claim {}\"),") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(rebuild.find(": Glib::ustring(T_(\"claim\", \"Claim\")));") != std::string::npos);
+  const std::string sheet =
+      LedgerFunctionBody(page, "LedgerClaimSheet::LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,");
+  UR_EXPECT_TRUE(sheet.find("} else if (!progress_->FailureMessage().empty()) {\n"
+                            "    // opened on a claim that failed about no account: why nothing moved\n"
+                            "    ShowError(SnErrorMessage(progress_->FailureMessage(),") != std::string::npos);
 }
 
 // The Transaction link of URnetwork's claim (the claim relay's 4d): the SDK's

@@ -538,11 +538,12 @@ class EarningsPage : public Gtk::Box {
   // ---- capture the flag: the won slots' lines (GET /sn/ctf/client) ---------
   // Every win whose award is not claimed yet, read on every load and after a
   // v2 claim (snledger::WinsAfterClaim): a line each, newest first, naming
-  // the role and the country (snledger::WonLinesFor). `answer` is nullopt for
-  // a read that failed or could not be asked, which keeps the lines the last
-  // answer drew (snledger::WinsAfterRead).
+  // the role and the country (snledger::WonLinesFor). The answer of read
+  // number `read` shows unless a newer read's good answer already does; it is
+  // nullopt for a read that failed or could not be asked, which keeps the
+  // lines (snledger::WinsLines).
   void LoadCtfWins();
-  void ApplyCtfWins(std::optional<std::vector<snledger::Win>> answer);
+  void ApplyCtfWins(uint64_t read, std::optional<std::vector<snledger::Win>> answer);
   // The schedule's reads go through LoadCtfWins, on the main loop's timers.
   snledger::WinsAfterClaim::Ports WinsAfterClaimPorts();
 
@@ -922,10 +923,11 @@ class EarningsPage : public Gtk::Box {
   bool claimingNow_ = false;
   std::weak_ptr<ClaimRelaySheet> claimRelaySheet_;
 
-  // the capture the flag wins not claimed yet, as the last read that answered
-  // listed them: a read that failed keeps them (none before the first answer
-  // after a sign-in, and none without one)
-  std::vector<snledger::Win> ctfWins_;
+  // the capture the flag wins not claimed yet, as the newest read that
+  // answered listed them, by the order the reads started: a read that failed
+  // keeps them (none before the first answer after a sign-in, and none
+  // without one)
+  snledger::WinsLines ctfWins_;
   // their reads after a v2 claim's Done: at Done, and on the apps' schedule
   // after a claim that paid an account; stopped on sign-out
   snledger::WinsAfterClaim winsAfterClaim_;
