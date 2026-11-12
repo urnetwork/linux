@@ -219,6 +219,12 @@ class MainWindow : public Gtk::ApplicationWindow {
   // the prompt under its error, a signed-in window a toast. Never changes the
   // region.
   void OnApiUnreachable(const std::string& error);
+  // Signed in, the connect window's diagnosis just turned to the platform
+  // being unreachable (urnet::cantReachOnStall in ApplyConnectReading): the
+  // same prompt, as Windows raises it.
+  void OnPlatformUnreachable();
+  // Raises the prompt where the user is (region::PlaceCantReachPrompt).
+  void ShowCantReachPrompt();
   void SetLoginNotice(const Glib::ustring& text);
   // the signed-out Hero Bloom (motion-overhaul §2.1): hero spring + ripple
   void RunSignedOutReveal();

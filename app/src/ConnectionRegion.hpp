@@ -14,9 +14,10 @@
 // Undisclosed" (""). It shows the resolvers a choice uses.
 //
 // When a call to URnetwork fails at the network level (no answer at all, not
-// an auth or validation refusal), the app offers "Can't reach URnetwork --
-// choose where you're connecting from", which opens the picker. It never
-// changes the region by itself.
+// an auth or validation refusal), or a signed-in connect finds the platform
+// unreachable, the app offers "Can't reach URnetwork -- choose where you're
+// connecting from", which opens the picker. It never changes the region by
+// itself. Which failures count is the SDK's rule (see the can't reach part).
 //
 // Pure, with no GTK or SDK dependency, so the unit suite runs it anywhere; the
 // GTK sheet (ConnectionRegionSheet) and SdkHost supply the store and names.
@@ -119,57 +120,23 @@ class Picker {
 
 // ---- can't reach ------------------------------------------------------------
 
-// Whether a failed call to URnetwork failed at the network level: the request
-// got no answer (lookup, dial, tls or timeout), as against an answer that
-// refused it (an http status, an auth or validation message). An api call that
-// no route answered fails as "http request attempts exhausted" (connect
-// HttpRequestExhaustedError), whose text names none of its causes; the other
-// transport errors are Go's net and http errors. A server answer reads as
-// "<status code> <status>: <body>" (connect HttpStatusError) or the server's
-// own message.
-inline bool IsCantReachError(const std::string& error) {
-  if (error.empty()) return false;
-  // an http status answer: the server was reached
-  if (error.size() >= 4 && std::isdigit(static_cast<unsigned char>(error[0])) &&
-      std::isdigit(static_cast<unsigned char>(error[1])) &&
-      std::isdigit(static_cast<unsigned char>(error[2])) && error[3] == ' ') {
-    return false;
-  }
-  const std::string lower = Lowercased(error);
-  static const char* const kMarkers[] = {
-      "http request attempts exhausted",
-      "no such host",
-      "could not resolve",
-      "server misbehaving",
-      "dial tcp",
-      "dial udp",
-      "i/o timeout",
-      "connection refused",
-      "connection reset",
-      "network is unreachable",
-      "no route to host",
-      "host is down",
-      "context deadline exceeded",
-      "tls handshake timeout",
-      "timeout awaiting response headers",
-      "client.timeout exceeded",
-  };
-  for (const char* marker : kMarkers) {
-    if (lower.find(marker) != std::string::npos) return true;
-  }
-  return false;
-}
+// Which failures mean URnetwork could not be reached is the SDK's one rule for
+// every app (sdk cant_reach.go; support inbox 7956, 7973): a failed call's
+// text (urnet::isCantReachError, which SdkHost::NoteApiError asks), and,
+// signed in, the connect window's diagnosis turning to the platform being
+// unreachable (urnet::cantReachOnStall, which MainWindow::ApplyConnectReading
+// asks). Each app used to keep its own list of failure texts, and the lists
+// drifted; only Windows raised the prompt for a signed-in stall.
 
-// The prompt's state. It reads failures and only shows or hides; it holds no
-// store, so it cannot change the region (the user picks, in the picker).
+// The prompt's state. It is raised for a failure or a stall the SDK's rule
+// found unreachable, and only shows or hides; it holds no store, so it cannot
+// change the region (the user picks, in the picker).
 class CantReachPrompt {
  public:
   bool visible() const { return visible_; }
-  // A failed call: shows the prompt for a network-level failure. Any other
-  // failure leaves it as it is.
-  void OnFailure(const std::string& error) {
-    if (IsCantReachError(error)) visible_ = true;
-  }
+  // A call that got no answer, or a signed-in connect that turned
+  // unreachable, by the SDK's rule.
+  void Raise() { visible_ = true; }
   // A call that got an answer, or the user opened the picker.
   void Dismiss() { visible_ = false; }
 

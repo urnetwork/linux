@@ -14,7 +14,6 @@
 namespace {
 
 using urnw::region::CantReachPrompt;
-using urnw::region::IsCantReachError;
 using urnw::region::Option;
 using urnw::region::Options;
 using urnw::region::Picker;
@@ -96,50 +95,21 @@ UR_TEST(ConnectionRegion_LoginControlAndSettingsShareOneStoredValue) {
   UR_EXPECT_TRUE(store.value == "ir");
 }
 
-UR_TEST(ConnectionRegion_NetworkFailuresAreCantReach) {
-  UR_EXPECT_TRUE(IsCantReachError(
-      "Post \"https://api.bringyour.com/auth/login\": dial tcp: lookup api.bringyour.com: no such host"));
-  UR_EXPECT_TRUE(IsCantReachError("Could not resolve api.bringyour.com"));
-  UR_EXPECT_TRUE(IsCantReachError("dial tcp 1.2.3.4:443: i/o timeout"));
-  UR_EXPECT_TRUE(IsCantReachError("dial tcp 1.2.3.4:443: connect: connection refused"));
-  UR_EXPECT_TRUE(IsCantReachError("read tcp: connection reset by peer"));
-  UR_EXPECT_TRUE(IsCantReachError("net/http: TLS handshake timeout"));
-  UR_EXPECT_TRUE(IsCantReachError("context deadline exceeded"));
-}
-
-// What the sdk's api calls answer when nothing reached URnetwork (support inbox
-// 8050): connect ends a request whose attempts all failed -- a lookup a censor
-// drops, a dial to a blackholed address, a timeout -- with its
-// HttpRequestExhaustedError, whose text names none of those causes
-// (net_http_exhaustion.go). A sign-in from such a network fails with exactly
-// this text, and it must offer the connection region like any no-answer error.
-UR_TEST(ConnectionRegion_AnExhaustedApiRequestIsCantReach) {
-  UR_EXPECT_TRUE(IsCantReachError("http request attempts exhausted"));
-  CantReachPrompt prompt;
-  prompt.OnFailure("http request attempts exhausted");
-  UR_EXPECT_TRUE(prompt.visible());
-}
-
-UR_TEST(ConnectionRegion_RefusalsAreNotCantReach) {
-  UR_EXPECT_FALSE(IsCantReachError(""));
-  UR_EXPECT_FALSE(IsCantReachError("401 Unauthorized: {\"message\":\"timeout awaiting response headers\"}"));
-  UR_EXPECT_FALSE(IsCantReachError("400 Bad Request: invalid user auth"));
-  UR_EXPECT_FALSE(IsCantReachError("Invalid user or password."));
-  UR_EXPECT_FALSE(IsCantReachError("verification required"));
-  UR_EXPECT_FALSE(IsCantReachError("superseded by signing out"));
-  UR_EXPECT_FALSE(IsCantReachError("no result"));
-}
-
-UR_TEST(ConnectionRegion_ThePromptShowsOnlyForCantReachAndNeverChangesTheRegion) {
+// Which failures and stalls count as can't-reach is the SDK's one rule for
+// every app (sdk cant_reach.go, whose tests hold the cases this file and the
+// other apps' tests used to keep in four drifting lists; support inbox 7956,
+// 7973). SdkHost::NoteApiError asks urnet::isCantReachError and
+// MainWindow::ApplyConnectReading asks urnet::cantReachOnStall; the prompt only
+// shows what they found.
+UR_TEST(ConnectionRegion_ThePromptShowsWhatTheSdkFoundAndNeverChangesTheRegion) {
   FakeStore store(kSdkCodes);
   store.value = "tr";
   CantReachPrompt prompt;
-  prompt.OnFailure("Invalid user or password.");
   UR_EXPECT_FALSE(prompt.visible());
-  prompt.OnFailure("dial tcp: lookup api.bringyour.com: no such host");
+  prompt.Raise();
   UR_EXPECT_TRUE(prompt.visible());
-  prompt.OnFailure("401 Unauthorized: ");
-  UR_EXPECT_TRUE(prompt.visible());  // a later refusal does not hide it
+  prompt.Raise();  // a second failure or turn keeps it up
+  UR_EXPECT_TRUE(prompt.visible());
   prompt.Dismiss();
   UR_EXPECT_FALSE(prompt.visible());
   UR_EXPECT_EQ(0, store.sets);

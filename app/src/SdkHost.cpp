@@ -1238,7 +1238,8 @@ std::vector<std::string> SdkHost::IngressPlainDnsServers(const std::string& coun
 }
 
 void SdkHost::NoteApiError(const std::optional<std::string>& err) {
-  if (!err || !region::IsCantReachError(*err)) return;
+  // the SDK's one rule for every app (sdk cant_reach.go)
+  if (!err || !urnet::isCantReachError(*err)) return;
   g_message("sdkhost: a call to URnetwork got no answer: %s", err->c_str());
   if (onApiUnreachable_) onApiUnreachable_(*err);
 }
