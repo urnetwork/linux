@@ -5719,6 +5719,26 @@ msgctxt "extender_port_mapping_description"
 msgid "Asks your router, by UPnP, NAT-PMP or PCP, to forward TCP and UDP 443 and UDP 4053 to this device, so the extender can be reached from the internet. This opens a port on your router."
 msgstr "Požádá váš router přes UPnP, NAT-PMP nebo PCP, aby na toto zařízení přesměroval TCP a UDP 443 a UDP 4053, aby byl extender dosažitelný z internetu. Tím se na vašem routeru otevře port."
 
+#. Status line under the Open a port on my router switch when no method mapped the ports. The reason stays in the log, since the router's words can name an address; the device asks again on its own.
+msgctxt "extender_port_mapping_failed"
+msgid "Your router didn't open the ports. Trying again later."
+msgstr "Váš router porty neotevřel. Zkusíme to znovu později."
+
+#. Status line under the Open a port on my router switch once the router forwards the extender's ports. The first argument is the ports, such as TCP 443, UDP 443, UDP 4053 (an arrow joins a router port to the device's, as TCP 40443→443); the second is how the router was asked: PCP, NAT-PMP or UPnP. Neither is translated.
+msgctxt "extender_port_mapping_mapped"
+msgid "Your router forwards {0} ({1})."
+msgstr "Váš router přesměrovává {0} ({1})."
+
+#. Status line under the Open a port on my router switch while the router's first answer is awaited.
+msgctxt "extender_port_mapping_mapping"
+msgid "Asking your router…"
+msgstr "Dotazování routeru…"
+
+#. Status line under the Open a port on my router switch: the device has a public address, so the router is not asked to open anything.
+msgctxt "extender_port_mapping_not_needed"
+msgid "Not needed: this device has a public address."
+msgstr "Není potřeba: toto zařízení má veřejnou adresu."
+
 #. Extender status when the operator revoked this device's extender key.
 msgctxt "extender_revoked"
 msgid "Revoked by the operator"

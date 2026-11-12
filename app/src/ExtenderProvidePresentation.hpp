@@ -273,6 +273,97 @@ PortMappingRow PortMappingRowOf(const ProvideRow& extenderRow, bool writable,
   return row;
 }
 
+// ---- the router port mapping's status line (connect EXTENDER.md S10) --------
+// One line under the switch while it shows and is on and the role reports a
+// state: that this device needs no mapping, that the router is being asked,
+// what the router forwards and how it was asked, or that it didn't open the
+// ports. The role's PortMapping alone picks the line, and the mapped line puts
+// the sdk's PortMappingPorts and PortMappingMethodName, the same in every
+// language, in the catalog's sentence. The router's own words
+// (PortMappingError) and the external address are never read: they can name an
+// address, so they stay in the log.
+
+// Mirrors of the SDK's vocabulary (URNET_EXTENDER_PORT_MAPPING_*), kept here so
+// this header stays SDK-free.
+inline constexpr const char* kPortMappingOff = "off";
+inline constexpr const char* kPortMappingNotNeeded = "not_needed";
+inline constexpr const char* kPortMappingMapping = "mapping";
+inline constexpr const char* kPortMappingMapped = "mapped";
+inline constexpr const char* kPortMappingFailed = "failed";
+
+struct PortMappingLine {
+  bool visible = false;
+  // The line's store key and the English source it carries (the msgctxt and
+  // msgid of po/); empty while it is hidden.
+  const char* textKey = "";
+  const char* textEnglish = "";
+  // The mapped line's {0} and {1}: what the router forwards ("TCP 443, UDP
+  // 443, UDP 4053") and how it was asked ("UPnP"). Empty otherwise.
+  std::string ports;
+  std::string method;
+
+  // By value, so a widget can drop a reading that changes nothing.
+  friend bool operator==(const PortMappingLine& a, const PortMappingLine& b) {
+    return a.visible == b.visible && std::strcmp(a.textKey, b.textKey) == 0 &&
+           std::strcmp(a.textEnglish, b.textEnglish) == 0 && a.ports == b.ports &&
+           a.method == b.method;
+  }
+  friend bool operator!=(const PortMappingLine& a, const PortMappingLine& b) { return !(a == b); }
+};
+
+// `row` is the switch's row as drawn, and `state`, `methodName` and `ports` the
+// role's PortMapping, PortMappingMethodName and PortMappingPorts. Off, no role
+// (an empty state) and a state this build does not know have no line, and
+// neither does a mapped role without both texts (a device process from before
+// them): empty parentheses would say less than no line.
+inline PortMappingLine PortMappingLineFor(const PortMappingRow& row, const std::string& state,
+                                          const std::string& methodName,
+                                          const std::string& ports) {
+  PortMappingLine line;
+  // it speaks for the switch: nothing while that is hidden or off
+  if (!row.visible || !row.on) return line;
+  if (state == kPortMappingNotNeeded) {
+    line.textKey = "extender_port_mapping_not_needed";
+    line.textEnglish = "Not needed: this device has a public address.";
+  } else if (state == kPortMappingMapping) {
+    line.textKey = "extender_port_mapping_mapping";
+    line.textEnglish = "Asking your router…";
+  } else if (state == kPortMappingMapped && !ports.empty() && !methodName.empty()) {
+    line.textKey = "extender_port_mapping_mapped";
+    line.textEnglish = "Your router forwards {0} ({1}).";
+    line.ports = ports;
+    line.method = methodName;
+  } else if (state == kPortMappingFailed) {
+    line.textKey = "extender_port_mapping_failed";
+    line.textEnglish = "Your router didn't open the ports. Trying again later.";
+  } else {
+    return line;
+  }
+  line.visible = true;
+  return line;
+}
+
+// The line's reading of the status as the widgets hold it: PortMapping,
+// PortMappingMethodName and PortMappingPorts, and nothing else of it. Generic
+// so the tests can hand it every field of ExtenderProvideStatus.
+template <typename Status>
+PortMappingLine PortMappingLineOf(const PortMappingRow& row, const std::optional<Status>& status) {
+  if (!status) return PortMappingLine();
+  return PortMappingLineFor(row, status->PortMapping, status->PortMappingMethodName,
+                            status->PortMappingPorts);
+}
+
+// The line's text. `lookup(key, english)` is the catalog -- T_ in the widgets,
+// the English source in the tests -- and `format(pattern, ports, method)` the
+// store's {0} {1} substitution (I18n.hpp's Format), which leaves a line without
+// placeholders as it is.
+template <typename Lookup, typename FormatTwo>
+std::string PortMappingLineTextFor(const PortMappingLine& line, const Lookup& lookup,
+                                   const FormatTwo& format) {
+  if (!line.visible) return std::string();
+  return format(std::string(lookup(line.textKey, line.textEnglish)), line.ports, line.method);
+}
+
 // The row's one line of state text. `lookup(key, english)` is the catalog --
 // T_ in the widgets, the English source in the tests -- and
 // `format(pattern, argument)` the store's {} substitution (I18n.hpp's Format).

@@ -2197,14 +2197,11 @@ bool TunnelHost::SetProvideExtenderPortMapping(bool on, std::string* error) {
         device_->setProvideExtenderPortMapping(on);
         break;
       case provide::ExtenderSettingTarget::NetworkSpace:
-        // The sdk keeps this setting in the space as well, but its LocalState
-        // has no writer for it: only a device writes it. Refused rather than
-        // reported as written; the GUI reads the setting again, and with no
-        // device running the switch hides.
-        if (error) {
-          *error = "no device runs in this daemon to take the router port mapping setting";
-        }
-        return false;
+        // Stored in the space as the measurements setting is: the next device
+        // started on it reads the stored value as its role starts, so a press
+        // that lands while no device runs is kept, never dropped.
+        networkSpace_->getAsyncLocalState().getLocalState().setProvideExtenderPortMapping(on);
+        break;
       case provide::ExtenderSettingTarget::None:
         if (error) {
           *error = "no device has run in this daemon yet, so there is no network space to keep "

@@ -328,7 +328,9 @@ class ProviderStatusLease {
 // Where set_provide_extender writes it (TunnelHost::SetProvideExtender):
 // through the device that runs, which persists it and applies it at once, and
 // with none into the space the last device ran in, which the next start of
-// either imports. The two devices never run side by side.
+// either imports. The two devices never run side by side. The settings that
+// ride on the role, set_measurements_enabled's and
+// set_provide_extender_port_mapping's, are written by the same rule.
 enum class ExtenderSettingTarget {
   ProviderDevice,  // the provider-only device: the switch's own case
   SessionDevice,   // a tunnel session's device that came up after the GUI asked

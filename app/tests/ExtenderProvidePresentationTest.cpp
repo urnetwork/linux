@@ -15,6 +15,9 @@
 
 #include "ExtenderProvidePresentation.hpp"
 
+using urnw::extender::PortMappingLine;
+using urnw::extender::PortMappingLineFor;
+using urnw::extender::PortMappingLineOf;
 using urnw::extender::PortMappingRow;
 using urnw::extender::PortMappingRowOf;
 using urnw::extender::ProvideDot;
@@ -94,10 +97,12 @@ struct FullStatus {
   int64_t PortMappingUdpPort{};
   int64_t PortMappingDnsPort{};
   std::string PortMappingError{};
+  std::string PortMappingMethodName{};
+  std::string PortMappingPorts{};
   int64_t ConnectionCount{};
 };
 
-// A supported status with the fields the reading takes; the other twenty-six
+// A supported status with the fields the reading takes; the other twenty-eight
 // stay at their zero values.
 FullStatus SupportedStatus(const std::string& state, const std::string& errorCase = std::string(),
                            const std::string& reason = std::string(), bool activatedV4 = false,
@@ -115,6 +120,66 @@ FullStatus SupportedStatus(const std::string& state, const std::string& errorCas
 
 ProvideRow RowOf(const FullStatus& status, bool setting) {
   return ProvideRowOf(std::optional<FullStatus>(status), [setting] { return setting; });
+}
+
+// The store's {0} {1} substitution (I18n.hpp's Format with two arguments):
+// "{0}" and "{1}" take that argument, "{}" the next one.
+std::string FormatTwo(const std::string& pattern, const std::string& first,
+                      const std::string& second) {
+  const std::string args[] = {first, second};
+  std::string out;
+  size_t next = 0;
+  for (size_t i = 0; i < pattern.size();) {
+    const size_t close = pattern[i] == '{' ? pattern.find('}', i) : std::string::npos;
+    if (close != std::string::npos) {
+      const std::string spec = pattern.substr(i + 1, close - i - 1);
+      size_t index = next;
+      if (spec == "0") {
+        index = 0;
+      } else if (spec == "1") {
+        index = 1;
+      } else if (!spec.empty()) {
+        index = 2;  // not a placeholder: copied through
+      }
+      if (index < 2) {
+        out += args[index];
+        if (spec.empty()) ++next;
+        i = close + 1;
+        continue;
+      }
+    }
+    out += pattern[i++];
+  }
+  return out;
+}
+
+std::string LineTextOf(const PortMappingLine& line) {
+  return urnw::extender::PortMappingLineTextFor(line, &English, &FormatTwo);
+}
+
+// The router port mapping switch's row as drawn: shown and on unless said
+// otherwise.
+PortMappingRow SwitchRow(bool visible = true, bool on = true) {
+  PortMappingRow row;
+  row.visible = visible;
+  row.on = on;
+  return row;
+}
+
+// An active role whose port mapping reports `state`, with the sdk's method
+// name and ports text.
+FullStatus PortMappingStatus(const std::string& state,
+                             const std::string& methodName = std::string(),
+                             const std::string& ports = std::string()) {
+  FullStatus status = SupportedStatus("active", "", "", true);
+  status.PortMapping = state;
+  status.PortMappingMethodName = methodName;
+  status.PortMappingPorts = ports;
+  return status;
+}
+
+PortMappingLine LineOf(const PortMappingRow& row, const FullStatus& status) {
+  return PortMappingLineOf(row, std::optional<FullStatus>(status));
 }
 
 }  // namespace
@@ -336,10 +401,11 @@ UR_TEST(ExtenderProvide_EqualReadingsCompareEqual) {
 }
 
 // The reading takes Supported, State, ErrorCase, Reason, ActivatedV4,
-// ActivatedV6 and LastActivationRefused and nothing else: the other twenty-six
-// fields, set to noise, leave every reading as it was. The tcp 443 bind error
-// reaches the row as the Reason of its case, never as TcpUnavailableError, and
-// the router port mapping's state never moves the row.
+// ActivatedV6 and LastActivationRefused and nothing else: the other
+// twenty-eight fields, set to noise, leave every reading as it was. The tcp 443
+// bind error reaches the row as the Reason of its case, never as
+// TcpUnavailableError, and the router port mapping's state and texts never move
+// the row.
 UR_TEST(ExtenderProvide_ReadsOnlyTheContractFields) {
   FullStatus unsupported = SupportedStatus("active", "", "", true, true);
   unsupported.Supported = false;
@@ -381,6 +447,8 @@ UR_TEST(ExtenderProvide_ReadsOnlyTheContractFields) {
     noisy.PortMappingUdpPort = 8443;
     noisy.PortMappingDnsPort = 14053;
     noisy.PortMappingError = "no gateway answered";
+    noisy.PortMappingMethodName = "UPnP";
+    noisy.PortMappingPorts = "TCP 8443→443, UDP 8443→443, UDP 14053→4053";
     noisy.ConnectionCount = 42;
     const std::string label = reading.State + "/" + reading.ErrorCase;
     UR_EXPECT_TRUE_MSG(label, RowOf(reading, true) == RowOf(noisy, true));
@@ -551,6 +619,190 @@ UR_TEST(PortMapping_IndependentOfTheExtenderSwitchAndOffByDefault) {
                    [] { return true; });
   UR_EXPECT_TRUE(PortMappingRowOf(extender, true, [] { return true; }) !=
                  PortMappingRowOf(extender, true, [] { return false; }));
+}
+
+// ---- the router port mapping's status line (connect EXTENDER.md S10) --------
+
+// Under a shown switch that is on, each state the role reports has its own
+// line, named by the catalog's key; the mapped line carries the sdk's ports
+// text and method name as they are, the arrow of a moved port included.
+UR_TEST(PortMappingLine_EachStateHasItsLine) {
+  const PortMappingLine notNeeded = PortMappingLineFor(SwitchRow(), "not_needed", "", "");
+  UR_EXPECT_TRUE(notNeeded.visible);
+  UR_EXPECT_TEXT("extender_port_mapping_not_needed", notNeeded.textKey);
+  UR_EXPECT_TEXT("Not needed: this device has a public address.", LineTextOf(notNeeded));
+
+  const PortMappingLine asking = PortMappingLineFor(SwitchRow(), "mapping", "", "");
+  UR_EXPECT_TRUE(asking.visible);
+  UR_EXPECT_TEXT("extender_port_mapping_mapping", asking.textKey);
+  UR_EXPECT_TEXT("Asking your router…", LineTextOf(asking));
+
+  const PortMappingLine mapped =
+      PortMappingLineFor(SwitchRow(), "mapped", "UPnP", "TCP 443, UDP 443, UDP 4053");
+  UR_EXPECT_TRUE(mapped.visible);
+  UR_EXPECT_TEXT("extender_port_mapping_mapped", mapped.textKey);
+  UR_EXPECT_TEXT("Your router forwards TCP 443, UDP 443, UDP 4053 (UPnP).", LineTextOf(mapped));
+
+  const PortMappingLine moved =
+      PortMappingLineFor(SwitchRow(), "mapped", "NAT-PMP", "TCP 40443→443, UDP 4053");
+  UR_EXPECT_TEXT("Your router forwards TCP 40443→443, UDP 4053 (NAT-PMP).", LineTextOf(moved));
+
+  const PortMappingLine failed = PortMappingLineFor(SwitchRow(), "failed", "", "");
+  UR_EXPECT_TRUE(failed.visible);
+  UR_EXPECT_TEXT("extender_port_mapping_failed", failed.textKey);
+  UR_EXPECT_TEXT("Your router didn't open the ports. Trying again later.", LineTextOf(failed));
+  // only the mapped line takes the texts, whatever a failed role carries
+  UR_EXPECT_TRUE(PortMappingLineFor(SwitchRow(), "failed", "UPnP", "TCP 443") == failed);
+}
+
+// Off, no role (an empty state) and a state this build does not know have no
+// line: hidden, never a guess, and equal to every other hidden line. No status
+// at all reads the same.
+UR_TEST(PortMappingLine_NothingForOffNoRoleOrAnUnknownState) {
+  for (const char* state : {urnw::extender::kPortMappingOff, "", "paused"}) {
+    const PortMappingLine line = PortMappingLineFor(SwitchRow(), state, "UPnP", "TCP 443");
+    UR_EXPECT_TRUE_MSG(state, !line.visible);
+    UR_EXPECT_TRUE_MSG(state, LineTextOf(line).empty());
+    UR_EXPECT_TRUE_MSG(state, line == PortMappingLine());
+  }
+  UR_EXPECT_TRUE(PortMappingLineOf(SwitchRow(), std::optional<FullStatus>()) == PortMappingLine());
+}
+
+// The line speaks for the switch: none while the switch is hidden or off,
+// whatever the role reports, so turning the switch off takes the line with it.
+UR_TEST(PortMappingLine_OnlyUnderAShownSwitchThatIsOn) {
+  for (const char* state : {"not_needed", "mapping", "mapped", "failed"}) {
+    UR_EXPECT_TRUE_MSG(state, PortMappingLineFor(SwitchRow(), state, "PCP", "TCP 443").visible);
+    for (const PortMappingRow& row : {SwitchRow(true, false), SwitchRow(false, true),
+                                      SwitchRow(false, false), PortMappingRow()}) {
+      const PortMappingLine line = PortMappingLineFor(row, state, "PCP", "TCP 443");
+      UR_EXPECT_TRUE_MSG(state, line == PortMappingLine());
+      UR_EXPECT_TRUE_MSG(state, LineTextOf(line).empty());
+    }
+  }
+}
+
+// A mapped role without both of the sdk's texts (a device process from before
+// them) has no line rather than a sentence with empty parentheses.
+UR_TEST(PortMappingLine_MappedWithoutItsTextsHasNoLine) {
+  struct Texts {
+    const char* method;
+    const char* ports;
+  };
+  for (const Texts& texts :
+       {Texts{"", ""}, Texts{"UPnP", ""}, Texts{"", "TCP 443, UDP 443, UDP 4053"}}) {
+    const PortMappingLine line =
+        PortMappingLineFor(SwitchRow(), "mapped", texts.method, texts.ports);
+    const std::string label = std::string(texts.method) + "/" + texts.ports;
+    UR_EXPECT_TRUE_MSG(label, line == PortMappingLine());
+    UR_EXPECT_TRUE_MSG(label, LineTextOf(line).empty());
+  }
+}
+
+// Through the status as the widgets hold it, the method name and the ports text
+// land in their own places (two strings side by side, so a swap cannot pass),
+// and a switch that is off reads no line from any status.
+UR_TEST(PortMappingLine_ReadsTheStatusAsTheWidgetsHoldIt) {
+  UR_EXPECT_TEXT("Your router forwards TCP 443, UDP 4053 (PCP).",
+                 LineTextOf(LineOf(SwitchRow(), PortMappingStatus("mapped", "PCP",
+                                                                  "TCP 443, UDP 4053"))));
+  UR_EXPECT_TEXT("extender_port_mapping_not_needed",
+                 LineOf(SwitchRow(), PortMappingStatus("not_needed")).textKey);
+  UR_EXPECT_TEXT("extender_port_mapping_mapping",
+                 LineOf(SwitchRow(), PortMappingStatus("mapping")).textKey);
+  UR_EXPECT_TEXT("extender_port_mapping_failed",
+                 LineOf(SwitchRow(), PortMappingStatus("failed")).textKey);
+  UR_EXPECT_TRUE(LineOf(SwitchRow(), PortMappingStatus("off")) == PortMappingLine());
+  UR_EXPECT_TRUE(LineOf(SwitchRow(true, false),
+                        PortMappingStatus("mapped", "PCP", "TCP 443, UDP 4053")) ==
+                 PortMappingLine());
+}
+
+// The line reads PortMapping, PortMappingMethodName and PortMappingPorts and
+// nothing else: the router's own words (PortMappingError), the address it
+// answered from, its raw method and ports, and every other field, set to noise,
+// leave each line as it was, and no line's text carries the router's words or
+// an address.
+UR_TEST(PortMappingLine_NeverCarriesTheRoutersWords) {
+  const std::string routerWords =
+      "AddPortMapping: 192.168.1.1 answered 718 ConflictInMappingEntry for 198.51.100.7";
+  const std::vector<FullStatus> readings = {
+      PortMappingStatus("not_needed"),
+      PortMappingStatus("mapping"),
+      PortMappingStatus("mapped", "UPnP", "TCP 443, UDP 443, UDP 4053"),
+      PortMappingStatus("mapped", "NAT-PMP", "TCP 40443→443, UDP 4053"),
+      PortMappingStatus("mapped"),
+      PortMappingStatus("failed"),
+      PortMappingStatus("off"),
+      PortMappingStatus(""),
+  };
+  for (const FullStatus& reading : readings) {
+    FullStatus noisy = reading;
+    noisy.Supported = !reading.Supported;
+    noisy.State = "error";
+    noisy.ErrorCase = "listen";
+    noisy.Reason = "tcp: bind: permission denied";
+    noisy.Enabled = !reading.Enabled;
+    noisy.StartError = "no extender directory in this network space";
+    noisy.TcpUnavailableError = "listen tcp 0.0.0.0:443: bind: permission denied";
+    noisy.ListenError = "udp: bind: address already in use";
+    noisy.Ipv4 = "192.0.2.10";
+    noisy.Ipv6 = "2001:db8::10";
+    noisy.LastActivationError = "context deadline exceeded";
+    noisy.DnsPorts = "53,4053";
+    noisy.PortMappingMethod = "upnp";
+    noisy.PortMappingExternalIp = "198.51.100.7";
+    noisy.PortMappingTcpPort = 40443;
+    noisy.PortMappingUdpPort = 40444;
+    noisy.PortMappingDnsPort = 40053;
+    noisy.PortMappingError = routerWords;
+    noisy.ConnectionCount = 42;
+    const std::string label = reading.PortMapping + "/" + reading.PortMappingMethodName;
+    const PortMappingLine line = LineOf(SwitchRow(), noisy);
+    UR_EXPECT_TRUE_MSG(label, line == LineOf(SwitchRow(), reading));
+    const std::string text = LineTextOf(line);
+    for (const char* never : {"AddPortMapping", "ConflictInMappingEntry", "192.168.1.1",
+                              "198.51.100.7", "192.0.2.10", "2001:db8::10", "upnp"}) {
+      UR_EXPECT_TRUE_MSG(label + " carries " + never, text.find(never) == std::string::npos);
+    }
+  }
+}
+
+// By value: an unchanged reading is dropped, another method, a moved port or
+// another state is not.
+UR_TEST(PortMappingLine_EqualReadingsCompareEqual) {
+  const auto mapped = [](const char* method, const char* ports) {
+    return PortMappingLineFor(SwitchRow(), "mapped", method, ports);
+  };
+  UR_EXPECT_TRUE(mapped("UPnP", "TCP 443") == mapped("UPnP", "TCP 443"));
+  UR_EXPECT_TRUE(mapped("UPnP", "TCP 443") != mapped("PCP", "TCP 443"));
+  UR_EXPECT_TRUE(mapped("UPnP", "TCP 443") != mapped("UPnP", "TCP 40443→443"));
+  UR_EXPECT_TRUE(PortMappingLineFor(SwitchRow(), "mapping", "", "") !=
+                 PortMappingLineFor(SwitchRow(), "failed", "", ""));
+}
+
+// Every key and English source the line can emit is the catalog's, byte for
+// byte, and the mapped line's sentence takes both of its arguments.
+UR_TEST(PortMappingLine_KeysAreTheCatalogs) {
+  std::ifstream in(std::string(UR_SRC_DIR) + "/../po/en.po", std::ios::binary);
+  UR_EXPECT_TRUE(in.good());
+  std::stringstream buffer;
+  buffer << in.rdbuf();
+  const std::string catalog = buffer.str();
+
+  const PortMappingLine mapped = PortMappingLineFor(SwitchRow(), "mapped", "UPnP", "TCP 443");
+  std::set<std::string> keys;
+  for (const PortMappingLine& line : {PortMappingLineFor(SwitchRow(), "not_needed", "", ""),
+                                      PortMappingLineFor(SwitchRow(), "mapping", "", ""), mapped,
+                                      PortMappingLineFor(SwitchRow(), "failed", "", "")}) {
+    keys.insert(line.textKey);
+    const std::string entry = std::string("msgctxt \"") + line.textKey + "\"\nmsgid \"" +
+                              line.textEnglish + "\"\n";
+    UR_EXPECT_TRUE_MSG(entry, catalog.find(entry) != std::string::npos);
+  }
+  UR_EXPECT_EQ(4, static_cast<int>(keys.size()));
+  UR_EXPECT_TRUE(std::string(mapped.textEnglish).find("{0}") != std::string::npos);
+  UR_EXPECT_TRUE(std::string(mapped.textEnglish).find("{1}") != std::string::npos);
 }
 
 // Every key and English source the row can emit is the catalog's, byte for

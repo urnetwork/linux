@@ -1115,9 +1115,9 @@ inline void from_json(const nlohmann::json& j, SetMeasurementsEnabledRequest& v)
 // device. Off by default on every app (owner, 2026-11-11). Like the provider
 // extender setting it belongs to the network space
 // (`.provide_extender_port_mapping`) and every device reads it from its space
-// when it starts, but the sdk writes it only through a device, so the daemon
-// writes it through the device that runs and refuses with none
-// (TunnelHost::SetProvideExtenderPortMapping). Gated like set_provide_extender.
+// when it starts, so the daemon writes it by the same rule
+// (provide::ExtenderSettingTargetFor): through the device that runs, or with
+// none into the space the last device ran in. Gated like set_provide_extender.
 // A new verb, additive within protocol v1: the GUI sends it only to a daemon
 // whose provider_stats said it takes it (provide_extender_port_mapping_writable).
 struct SetProvideExtenderPortMappingRequest {

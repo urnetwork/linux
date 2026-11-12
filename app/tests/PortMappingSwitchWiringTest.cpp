@@ -10,12 +10,18 @@
 //     (provide::PortMappingSwitchSourceFor), and reads off whenever nothing
 //     answers;
 //   * the daemon takes the verb behind set_provide_extender's owner gate,
-//     writes it through the device that runs, refuses with none (the sdk
-//     writes the setting only through a device), and reports it beside the
-//     role;
+//     writes it where set_measurements_enabled writes the speed tests
+//     setting -- through the device that runs, or with none into the space
+//     the last device ran in, which the next device reads -- and reports it
+//     beside the role;
 //   * the page draws it beside the Extender row as just drawn, directly under
 //     the speed tests switch, hidden, never disabled, off until a reading says
-//     otherwise, and never writes it while hidden (N1).
+//     otherwise, and never writes it while hidden (N1);
+//   * under its description, while it is on, one line says what the role
+//     reports (connect EXTENDER.md S10), read from the status the Extender row
+//     reads, through either the bound DeviceRemote or provider_stats' copy of
+//     the provider-only device's status: never the router's own words or an
+//     address.
 //
 // The pure halves are tested in ControlProtocolTest.cpp, ProvideLifecycleTest.cpp
 // and ExtenderProvidePresentationTest.cpp; these need glib, GTK and the SDK, so
@@ -43,8 +49,8 @@ std::string From(const std::string& text, const std::string& from, const std::st
 }  // namespace
 
 // The daemon: the verb behind set_provide_extender's gate, the write through
-// the device that runs and never into the space, and the setting beside the
-// role.
+// the device that runs or with none into the space the last device ran in, and
+// the setting beside the role.
 UR_TEST(PortMapping_TheDaemonTakesTheSwitch) {
   const std::string server = ReadCode("daemon/ControlServer.cpp");
   const std::string authorized = FunctionBody(server, "void ControlServer::DispatchAuthorized(");
@@ -73,18 +79,33 @@ UR_TEST(PortMapping_TheDaemonTakesTheSwitch) {
   UR_EXPECT_TRUE(Contains(write, "device_->setProvideExtenderPortMapping(on);"));
   UR_EXPECT_FALSE(Contains(write, "setProvideExtender("));
   UR_EXPECT_FALSE(Contains(write, "setMeasurementsEnabled("));
-  // With no device running it is refused, never reported as written: the
-  // sdk's LocalState has no writer for this setting, so nothing writes the
-  // space directly.
-  UR_EXPECT_FALSE(Contains(write, "getLocalState()"));
+  // With no device running it is written into the space the last device ran
+  // in, as the speed tests switch's setting is, and the next device reads it:
+  // a press that lands between two devices is kept, never refused and dropped.
   const std::string spaceCase = From(write, "case provide::ExtenderSettingTarget::NetworkSpace:",
                                      "case provide::ExtenderSettingTarget::None:");
-  UR_EXPECT_TRUE(Before(spaceCase, "*error = ", "return false;"));
-  UR_EXPECT_FALSE(Contains(spaceCase, "break;"));
+  UR_EXPECT_TRUE(Before(
+      spaceCase,
+      "networkSpace_->getAsyncLocalState().getLocalState().setProvideExtenderPortMapping(on);",
+      "break;"));
+  UR_EXPECT_FALSE(Contains(spaceCase, "*error = "));
+  UR_EXPECT_FALSE(Contains(spaceCase, "return false;"));
+  // only there: a running device persists the setting itself and replaces its
+  // role, so the space is never written behind it
+  UR_EXPECT_EQ(1, int(CountOf(write, "getLocalState()")));
+  // the speed tests switch's twin, so the two settings keep one rule
+  const std::string twin =
+      FunctionBody(host, "bool TunnelHost::SetMeasurementsEnabled(bool on, std::string* error)");
+  UR_EXPECT_TRUE(Contains(
+      From(twin, "case provide::ExtenderSettingTarget::NetworkSpace:",
+           "case provide::ExtenderSettingTarget::None:"),
+      "networkSpace_->getAsyncLocalState().getLocalState().setMeasurementsEnabled(on);"));
+  // with no space at all it is still refused, never reported as written
   const std::string noneCase =
       From(write, "case provide::ExtenderSettingTarget::None:", "} catch (");
   UR_EXPECT_TRUE(Before(noneCase, "*error = ", "return false;"));
   UR_EXPECT_FALSE(Contains(noneCase, "return true;"));
+  UR_EXPECT_FALSE(Contains(noneCase, "getLocalState()"));
 
   // reported beside the setting the speed tests switch shows, said to be
   // written only once read, and left off and unwritable when the read throws
@@ -205,4 +226,77 @@ UR_TEST(PortMapping_TheConnectPageDrawsItUnderTheSpeedTestsSwitch) {
   UR_EXPECT_TRUE(Before(page, "moreOptionsHost_->append(*speedTestsRow_);",
                         "moreOptionsHost_->append(*portMappingRow_);"));
   UR_EXPECT_EQ(1, int(CountOf(under, "moreOptionsHost_->append(")));
+}
+
+// The status line under the switch (connect EXTENDER.md S10). The role's port
+// mapping state and the sdk's two texts reach the page in the status the
+// Extender row reads: through the bound DeviceRemote, or in provider_stats'
+// copy of the provider-only device's whole status, whose change redraws the
+// page. The page reads that status once for the row and the line, draws the
+// line beside the switch as just drawn, in the catalog's words with the texts
+// set as plain text, and hides it at a press; nothing on the page or in the
+// reading touches the router's own words or the address it answered from.
+UR_TEST(PortMapping_TheConnectPageDrawsTheStatusLineUnderTheSwitch) {
+  // the daemon sends the role's whole status, and the GUI reads it whole and
+  // redraws when it changes
+  const std::string daemon = ReadCode("daemon/TunnelHost.cpp");
+  const std::string stats =
+      FunctionBody(daemon, "ctl::ProviderStatsReply TunnelHost::ProviderStats(");
+  UR_EXPECT_TRUE(Contains(
+      stats, "reply.extender_provide_status_json = ctl::DumpForWire(nlohmann::json(*status));"));
+  const std::string host = ReadCode("SdkHost.cpp");
+  const std::string poll = FunctionBody(host, "void SdkHost::PollDaemonProviderStatsLocked()");
+  UR_EXPECT_TRUE(Contains(poll, "ProviderStatsPart<urnet::ExtenderProvideStatus>("));
+  UR_EXPECT_TRUE(Contains(
+      poll, "daemonProviderStats_->extenderProvideStatusJson != stats.extenderProvideStatusJson"));
+  const std::string read = FunctionBody(
+      host, "std::optional<urnet::ExtenderProvideStatus> SdkHost::GetExtenderProvideStatus()");
+  UR_EXPECT_TRUE(Contains(read, "return DeviceExtenderProvideStatusLocked();"));
+  UR_EXPECT_TRUE(Contains(read, "return daemonProviderStats_->extenderProvideStatus;"));
+
+  // one status for the row and the line, so the line speaks for the same role
+  const std::string page = ReadCode("ConnectPage.cpp");
+  const std::string apply = FunctionBody(page, "void ConnectPage::ApplyExtenderProvideState()");
+  UR_EXPECT_EQ(1, int(CountOf(apply, "host_.GetExtenderProvideStatus()")));
+  UR_EXPECT_TRUE(Contains(apply, "extender::ProvideRowOf(status,"));
+  UR_EXPECT_TRUE(Contains(apply, "extender::PortMappingLineOf(portMappingDrawn_, status)"));
+  UR_EXPECT_TRUE(Before(apply, "DrawPortMappingRow(", "DrawPortMappingLine("));
+
+  const std::string draw = FunctionBody(
+      page, "void ConnectPage::DrawPortMappingLine(const extender::PortMappingLine& line)");
+  UR_EXPECT_TRUE(Before(draw,
+                        "if (portMappingLineApplied_ && line == portMappingLineDrawn_) return;",
+                        "portMappingLine_->set_visible(line.visible);"));
+  UR_EXPECT_TRUE(Contains(draw, "extender::PortMappingLineTextFor("));
+  UR_EXPECT_TRUE(Contains(draw, "T_(key, english)"));
+  UR_EXPECT_TRUE(Contains(draw, "Format(pattern.c_str(), ports, method)"));
+  // the sdk's texts are set as text, never parsed as markup
+  UR_EXPECT_TRUE(Contains(draw, "portMappingLine_->set_text("));
+  UR_EXPECT_FALSE(Contains(draw, "set_markup("));
+
+  // a press hides the line, which spoke for the position before it
+  const std::string toggled = FunctionBody(page, "void ConnectPage::OnPortMappingToggled()");
+  UR_EXPECT_TRUE(Before(toggled, "host_.SetProvideExtenderPortMapping(on);",
+                        "DrawPortMappingLine(extender::PortMappingLine());"));
+
+  // inside the switch's row, under its description, hidden until a reading
+  // draws it
+  const std::string row = From(page, "portMappingRow_ = kit::MakePaneRow(44);",
+                               "moreOptionsHost_->append(*portMappingRow_);");
+  UR_EXPECT_TRUE(
+      Before(row, "\"extender_port_mapping_description\"", "text->append(*portMappingLine_);"));
+  UR_EXPECT_TRUE(
+      Before(row, "portMappingLine_->set_visible(false);", "text->append(*portMappingLine_);"));
+
+  // the reading takes the state and the sdk's two texts, and nothing reads the
+  // router's own words or the address it answered from
+  const std::string presentation = ReadCode("ExtenderProvidePresentation.hpp");
+  const std::string of = FunctionBody(presentation, "PortMappingLine PortMappingLineOf(");
+  UR_EXPECT_TRUE(Contains(of, "status->PortMapping,"));
+  UR_EXPECT_TRUE(Contains(of, "status->PortMappingMethodName"));
+  UR_EXPECT_TRUE(Contains(of, "status->PortMappingPorts"));
+  for (const std::string* code : {&page, &presentation}) {
+    UR_EXPECT_FALSE(Contains(*code, "PortMappingError"));
+    UR_EXPECT_FALSE(Contains(*code, "PortMappingExternalIp"));
+  }
 }
