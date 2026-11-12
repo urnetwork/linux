@@ -5,7 +5,8 @@
 // the Stripe webhook lands. The sheet then tracks the store: waiting ->
 // premium success, or the poll's 2-minute deadline -> a timed-out state (the
 // purchase still lands later; the background poll and the next launch pick it
-// up).
+// up). The finished payment is also reported to the server by its Stripe id
+// (ReportCardPayment), so a late webhook no longer keeps a paid plan on Free.
 //
 // Three checkout paths, tried in order (mmm/onboarding/PLAN.md: inline
 // Stripe, never an external browser while a web view exists):
@@ -124,6 +125,13 @@ class UpgradeSheet : public Gtk::Window {
   // One createStripeCheckoutSession round trip. An embedded failure retries
   // once as hosted; sessions are only ever created in sequence, never both.
   void RequestSession(bool embedded);
+  // Hands the server the id this attempt's card payment started with
+  // (Api::reportStripePurchase), so it reads the payment back from Stripe
+  // instead of waiting for the webhook: the payment sheet's subscription, or
+  // the checkout session's. Called where the confirmation poll starts, once
+  // per attempt; the sdk asks again while the answer is pending. A credited
+  // answer reads the balance at once; the state still follows the balance.
+  void ReportCardPayment(bool paySheet);
   void SetState(State state);
   // The refusal for a guest network (PurchaseRefusalFor): no fallback, no
   // error line; the sheet hides and on_guest_sign_in_required runs.
@@ -152,6 +160,12 @@ class UpgradeSheet : public Gtk::Window {
   State state_ = State::Options;
   // invalidates the in-flight checkout-session callback after a reset
   std::shared_ptr<uint64_t> epoch_ = std::make_shared<uint64_t>(0);
+  // the Stripe ids the server answered for this attempt, which
+  // ReportCardPayment reports: the payment sheet's subscription and the
+  // checkout session (embedded or hosted) of the latest leg
+  std::string paySheetSubscriptionId_;
+  std::string checkoutSessionId_;
+  bool cardPaymentReported_ = false;  // ReportCardPayment ran for this attempt
 
   Gtk::Box* optionsBox_ = nullptr;
   Gtk::Box* waitingBox_ = nullptr;
