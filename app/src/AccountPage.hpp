@@ -250,6 +250,11 @@ class AccountPage : public Gtk::Box {
   // ---- appliers (one writer per surface) -------------------------------------
   void ApplyAccountState(AccountFieldState state);
   void ApplyNetworkName(const std::string& name);  // the acknowledged name
+  // The account the plan is on, under the plan value (urnet::planAccountName
+  // over the acknowledged name and the balance's guest), so a customer with
+  // several accounts sees which one holds the plan; hidden for a guest and
+  // without a name. From ApplyNetworkName and ApplyBalance, which change them.
+  void ApplyPlanAccount();
   void ApplyAuthLine();
   void ApplyReferralsRow(AccountFieldState state);
   void RenderAuthMethods();
@@ -336,6 +341,9 @@ class AccountPage : public Gtk::Box {
   Gtk::Button* planRetryButton_ = nullptr;  // shown only after a failed balance read
   AccountUsageBar* usageBar_ = nullptr;
   Gtk::Button* upgradeButton_ = nullptr;
+  // the account the plan is on, the row under the plan value (ApplyPlanAccount)
+  Gtk::Widget* planAccountRow_ = nullptr;
+  Gtk::Label* planAccountLine_ = nullptr;
   // a renewal whose payment did not go through: the past-due notice and its
   // "Update payment method" (disabled while its auth code is in flight)
   Gtk::Widget* paymentPastDueRow_ = nullptr;

@@ -1832,6 +1832,8 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   } else {
     planValue_->set_cursor();
   }
+  // ...and under it the account the plan is on (a guest shows none)
+  ApplyPlanAccount();
 
   // the Stripe customer portal only manages a Stripe subscription: a free
   // network, or a store or crypto subscription, got the portal's raw error
@@ -1982,6 +1984,18 @@ void AccountPage::BuildPlanPane() {
     });
     planValueBox->append(*planRetryButton_);
     row.content->append(*planValueBox);
+    content->append(*row.root);
+  }
+
+  // the account the plan is on, the row under the plan value (ApplyPlanAccount;
+  // windows parity), hidden until there is a name to show
+  {
+    const ProseRow row = MakeProseRow({}, kStatePadY);
+    planAccountLine_ = row.line;
+    // a long name with no spaces still wraps inside the pane
+    planAccountLine_->set_wrap_mode(Pango::WrapMode::WORD_CHAR);
+    planAccountRow_ = row.root;
+    planAccountRow_->set_visible(false);
     content->append(*row.root);
   }
 
@@ -2702,6 +2716,21 @@ void AccountPage::ApplyNetworkName(const std::string& name) {
   const std::string shown = SanitizeExternalDisplayText(name);
   kit::SetTextOrCollapse(*nameRow_.value, shown);
   if (!shown.empty()) SetToned(*nameRow_.value, kUrTextMuted, shown);
+  ApplyPlanAccount();
+}
+
+void AccountPage::ApplyPlanAccount() {
+  if (!planAccountRow_ || !planAccountLine_) return;
+  // the sdk's rule, over the name as the name row shows it: "" for a guest
+  // or without a name, and then the plan shows alone
+  const std::string account =
+      urnet::planAccountName(SanitizeExternalDisplayText(acknowledgedName_), balance_.guest);
+  if (account.empty()) {
+    planAccountLine_->set_text({});
+  } else {
+    planAccountLine_->set_text(Format(T_("plan_account_name", "Account: {}"), account));
+  }
+  planAccountRow_->set_visible(!account.empty());
 }
 
 void AccountPage::ApplyAuthLine() {
