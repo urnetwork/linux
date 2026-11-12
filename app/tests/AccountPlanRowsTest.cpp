@@ -6,7 +6,7 @@
 // figure once a snapshot has landed and their state before it, never "0 B";
 // the referral rule sits under the referral numbers; and the Balance Codes
 // count shows for every answered fetch, zero included, and hides otherwise.
-// The page needs GTK and the SDK, so the wiring cases read AccountPage.cpp
+// The page needs gtk and the sdk, so the wiring cases read AccountPage.cpp
 // (and the store and window that feed it) with the comments blanked.
 // SPDX-License-Identifier: MPL-2.0
 #include <fstream>
@@ -30,11 +30,6 @@ using urnw::account_plan::OffersRetry;
 using urnw::account_plan::OffersUpgrade;
 using urnw::account_plan::PlanView;
 using urnw::account_plan::PlanViewFor;
-
-// The plan value before this change: Guest, else Pro, else Free.
-std::string PlanValueBefore(bool isPro, bool guest) {
-  return guest ? "Guest" : isPro ? "Pro" : "Free";
-}
 
 // A C++ source with every // comment blanked; string literals are kept.
 std::string ReadPlanRowsSource(const std::string& relative) {
@@ -153,19 +148,24 @@ UR_TEST(AccountPlanRowsWiring_TheCodesRenderSetsTheCountRowFirst) {
 // load, and a paying network whose stored jwt still said Free read "Free" with
 // Upgrade. Only the server says Free now.
 UR_TEST(AccountPlanRows_AFailedReadIsNeverFree) {
+  // the value before this change: Guest, else Pro, else Free
+  const auto planValueBefore = [](bool isPro, bool guest) -> std::string {
+    return guest ? "Guest" : isPro ? "Pro" : "Free";
+  };
   // the network paid; its stored jwt still says Free; every read fails
-  const PlanView failed = PlanViewFor("unknown", /*lastReadFailed=*/true, /*canCallApi=*/true);
+  const PlanView failedPlanView =
+      PlanViewFor("unknown", /*lastReadFailed=*/true, /*canCallApi=*/true);
   // control: the value before this change read Free, with Upgrade
-  UR_EXPECT_TRUE(PlanValueBefore(/*isPro=*/false, /*guest=*/false) == "Free");
-  UR_EXPECT_TRUE(failed == PlanView::Failed);
-  UR_EXPECT_TRUE(OffersRetry(failed, /*guest=*/false));
-  UR_EXPECT_FALSE(OffersUpgrade(failed, /*guest=*/false));
+  UR_EXPECT_TRUE(planValueBefore(/*isPro=*/false, /*guest=*/false) == "Free");
+  UR_EXPECT_TRUE(failedPlanView == PlanView::Failed);
+  UR_EXPECT_TRUE(OffersRetry(failedPlanView, /*guest=*/false));
+  UR_EXPECT_FALSE(OffersUpgrade(failedPlanView, /*guest=*/false));
 
   // the first read on its way: Loading, nothing to retry, no Upgrade
-  const PlanView loading = PlanViewFor("unknown", false, true);
-  UR_EXPECT_TRUE(loading == PlanView::Loading);
-  UR_EXPECT_FALSE(OffersRetry(loading, false));
-  UR_EXPECT_FALSE(OffersUpgrade(loading, false));
+  const PlanView loadingPlanView = PlanViewFor("unknown", false, true);
+  UR_EXPECT_TRUE(loadingPlanView == PlanView::Loading);
+  UR_EXPECT_FALSE(OffersRetry(loadingPlanView, false));
+  UR_EXPECT_FALSE(OffersUpgrade(loadingPlanView, false));
 
   // no session to ask with
   UR_EXPECT_TRUE(PlanViewFor("unknown", false, false) == PlanView::NoSession);
@@ -175,6 +175,8 @@ UR_TEST(AccountPlanRows_AFailedReadIsNeverFree) {
   UR_EXPECT_TRUE(PlanViewFor("supporter", true, true) == PlanView::Failed);
 }
 
+// Pro and Free as the server answered, Pro also by a claim before it does;
+// Upgrade only for Free, and a guest gets neither Upgrade nor Try again.
 UR_TEST(AccountPlanRows_ProAndFreeAreTheServers) {
   // the server's Pro, or a Pro claim before it answers, also through a failed read
   UR_EXPECT_TRUE(PlanViewFor("pro", false, true) == PlanView::Pro);
@@ -189,10 +191,10 @@ UR_TEST(AccountPlanRows_ProAndFreeAreTheServers) {
   // a snapshot already relayed stands after the session went, like a figure
   UR_EXPECT_TRUE(PlanViewFor("free", false, false) == PlanView::Free);
   // a guest creates an account instead: no Upgrade, no Try again
-  for (const PlanView plan :
+  for (const PlanView planView :
        {PlanView::Pro, PlanView::Free, PlanView::Loading, PlanView::Failed, PlanView::NoSession}) {
-    UR_EXPECT_FALSE(OffersUpgrade(plan, /*guest=*/true));
-    UR_EXPECT_FALSE(OffersRetry(plan, /*guest=*/true));
+    UR_EXPECT_FALSE(OffersUpgrade(planView, /*guest=*/true));
+    UR_EXPECT_FALSE(OffersRetry(planView, /*guest=*/true));
   }
 }
 
@@ -212,15 +214,15 @@ UR_TEST(AccountPlanRowsWiring_ThePlanValueIsTheSdksDecision) {
        "AccountFieldState::Loading", "case account_plan::PlanView::Failed:",
        "AccountFieldState::Failed", "case account_plan::PlanView::NoSession:",
        "AccountFieldState::NoSession",
-       "planRetry_->set_visible(account_plan::OffersRetry(planView, balance_.guest));",
+       "planRetryButton_->set_visible(account_plan::OffersRetry(planView, balance_.guest));",
        "account_plan::OffersUpgrade(planView, balance_.guest)"}));
   UR_EXPECT_TRUE(relay.find("!balance_.isPro") == std::string::npos);
   UR_EXPECT_TRUE(relay.find(": Glib::ustring(T_(\"free\", \"Free\"))") == std::string::npos);
   const std::string build = PlanRowsBody(page, "void AccountPage::BuildPlanPane() {");
   UR_EXPECT_TRUE(PlanRowsInOrder(
-      build, {"valueLine->append(*planValue_);", "T_(\"try_again\", \"Try again\")",
-              "planRetry_->set_visible(false);", "if (on_retry_plan) on_retry_plan();",
-              "valueLine->append(*planRetry_);"}));
+      build, {"planValueBox->append(*planValue_);", "T_(\"try_again\", \"Try again\")",
+              "planRetryButton_->set_visible(false);", "if (on_retry_plan) on_retry_plan();",
+              "planValueBox->append(*planRetryButton_);"}));
 }
 
 // Every failed read reaches the decision, and the window relays the plan and

@@ -118,9 +118,10 @@ struct AccountBalance {
   int64_t availableByteCount = 0;
   int64_t startBalanceByteCount = 0;
   bool isPro = false;
-  // ShownPlan and PlanReadFailed: the plan value (account_plan::PlanViewFor),
-  // never Free before the server says so; "unknown" until a relay lands
+  // what the plan value is drawn from (account_plan::PlanViewFor), relayed
+  // from the store's ShownPlan; "unknown" until a relay lands, never Free
   std::string shownPlan = "unknown";
+  // the store's last read failed with none loaded since (PlanReadFailed)
   bool planReadFailed = false;
   bool guest = false;
   // SubscriptionStoreFamily: Manage Subscription shows only for "stripe", and
@@ -332,7 +333,7 @@ class AccountPage : public Gtk::Box {
   // ---- pane A ----------------------------------------------------------------
   Gtk::Spinner* planRing_ = nullptr;  // active + visible ONLY while confirming
   Gtk::Label* planValue_ = nullptr;
-  Gtk::Button* planRetry_ = nullptr;  // shown only after a failed balance read
+  Gtk::Button* planRetryButton_ = nullptr;  // shown only after a failed balance read
   AccountUsageBar* usageBar_ = nullptr;
   Gtk::Button* upgradeButton_ = nullptr;
   // a renewal whose payment did not go through: the past-due notice and its

@@ -73,9 +73,8 @@ void SubscriptionBalanceStore::Start() {
   paymentPastDue_ = false;
 
   // Offline Pro: the jwt's Pro (and GuestMode) claims are readable without a
-  // network call — a Pro label is right even before the first fetch. The
-  // sdk's decision reads the Pro claim until the first fetch lands; a claim
-  // of Free is not shown as Free until the server says so (ShownPlan).
+  // network call. The sdk's decision reads a Pro claim until the first fetch
+  // lands; a claim of Free is not shown as Free until then (ShownPlan).
   serverGuest_ = false;
   proTracker_.reset();
   TrackStoredJwt();
@@ -193,7 +192,7 @@ void SubscriptionBalanceStore::OnJwtRefreshed() {
   if (!byJwt) return;
   const bool before = isPro_;
   const bool guestBefore = isGuest_;
-  const std::string planBefore = proTracker_.getShownPlan();
+  const std::string shownPlanBefore = proTracker_.getShownPlan();
   // The refresh renewed the client token; the stored jwt is usually the one
   // read before, and the sdk's decision keeps Pro the server's once a fetch
   // answered. Re-deriving Pro from its claim here flipped Pro back, and the
@@ -205,7 +204,7 @@ void SubscriptionBalanceStore::OnJwtRefreshed() {
   isGuest_ = IsGuestNetwork(jwtGuest_, serverGuest_);
   // the plan can change without Pro (another network's jwt starts over)
   if (isPro_ != before || isGuest_ != guestBefore ||
-      proTracker_.getShownPlan() != planBefore) {
+      proTracker_.getShownPlan() != shownPlanBefore) {
     Emit();
   }
 }
@@ -244,9 +243,8 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
           if (err || !result) {
             if (err) std::fprintf(stderr, "[balance] fetch failed: %s\n", err->c_str());
             errorFetching_ = true;
-            // the plan stays the server's last answer, and before one it
-            // reads failed with Try again, never Free (support inbox 4074);
-            // the Emit below repaints it
+            // before the server's first answer the plan turns failed, with
+            // Try again, never Free; the Emit below repaints it
             proTracker_.balanceFailed();
           } else {
             errorFetching_ = false;

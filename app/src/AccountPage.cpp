@@ -1788,8 +1788,7 @@ void AccountPage::SettleNoSession() {
   // daily figure on screen beside a pane B correctly reading "Please login" —
   // on a shared machine that is the previous user's plan and consumption,
   // readable by whoever sits down next. A default snapshot re-seeds the plan's
-  // unknown state (never "Free"), the faint full-width track and the
-  // not-yet-known daily figure.
+  // unknown state, the faint full-width track and the unknown daily figure.
   ApplyBalance(AccountBalance{});
 }
 
@@ -1798,11 +1797,8 @@ void AccountPage::SettleNoSession() {
 void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   balance_ = snapshot;
 
-  // 1. the plan value. Gold iff Pro — the ONE entitlement colour. Until the
-  //    server answers, the plan is unknown and the value shows its state:
-  //    Loading, Something went wrong with Try again once a read failed, or
-  //    Please login without a session — never "Free" (AccountPlanRows.hpp;
-  //    support inbox 4074).
+  // 1. the plan value. Gold iff Pro — the ONE entitlement colour.
+  // While unknown it shows its state, never "Free" (AccountPlanRows.hpp)
   const account_plan::PlanView planView =
       account_plan::PlanViewFor(balance_.shownPlan, balance_.planReadFailed, CanCallApi());
   if (balance_.guest) {
@@ -1828,7 +1824,7 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   }
   kit::SetAccessibleLabel(*planValue_,
                           Glib::ustring(T_("plan", "Plan")) + ", " + planValue_->get_text());
-  planRetry_->set_visible(account_plan::OffersRetry(planView, balance_.guest));
+  planRetryButton_->set_visible(account_plan::OffersRetry(planView, balance_.guest));
   // the Pro label is a button that replays the celebration: say so with the
   // cursor (free and guest labels stay plain text)
   if (balance_.isPro && !balance_.guest) {
@@ -1877,8 +1873,8 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
                      balance_.availableByteCount);
 
   // 4. the primary action: guests ALWAYS get "Create an account"; a signed-in
-  //    account the server said is free gets "Upgrade"; Pro gets nothing to
-  //    buy, and neither does a plan not known yet (support inbox 4074).
+  //    free account gets "Upgrade"; Pro gets nothing to buy.
+  // a plan not known yet gets nothing to buy either (OffersUpgrade)
   upgradeButton_->set_visible(balance_.guest ||
                               account_plan::OffersUpgrade(planView, balance_.guest));
   upgradeButton_->set_label(balance_.guest
@@ -1890,8 +1886,7 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   //    landed there is no balance to report, and printing "0 B" asserts a
   //    figure the server never gave (§0.4 — an async field renders its state,
   //    never a fabricated value). The plan value above follows the same rule
-  //    now: it seeded "Free", which a paying network read while its balance
-  //    reads failed.
+  //    (step 1).
   const bool canCallApi = CanCallApi();
   ApplyBalanceFigure(*dailyValue_, T_("daily_data_balance", "Daily Data Balance"),
                      balance_.startBalanceByteCount, balance_.loaded, canCallApi);
@@ -1977,16 +1972,16 @@ void AccountPage::BuildPlanPane() {
     planValue_->add_controller(planTap);
     // the value, and beside it Try again after a failed balance read with no
     // answer since (ApplyBalance, account_plan::OffersRetry)
-    auto* valueLine = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
-    valueLine->append(*planValue_);
-    planRetry_ = Gtk::make_managed<Gtk::Button>(T_("try_again", "Try again"));
-    planRetry_->set_valign(Gtk::Align::CENTER);
-    planRetry_->set_visible(false);
-    planRetry_->signal_clicked().connect([this] {
+    auto* planValueBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    planValueBox->append(*planValue_);
+    planRetryButton_ = Gtk::make_managed<Gtk::Button>(T_("try_again", "Try again"));
+    planRetryButton_->set_valign(Gtk::Align::CENTER);
+    planRetryButton_->set_visible(false);
+    planRetryButton_->signal_clicked().connect([this] {
       if (on_retry_plan) on_retry_plan();
     });
-    valueLine->append(*planRetry_);
-    row.content->append(*valueLine);
+    planValueBox->append(*planRetryButton_);
+    row.content->append(*planValueBox);
     content->append(*row.root);
   }
 

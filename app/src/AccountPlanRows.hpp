@@ -1,6 +1,6 @@
 // What the Account page's Plan pane (pane A) shows in its plan value and its
 // figure rows, decided pure so tests/AccountPlanRowsTest.cpp pins it without
-// GTK.
+// gtk.
 //
 // The plan value is the sdk's decision (urnet::SubscriptionProTracker
 // getShownPlan, getLastReadFailed): Pro or Free as the server answered, Pro
@@ -28,6 +28,8 @@
 
 namespace urnw::account_plan {
 
+// What the plan value can show: the server's answer, or the states of a plan
+// it has not answered yet.
 enum class PlanView {
   Pro,
   Free,
@@ -42,8 +44,9 @@ inline constexpr std::string_view kShownPlanPro = "pro";
 inline constexpr std::string_view kShownPlanFree = "free";
 inline constexpr std::string_view kShownPlanUnknown = "unknown";
 
-// `shownPlan` is the sdk's getShownPlan; any value but Pro and Free is
-// unknown.
+// The value's view of the sdk's decision: `shownPlan` is its getShownPlan and
+// `lastReadFailed` its getLastReadFailed; any value but Pro and Free is
+// unknown, and an unknown plan with no session to ask with is NoSession.
 constexpr PlanView PlanViewFor(std::string_view shownPlan, bool lastReadFailed,
                                bool canCallApi) {
   if (shownPlan == kShownPlanPro) return PlanView::Pro;
@@ -54,14 +57,14 @@ constexpr PlanView PlanViewFor(std::string_view shownPlan, bool lastReadFailed,
 
 // Upgrade below the plan: a signed-in account the server said is Free (a guest
 // gets "Create an account" there instead). Never while the plan is unknown.
-constexpr bool OffersUpgrade(PlanView plan, bool guest) {
-  return !guest && plan == PlanView::Free;
+constexpr bool OffersUpgrade(PlanView planView, bool guest) {
+  return !guest && planView == PlanView::Free;
 }
 
 // Try again beside the plan value: a read failed and the server has not
 // answered since.
-constexpr bool OffersRetry(PlanView plan, bool guest) {
-  return !guest && plan == PlanView::Failed;
+constexpr bool OffersRetry(PlanView planView, bool guest) {
+  return !guest && planView == PlanView::Failed;
 }
 
 enum class FigureView {
