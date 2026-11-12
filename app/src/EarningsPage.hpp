@@ -944,6 +944,9 @@ class EarningsPage : public Gtk::Box {
   // No load touches them; only its Done, its watchdog and a sign-out end them
   snledger::ClaimInFlight claim_;
   snledger::EpochClaimAnswers claimAnswers_;
+  // its own rows, as the sheet that pressed it listed them: a sheet opened
+  // during it is built from them, whatever the claims read since
+  std::vector<SnClaimRow> claimRows_;
 
   // preview + balance relay
   bool previewMode_ = false;

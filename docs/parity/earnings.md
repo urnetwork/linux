@@ -189,11 +189,13 @@
 >   Earnings during a v1 claim and coming back dropped its Done, and Claim stayed held until the
 >   3-minute watchdog. It now has its own `snledger::ClaimInFlight` (`claim_`, without rows: its
 >   sheet keeps its own), whose ticket only its Done, its watchdog and a sign-out move. `claiming_`
->   is gone: `Claiming()` is either claim in flight. The page keeps the v1 claim's answers
->   (`snledger::EpochClaimAnswers`), and while it is in flight the v1 tiles' Claim opens a sheet
->   that replays them, so closing the sheet loses none, as the v2 tile's Claim opens its claim.
->   Otherwise Claim waits for a claim of either kind, the v2 sheet's too (the relay's "Claim it
->   yourself" reaches it). The v1 watchdog waits past the SDK's bounds, 6 minutes an epoch and a
+>   is gone: `Claiming()` is either claim in flight. The page keeps the v1 claim's own rows, as
+>   the sheet that pressed it listed them, and its answers (`snledger::EpochClaimAnswers`); while
+>   it is in flight the v1 tiles' Claim opens a sheet built from those rows that replays the
+>   answers, so closing the sheet loses none and a claims read that failed meanwhile leaves the
+>   sheet whole, as the v2 tile's Claim opens its claim. Otherwise Claim waits for a claim of
+>   either kind: both sheets' (the relay's "Claim it yourself" reaches the v2 sheet) and the
+>   payout line's, which is drawn again at each claim's start and end. The v1 watchdog waits past the SDK's bounds, 6 minutes an epoch and a
 >   minute (`EpochClaimWatchdogMs`): the 3 minutes before gave up while the SDK could still send,
 >   and offered a second claim of a pending epoch.
 > - **The figure during a claim is what it moves** (Apple and Windows show it). The v2 sheet draws
