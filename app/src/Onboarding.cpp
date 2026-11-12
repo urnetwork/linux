@@ -530,6 +530,15 @@ void OnboardingWindow::StartCheckout(bool yearly, const char* surface) {
     host_.events().OfferCtaTapped(PlanName(true), PaymentMethodEventStore(method_));
   }
   (void)surface;
+  // No purchase for a legacy guest network (MainWindow::OpenUpgrade; windows
+  // gates this tap in MainWindow::ShowUpgradeCheckout and ShowCryptoCheckout):
+  // the flow steps aside for the conversion its owner opens, which goes on to
+  // the upgrade once a sign-in is added (GuestUpgradeContinuation)
+  if (balance_.IsGuest()) {
+    hide();
+    if (on_guest_sign_in_required) on_guest_sign_in_required();
+    return;
+  }
   if (!checkout_) {
     checkout_ = std::make_unique<UpgradeSheet>(*this, host_, balance_);
     // the server refused the checkout for a guest network: the flow steps
