@@ -106,12 +106,13 @@ class SubscriptionBalanceStore {
   void ClearPurchaseConfirmationTimeout();
 
   bool IsPro() const { return isPro_; }
-  // The plan to show, the sdk's decision (urnet::SubscriptionProTracker
-  // getShownPlan): "pro" or "free" as the server answered (Pro also by a Pro
-  // claim before it does), else "unknown", while the first read is on its
-  // way and after it failed, never Free (account_plan::PlanViewFor; support
-  // inbox 4074). PlanReadFailed: the last read failed with none loaded since.
+  // The sdk's decision of what the plan value shows
+  // (urnet::SubscriptionProTracker getShownPlan): "pro" or "free" as the
+  // server answered (Pro also by a Pro claim before it does), else "unknown",
+  // while the first read is on its way and after it failed, never Free
+  // (account_plan::PlanViewFor; support inbox 4074).
   std::string ShownPlan() const { return proTracker_.getShownPlan(); }
+  // the last read failed, and none has loaded since (getLastReadFailed)
   bool PlanReadFailed() const { return proTracker_.getLastReadFailed(); }
   bool IsGuest() const { return isGuest_; }
   // the current subscription's store family (urnet::classifySubscriptionStore:
