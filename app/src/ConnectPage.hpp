@@ -272,6 +272,10 @@ class ConnectPage : public Gtk::Box {
   // position until the next reading.
   void DrawPortMappingRow(const extender::PortMappingRow& row);
   void OnPortMappingToggled();
+  // The line under its description (connect EXTENDER.md S10): the role's port
+  // mapping state while the switch is on, drawn beside the switch as just drawn
+  // and hidden by a press until the role reports for the new position.
+  void DrawPortMappingLine(const extender::PortMappingLine& line);
   // the selected-provider row (§2.3): stats.locationName with a selected peer
   // resolved to its device name; empty => "Best available provider"
   void ApplyLocationRow();
@@ -655,6 +659,11 @@ class ConnectPage : public Gtk::Box {
   Gtk::Switch* portMappingToggle_ = nullptr;
   extender::PortMappingRow portMappingDrawn_;
   bool portMappingApplied_ = false;
+  // its status line inside the row, under the description: hidden while the
+  // switch is off or the role reports nothing it has a line for
+  Gtk::Label* portMappingLine_ = nullptr;
+  extender::PortMappingLine portMappingLineDrawn_;
+  bool portMappingLineApplied_ = false;
   // connect options (§2.8): the 3-item connection-mode segmented control and
   // the three PerformanceProfile toggles, all echo-guarded
   Gtk::ToggleButton* modeAuto_ = nullptr;

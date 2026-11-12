@@ -1112,6 +1112,16 @@ void ConnectPage::BuildPaneA() {
     note->set_wrap(true);
     CapNatural(note, 30);
     text->append(*note);
+    // the role's port mapping state under the description (connect EXTENDER.md
+    // S10): one line while the switch is on and the role reports a state,
+    // hidden until a reading draws it (DrawPortMappingLine)
+    portMappingLine_ = Gtk::make_managed<Gtk::Label>();
+    portMappingLine_->add_css_class("ur-row-note");
+    portMappingLine_->set_xalign(0);
+    portMappingLine_->set_wrap(true);
+    CapNatural(portMappingLine_, 30);
+    portMappingLine_->set_visible(false);
+    text->append(*portMappingLine_);
     line->append(*text);
     portMappingToggle_ = Gtk::make_managed<Gtk::Switch>();
     portMappingToggle_->set_valign(Gtk::Align::CENTER);
@@ -3485,10 +3495,11 @@ void ConnectPage::ApplyKillSwitchUi() {
 // takes its position from: the bound device's, or while disconnected the
 // provider-only device's when the daemon takes the switch's write. No status
 // and an unsupported role both hide the row, and a row that will not show
-// reads nothing else.
+// reads nothing else. The status is read once, so the port mapping line under
+// the switches speaks for the same role as the row.
 void ConnectPage::ApplyExtenderProvideState() {
-  DrawExtenderRow(extender::ProvideRowOf(host_.GetExtenderProvideStatus(),
-                                         [this] { return host_.GetProvideExtender(); }));
+  const auto status = host_.GetExtenderProvideStatus();
+  DrawExtenderRow(extender::ProvideRowOf(status, [this] { return host_.GetProvideExtender(); }));
   // the lag.dev speed tests switch under it, beside the row as just drawn: its
   // setting is read only when it will show
   DrawSpeedTestsRow(extender::SpeedTestsRowOf(extenderRowDrawn_,
@@ -3499,6 +3510,9 @@ void ConnectPage::ApplyExtenderProvideState() {
   DrawPortMappingRow(extender::PortMappingRowOf(
       extenderRowDrawn_, host_.PortMappingSwitchWritable(),
       [this] { return host_.GetProvideExtenderPortMapping(); }));
+  // with the role's port mapping state under it, beside the switch as just
+  // drawn (connect EXTENDER.md S10)
+  DrawPortMappingLine(extender::PortMappingLineOf(portMappingDrawn_, status));
 }
 
 void ConnectPage::DrawSpeedTestsRow(const extender::SpeedTestsRow& row) {
@@ -3555,6 +3569,26 @@ void ConnectPage::OnPortMappingToggled() {
   const bool on = portMappingToggle_->get_active();
   host_.SetProvideExtenderPortMapping(on);
   portMappingDrawn_.on = on;
+  // the line under it spoke for the position before the press: hidden until
+  // the role reports for the new one
+  DrawPortMappingLine(extender::PortMappingLine());
+}
+
+void ConnectPage::DrawPortMappingLine(const extender::PortMappingLine& line) {
+  if (!portMappingLine_) return;
+  // a reading that changes nothing is dropped
+  if (portMappingLineApplied_ && line == portMappingLineDrawn_) return;
+  portMappingLineApplied_ = true;
+  portMappingLineDrawn_ = line;
+  portMappingLine_->set_visible(line.visible);
+  if (!line.visible) return;
+  // the sdk's ports text and method name in the catalog's sentence, set as
+  // plain text: the ports text is the sdk's, never markup
+  portMappingLine_->set_text(extender::PortMappingLineTextFor(
+      line, [](const char* key, const char* english) { return std::string(T_(key, english)); },
+      [](const std::string& pattern, const std::string& ports, const std::string& method) {
+        return Format(pattern.c_str(), ports, method);
+      }));
 }
 
 void ConnectPage::DrawExtenderRow(const extender::ProvideRow& row) {
