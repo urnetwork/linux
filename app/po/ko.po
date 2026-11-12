@@ -8464,6 +8464,18 @@ msgctxt "provider_status_reason_egress_unprobed"
 msgid "The network check hasn't run on this connection yet. Until it passes, clients are offered this device only when checked providers run out."
 msgstr "이 연결에서는 아직 네트워크 검사가 실행되지 않았습니다. 검사를 통과할 때까지는 검사를 마친 제공업체가 부족할 때만 클라이언트에게 제시됩니다."
 
+#. Provider status 'Why?' list: a line under the network checks when the checks took IPv6 away (FP2-PROTOCOL.md §5.5, the sdk's ProviderStatusReasonLineIpv4). The argument is how many of the checks failed only over IPv6; the device is still offered to clients, but for IPv4 traffic only.
+msgctxt "provider_status_reason_line_ipv4"
+msgid "{} of these checks failed only over IPv6, so this device is offered for IPv4 traffic only."
+msgid_plural "{} of these checks failed only over IPv6, so this device is offered for IPv4 traffic only."
+msgstr[0] "이 검사 중 {}개가 IPv6에서만 실패하여 이 기기는 IPv4 트래픽 전용으로 제시됩니다."
+
+#. Provider status 'Why?' list: a line under the network checks when the checks took UDP away (FP2-PROTOCOL.md §5.5, the sdk's ProviderStatusReasonLineTcp). The argument is how many of the checks failed only over HTTP/3, which runs over UDP; the device is still offered to clients, but for TCP traffic only.
+msgctxt "provider_status_reason_line_tcp"
+msgid "{} of these checks failed only over HTTP/3 (UDP), so this device is offered for TCP traffic only. Some app builds and some networks do not route UDP."
+msgid_plural "{} of these checks failed only over HTTP/3 (UDP), so this device is offered for TCP traffic only. Some app builds and some networks do not route UDP."
+msgstr[0] "이 검사 중 {}개가 HTTP/3(UDP)에서만 실패하여 이 기기는 TCP 트래픽 전용으로 제시됩니다. 일부 앱 버전과 일부 네트워크는 UDP를 라우팅하지 않습니다."
+
 #. Provider status reason (location_invalid): the device was seen at more than one IP address, or its location is unknown.
 msgctxt "provider_status_reason_location_invalid"
 msgid "This device is connecting from more than one address, or its location is unknown. Clients are offered only devices with one address and a known location."
