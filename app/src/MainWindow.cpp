@@ -3612,7 +3612,14 @@ void MainWindow::OpenUpgrade() {
 }
 
 void MainWindow::OpenCryptoInvoice() {
-  // the saved invoice belongs to this network, guest or not: it always opens
+  // No purchase for a legacy guest network, as in OpenUpgrade: with no invoice
+  // in progress the sheet opens on the card and coin options
+  // (UpgradeSheet::OpenInvoice). The conversion first, then the invoice once
+  // a sign-in is added (windows MainWindow::ShowCryptoInvoice parity).
+  if (balance_.IsGuest()) {
+    DivertGuestToConversion([this] { OpenCryptoInvoice(); });
+    return;
+  }
   if (!upgradeSheet_) {
     upgradeSheet_ = std::make_unique<UpgradeSheet>(*this, host_, balance_);
     upgradeSheet_->on_guest_sign_in_required = [this] {

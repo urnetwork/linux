@@ -604,7 +604,8 @@ void UpgradeSheet::OpenInvoice() {
 }
 
 void UpgradeSheet::StartCheckout() {
-  if (state_ == State::Launching) return;
+  // no checkout without a session (windows UpgradeSheet::BeginCheckout parity)
+  if (state_ == State::Launching || !host_.IsLoggedIn()) return;
   SetState(State::Launching);
   errorLabel_->set_visible(false);
   purchaseEmitted_ = false;
@@ -614,6 +615,14 @@ void UpgradeSheet::StartCheckout() {
   purchaseMethod_ = crypto_pay::kMethodCard;
   purchasePlan_.clear();
   EmitPurchase("started");
+  // A legacy guest network buys nothing. The owners gate their entries
+  // (MainWindow::OpenUpgrade, OnboardingWindow::StartCheckout); this is a
+  // guest the balance reported after the sheet opened. As for the server's
+  // refusal, the sheet hides and its owner opens the conversion.
+  if (balance_.IsGuest()) {
+    RefuseForGuest();
+    return;
+  }
 #ifdef UR_HAVE_WEBKIT
   // The inline payment sheet first, then embedded checkout — but only once a
   // webview actually exists (webkit can be present at build time and still
@@ -680,6 +689,24 @@ void UpgradeSheet::RefuseForGuest() {
 }
 
 void UpgradeSheet::RequestSession(bool embedded) {
+  // reached from StartCheckout, directly or as a later leg's fallback: the
+  // session may have ended, or the balance named a guest, since its gate
+  if (!host_.IsLoggedIn()) {
+    // windows UpgradeSheet::RequestSession parity
+    if (!purchaseEmitted_) {
+      EmitPurchase("failed", "transport");
+      purchaseEmitted_ = true;
+    }
+    SetState(State::Options);
+    errorLabel_->set_text(T_("something_went_wrong_please_try_again_later",
+                             "Something went wrong. Please try again later."));
+    errorLabel_->set_visible(true);
+    return;
+  }
+  if (balance_.IsGuest()) {
+    RefuseForGuest();
+    return;
+  }
   urnet::StripeCreateCheckoutSessionArgs args;
   args.item_id = plans_->Yearly() ? kItemProYearly : kItemProMonthly;
   const CheckoutSessionMode mode = CheckoutSessionModeFor(embedded);
