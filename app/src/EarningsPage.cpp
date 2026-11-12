@@ -1939,7 +1939,10 @@ void LedgerClaimSheet::ShowError(const Glib::ustring& message) {
 // ---- EarningsPage ------------------------------------------------------------
 
 EarningsPage::EarningsPage(SdkHost& host)
-    : Gtk::Box(Gtk::Orientation::HORIZONTAL, 0), host_(host), consent_(ConsentPorts()) {
+    : Gtk::Box(Gtk::Orientation::HORIZONTAL, 0),
+      host_(host),
+      consent_(ConsentPorts()),
+      winsAfterClaim_(WinsAfterClaimPorts()) {
   EnsureBrandCss();
   EnsureDrawerCss();
   // the one-tap Bittensor key: its flow's mirror draws the payout card, the
@@ -2182,6 +2185,8 @@ void EarningsPage::Load() {
 void EarningsPage::ResetForSignOut() {
   // what marks the own row on the boards; the next load reads it from the jwt
   ownNetworkId_.clear();
+  // the departed account's wins are not read again after its claim
+  winsAfterClaim_.Stop();
   // A switch's set still in flight was the departed account's. Load's epoch
   // drops its answer, so it is abandoned here: its watchdog would otherwise
   // report it failed to whoever signs in next, and the switch would stay
@@ -2249,6 +2254,7 @@ void EarningsPage::ShowPreviewSnackbar() {
 void EarningsPage::SettleAllEmpty() {
   // no session: no consent to show, and nothing in flight counts any more
   consent_.Reset();
+  winsAfterClaim_.Stop();
   // ...and no key's flow: its phrase in memory, if any, goes
   keyConsentFed_.reset();
   keys_->SignedOut();
@@ -5347,6 +5353,21 @@ void EarningsPage::ApplyCtfWins(std::vector<snledger::Win> wins) {
   RebuildLedgerTile();
 }
 
+// Built in the constructor's initializer list, which runs it after alive_.
+snledger::WinsAfterClaim::Ports EarningsPage::WinsAfterClaimPorts() {
+  snledger::WinsAfterClaim::Ports ports;
+  ports.read = [this] { LoadCtfWins(); };
+  // a read on the schedule: nothing once the page is gone
+  ports.schedule = [alive = alive_](int delayMs, std::function<void()> fire) {
+    Glib::signal_timeout().connect_once(
+        [alive, fire = std::move(fire)] {
+          if (*alive) fire();
+        },
+        delayMs);
+  };
+  return ports;
+}
+
 // ---- the Solana payout wallet --------------------------------------------------
 // USDC payouts continue to a Solana payout wallet until the migration to
 // Bittensor completes, and a network whose payouts are held for want of one is
@@ -5931,6 +5952,7 @@ void EarningsPage::StartLedgerClaim() {
     return;
   }
   claiming_ = true;
+  ledgerClaimPaid_ = false;
   if (sheet) sheet->OnSending();
   RebuildUnclaimedTile();
   RebuildLedgerTile();
@@ -5959,6 +5981,7 @@ void EarningsPage::StartLedgerClaim() {
                                            int64_t amountRao) {
     PostToMain([this, epoch, seen, noId, index, txHash = std::move(txHash), amountRao] {
       if (*epoch != seen) return;
+      ledgerClaimPaid_ = true;
       if (auto open = ledgerClaimSheet_.lock()) open->OnConfirmed(noId, index, txHash, amountRao);
     });
   };
@@ -5967,6 +5990,8 @@ void EarningsPage::StartLedgerClaim() {
       if (*epoch != seen) return;
       g_warning("earnings: v2 claim for pool %lld account %lld failed: %s",
                 static_cast<long long>(noId), static_cast<long long>(index), message.c_str());
+      // another claim paid it first, to the same coldkey: paid all the same
+      if (snledger::FailureFor(message) == snledger::Failure::AlreadyClaimed) ledgerClaimPaid_ = true;
       if (auto open = ledgerClaimSheet_.lock()) open->OnFailed(noId, index, message);
     });
   };
@@ -5979,7 +6004,10 @@ void EarningsPage::StartLedgerClaim() {
       RebuildUnclaimedTile();
       RebuildLedgerTile();
       LoadWalletLayer();  // the accounts again, as the chain now has them
-      LoadCtfWins();      // and the wins: one this claim paid is claimed now
+      // and the wins: one this claim paid reads claimed once the finalized
+      // head covers the claim, so after a claim that paid they are read again
+      // on the apps' schedule
+      winsAfterClaim_.Done(ledgerClaimPaid_);
     });
   };
   sn::LedgerClaim(host_, std::move(callback));

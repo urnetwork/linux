@@ -22,12 +22,16 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <limits>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "SnLedgerPresentation.hpp"
@@ -53,7 +57,9 @@ using urnw::snledger::SectionFor;
 using urnw::snledger::SectionView;
 using urnw::snledger::Status;
 using urnw::snledger::UnavailablePool;
+using urnw::snledger::kWinsReadsAfterClaimMs;
 using urnw::snledger::Win;
+using urnw::snledger::WinsAfterClaim;
 using urnw::snledger::WonLine;
 using urnw::snledger::WonLinesFor;
 using urnw::snledger::WonSlot;
@@ -970,11 +976,82 @@ UR_TEST(SnLedgerCtf_TheLargestIsClaimedAndTheOthersStayClaimable) {
   UR_EXPECT_TRUE(RowOf(batch, kCtfPool, 7)->phase == Phase::Claimable);
   UR_EXPECT_TRUE(RowOf(batch, kCtfPool, 7)->txHash.empty());
   UR_EXPECT_TRUE(RowOf(batch, 1, 42)->txHash == "0xba7c");
-  // one below the claim minimum keeps saying so
+  // one the sheet listed below the claim minimum, which the SDK tried, is
+  // still claimable too, as on Android (SnLedgerCtf_AnAccountBelowTheClaim
+  // MinimumShowsWhatTheSdkSaid)
   ClaimProgress small = CtfSheet(12'000'000);
   small.Start();
   UR_EXPECT_TRUE(small.Failed(kCtfPool, 7, "needs_gas: the gas key cannot pay for this claim"));
-  UR_EXPECT_TRUE(RowOf(small, kCtfPool, 7)->phase == Phase::UnderFloor);
+  UR_EXPECT_TRUE(RowOf(small, kCtfPool, 7)->phase == Phase::Claimable);
+  UR_EXPECT_TRUE(small.NeedsGas());
+}
+
+// Android's snLedgerClaimProgressAfter: the SDK claims every account with
+// something to claim, one the sheet lists below the claim minimum too, and the
+// row says what came of it. Only the runtime's AmountTooLow reads below the
+// claim minimum; the gas key unable to pay for it leaves it claimable, with
+// the top-up; any other failure is Failed, with the SDK's message; a claim of
+// it is claimed. A press never counts it, as the sheet's read listed it: no
+// Claim the runtime would refuse at the relay's price
+UR_TEST(SnLedgerCtf_AnAccountBelowTheClaimMinimumShowsWhatTheSdkSaid) {
+  for (const char* message :
+       {"claim_failed: the claim transaction reverted",
+        "proof_mismatch: the ledger's proof does not verify against vault2's root",
+        "chain_rpc_error: eth_sendRawTransaction: nonce too low",
+        "not_claimable: NothingToClaim"}) {
+    ClaimProgress progress = CtfSheet(12'000'000);
+    progress.Start();
+    progress.Sent(1, 42, "0x0001");
+    progress.Confirmed(1, 42, "0x0001", 3'241'000'000);
+    UR_EXPECT_TRUE_MSG(message, progress.Failed(kCtfPool, 7, message));
+    progress.Done();
+    const ClaimRow* ctf = RowOf(progress, kCtfPool, 7);
+    UR_EXPECT_TRUE_MSG(message, ctf->phase == Phase::Failed);
+    UR_EXPECT_TRUE_MSG(message, ctf->message == message);
+    // out of the next press: no amount, no Claim both, no Claim for it alone
+    UR_EXPECT_EQ(int64_t{0}, progress.ClaimableRao());
+    UR_EXPECT_FALSE(progress.ClaimsBoth());
+    // a press waits below the claim minimum again, as the sheet's read
+    // listed it, until the SDK reports on it
+    progress.Start();
+    UR_EXPECT_TRUE_MSG(message, RowOf(progress, kCtfPool, 7)->phase == Phase::UnderFloor);
+    UR_EXPECT_TRUE_MSG(message, RowOf(progress, kCtfPool, 7)->message.empty());
+  }
+  // the gas key could not pay for it: still claimable, with the top-up, and
+  // still no Claim for it
+  ClaimProgress gas = CtfSheet(12'000'000);
+  gas.Start();
+  gas.Sent(1, 42, "0x0001");
+  gas.Confirmed(1, 42, "0x0001", 3'241'000'000);
+  UR_EXPECT_TRUE(gas.Failed(kCtfPool, 7, "needs_gas: the gas key cannot pay for this claim"));
+  gas.Done();
+  UR_EXPECT_TRUE(RowOf(gas, kCtfPool, 7)->phase == Phase::Claimable);
+  UR_EXPECT_TRUE(RowOf(gas, kCtfPool, 7)->message.empty());
+  UR_EXPECT_TRUE(gas.NeedsGas());
+  UR_EXPECT_EQ(int64_t{0}, gas.ClaimableRao());
+  // AmountTooLow alone reads below the claim minimum
+  ClaimProgress tooLow = CtfSheet(12'000'000);
+  tooLow.Start();
+  UR_EXPECT_TRUE(tooLow.Failed(kCtfPool, 7, "not_claimable: AmountTooLow: below the runtime's floor"));
+  UR_EXPECT_TRUE(RowOf(tooLow, kCtfPool, 7)->phase == Phase::UnderFloor);
+  UR_EXPECT_TRUE(RowOf(tooLow, kCtfPool, 7)->message.empty());
+  // the pool's account under the floor, batched with capture the flag's, the
+  // batch reverted: both Failed, and the retry takes capture the flag's alone
+  ClaimProgress pool({LedgerAccount(1, 42, 12'000'000, 0), CtfAccount(615'000'000)}, {}, kFloor);
+  UR_EXPECT_TRUE(RowOf(pool, 1, 42)->phase == Phase::UnderFloor);
+  pool.Start();
+  pool.Sent(1, 42, "0x0002");
+  pool.Sent(kCtfPool, 7, "0x0002");
+  UR_EXPECT_TRUE(pool.Failed(1, 42, "claim_failed: the batch transaction reverted"));
+  UR_EXPECT_TRUE(pool.Failed(kCtfPool, 7, "claim_failed: the batch transaction reverted"));
+  pool.Done();
+  UR_EXPECT_TRUE(RowOf(pool, 1, 42)->phase == Phase::Failed);
+  UR_EXPECT_TRUE(RowOf(pool, kCtfPool, 7)->phase == Phase::Failed);
+  UR_EXPECT_EQ(int64_t{615'000'000}, pool.ClaimableRao());
+  UR_EXPECT_FALSE(pool.ClaimsBoth());
+  pool.Start();
+  UR_EXPECT_TRUE(RowOf(pool, 1, 42)->phase == Phase::UnderFloor);
+  UR_EXPECT_TRUE(RowOf(pool, kCtfPool, 7)->phase == Phase::Sending);
 }
 
 // Android's snLedgerClaimSettled: a pool the sheet's read could not read keeps
@@ -1335,6 +1412,136 @@ UR_TEST(SnLedgerCtf_EveryUnclaimedWinIsALine) {
   UR_EXPECT_EQ(1u, left.size());
   if (left.size() == 1) UR_EXPECT_TRUE(left[0] == (WonLine{WonSlot::Extender, "ke"}));
   UR_EXPECT_TRUE(WonLinesFor({WonIn(9, "provider", "ke", "")}).empty());
+}
+
+// ---- the wins after a claim (every app's schedule) ----------------------------------
+
+// GET /sn/ctf/client as the SDK reads it: one answer per read in turn, the last
+// one for every read after it. Each read replaces the lines, as the page's
+// LoadCtfWins and ApplyCtfWins do.
+struct FakeWinsRoute {
+  std::vector<std::vector<Win>> answers;
+  size_t reads = 0;
+  std::vector<WonLine> lines;
+
+  void Read() {
+    lines = WonLinesFor(answers[std::min(reads, answers.size() - 1)]);
+    ++reads;
+  }
+};
+
+// The main loop's one-shot timers on a clock the test moves: each fires once,
+// in time order, as the clock passes it.
+struct FakeClock {
+  int64_t now = 0;
+  std::vector<int> delays;  // every delay asked for, in order
+  std::vector<std::pair<int64_t, std::function<void()>>> timers;  // due, fire
+
+  WinsAfterClaim::Schedule Port() {
+    return [this](int delayMs, std::function<void()> fire) {
+      delays.push_back(delayMs);
+      timers.emplace_back(now + delayMs, std::move(fire));
+    };
+  }
+
+  void AdvanceTo(int64_t ms) {
+    for (;;) {
+      auto due = std::min_element(timers.begin(), timers.end(),
+                                  [](const auto& a, const auto& b) { return a.first < b.first; });
+      if (due == timers.end() || due->first > ms) break;
+      now = due->first;
+      std::function<void()> fire = std::move(due->second);
+      timers.erase(due);
+      fire();
+    }
+    now = ms;
+  }
+};
+
+// The SDK's Done comes once the claim is in a block, but the route reads
+// vault2's claimed at the finalized head, so its first answers after the claim
+// still list a win the claim paid. After a claim that paid an account the wins
+// are read at Done and again 30 s, 60 s and 120 s after it, and the line goes
+// at the first read that finds the win claimed
+UR_TEST(SnLedgerCtf_TheWinsAClaimPaidAreReadAgainUntilTheServerReadsThemClaimed) {
+  UR_EXPECT_TRUE((kWinsReadsAfterClaimMs == std::array<int, 3>{30'000, 60'000, 120'000}));
+  FakeWinsRoute route;
+  route.answers = {{WonIn(10, "provider", "is")},
+                   {WonIn(10, "provider", "is")},
+                   {WonIn(10, "provider", "is")},
+                   {WonIn(10, "provider", "is", urnw::snledger::kClaimStateClaimed)},
+                   {}};
+  FakeClock clock;
+  WinsAfterClaim after({[&route] { route.Read(); }, clock.Port()});
+  route.Read();  // the page's load, before the claim
+  UR_EXPECT_EQ(1u, route.lines.size());
+  // at Done: still unclaimed at the finalized head
+  after.Done(/*paid=*/true);
+  UR_EXPECT_EQ(2u, route.reads);
+  UR_EXPECT_EQ(1u, route.lines.size());
+  clock.AdvanceTo(29'999);
+  UR_EXPECT_EQ(2u, route.reads);
+  // 30 s after Done: still unclaimed
+  clock.AdvanceTo(30'000);
+  UR_EXPECT_EQ(3u, route.reads);
+  UR_EXPECT_EQ(1u, route.lines.size());
+  // 60 s: the finalized head covers the claim, and the line goes
+  clock.AdvanceTo(60'000);
+  UR_EXPECT_EQ(4u, route.reads);
+  UR_EXPECT_TRUE(route.lines.empty());
+  // 120 s: the last read
+  clock.AdvanceTo(120'000);
+  UR_EXPECT_EQ(5u, route.reads);
+  UR_EXPECT_TRUE(route.lines.empty());
+  // and none after it
+  clock.AdvanceTo(24 * 3'600'000);
+  UR_EXPECT_EQ(5u, route.reads);
+  UR_EXPECT_TRUE((clock.delays == std::vector<int>{30'000, 30'000, 60'000}));
+}
+
+// a claim that paid nothing reads the wins once, at Done, as before
+UR_TEST(SnLedgerCtf_TheWinsAfterAClaimThatPaidNothingAreReadOnce) {
+  FakeWinsRoute route;
+  route.answers = {{WonIn(10, "provider", "is")}};
+  FakeClock clock;
+  WinsAfterClaim after({[&route] { route.Read(); }, clock.Port()});
+  after.Done(/*paid=*/false);
+  UR_EXPECT_EQ(1u, route.reads);
+  UR_EXPECT_EQ(1u, route.lines.size());
+  clock.AdvanceTo(600'000);
+  UR_EXPECT_EQ(1u, route.reads);
+  UR_EXPECT_TRUE(clock.delays.empty());
+}
+
+// a sign-out stops the reads still to come, and the next claim's Done starts
+// them over: the earlier claim's timers then read nothing
+UR_TEST(SnLedgerCtf_TheWinsAfterAClaimStopOnSignOutAndStartOverWithTheNextClaim) {
+  FakeWinsRoute route;
+  route.answers = {{WonIn(10, "provider", "is")}};
+  FakeClock clock;
+  WinsAfterClaim after({[&route] { route.Read(); }, clock.Port()});
+  after.Done(true);
+  clock.AdvanceTo(30'000);
+  UR_EXPECT_EQ(2u, route.reads);
+  after.Stop();
+  clock.AdvanceTo(600'000);
+  UR_EXPECT_EQ(2u, route.reads);
+  // a claim's Done at 600 s, and another's at 610 s
+  after.Done(true);
+  UR_EXPECT_EQ(3u, route.reads);
+  clock.AdvanceTo(610'000);
+  after.Done(true);
+  UR_EXPECT_EQ(4u, route.reads);
+  clock.AdvanceTo(630'000);
+  UR_EXPECT_EQ(4u, route.reads);
+  clock.AdvanceTo(640'000);
+  UR_EXPECT_EQ(5u, route.reads);
+  clock.AdvanceTo(670'000);
+  UR_EXPECT_EQ(6u, route.reads);
+  clock.AdvanceTo(730'000);
+  UR_EXPECT_EQ(7u, route.reads);
+  clock.AdvanceTo(3'600'000);
+  UR_EXPECT_EQ(7u, route.reads);
 }
 
 // ---- the page's wiring and English, read from the sources ----------------------
@@ -1712,10 +1919,13 @@ UR_TEST(SnLedgerCtf_TheWonSlotLineIsWired) {
                  std::string::npos);
   UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::SettleAllEmpty()").find("ctfWins_.clear();") !=
                  std::string::npos);
-  // a win the claim paid is claimed now: the lines are read again after Done
+  // a win the claim paid reads claimed once the finalized head covers the
+  // claim: the lines are read again after Done (SnLedgerCtf_TheWinsAfterA
+  // ClaimAreWired)
   const std::string start = LedgerFunctionBody(page, "void EarningsPage::StartLedgerClaim()");
   const size_t settle = start.find("if (!SettleFlow(ledgerClaimFlow_, generation, \"v2 claim\")) return;");
-  UR_EXPECT_TRUE(settle != std::string::npos && start.find("LoadCtfWins();", settle) != std::string::npos);
+  UR_EXPECT_TRUE(settle != std::string::npos &&
+                 start.find("winsAfterClaim_.Done(ledgerClaimPaid_);", settle) != std::string::npos);
   const std::string tile = LedgerFunctionBody(page, "void EarningsPage::RebuildLedgerTile()");
   UR_EXPECT_TRUE(tile.find("for (const snledger::WonLine& won : snledger::WonLinesFor(ctfWins_)) {") !=
                  std::string::npos);
@@ -1726,6 +1936,56 @@ UR_TEST(SnLedgerCtf_TheWonSlotLineIsWired) {
                            "slots\"), country)") != std::string::npos);
   UR_EXPECT_TRUE(tile.find("Format(T_(\"sn_ctf_won_extender_slot\", \"You won one of the {} extender "
                            "slots\"), country)") != std::string::npos);
+}
+
+// The wins after a v2 claim (snledger::WinsAfterClaim, whose schedule the tests
+// above run): read through the page's LoadCtfWins on the main loop's timers,
+// which do nothing once the page is gone; the claim's Done says whether it paid
+// an account, which a Confirmed or an already_claimed says; and a sign-out, or
+// no session, stops them
+UR_TEST(SnLedgerCtf_TheWinsAfterAClaimAreWired) {
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  UR_EXPECT_TRUE(page.find("      consent_(ConsentPorts()),\n"
+                           "      winsAfterClaim_(WinsAfterClaimPorts()) {") != std::string::npos);
+  const std::string ports =
+      LedgerFunctionBody(page, "snledger::WinsAfterClaim::Ports EarningsPage::WinsAfterClaimPorts()");
+  UR_EXPECT_TRUE(ports.find("ports.read = [this] { LoadCtfWins(); };") != std::string::npos);
+  UR_EXPECT_TRUE(ports.find("ports.schedule = [alive = alive_](int delayMs, std::function<void()> fire) {\n"
+                            "    Glib::signal_timeout().connect_once(\n"
+                            "        [alive, fire = std::move(fire)] {\n"
+                            "          if (*alive) fire();\n"
+                            "        },\n"
+                            "        delayMs);") != std::string::npos);
+  // alive_ is set before the initializer list reaches winsAfterClaim_
+  const std::string header = ReadLedgerSource("EarningsPage.hpp");
+  const size_t alive = header.find("std::shared_ptr<bool> alive_");
+  const size_t member = header.find("snledger::WinsAfterClaim winsAfterClaim_;");
+  UR_EXPECT_TRUE(alive != std::string::npos && member != std::string::npos && alive < member);
+  const std::string start = LedgerFunctionBody(page, "void EarningsPage::StartLedgerClaim()");
+  const size_t claiming = start.find("claiming_ = true;\n  ledgerClaimPaid_ = false;");
+  UR_EXPECT_TRUE(claiming != std::string::npos);
+  UR_EXPECT_TRUE(claiming < start.find("sn::LedgerClaim(host_, std::move(callback));"));
+  const size_t confirmed = start.find("callback.confirmed =");
+  const size_t failed = start.find("callback.failed =");
+  const size_t done = start.find("callback.done =");
+  UR_EXPECT_TRUE(confirmed != std::string::npos && failed != std::string::npos && done != std::string::npos);
+  const std::string onConfirmed = start.substr(confirmed, failed - confirmed);
+  UR_EXPECT_TRUE(onConfirmed.find("if (*epoch != seen) return;\n      ledgerClaimPaid_ = true;") !=
+                 std::string::npos);
+  const std::string onFailed = start.substr(failed, done - failed);
+  UR_EXPECT_TRUE(onFailed.find("if (snledger::FailureFor(message) == snledger::Failure::AlreadyClaimed) "
+                               "ledgerClaimPaid_ = true;") != std::string::npos);
+  // the read at Done is the schedule's own: no second read beside it
+  const std::string onDone = start.substr(done);
+  UR_EXPECT_TRUE(onDone.find("LoadCtfWins();") == std::string::npos);
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::ResetForSignOut()").find("winsAfterClaim_.Stop();") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void EarningsPage::SettleAllEmpty()").find("winsAfterClaim_.Stop();") !=
+                 std::string::npos);
+  // a read needs a session, and its answer the load it was asked in
+  const std::string load = LedgerFunctionBody(page, "void EarningsPage::LoadCtfWins()");
+  UR_EXPECT_TRUE(load.find("if (!CanCallApi()) return;") != std::string::npos);
+  UR_EXPECT_TRUE(load.find("if (*epoch != seen) return;") != std::string::npos);
 }
 
 // The Transaction link of URnetwork's claim (the claim relay's 4d): the SDK's

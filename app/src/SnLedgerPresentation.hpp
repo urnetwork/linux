@@ -29,14 +29,19 @@
 // network with no wallet here. Without a capture the flag account, as with
 // every server before it, the tile and the v2 sheet read as before, but for
 // the claim minimum. The tile ends with a line for every capture the flag win
-// whose award is not claimed yet: "You won one of the Kenya provider slots".
+// whose award is not claimed yet: "You won one of the Kenya provider slots",
+// read again after a claim until the server reads the wins it paid claimed
+// (WinsAfterClaim).
 //
 // The claim minimum (owner, 2026-11-11, for every app): any account whose
 // claimable is under the claim relay's transfer floor, alone or beside others,
 // says it is below the claim minimum, and no Claim counts it: the runtime
 // refuses a transfer that small, so the app never offers a claim the chain
 // will refuse. The runtime's own refusal of one (not_claimable, AmountTooLow)
-// reads the same.
+// reads the same. The SDK still tries such an account when a press claims the
+// others, and the sheet then shows what came of it, as Android does: claimed,
+// still claimable when the gas key could not pay for it (needs_gas), or Failed
+// with the SDK's message.
 //
 // Header-only and free of GTK and the SDK so the unit tests need no vendored
 // headers (tests/SnLedgerPresentationTest.cpp).
@@ -44,10 +49,12 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace urnw::snledger {
@@ -386,6 +393,12 @@ struct ClaimRow {
 // claim) comes with noId 0. Whenever the SDK claims accounts alone, the
 // largest goes first, and an account the gas key cannot pay for fails
 // needs_gas with nothing sent for it (sdk-ctf-v2 §2.1): it stays claimable.
+//
+// The SDK claims every account with something to claim, those the sheet lists
+// below the claim minimum too, so each row shows what the SDK reports of it,
+// as Android's rows do (snLedgerClaimProgressAfter). A press never counts an
+// account under the sheet's floor, whatever came of it before: Android's
+// dialog reads the accounts again, floor and all, before each claim.
 class ClaimProgress {
  public:
   ClaimProgress() = default;
@@ -394,7 +407,8 @@ class ClaimProgress {
   // pool. An account under `transferFloorRao`, alone or beside others, waits
   // below the claim minimum.
   ClaimProgress(const std::vector<Account>& accounts, const std::vector<UnavailablePool>& unavailable,
-                int64_t transferFloorRao) {
+                int64_t transferFloorRao)
+      : floor_(transferFloorRao) {
     for (const Account& account : accounts) refs_.push_back(PoolRef{account.noId, account.kind});
     for (const UnavailablePool& pool : unavailable) refs_.push_back(PoolRef{pool.noId, pool.kind});
     naming_ = PoolNaming::Of(refs_);
@@ -426,7 +440,7 @@ class ClaimProgress {
     size_t pools = 0;
     size_t ctfs = 0;
     for (const ClaimRow& row : rows_) {
-      if (row.phase != Phase::Claimable && row.phase != Phase::Failed) continue;
+      if (!Takes(row)) continue;
       if (IsCtf(row.kind)) {
         ++ctfs;
       } else {
@@ -446,7 +460,7 @@ class ClaimProgress {
   int64_t ClaimableRao() const {
     int64_t total = 0;
     for (const ClaimRow& row : rows_) {
-      if (row.phase == Phase::Claimable || row.phase == Phase::Failed) total += row.amountRao;
+      if (Takes(row)) total += row.amountRao;
     }
     return total;
   }
@@ -457,17 +471,19 @@ class ClaimProgress {
     return false;
   }
 
-  // Claim pressed: every row the press claims is sending.
+  // Claim pressed: every row the press claims is sending. One under the
+  // sheet's floor that the last press left claimable or failed waits below
+  // the claim minimum again, as the sheet's read listed it, until the SDK
+  // reports on it.
   void Start() {
     busy_ = true;
     needsGas_ = false;
     read_ = false;
     reportedUnavailable_.clear();
     for (ClaimRow& row : rows_) {
-      if (row.phase == Phase::Claimable || row.phase == Phase::Failed) {
-        row.phase = Phase::Sending;
-        row.message.clear();
-      }
+      if (row.phase != Phase::Claimable && row.phase != Phase::Failed) continue;
+      row.phase = Takes(row) ? Phase::Sending : Phase::UnderFloor;
+      row.message.clear();
     }
   }
   void Sent(int64_t noId, int64_t index, const std::string& txHash) {
@@ -518,7 +534,8 @@ class ClaimProgress {
     }
     // the runtime's refusal of an amount under its floor is the claim
     // minimum, which the relay's price may not have shown: the row waits, out
-    // of the next press, alone or beside others
+    // of the next press, alone or beside others. Only this reads below the
+    // claim minimum once the SDK has tried the account
     if (failure == Failure::UnderFloor) {
       row.phase = Phase::UnderFloor;
       row.message.clear();
@@ -526,18 +543,18 @@ class ClaimProgress {
     }
     // the gas key could not pay for its claim, so nothing was sent for it:
     // it is still claimable, no transaction claims it now, and the sheet's
-    // top-up says what to add. One below the claim minimum keeps saying so
+    // top-up says what to add; so too for one the sheet listed below the
+    // claim minimum, which the SDK tried
     if (failure == Failure::NeedsGas) {
-      if (row.phase != Phase::UnderFloor && row.phase != Phase::Claimed) {
+      if (row.phase != Phase::Claimed) {
         row.phase = Phase::Claimable;
         row.txHash.clear();
       }
       row.message.clear();
       return true;
     }
-    // below the claim minimum the vault refuses it, and no retry helps until
-    // it rises: the row keeps saying why
-    if (row.phase == Phase::UnderFloor) return true;
+    // any other failure is Failed, with the SDK's message, whatever the
+    // sheet listed the account as
     row.phase = Phase::Failed;
     row.message = message;
     return true;
@@ -565,6 +582,14 @@ class ClaimProgress {
   }
 
  private:
+  // A press takes the row: not claimed yet (claimable, or failed and so worth
+  // another try), and not under the sheet's floor, whatever the SDK said of it
+  // since. An account the SDK reported without a listed amount counts.
+  bool Takes(const ClaimRow& row) const {
+    return (row.phase == Phase::Claimable || row.phase == Phase::Failed) &&
+           !UnderFloor(row.amountRao, floor_);
+  }
+
   // A pool's kind by its id, as the SDK reads an entry without a kind.
   static std::string KindOfPoolId(int64_t noId) {
     return kCtfPoolIdBase <= noId ? kKindCtf : kKindPool;
@@ -617,6 +642,7 @@ class ClaimProgress {
   std::vector<ClaimRow> rows_;
   std::vector<PoolRef> refs_;  // every pool of the read, and of the rows added since
   PoolNaming naming_;
+  int64_t floor_ = 0;  // the transfer floor at the sheet's read; 0 without one
   bool busy_ = false;
   bool needsGas_ = false;
   // this press: the SDK's own read of the ledger answered, and the pools it
@@ -858,5 +884,61 @@ inline std::vector<WonLine> WonLinesFor(std::vector<Win> wins) {
   }
   return lines;
 }
+
+// When the wins are read again after a v2 claim that paid an account, in ms
+// after its Done, beside the read at Done (every app's schedule). The SDK's
+// Done comes once the claim is in a block, but the server says a win is
+// claimed only once vault2's claimed at the finalized head covers it, so the
+// read at Done can still list it.
+constexpr std::array<int, 3> kWinsReadsAfterClaimMs = {30'000, 60'000, 120'000};
+
+// The reads of the wins after a v2 claim's Done: one at Done, after any claim,
+// and when the claim paid an account (claimed, or claimed already by another)
+// one more at each of kWinsReadsAfterClaimMs. Each read replaces the lines, as
+// every read does. The next claim's Done starts over, and Stop() drops what is
+// still to come when the user signs out; the page's timers do nothing once the
+// page is gone (EarningsPage::WinsAfterClaimPorts). Main loop only.
+class WinsAfterClaim {
+ public:
+  // Runs `fire` once, `delayMs` from now, on the main loop.
+  using Schedule = std::function<void(int delayMs, std::function<void()> fire)>;
+
+  struct Ports {
+    std::function<void()> read;  // reads the wins; the answer replaces the lines
+    Schedule schedule;
+  };
+
+  explicit WinsAfterClaim(Ports ports) : ports_(std::move(ports)) {}
+  WinsAfterClaim(const WinsAfterClaim&) = delete;
+  WinsAfterClaim& operator=(const WinsAfterClaim&) = delete;
+
+  void Done(bool paid) {
+    ++run_;
+    Read();
+    if (paid) Next(run_, 0);
+  }
+
+  void Stop() { ++run_; }
+
+ private:
+  void Read() {
+    if (ports_.read) ports_.read();
+  }
+
+  // The read at step `step` of the schedule, for run `run`: none once another
+  // run started or Stop() came.
+  void Next(uint64_t run, size_t step) {
+    if (step >= kWinsReadsAfterClaimMs.size() || !ports_.schedule) return;
+    const int since = step == 0 ? 0 : kWinsReadsAfterClaimMs[step - 1];
+    ports_.schedule(kWinsReadsAfterClaimMs[step] - since, [this, run, step] {
+      if (run != run_) return;
+      Read();
+      Next(run, step + 1);
+    });
+  }
+
+  Ports ports_;
+  uint64_t run_ = 0;
+};
 
 }  // namespace urnw::snledger
