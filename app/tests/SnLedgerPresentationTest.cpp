@@ -3116,7 +3116,8 @@ UR_TEST(SnLedgerCtf_ThePayoutLinesClaimFollowsBothClaims) {
 // gas; a wallet read that finds no coldkey supersedes both reads; and these
 // are the three kinds' only reads, so no answer lands unchecked. Each claim's
 // Done starts both again (LoadWalletLayer after its settle:
-// SnLedgerClaimSheetWiring, SnLedgerCtf_TheV1ClaimsAnswersAreWired)
+// SnLedgerClaimSheetWiring, SnLedgerCtf_TheV1ClaimsAnswersAreWired), and so
+// does each claim's watchdog give-up (SnLedgerCtf_EachWatchdogGiveUpReadsAgain)
 UR_TEST(SnLedgerCtf_TheReadsOfTheClaimableStateAreWired) {
   const std::string page = ReadLedgerSource("EarningsPage.cpp");
   const std::string layer = LedgerFunctionBody(page, "void EarningsPage::LoadWalletLayer()");
@@ -3198,6 +3199,52 @@ UR_TEST(SnLedgerCtf_TheReadsOfTheClaimableStateAreWired) {
   for (const char* member : {"  snledger::NewestRead claimsReads_;\n", "  snledger::NewestRead ledgerReads_;\n",
                              "  snledger::NewestRead gasReads_;\n"}) {
     UR_EXPECT_TRUE_MSG(member, header.find(member) != std::string::npos);
+  }
+}
+
+// A claim's watchdog gives up past the SDK's own bounds, and the claim may have
+// landed all the same, so the read from before it may still list what it paid.
+// Each give-up, v1's and v2's, reads the claims and the accounts again, as each
+// Done does, as its last step: its other steps stay in their order (the claim
+// ended for good, the sheet's error, the other sheet drawn again, the
+// rebuilds), then the page shows Loading and only that read or a newer one
+// counts (SnLedgerCtf_TheReadsOfTheClaimableStateAreWired), so Claim is never
+// offered from the read before the claim
+UR_TEST(SnLedgerCtf_EachWatchdogGiveUpReadsAgain) {
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  struct GiveUp {
+    const char* claim;
+    const char* flow;
+    std::vector<const char*> steps;
+  };
+  const GiveUp giveUps[] = {
+      {"void EarningsPage::StartClaim(", "BeginFlow(claimFlow_, watchdogMs, [this]",
+       {"claim_.End();", "claimAnswers_.Clear();", "claimRows_.clear();",
+        "open->ShowError(T_(\"chain_rpc_unreachable\",", "open->OnDone();",
+        "if (auto open = ledgerClaimSheet_.lock()) open->Redraw();", "RebuildPayoutLine();",
+        "RebuildUnclaimedTile();", "RebuildLedgerTile();", "LoadWalletLayer();"}},
+      {"void EarningsPage::StartLedgerClaim()", "BeginFlow(ledgerClaimFlow_, watchdogMs, [this]",
+       {"ledgerClaim_.End();", "open->ShowError(T_(\"chain_rpc_unreachable\",", "open->Redraw();",
+        "if (auto open = claimSheet_.lock()) open->Redraw();", "RebuildPayoutLine();",
+        "RebuildUnclaimedTile();", "RebuildLedgerTile();", "LoadWalletLayer();"}},
+  };
+  for (const GiveUp& giveUp : giveUps) {
+    const std::string body = LedgerFunctionBody(LedgerFunctionBody(page, giveUp.claim), giveUp.flow);
+    UR_EXPECT_TRUE_MSG(giveUp.claim, !body.empty());
+    size_t from = 0;
+    for (const char* step : giveUp.steps) {
+      const size_t at = body.find(step, from);
+      UR_EXPECT_TRUE_MSG(step, at != std::string::npos);
+      if (at != std::string::npos) from = at + 1;
+    }
+    // the read once, and nothing after it
+    const size_t read = body.find("LoadWalletLayer();");
+    UR_EXPECT_TRUE_MSG(giveUp.claim, read != std::string::npos &&
+                                         body.find("LoadWalletLayer();", read + 1) == std::string::npos);
+    if (read != std::string::npos) {
+      const std::string rest = body.substr(read + std::string("LoadWalletLayer();").size());
+      UR_EXPECT_TRUE_MSG(giveUp.claim, rest.find_first_not_of(" \n") == rest.size() - 1 && rest.back() == '}');
+    }
   }
 }
 

@@ -239,6 +239,9 @@
 >   shows the claims and the accounts as Loading from a read's start and every claim's Done starts
 >   one of each, so neither Claim is offered from a read that started before the last claim's Done.
 >   A wallet read that finds no coldkey empties both at once and drops the reads still out.
+> - A claim's watchdog give-up starts one of each too, as its last step, as the Done does. The
+>   claim may have landed all the same, and before, the give-up offered Claim again on the read
+>   from before the claim.
 > - While the claims read is out the page still holds the read before it's total, so the payout
 >   line's Claim now waits for the read as the unclaimed tile's does (`snpayout::V1ClaimEnabled`),
 >   and the v1 sheet does not open between claims while a read is out ("Loading...", as the v2

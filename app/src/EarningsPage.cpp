@@ -3188,10 +3188,11 @@ void EarningsPage::LoadEarnings() {
 // The subnet layer: the vault's view of this network's epochs, the coldkey's
 // v2 accounts and the gas key. Only with an attached wallet — without one
 // there is nothing to read. The claims and the accounts show Loading from here
-// until this read answers: a visit, a wallet connect and every claim's Done
-// read them again, and only the newest read of each counts (snledger::
-// NewestRead), so a read still out from before a claim's Done, which may list
-// what the claim paid, never lands over the Done's.
+// until this read answers: a visit, a wallet connect and every claim's end
+// (its Done, or its watchdog's give-up) read them again, and only the newest
+// read of each counts (snledger::NewestRead), so a read still out from before
+// a claim's end, which may list what the claim paid, never lands over the
+// end's.
 void EarningsPage::LoadWalletLayer() {
   if (!wallet_ || !CanCallApi()) return;
   ApplyClaims(std::nullopt, 0, Fetch::Loading);
@@ -5540,6 +5541,10 @@ void EarningsPage::StartClaim(std::vector<int64_t> epochs) {
     RebuildPayoutLine();
     RebuildUnclaimedTile();
     RebuildLedgerTile();
+    // the claim may have landed all the same: read again, as at its Done, so
+    // Claim waits for a read that started after the claim ended rather than
+    // following the one from before it (snledger::NewestRead)
+    LoadWalletLayer();
   });
   // Each answer lands on the main loop while the page lives and the claim is
   // still the one in flight, into the page's rows and a v1 sheet open
@@ -5698,6 +5703,10 @@ void EarningsPage::StartLedgerClaim() {
     RebuildPayoutLine();
     RebuildUnclaimedTile();
     RebuildLedgerTile();
+    // the claim may have landed all the same: read again, as at its Done, so
+    // Claim waits for a read that started after the claim ended rather than
+    // following the one from before it (snledger::NewestRead)
+    LoadWalletLayer();
   });
   // Each answer lands on the main loop while the page lives and the claim is
   // still the one in flight; a v2 sheet open meanwhile draws its rows (one
