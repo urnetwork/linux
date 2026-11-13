@@ -10735,7 +10735,7 @@ msgctxt "split_tunnel_extension_needs_approval"
 msgid "To keep these apps off the VPN, allow the URnetwork Split Tunnel extension in System Settings."
 msgstr "Ili kuweka programu hizi nje ya VPN, ruhusu kiendelezi cha URnetwork Split Tunnel katika Mipangilio ya Mfumo."
 
-#. Error when the app could not open the browser for a sign-in page (macOS: adding a sign-in method; Windows: the browser sign-in).
+#. Error when the app could not open the browser for a sign-in page (macOS: adding a sign-in method; Windows: the browser sign-in; Windows and Linux: the ur.io wallet bridge page of a Solana sign-in, which the wallet never saw).
 msgctxt "sso_browser_open_failed"
 msgid "Could not open the browser. Please try again."
 msgstr "Imeshindwa kufungua kivinjari. Tafadhali jaribu tena."

@@ -10699,7 +10699,7 @@ msgctxt "split_tunnel_extension_needs_approval"
 msgid "To keep these apps off the VPN, allow the URnetwork Split Tunnel extension in System Settings."
 msgstr "이 앱들을 VPN에서 제외하려면 시스템 설정에서 URnetwork Split Tunnel 확장 프로그램을 허용하세요."
 
-#. Error when the app could not open the browser for a sign-in page (macOS: adding a sign-in method; Windows: the browser sign-in).
+#. Error when the app could not open the browser for a sign-in page (macOS: adding a sign-in method; Windows: the browser sign-in; Windows and Linux: the ur.io wallet bridge page of a Solana sign-in, which the wallet never saw).
 msgctxt "sso_browser_open_failed"
 msgid "Could not open the browser. Please try again."
 msgstr "브라우저를 열 수 없습니다. 다시 시도하세요."

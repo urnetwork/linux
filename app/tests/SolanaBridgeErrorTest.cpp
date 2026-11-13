@@ -172,11 +172,12 @@ UR_TEST(SolanaWalletFailure_StringsAreTranslated) {
   }
 }
 
-// Every failure of a Phantom or Solflare step goes through FailSolana, which
-// asks the sdk: the page's code on the connect and the sign step, a browser
-// that would not open the page, and whatever the app finds wrong with a
-// return. No step answers on_error itself, and neither hop opens the page
-// where a failure answers the launcher's words (OpenUrl).
+// Every wallet failure of a Phantom or Solflare step goes through FailSolana,
+// which asks the sdk: the page's code on the connect and the sign step, and
+// whatever the app finds wrong with a return. No such step answers on_error
+// itself, and neither hop opens the page where a failure answers the
+// launcher's words (OpenUrl). A browser that would not open the page is no
+// wallet failure: it reads sso_browser_open_failed, as on Windows.
 UR_TEST(SolanaWalletFailure_EverySolanaStepFailsThroughTheSdk) {
   const std::string wallet = wiring::ReadCode("WalletConnect.cpp");
   if (wallet.empty()) {
@@ -185,7 +186,6 @@ UR_TEST(SolanaWalletFailure_EverySolanaStepFailsThroughTheSdk) {
   }
   for (const char* step : {"void WalletConnect::Connect(Provider p)",
                            "void WalletConnect::SignMessage(const std::string& message)",
-                           "void WalletConnect::OpenSolanaBridge(Provider p,",
                            "void WalletConnect::HandleConnect(Provider p,",
                            "void WalletConnect::HandleSignMessage(Provider p,"}) {
     const std::string body = wiring::FunctionBody(wallet, step);
@@ -198,10 +198,13 @@ UR_TEST(SolanaWalletFailure_EverySolanaStepFailsThroughTheSdk) {
                                   "OpenSolanaBridge(p, url);"));
   UR_EXPECT_TRUE(wiring::Contains(wiring::FunctionBody(wallet, "void WalletConnect::SignMessage("),
                                   "OpenSolanaBridge(currentProvider_, url);"));
-  // the wallet never saw the request: the sdk's wallet_error
+  // the wallet never saw the request: the browser's failure, in the words the
+  // Windows app shows for it, never the launcher's
+  const std::string open = wiring::FunctionBody(wallet, "void WalletConnect::OpenSolanaBridge(");
   UR_EXPECT_TRUE(wiring::Contains(
-      wiring::FunctionBody(wallet, "void WalletConnect::OpenSolanaBridge("),
-      "FailSolana(p, urnet::SolanaWalletFailureSourceApp, urnet::SolanaWalletFailureWallet,"));
+      open, "on_error(T_(\"sso_browser_open_failed\", \"Could not open the browser. Please try again.\"))"));
+  UR_EXPECT_TRUE(!wiring::Contains(open, "OpenUrl("));
+  UR_EXPECT_TRUE(!wiring::Contains(open, "on_error(error"));
   // the page's code, -1 included, read by the sdk as a bridge code on both steps
   for (const char* handler :
        {"void WalletConnect::HandleConnect(", "void WalletConnect::HandleSignMessage("}) {

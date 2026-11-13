@@ -111,10 +111,12 @@ void WalletConnect::OpenUrl(const std::string& url) {
 void WalletConnect::OpenSolanaBridge(Provider p, const std::string& url) {
   std::string error;
   if (LaunchUrl(url, error)) return;
-  // the wallet never saw the request: no message of the SDK's is closer than
-  // the wallet not finishing it
-  FailSolana(p, urnet::SolanaWalletFailureSourceApp, urnet::SolanaWalletFailureWallet,
-             "the browser would not open the bridge page: " + error);
+  // the wallet never saw the request, so this is no wallet failure of the
+  // SDK's: the browser would not open, in the words the Windows app uses for
+  // it (the launcher's own words are only logged)
+  std::fprintf(stderr, "[wallet] the browser would not open the %s bridge page: %s\n",
+               std::string(Host(p)).c_str(), error.c_str());
+  if (on_error) on_error(T_("sso_browser_open_failed", "Could not open the browser. Please try again."));
 }
 
 void WalletConnect::FailSolana(Provider p, const std::string& source, const std::string& code,

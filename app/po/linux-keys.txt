@@ -1428,6 +1428,7 @@ split_rules
 split_rules_activity_hint
 split_rules_hint
 split_rules_info_note
+sso_browser_open_failed
 start_free_trial
 stay_in_touch
 stay_on_this_exit
