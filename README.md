@@ -136,6 +136,15 @@ meson compile -C build     # build/urnetwork-gui and build/urnetworkd
 meson test -C build
 ```
 
+For a fast check on macOS or Linux with Python 3 and a C++17 compiler, run
+`python3 -B app/tests/Preflight.py` from the repository root. It exercises the
+real auth/logout methods, their retired-epoch and asynchronous-logout mutation
+controls, crypto payment UI wiring, display/edit boundaries and localization
+catalog coverage without GTK or the SDK. `CXX` selects
+the compiler. The release harness runs this check after localization generation,
+before allocating a version or building artifacts, even when `BUILD_TEST` is
+empty. The full Meson suite remains required during the Linux build.
+
 `URnetworkSdkLinux-<version>.zip` is attached to every release on
 urnetwork/build. You can also build it from `sdk/cgo` (`make build_linux`).
 

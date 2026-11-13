@@ -5,9 +5,11 @@
 #include <atomic>
 #include <cctype>
 #include <cstdint>
+#include <chrono>
 #include <cstdio>
 #include <deque>
 #include <functional>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -16,8 +18,10 @@
 #include <utility>
 #include <vector>
 #include "ConnectionRegion.hpp"
+#include "ClientLimitNotice.hpp"
 
 namespace region = urnw::region;
+namespace client_limit = urnw::client_limit;
 
 using Task = std::function<void()>;
 std::deque<Task> mainTasks, workerTasks, storageTasks;
@@ -39,7 +43,9 @@ namespace urnet {
 struct NetworkPeerList {};
 inline const std::string TAO = "tao";
 inline constexpr int BittensorWalletStateSigned = 1;
-struct Error { std::string message; std::optional<std::string> code; };
+inline const std::string ClientLimitPromptUpgrade = "upgrade";
+inline const std::string ClientLimitPromptRemoveClient = "remove_client";
+struct Error { std::string message; std::optional<std::string> code, client_limit_prompt; };
 struct Network { std::string by_jwt; };
 struct OptionalNetwork { std::optional<std::string> by_jwt; };
 struct Verification { std::optional<std::string> send_error; };
@@ -55,7 +61,10 @@ struct AuthVerifyResult { std::optional<Error> error; std::optional<Network> net
 struct NetworkCreateArgs { std::string user_name, user_auth, password, network_name, referral_code, auth_jwt_type, auth_jwt; bool terms = false, verify_use_numeric = false; };
 struct NetworkCreateResult { std::optional<Error> error; std::optional<OptionalNetwork> network; std::optional<Verification> verification_required; std::optional<std::string> seedphrase; };
 struct AuthNetworkClientArgs { std::string description, device_spec; };
-struct AuthNetworkClientResult { std::optional<Error> error; std::optional<std::string> by_client_jwt; };
+struct AuthNetworkClientResult { std::optional<Error> error; std::optional<std::string> by_client_jwt, client_id; };
+struct RemoveNetworkClientArgs { std::string client_id; };
+struct RemoveNetworkClientResult { std::optional<Error> error; };
+struct SessionSignOutResult {};
 template<class T> using Callback = std::function<void(std::optional<T>, std::optional<std::string>)>;
 using AuthNetworkClientCallback = Callback<AuthNetworkClientResult>;
 // The SDK's one can't-reach rule (sdk cant_reach.go isCantReachError), which
@@ -74,6 +83,7 @@ inline bool isCantReachError(const std::string& error) {
 struct Api {
   std::string jwt;
   std::vector<std::string> writes;
+  std::vector<std::string> removedClients, removedClientTokens, signedOutTokens;
   std::vector<urnet::Callback<urnet::AuthLoginResult>> login;
   std::vector<urnet::Callback<urnet::AuthLoginWithPasswordResult>> password;
   std::vector<urnet::Callback<urnet::AuthCodeLoginResult>> code;
@@ -85,6 +95,13 @@ struct Api {
   void authCodeLogin(urnet::AuthCodeLoginArgs, urnet::Callback<urnet::AuthCodeLoginResult> cb) { code.push_back(cb); }
   void authVerify(urnet::AuthVerifyArgs, urnet::Callback<urnet::AuthVerifyResult> cb) { verify.push_back(cb); }
   void networkCreate(urnet::NetworkCreateArgs, urnet::Callback<urnet::NetworkCreateResult> cb) { create.push_back(cb); }
+  void removeNetworkClient(urnet::RemoveNetworkClientArgs args, urnet::Callback<urnet::RemoveNetworkClientResult> cb) {
+    removedClients.push_back(args.client_id); removedClientTokens.push_back(jwt);
+    cb(urnet::RemoveNetworkClientResult{}, std::nullopt);
+  }
+  void signOut(std::function<void(urnet::SessionSignOutResult, std::optional<std::string>)> cb) {
+    signedOutTokens.push_back(jwt); cb({}, std::nullopt);
+  }
 };
 struct LocalState {
   std::string jwt, client;
@@ -111,16 +128,22 @@ struct Obligation { signout::Delivery Begin(int) { return signout::Delivery::Del
 struct Backoff { void NoteSuccess() {} void NoteFailure(long) {} };
 struct ConnectCommandQueue { enum class Kind { Connect, Disconnect, Device }; bool signingOut=false; void BeginSignOut() { signingOut=true; } void EndSignOut() { signingOut=false; } bool SigningOut() const { return signingOut; } };
 enum class DrawerEvent { DeviceLifecycle };
-struct AuthResult { bool ok=false, verification_required=false; std::string error, authAllowed; bool sso=false, sso_needs_network=false, wallet_needs_network=false; };
+struct AuthResult { bool ok=false, verification_required=false; std::string error, authAllowed; bool sso=false, sso_needs_network=false, wallet_needs_network=false; client_limit::Prompt clientLimitPrompt=client_limit::Prompt::None; };
 struct InstantAccount { bool ok=false; std::string seedphrase, error; };
 enum class LoginRoute { Error, Login, Password, IncorrectAuth, Create };
-struct LoginRouting { LoginRoute route=LoginRoute::Error; std::string userAuth,error,authAllowed; };
+struct LoginRouting { LoginRoute route=LoginRoute::Error; std::string userAuth,error,authAllowed; client_limit::Prompt clientLimitPrompt=client_limit::Prompt::None; };
 struct WalletSignature { std::string error; };
 AuthResult VerificationRequired(std::optional<std::string>) { return {false,true,""}; }
 
 struct SdkHost {
   std::atomic<uint64_t> signInEpoch_{0};
   std::mutex mutex_, authStateMutex_;
+  mutable std::mutex refusedSignInMutex_;
+  struct RefusedSignIn { std::string byJwt; uint64_t epoch=0; };
+  std::optional<RefusedSignIn> refusedSignIn_;
+  std::function<void(client_limit::Prompt)> onClientLimitRefusal_;
+  std::function<void(AuthResult)> onRefusedSignInRetry_;
+  std::vector<std::string> abandonedClientIds_;
   bool authAttemptSinceLogout_=false;
   std::atomic<bool> signedOut_{false},hasClientJwt_{true};
   Tracker authLogouts_;
@@ -183,7 +206,12 @@ struct SdkHost {
   void AuthLoginWithSso(const std::string&,const std::string&);
   void AuthLoginWithWallet(const std::string&,const std::string&,const std::string&,const std::string&);
   void RegisterNetworkClient(const std::string&,std::function<void(AuthResult)>,uint64_t);
-  void FinishNetworkClientRegistration(const std::string&,std::function<void(AuthResult)>,uint64_t);
+  void FinishNetworkClientRegistration(const std::string&,const std::optional<std::string>&,std::function<void(AuthResult)>,uint64_t);
+  void NoteAbandonedClient(const std::optional<std::string>&);
+  void RemoveAbandonedClientLocked(const std::optional<std::string>&);
+  void ServerSignOutLocked();
+  bool HasRefusedSignIn() const;
+  void RetryRefusedSignIn();
   void Logout();
   void LogoutNow();
 };
@@ -220,6 +248,43 @@ template<class Result> void Respond(const urnet::Callback<Result>& callback,Resu
 
 int main() {
   try {
+    for (const auto& prompt : {urnet::ClientLimitPromptUpgrade, urnet::ClientLimitPromptRemoveClient}) {
+      Fresh(); SdkHost h; int answers=0, refusals=0, retries=0;
+      const auto expected = prompt==urnet::ClientLimitPromptUpgrade ? client_limit::Prompt::Upgrade : client_limit::Prompt::RemoveClient;
+      h.onClientLimitRefusal_=[&](client_limit::Prompt value) { Check(value==expected,"SDK refusal prompt reaches the window"); ++refusals; };
+      h.RegisterNetworkClient("A",[&](AuthResult r) {
+        Check(!r.ok && r.clientLimitPrompt==expected,"registration preserves the SDK refusal prompt"); ++answers;
+      },h.CaptureAuthEpoch()); Drain();
+      h.registrations.back()(urnet::AuthNetworkClientResult{urnet::Error{"limit",std::nullopt,prompt},std::nullopt,std::nullopt},std::nullopt); Drain();
+      Check(answers==1 && refusals==1 && h.HasRefusedSignIn(),"refused sign-in is retained for retry");
+      Check(h.refusedSignIn_->byJwt=="A","retry retains the refused credential");
+      h.onRefusedSignInRetry_=[&](AuthResult r) { Check(r.ok,"freed client slot permits retry"); ++retries; };
+      h.RetryRefusedSignIn(); Drain();
+      Check(h.registrations.size()==2 && h.registrationTokens.back()=="A","retry reuses the refused account");
+      h.registrations.back()(urnet::AuthNetworkClientResult{std::nullopt,"A-client","A-id"},std::nullopt); Drain();
+      Check(retries==1 && answers==1 && !h.HasRefusedSignIn(),"successful retry clears refusal without answering original callback twice");
+      h.Logout(); Drain();
+      Check(h.api_->signedOutTokens==std::vector<std::string>{"A"},"server signs out before the leaving credential is cleared");
+    }
+    {
+      Fresh(); SdkHost h; bool cancelled=false;
+      h.RegisterNetworkClient("A",[&](AuthResult r) { cancelled=!r.ok; },h.CaptureAuthEpoch()); Drain();
+      h.Logout();
+      h.registrations.back()(urnet::AuthNetworkClientResult{std::nullopt,"A-client","abandoned-A"},std::nullopt);
+      Main(); // retired callback records the client before the logout worker runs
+      Check(cancelled && h.abandonedClientIds_==std::vector<std::string>{"abandoned-A"},"retired registration remembers its created client");
+      Drain();
+      Check(h.api_->removedClients==std::vector<std::string>{"abandoned-A"} && h.abandonedClientIds_.empty(),"logout removes and drains abandoned clients");
+      Check(h.api_->removedClientTokens==std::vector<std::string>{"A"} && h.api_->signedOutTokens==std::vector<std::string>{"A"},"client removal and server sign-out use the leaving account credential");
+      Check(h.api_->jwt.empty() && h.localState_->jwt.empty(),"local credential clearing follows server cleanup");
+    }
+    {
+      Fresh(); SdkHost h;
+      h.hasClientJwt_=false; h.signedOut_=true; h.localState_->failClient=true;
+      h.RegisterNetworkClient("A",[](AuthResult){},h.CaptureAuthEpoch()); Drain();
+      h.registrations.back()(urnet::AuthNetworkClientResult{std::nullopt,"A-client","unsaved-A"},std::nullopt); Drain();
+      Check(h.api_->removedClients==std::vector<std::string>{"unsaved-A"},"failed client persistence removes its unpublished server client");
+    }
     {
       Fresh(); SdkHost h; int unreachable=0; bool failed=false;
       h.onApiUnreachable_=[&](const std::string&) { ++unreachable; };

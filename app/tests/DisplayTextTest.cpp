@@ -196,12 +196,17 @@ UR_TEST(DisplayText_TypedAndSeededTextIsNeverFiltered) {
                  std::string::npos);
   UR_EXPECT_TRUE(apply.find("kit::SetTextOrCollapse(*nameRow_.value, shown);") !=
                  std::string::npos);
-  size_t uses = 0;
-  for (size_t at = account.find("SanitizeExternalDisplayText("); at != std::string::npos;
-       at = account.find("SanitizeExternalDisplayText(", at + 1)) {
-    ++uses;
-  }
-  UR_EXPECT_TRUE(uses == 1);
+  const std::string plan = DisplayBody(account, "void AccountPage::ApplyPlanAccount(");
+  UR_EXPECT_TRUE(plan.find("urnet::planAccountName(SanitizeExternalDisplayText(acknowledgedName_), balance_.guest)") !=
+                 std::string::npos);
+  const std::string editor = DisplayBody(account, "void AccountPage::OpenNameEditor(");
+  UR_EXPECT_TRUE(editor.find("nameBox_->set_text(acknowledgedName_);") != std::string::npos);
+  UR_EXPECT_TRUE(editor.find("SanitizeExternalDisplayText") == std::string::npos);
+  const std::string save = DisplayBody(account, "void AccountPage::OnSaveNetworkName(");
+  UR_EXPECT_TRUE(save.find("const std::string name = TrimSpace(nameBox_->get_text().raw());") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(save.find("args.new_name = name;") != std::string::npos);
+  UR_EXPECT_TRUE(save.find("SanitizeExternalDisplayText") == std::string::npos);
   UR_EXPECT_TRUE(ReadDisplaySource("AuthViews.cpp").find("SanitizeExternalDisplayText") ==
                  std::string::npos);
 }
