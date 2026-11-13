@@ -1341,8 +1341,8 @@ class ClaimAlphaSheet : public Gtk::Window {
   std::function<void(const std::string& url)> on_open_link;
   std::function<std::string(const std::string& txHash)> explorer_url;  // page: the chain settings
 
-  // page: a v2 claim is in flight, which holds Claim (the page redraws the
-  // sheet at its end)
+  // page: Claim waits, while a v2 claim is in flight or the claims are read
+  // again after a claim's end (the page redraws the sheet as either ends)
   std::function<bool()> claim_held;
 
   // the claims of `epochs` as this sheet lists them: what its press claims
@@ -1383,6 +1383,11 @@ class ClaimAlphaSheet : public Gtk::Window {
   std::optional<SnGasInfo> gas_;
   bool claimsAvailable_ = false;
   bool busy_ = false;
+  // its claim ended (its Done, or the page's give-up): the sheet shows the
+  // outcome and offers no Claim from its rows, which are the read from before
+  // the claim; what is left is claimed from a sheet opened again, on the read
+  // since (owner, 2026-11-12, as Apple's sheets end in Done)
+  bool ended_ = false;
   // what the claim in flight is moving: the epochs it sends and their amount,
   // the figure while it runs (every app, 2026-11-12)
   int64_t movingRao_ = 0;
@@ -1518,7 +1523,8 @@ ClaimAlphaSheet::Row* ClaimAlphaSheet::FindRow(int64_t epoch) {
 std::vector<int64_t> ClaimAlphaSheet::ClaimableEpochs() const {
   std::vector<int64_t> out;
   for (const auto& row : rows_) {
-    // a failed claim stays claimable: the user may top up gas and try again
+    // a failed claim is left unclaimed, as the figure counts it after the
+    // claim; this sheet claims none of it again (ended_)
     if (row.phase == Phase::Claimable || row.phase == Phase::Failed) out.push_back(row.claim.epoch);
   }
   return out;
@@ -1634,9 +1640,10 @@ void ClaimAlphaSheet::RebuildGas() {
 }
 
 void ClaimAlphaSheet::RebuildAction() {
-  const int64_t rao = ClaimableRao();
-  // with nothing Claim would claim (a claim out, or nothing left) it names no
-  // amount, never "Claim 0"
+  // what a press of this sheet claims: nothing once its claim ended
+  const int64_t rao = ended_ ? 0 : ClaimableRao();
+  // with nothing Claim would claim (a claim out or ended, or nothing left) it
+  // names no amount, never "Claim 0"
   claimButton_->set_label(0 < rao ? Glib::ustring(Format(T_("claim_amount_button", "Claim {}"),
                                                          FormatAlphaRao(rao)))
                                   : Glib::ustring(T_("claim", "Claim")));
@@ -1650,7 +1657,7 @@ void ClaimAlphaSheet::RebuildAction() {
 }
 
 void ClaimAlphaSheet::OnClaimPressed() {
-  if (busy_) return;
+  if (busy_ || ended_) return;
   const std::vector<int64_t> epochs = ClaimableEpochs();
   if (epochs.empty()) return;
   ShowError({});
@@ -1753,7 +1760,11 @@ void ClaimAlphaSheet::OnFailed(int64_t epoch, const std::string& message) {
 
 void ClaimAlphaSheet::OnDone() {
   busy_ = false;
-  // the figure is what Claim would claim again
+  // The claim's outcome: the figure is what it left unclaimed, and Claim stays
+  // off. A failed epoch may be a claim that landed (claim_failed after its
+  // transaction went through), which a resend from a node behind its block
+  // would revert; a sheet opened again lists the claims as read since.
+  ended_ = true;
   RebuildRows();
   RebuildAction();
 }
@@ -1789,8 +1800,8 @@ class LedgerClaimSheet : public Gtk::Window {
   std::function<void()> on_claim;  // page: StartLedgerClaim
   std::function<void(const std::string& url)> on_open_link;
   std::function<std::string(const std::string& txHash)> explorer_url;  // page: the chain settings
-  // page: a v1 claim is in flight, which holds Claim (the page redraws the
-  // sheet at its end)
+  // page: Claim waits, while a v1 claim is in flight or the accounts are read
+  // again after a claim's end (the page redraws the sheet as either ends)
   std::function<bool()> claim_held;
 
   // the rows it draws, which the page's claim takes when Claim is pressed
@@ -1863,7 +1874,7 @@ LedgerClaimSheet::LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,
   // 4. the action and the plain statement of what it does
   claimButton_ = MakeGoldButton({});
   claimButton_->signal_clicked().connect([this] {
-    if (progress_->Busy() || progress_->ClaimableRao() <= 0) return;
+    if (progress_->Busy() || progress_->Ended() || progress_->ClaimableRao() <= 0) return;
     ShowError({});
     if (!on_claim) {
       ShowError(T_("something_went_wrong", "Something went wrong."));
@@ -1977,12 +1988,18 @@ void LedgerClaimSheet::Rebuild() {
     line->append(*chip);
     rowsPanel_->append(*line);
   }
-  const int64_t rao = progress_->ClaimableRao();
+  // what a press of these rows claims: nothing once their claim ended
+  // (ClaimProgress::Ended). The sheet then shows the outcome, and Claim, naming
+  // nothing, stays off: the rows are the read from before the claim, and what is
+  // left is claimed from a sheet opened again, on the read since.
+  const bool ended = progress_->Ended();
+  const int64_t rao = ended ? 0 : progress_->ClaimableRao();
   // the figure, as on the other apps' sheets: while a press is out, what it is
-  // moving, the amount Claim named; between presses, what a press claims, or a
-  // true zero once nothing is left; none while the rows left are below the
-  // claim minimum, unavailable or of an amount not known yet, which say what
-  // they are, never a zero (snledger::ClaimProgress::Figure)
+  // moving, the amount Claim named; between presses, what a press claims (once
+  // the claim ended, what it left), or a true zero once nothing is left; none
+  // while the rows left are below the claim minimum, unavailable or of an
+  // amount not known yet, which say what they are, never a zero
+  // (snledger::ClaimProgress::Figure)
   const std::optional<int64_t> figure = progress_->Figure();
   totalValue_->set_visible(figure.has_value());
   if (figure) {
@@ -1993,7 +2010,7 @@ void LedgerClaimSheet::Rebuild() {
   BuildGasPanel(*gasPanel_, *this, gas_, NeedsGas(), snledger::kClaimGasTao, copiedReset_);
   // the pool's account and the capture the flag account in one transaction;
   // with nothing a press claims, Claim names no amount, never "Claim 0"
-  claimButton_->set_label(progress_->ClaimsBoth()
+  claimButton_->set_label(progress_->ClaimsBoth() && !ended
                               ? Glib::ustring(T_("sn_ledger_claim_both", "Claim both"))
                           : 0 < rao ? Glib::ustring(Format(T_("claim_amount_button", "Claim {}"),
                                                            FormatAlphaRao(rao)))
@@ -3187,19 +3204,27 @@ void EarningsPage::LoadEarnings() {
 
 // The subnet layer: the vault's view of this network's epochs, the coldkey's
 // v2 accounts and the gas key. Only with an attached wallet — without one
-// there is nothing to read.
+// there is nothing to read. The claims and the accounts show Loading from here
+// until this read answers: a visit, a wallet connect and every claim's end
+// (its Done, or its watchdog's give-up) read them again, and only the newest
+// read of each counts (snledger::NewestRead), so a read still out from before
+// a claim's end, which may list what the claim paid, never lands over the
+// end's.
 void EarningsPage::LoadWalletLayer() {
   if (!wallet_ || !CanCallApi()) return;
   ApplyClaims(std::nullopt, 0, Fetch::Loading);
   ApplyLedger(snledger::Load::Loading, {}, {}, ledgerConfigured_);
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
-  sn::FetchClaims(host_, [this, epoch, seen](std::optional<std::vector<SnClaimRow>> claims,
-                                              int64_t total, std::string err,
-                                              std::optional<snpayout::EpochSchedule> schedule) {
-    PostToMain([this, epoch, seen, claims = std::move(claims), total, err = std::move(err),
-                schedule] {
+  const uint64_t claimsRead = claimsReads_.Start();
+  const uint64_t ledgerRead = ledgerReads_.Start();
+  sn::FetchClaims(host_, [this, epoch, seen, claimsRead](
+                             std::optional<std::vector<SnClaimRow>> claims, int64_t total,
+                             std::string err, std::optional<snpayout::EpochSchedule> schedule) {
+    PostToMain([this, epoch, seen, claimsRead, claims = std::move(claims), total,
+                err = std::move(err), schedule] {
       if (*epoch != seen) return;
+      if (!claimsReads_.Current(claimsRead)) return;  // a newer read of the claims decides
       if (!claims) {
         g_warning("earnings: sn claims failed: %s", err.c_str());
         Glib::ustring text;
@@ -3223,12 +3248,14 @@ void EarningsPage::LoadWalletLayer() {
       ApplyClaims(std::move(claims), total, Fetch::Ready, {}, schedule);
     });
   });
-  sn::FetchLedger(host_, [this, epoch, seen](std::optional<std::vector<snledger::Account>> accounts,
-                                              std::vector<snledger::UnavailablePool> unavailable,
-                                              bool configured, std::string err) {
-    PostToMain([this, epoch, seen, accounts = std::move(accounts),
+  sn::FetchLedger(host_, [this, epoch, seen, ledgerRead](
+                             std::optional<std::vector<snledger::Account>> accounts,
+                             std::vector<snledger::UnavailablePool> unavailable, bool configured,
+                             std::string err) {
+    PostToMain([this, epoch, seen, ledgerRead, accounts = std::move(accounts),
                 unavailable = std::move(unavailable), configured, err = std::move(err)] {
       if (*epoch != seen) return;
+      if (!ledgerReads_.Current(ledgerRead)) return;  // a newer read of the accounts decides
       if (!accounts) {
         g_warning("earnings: sn ledger accounts failed: %s", err.c_str());
         ApplyLedger(snledger::Load::Unavailable, {}, {}, configured);
@@ -3240,12 +3267,17 @@ void EarningsPage::LoadWalletLayer() {
   LoadGas();
 }
 
+// The gas key and its balance, which both sheets' top-up and Claim follow. The
+// newest read decides (snledger::NewestRead): one from before a claim spent gas
+// never lands over a read since.
 void EarningsPage::LoadGas() {
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
-  sn::FetchGas(host_, [this, epoch, seen](std::optional<SnGasInfo> gas, std::string err) {
-    PostToMain([this, epoch, seen, gas = std::move(gas), err = std::move(err)] {
+  const uint64_t read = gasReads_.Start();
+  sn::FetchGas(host_, [this, epoch, seen, read](std::optional<SnGasInfo> gas, std::string err) {
+    PostToMain([this, epoch, seen, read, gas = std::move(gas), err = std::move(err)] {
       if (*epoch != seen) return;
+      if (!gasReads_.Current(read)) return;  // a newer read of the gas decides
       if (!gas) g_message("earnings: sn gas key unavailable: %s", err.c_str());
       ApplyGas(std::move(gas));
     });
@@ -3368,7 +3400,11 @@ void EarningsPage::ApplySnWallet(std::optional<SnWalletInfo> wallet, Fetch state
     kit::SetTextOrCollapse(*walletStatus_, {});
   }
   if (!wallet_) {
-    // no wallet: the subnet layer is empty by definition
+    // no wallet: the subnet layer is empty by definition, an answer that
+    // needs no read, and a read still out for the coldkey before counts no
+    // more (snledger::NewestRead)
+    claimsReads_.Start();
+    ledgerReads_.Start();
     claims_.clear();
     totalClaimableRao_ = 0;
     claimsState_ = Fetch::Ready;
@@ -3404,6 +3440,9 @@ void EarningsPage::ApplyClaims(std::optional<std::vector<SnClaimRow>> claims,
   RebuildUnclaimedTile();
   RebuildHistory();
   FeedKeyEarnings();
+  // a v1 sheet open meanwhile: its Claim waits while the claims are read
+  // again, and no longer once they answered (OpenClaimSheet's claim_held)
+  if (auto open = claimSheet_.lock()) open->Redraw();
 }
 
 void EarningsPage::ApplyGas(std::optional<SnGasInfo> gas) {
@@ -3421,6 +3460,9 @@ void EarningsPage::ApplyLedger(snledger::Load load, std::vector<snledger::Accoun
   ledgerConfigured_ = claimConfigured;
   RebuildLedgerTile();
   FeedKeyEarnings();
+  // a v2 sheet open meanwhile: its Claim waits while the accounts are read
+  // again, and no longer once they answered (OnLedgerClaim's claim_held)
+  if (auto open = ledgerClaimSheet_.lock()) open->Redraw();
 }
 
 void EarningsPage::ApplyReliability(std::optional<urnet::ReliabilityWindow> window,
@@ -3559,7 +3601,12 @@ void EarningsPage::RebuildPayoutLine() {
           : Glib::ustring());
   setColdkeyButton_->set_visible(setColdkey);
   payoutClaimButton_->set_visible(view.showClaim);
-  payoutClaimButton_->set_sensitive(view.showClaim && (claim_.InFlight() || !Claiming()));
+  // as the tile's Claim: while the claims read is out (after a visit, a wallet
+  // connect or a claim's Done) the total is the read before it's, which may
+  // still count what a claim paid
+  payoutClaimButton_->set_sensitive(
+      view.showClaim && snpayout::V1ClaimEnabled(claim_.InFlight(), claimsState_ == Fetch::Ready,
+                                                 totalClaimableRao_, Claiming()));
 }
 
 void EarningsPage::RebuildUnclaimedTile() {
@@ -3590,8 +3637,10 @@ void EarningsPage::RebuildUnclaimedTile() {
   kit::SetTextOrCollapse(*unclaimedStatus_, status);
   // Claim waits while a claim is in flight, but the v1 claim's own opens its
   // sheet on the claim in progress, whatever the read says, as the v2 tile's
-  // does for its claim
-  claimButton_->set_sensitive(claim_.InFlight() || (ready && totalClaimableRao_ > 0 && !Claiming()));
+  // does for its claim; and it waits for the claims read, which a claim's Done
+  // starts again
+  claimButton_->set_sensitive(
+      snpayout::V1ClaimEnabled(claim_.InFlight(), ready, totalClaimableRao_, Claiming()));
   // the first claim tile shown carries the claim card's disclaimer
   SetBittensorFundsDisclaimer(*unclaimedDisclaimer_, keys_->Card().claim_funds_disclaimer);
 }
@@ -5409,6 +5458,15 @@ void EarningsPage::OnClaim() {
     g_message("earnings: claim dialog suppressed — a modal is already open");
     return;
   }
+  // Between claims the sheet lists the claims as last read. While a read is
+  // out (after a visit, a wallet connect or a claim's Done) that is the read
+  // before it, which may still list what a claim paid, so the sheet waits for
+  // it, as both Claims that open it do (snpayout::V1ClaimEnabled) and as the
+  // v2 sheet does. A v1 claim in flight opens with its own rows.
+  if (!claim_.InFlight() && claimsState_ == Fetch::Loading) {
+    Notify(T_("loading", "Loading..."), kit::Snackbar::Severity::Info);
+    return;
+  }
   OpenClaimSheet(CanCallApi());
 }
 
@@ -5428,8 +5486,9 @@ void EarningsPage::OpenClaimSheet(bool allowActions) {
                                                  sn::ClaimsAvailable(host_) || previewMode_);
   sheet->on_claim = [this](std::vector<int64_t> epochs) { StartClaim(std::move(epochs)); };
   // a v2 claim in flight holds this sheet's Claim: the gas key sends one claim
-  // at a time
-  sheet->claim_held = [this] { return ledgerClaim_.InFlight(); };
+  // at a time; and so does the claims read its end starts, until it answers,
+  // as StartClaim would refuse the press (ApplyClaims redraws the sheet)
+  sheet->claim_held = [this] { return ledgerClaim_.InFlight() || claimsState_ != Fetch::Ready; };
   sheet->on_open_link = [this](const std::string& url) { OpenLink(url); };
   sheet->explorer_url = [this](const std::string& txHash) {
     return sn::ExplorerTxUrl(host_, txHash);
@@ -5462,6 +5521,14 @@ void EarningsPage::OpenClaimSheet(bool allowActions) {
 void EarningsPage::StartClaim(std::vector<int64_t> epochs) {
   auto sheet = claimSheet_.lock();
   if (epochs.empty() || Claiming()) return;
+  // No claim starts from a stale read: until the claims read since the last
+  // claim's end has answered, what a sheet lists may be what that claim paid.
+  // The sheet's Claim waits for it too (claim_held); a press that slips
+  // through claims nothing.
+  if (claimsState_ != Fetch::Ready) {
+    g_message("earnings: claim refused: the claims are read again since the last claim");
+    return;
+  }
   if (!CanCallApi()) {
     // the sheet is modal: the refusal renders ON it
     g_warning("earnings: refusing a claim with no session");
@@ -5506,6 +5573,10 @@ void EarningsPage::StartClaim(std::vector<int64_t> epochs) {
     RebuildPayoutLine();
     RebuildUnclaimedTile();
     RebuildLedgerTile();
+    // the claim may have landed all the same: read again, as at its Done, so
+    // Claim waits for a read that started after the claim ended rather than
+    // following the one from before it (snledger::NewestRead)
+    LoadWalletLayer();
   });
   // Each answer lands on the main loop while the page lives and the claim is
   // still the one in flight, into the page's rows and a v1 sheet open
@@ -5611,8 +5682,10 @@ void EarningsPage::OnLedgerClaim() {
   };
   // a v1 claim in flight holds this sheet's Claim (the relay's "Claim it
   // yourself" opens it whatever the tiles say): the gas key sends one claim
-  // at a time
-  sheet->claim_held = [this] { return claim_.InFlight(); };
+  // at a time; and so does the accounts read its end starts, until it
+  // answers, as StartLedgerClaim would refuse the press (ApplyLedger redraws
+  // the sheet)
+  sheet->claim_held = [this] { return claim_.InFlight() || ledgerLoad_ != snledger::Load::Ready; };
   sheet->Redraw();
   ledgerClaimSheet_ = sheet;
   PresentSheet(sheet);
@@ -5622,6 +5695,14 @@ void EarningsPage::OnLedgerClaim() {
 void EarningsPage::StartLedgerClaim() {
   auto sheet = ledgerClaimSheet_.lock();
   if (Claiming()) return;
+  // No claim starts from a stale read: until the accounts read since the last
+  // claim's end has answered, what a sheet lists may be what that claim paid.
+  // The sheet's Claim waits for it too (claim_held); a press that slips
+  // through claims nothing.
+  if (ledgerLoad_ != snledger::Load::Ready) {
+    g_message("earnings: v2 claim refused: the accounts are read again since the last claim");
+    return;
+  }
   if (!CanCallApi()) {
     // the sheet is modal: the refusal renders ON it
     g_warning("earnings: refusing a v2 claim with no session");
@@ -5664,6 +5745,10 @@ void EarningsPage::StartLedgerClaim() {
     RebuildPayoutLine();
     RebuildUnclaimedTile();
     RebuildLedgerTile();
+    // the claim may have landed all the same: read again, as at its Done, so
+    // Claim waits for a read that started after the claim ended rather than
+    // following the one from before it (snledger::NewestRead)
+    LoadWalletLayer();
   });
   // Each answer lands on the main loop while the page lives and the claim is
   // still the one in flight; a v2 sheet open meanwhile draws its rows (one

@@ -222,6 +222,43 @@
 >   showed 0 during a claim; it now shows the epochs the claim sends, none after a give-up while
 >   an epoch it sent has no outcome yet, and its Claim reads "Claim" rather than "Claim 0" while
 >   there is nothing to claim.
+>
+> **2026-11-12 (claim read order) — a read from before a claim's Done never lands over the Done's
+> read, and Claim is never offered from it** (owner, every app).
+> - The reads of the claims, the accounts and the gas overlap: a visit's load, a wallet connect and
+>   every claim's Done start them, and their answers counted by the load's epoch alone, so within a
+>   visit they landed in any order. A read still out at a claim's Done (the visit's own, when the
+>   user came back to Earnings during the claim; the previous claim's Done read, when a sheet held
+>   open during that claim started this one at once) could land after the Done's read and put back,
+>   as read, the epochs or accounts the claim paid, with the tile's Claim on them and the sheets
+>   built from them. The SDK refuses a v1 claim of a paid epoch as already claimed when its own
+>   read of the vault sees the payment; from a node still behind the claim's block it sends the
+>   claim, which reverts and spends its gas.
+> - Each read is now numbered as it starts, one count per kind (`snledger::NewestRead`), and only
+>   the newest read of a kind counts: an older answer is dropped however late it lands. The page
+>   shows the claims and the accounts as Loading from a read's start and every claim's Done starts
+>   one of each, so neither Claim is offered from a read that started before the last claim's Done.
+>   A wallet read that finds no coldkey empties both at once and drops the reads still out.
+> - A claim's watchdog give-up starts one of each too, as its last step, as the Done does. The
+>   claim may have landed all the same, and before, the give-up offered Claim again on the read
+>   from before the claim.
+> - While the claims read is out the page still holds the read before it's total, so the payout
+>   line's Claim now waits for the read as the unclaimed tile's does (`snpayout::V1ClaimEnabled`),
+>   and the v1 sheet does not open between claims while a read is out ("Loading...", as the v2
+>   sheet); a v1 claim in flight still opens with its own rows.
+> - A sheet left open across its own claim's end (its Done or its give-up) shows the outcome and
+>   offers no Claim from its rows (`ended_` on the v1 sheet, `snledger::ClaimProgress::Ended` on
+>   the v2 one), as Apple's sheets end in Done and Android's in Finished. Before, it offered its
+>   failed rows again at once: they are the read from before the claim, and a failed row may be a
+>   claim that landed (`claim_failed` once its transaction went through), which a resend from a
+>   node behind its block would revert. It was never the top-up retry: after `needs_gas` a sheet's
+>   Claim stays off for its life. What is left is claimed from a sheet opened again, which waits
+>   for the read since the end.
+> - No claim starts from a stale read: `StartClaim` and `StartLedgerClaim` refuse unless their
+>   kind's read since the last claim's end has answered (the claims or the accounts Ready), as
+>   Apple's session does. Each sheet's Claim waits for that read too, beside the other kind's claim,
+>   and the page redraws an open sheet as its kind's read starts and answers.
+> - Unchanged: a failed read still reads Failed (the claims) or Unavailable (the accounts).
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 
