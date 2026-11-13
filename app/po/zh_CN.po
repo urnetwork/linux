@@ -1172,7 +1172,7 @@ msgctxt "bittensor_error_user_rejected"
 msgid "The request was declined in your wallet. Start again and approve it to continue."
 msgstr "该请求已在您的钱包中被拒绝。请重新开始并批准该请求以继续。"
 
-#. ur.io Bittensor wallet error (Earnings wallet card and payout consent, sign-in, add sign-in): the wallet (the Talisman extension, or a WalletConnect wallet) failed in a way the page has no specific message for, so nothing was signed. The wallet's own English text is only logged. The argument is the wallet product name (Talisman or WalletConnect).
+#. Wallet failure with no more specific message, so nothing was signed: on ur.io's Bittensor wallet flows (Talisman, or a WalletConnect wallet), and on every app's Solana sign-in (sdk SolanaWalletFailureFor wallet_error, including a code the app does not know). The wallet's own English text is only logged. The argument is the wallet product name (Phantom, Solflare, Solana when the app does not know which wallet answered; Talisman or WalletConnect on ur.io's Bittensor page).
 msgctxt "bittensor_error_wallet_failed"
 msgid "Your {} wallet couldn't finish the request. Check the wallet, then try again."
 msgstr "您的 {} 钱包未能完成该请求。请检查钱包，然后重试。"
@@ -2564,7 +2564,7 @@ msgctxt "couldn_t_restore_purchases"
 msgid "Couldn't restore purchases. Please try again."
 msgstr "无法恢复购买。请重试。"
 
-#. Snackbar shown when the external wallet app could not be opened. Used in Shared/Views/SolanaSignMessageSheet.swift and Main/Account/Wallets/ConnectWalletSheet/ConnectWalletSheetView.swift.
+#. Solana sign-in failure on every app (sdk SolanaWalletFailureFor wallet_app_not_found): the chosen wallet app (Phantom or Solflare) is not installed, or would not open, so nothing was signed.
 msgctxt "couldnt_open_wallet"
 msgid "Couldn't open wallet. Please install it and try again."
 msgstr "无法打开钱包。请安装后再试。"
@@ -7579,7 +7579,7 @@ msgctxt "no_solana_wallets_found"
 msgid "No Solana Wallets Found"
 msgstr "未找到 Solana 钱包"
 
-#. Call to action
+#. Solana sign-in failure on every app (sdk SolanaWalletFailureFor no_wallet): no Solana wallet answered on this device or in this browser (Android's Mobile Wallet Adapter found no wallet app; ur.io found no wallet extension and no WalletConnect), so nothing was signed.
 msgctxt "no_wallets_found_alert_content"
 msgid "No Solana wallets were found installed on this device. Please install a wallet and try again."
 msgstr "在此设备上未找到已安装的 Solana 钱包。请安装一个钱包，然后重试。"
@@ -12001,7 +12001,7 @@ msgctxt "solana_wallet"
 msgid "Solana wallet"
 msgstr "Solana 钱包"
 
-#. Solana wallet error in the desktop apps (macOS, Windows, Linux) when the ur.io wallet bridge page returns session_not_found: the browser no longer has the wallet connection made in the connect step (another browser or a private window, or its site data was cleared), so nothing was signed. Starting again reconnects the wallet (Phantom or Solflare).
+#. Solana sign-in failure on every app (sdk SolanaWalletFailureFor session_not_found), from the ur.io wallet bridge page's session_not_found: the browser no longer has the wallet connection made in the connect step (another browser or a private window, or its site data was cleared), so nothing was signed. Starting again reconnects the wallet (Phantom or Solflare).
 msgctxt "solana_wallet_error_session_not_found"
 msgid "The wallet connection wasn't found in this browser. Start again to reconnect your wallet."
 msgstr "在此浏览器中未找到钱包连接。请重新开始以重新连接您的钱包。"
@@ -12177,7 +12177,7 @@ msgctxt "split_tunnel_extension_needs_approval"
 msgid "To keep these apps off the VPN, allow the URnetwork Split Tunnel extension in System Settings."
 msgstr "要让这些应用不走 VPN，请在系统设置中允许 URnetwork Split Tunnel 扩展。"
 
-#. Error when the app could not open the browser for a sign-in page (macOS: adding a sign-in method; Windows: the browser sign-in).
+#. Error when the app could not open the browser for a sign-in page (macOS: adding a sign-in method; Windows: the browser sign-in; Windows and Linux: the ur.io wallet bridge page of a Solana sign-in, which the wallet never saw).
 msgctxt "sso_browser_open_failed"
 msgid "Could not open the browser. Please try again."
 msgstr "无法打开浏览器。请重试。"
