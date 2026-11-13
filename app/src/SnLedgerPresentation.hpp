@@ -481,6 +481,13 @@ struct ClaimRow {
 // as Android's rows do (snLedgerClaimProgressAfter). A press never counts an
 // account under the sheet's floor, whatever came of it before: Android's
 // dialog reads the accounts again, floor and all, before each claim.
+//
+// The page presses a sheet's rows once (owner, 2026-11-12): once that press
+// ends (Ended) they show its outcome, and the sheet offers no Claim from them,
+// as Apple's sheets end in Done and Android's in Finished. They are the read
+// from before the claim, and a failed row may be a claim that landed. What is
+// left is claimed from a sheet opened again, on the read since the claim's
+// end. What another press of these rows would do is still kept below.
 class ClaimProgress {
  public:
   ClaimProgress() = default;
@@ -532,13 +539,18 @@ class ClaimProgress {
     return pools == 1 && ctfs == 1;
   }
   bool Busy() const { return busy_; }
+  // The press of these rows ended (its Done, or the page's give-up after its
+  // watchdog, ClaimInFlight::End): they show its outcome, and the sheet that
+  // draws them offers no Claim from them again.
+  bool Ended() const { return ended_; }
   // A claim came back needs_gas: the top-up shows, and Claim waits for the
   // next sheet, as on the v1 sheet. The accounts it could not pay for are
   // still claimable.
   bool NeedsGas() const { return needsGas_; }
   // What a press claims: every row not claimed yet, short of one below the
-  // claim minimum or of a pool that could not be read. A failed claim stays
-  // claimable, so the user may top up gas and try again.
+  // claim minimum or of a pool that could not be read. A failed claim is left
+  // claimable: after the press it is what the claim left, for a sheet opened
+  // again on the read since (Ended).
   int64_t ClaimableRao() const {
     int64_t total = 0;
     for (const ClaimRow& row : rows_) {
@@ -601,6 +613,7 @@ class ClaimProgress {
   void Start() {
     moving_ = ClaimableRao();
     busy_ = true;
+    ended_ = false;
     needsGas_ = false;
     read_ = false;
     paid_ = false;
@@ -695,9 +708,11 @@ class ClaimProgress {
   // not read keeps its row while the press stopped before the SDK's own read;
   // once that read answered (Android's snLedgerClaimSettled) without naming
   // the pool unavailable or reporting an account of it, the pool was read and
-  // held nothing to claim, and its row goes.
+  // held nothing to claim, and its row goes. The rows show the outcome from
+  // now (Ended).
   void Done() {
     busy_ = false;
+    ended_ = true;
     for (ClaimRow& row : rows_) {
       if (row.phase == Phase::Sending) row.phase = Phase::Claimable;
     }
@@ -713,9 +728,9 @@ class ClaimProgress {
   }
 
  private:
-  // A press takes the row: not claimed yet (claimable, or failed and so worth
-  // another try), and not under the sheet's floor, whatever the SDK said of it
-  // since. An account the SDK reported without a listed amount counts.
+  // A press takes the row: not claimed yet (claimable, or failed), and not
+  // under the sheet's floor, whatever the SDK said of it since. An account the
+  // SDK reported without a listed amount counts.
   bool Takes(const ClaimRow& row) const {
     return (row.phase == Phase::Claimable || row.phase == Phase::Failed) &&
            !UnderFloor(row.amountRao, floor_);
@@ -775,6 +790,7 @@ class ClaimProgress {
   PoolNaming naming_;
   int64_t floor_ = 0;  // the transfer floor at the sheet's read; 0 without one
   bool busy_ = false;
+  bool ended_ = false;  // the press of these rows ended (Ended)
   bool needsGas_ = false;
   // this press: the SDK's own read of the ledger answered, and the pools it
   // named unavailable
@@ -794,8 +810,9 @@ class ClaimProgress {
 // opens a sheet on its rows (SectionFor's ledgerClaimInFlight), where Claim
 // waits for it, and after its Done the accounts are read again and the wins
 // on the apps' schedule (WinsAfterClaim); its rows are the sheet's, shared
-// with it, so the sheet pressed again claims on from them. The v1 claim has no
-// rows here: its sheet keeps its own, and the tile's Claim waits for it. One
+// with it, so a sheet open at its end shows the outcome, with no Claim from
+// them (ClaimProgress::Ended). The v1 claim has no rows here: its sheet keeps
+// its own, and the tile's Claim waits for it. One
 // claim at a time, as the gas key sends one: the page starts one only while
 // none is in flight. Main loop only.
 class ClaimInFlight {

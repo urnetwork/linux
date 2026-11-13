@@ -246,8 +246,19 @@
 >   line's Claim now waits for the read as the unclaimed tile's does (`snpayout::V1ClaimEnabled`),
 >   and the v1 sheet does not open between claims while a read is out ("Loading...", as the v2
 >   sheet); a v1 claim in flight still opens with its own rows.
-> - Unchanged: a failed read still reads Failed (the claims) or Unavailable (the accounts), and a
->   sheet left open after its claim's Done still offers its failed rows again (the top-up retry).
+> - A sheet left open across its own claim's end (its Done or its give-up) shows the outcome and
+>   offers no Claim from its rows (`ended_` on the v1 sheet, `snledger::ClaimProgress::Ended` on
+>   the v2 one), as Apple's sheets end in Done and Android's in Finished. Before, it offered its
+>   failed rows again at once: they are the read from before the claim, and a failed row may be a
+>   claim that landed (`claim_failed` once its transaction went through), which a resend from a
+>   node behind its block would revert. It was never the top-up retry: after `needs_gas` a sheet's
+>   Claim stays off for its life. What is left is claimed from a sheet opened again, which waits
+>   for the read since the end.
+> - No claim starts from a stale read: `StartClaim` and `StartLedgerClaim` refuse unless their
+>   kind's read since the last claim's end has answered (the claims or the accounts Ready), as
+>   Apple's session does. Each sheet's Claim waits for that read too, beside the other kind's claim,
+>   and the page redraws an open sheet as its kind's read starts and answers.
+> - Unchanged: a failed read still reads Failed (the claims) or Unavailable (the accounts).
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 

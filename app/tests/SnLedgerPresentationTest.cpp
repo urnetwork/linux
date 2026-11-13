@@ -734,17 +734,50 @@ UR_TEST(SnLedgerCtf_OnePressClaimsBothPools) {
   UR_EXPECT_FALSE(TwoPoolSheet().ClaimsBoth());
 }
 
-// a press claims what is left: a failed capture the flag claim, say, alone
-UR_TEST(SnLedgerCtf_ARetryClaimsWhatIsLeft) {
+// The press ends with its outcome (owner, 2026-11-12): what it left, a failed
+// capture the flag claim, say, alone, is the rows' figure, and the rows offer
+// no Claim from it (Ended), as Apple's sheets end in Done and Android's in
+// Finished. A failed claim may have landed after all (claim_failed once its
+// transaction went through), and a resend from a node behind its block would
+// revert; a sheet opened again, on the read since the claim's end, claims what
+// is left. Rows read afresh have no press behind them
+UR_TEST(SnLedgerCtf_ThePressEndsWithItsOutcome) {
   ClaimProgress progress = CtfSheet(615'000'000);
+  UR_EXPECT_FALSE(progress.Ended());
   progress.Start();
+  UR_EXPECT_FALSE(progress.Ended());
   progress.Sent(1, 42, "0xba7c");
   progress.Confirmed(1, 42, "0xba7c", 3'241'000'000);
   UR_EXPECT_TRUE(progress.Failed(kCtfPool, 7, "claim_failed: the batch reverted"));
+  UR_EXPECT_FALSE(progress.Ended());
   progress.Done();
+  UR_EXPECT_TRUE(progress.Ended());
+  UR_EXPECT_FALSE(progress.Busy());
   UR_EXPECT_TRUE(RowOf(progress, kCtfPool, 7)->phase == Phase::Failed);
   UR_EXPECT_EQ(int64_t{615'000'000}, progress.ClaimableRao());
+  UR_EXPECT_TRUE(progress.Figure() == std::optional<int64_t>(615'000'000));
   UR_EXPECT_FALSE(progress.ClaimsBoth());
+  // the page's give-up after the watchdog ends the press the same way
+  ClaimInFlight claim;
+  auto rows = std::make_shared<ClaimProgress>(CtfSheet(615'000'000));
+  claim.Start(rows);
+  UR_EXPECT_FALSE(rows->Ended());
+  claim.End();
+  UR_EXPECT_TRUE(rows->Ended());
+  // and its Done: the rows a sheet opened during the claim draws
+  auto shown = std::make_shared<ClaimProgress>(TwoPoolSheet());
+  claim.Start(shown);
+  shown->Sent(1, 42, "0xabc1");
+  shown->Confirmed(1, 42, "0xabc1", 3'241'000'000);
+  UR_EXPECT_TRUE(claim.End());
+  UR_EXPECT_TRUE(shown->Ended());
+  // a sign-out drops the claim; its sheet closes with the departed account
+  auto departed = std::make_shared<ClaimProgress>(TwoPoolSheet());
+  claim.Start(departed);
+  claim.Drop();
+  UR_EXPECT_FALSE(departed->Ended());
+  // a sheet opened again starts on rows of its own
+  UR_EXPECT_FALSE(CtfSheet(615'000'000).Ended());
 }
 
 // below the claim minimum the capture the flag row says so: not in the total,
@@ -972,7 +1005,9 @@ UR_TEST(SnLedgerCtf_AnAccountTheBatchDidNotAttemptIsSentAlone) {
 // sdk-ctf-v2 §2.1: a gas key that cannot pay for the batch has the largest
 // account claimed alone first; an account it then cannot pay for fails
 // needs_gas with nothing sent: it stays claimable, in the total and the next
-// press, the top-up shows, and a retry claims what is left
+// press, and the top-up shows. The app claims what is left from a sheet opened
+// again (SnLedgerCtf_ThePressEndsWithItsOutcome); a press of these rows again
+// would send it
 UR_TEST(SnLedgerCtf_TheLargestIsClaimedAndTheOthersStayClaimable) {
   ClaimProgress progress = CtfSheet(615'000'000);
   progress.Start();
@@ -1064,7 +1099,8 @@ UR_TEST(SnLedgerCtf_AnAccountBelowTheClaimMinimumShowsWhatTheSdkSaid) {
   UR_EXPECT_TRUE(RowOf(tooLow, kCtfPool, 7)->phase == Phase::UnderFloor);
   UR_EXPECT_TRUE(RowOf(tooLow, kCtfPool, 7)->message.empty());
   // the pool's account under the floor, batched with capture the flag's, the
-  // batch reverted: both Failed, and the retry takes capture the flag's alone
+  // batch reverted: both Failed, and what is left is capture the flag's alone,
+  // which a press of these rows again would take
   ClaimProgress pool({LedgerAccount(1, 42, 12'000'000, 0), CtfAccount(615'000'000)}, {}, kFloor);
   UR_EXPECT_TRUE(RowOf(pool, 1, 42)->phase == Phase::UnderFloor);
   pool.Start();
@@ -2623,7 +2659,8 @@ UR_TEST(SnLedgerCtf_OneActionClaimsBothPools) {
   UR_EXPECT_EQ(1u, claims);
   const std::string rebuild = LedgerFunctionBody(page, "void LedgerClaimSheet::Rebuild()");
   UR_EXPECT_TRUE(rebuild.find("LedgerPoolName(progress_->NameOf(row), row.noId)") != std::string::npos);
-  UR_EXPECT_TRUE(rebuild.find("claimButton_->set_label(progress_->ClaimsBoth()\n"
+  // (and no longer once the claim ended: SnLedgerCtf_ASheetOffersNoClaimAfterItsClaimEnds)
+  UR_EXPECT_TRUE(rebuild.find("claimButton_->set_label(progress_->ClaimsBoth() && !ended\n"
                               "                              ? Glib::ustring(T_(\"sn_ledger_claim_both\", "
                               "\"Claim both\"))") != std::string::npos);
   UR_EXPECT_TRUE(rebuild.find("case snledger::Phase::UnderFloor:\n"
@@ -3062,7 +3099,10 @@ UR_TEST(SnLedgerCtf_TheV2SheetsClaimWaitsForAV1Claim) {
                               "!NeedsGas() &&\n                              !(claim_held && claim_held()));") !=
                  std::string::npos);
   const std::string open = LedgerFunctionBody(page, "void EarningsPage::OnLedgerClaim()");
-  const size_t held = open.find("sheet->claim_held = [this] { return claim_.InFlight(); };\n  sheet->Redraw();");
+  // (and the accounts read a claim's end starts: SnLedgerCtf_NoClaimStartsFromAStaleRead)
+  const size_t held = open.find(
+      "sheet->claim_held = [this] { return claim_.InFlight() || ledgerLoad_ != snledger::Load::Ready; };\n"
+      "  sheet->Redraw();");
   UR_EXPECT_TRUE(held != std::string::npos && held < open.find("PresentSheet(sheet);"));
   const std::string start = LedgerFunctionBody(page, "void EarningsPage::StartClaim(");
   size_t redraws = 0;
@@ -3078,7 +3118,8 @@ UR_TEST(SnLedgerCtf_TheV2SheetsClaimWaitsForAV1Claim) {
                      .find("!NeedsGas() &&\n                              !(claim_held && claim_held()));") !=
                  std::string::npos);
   const std::string openV1 = LedgerFunctionBody(page, "void EarningsPage::OpenClaimSheet(bool allowActions)");
-  const size_t heldV1 = openV1.find("sheet->claim_held = [this] { return ledgerClaim_.InFlight(); };");
+  const size_t heldV1 = openV1.find(
+      "sheet->claim_held = [this] { return ledgerClaim_.InFlight() || claimsState_ != Fetch::Ready; };");
   UR_EXPECT_TRUE(heldV1 != std::string::npos && heldV1 < openV1.find("sheet->SetGas(gas_);"));
   const std::string ledger = LedgerFunctionBody(page, "void EarningsPage::StartLedgerClaim()");
   size_t v1Redraws = 0;
@@ -3248,6 +3289,109 @@ UR_TEST(SnLedgerCtf_EachWatchdogGiveUpReadsAgain) {
   }
 }
 
+// A sheet left open across its own claim's end (its Done, or the page's
+// give-up) shows the outcome and offers no Claim from its rows (owner,
+// 2026-11-12, as Apple's sheets end in Done and Android's in Finished): they
+// are the read from before the claim, and a failed row may be a claim that
+// landed, which a resend from a node behind its block would revert. It was
+// never the top-up retry: after needs_gas a sheet's Claim stays off for its
+// life. What is left is claimed from a sheet opened again, which waits for the
+// read since the end (SnLedgerCtf_TheV1ClaimWaitsForTheClaimsRead, OnLedgerClaim)
+UR_TEST(SnLedgerCtf_ASheetOffersNoClaimAfterItsClaimEnds) {
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  const auto count = [](const std::string& text, const std::string& what) {
+    size_t n = 0;
+    for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + 1)) ++n;
+    return n;
+  };
+  // v1: the sheet's own end, set once, by OnDone, which the page calls at its
+  // claim's Done and at the give-up
+  UR_EXPECT_TRUE(page.find("  bool ended_ = false;\n") != std::string::npos);
+  UR_EXPECT_EQ(1u, count(page, "ended_ = true;"));
+  const std::string done = LedgerFunctionBody(page, "void ClaimAlphaSheet::OnDone()");
+  const size_t busy = done.find("busy_ = false;");
+  const size_t ended = done.find("ended_ = true;");
+  UR_EXPECT_TRUE(busy != std::string::npos && ended != std::string::npos && busy < ended &&
+                 ended < done.find("RebuildRows();") && ended < done.find("RebuildAction();"));
+  UR_EXPECT_EQ(2u, count(LedgerFunctionBody(page, "void EarningsPage::StartClaim("), "open->OnDone();"));
+  // a press of it claims nothing from then: Claim names no amount and stays off
+  const std::string action = LedgerFunctionBody(page, "void ClaimAlphaSheet::RebuildAction()");
+  const size_t nothing = action.find("const int64_t rao = ended_ ? 0 : ClaimableRao();");
+  UR_EXPECT_TRUE(nothing != std::string::npos && nothing < action.find("claimButton_->set_label(") &&
+                 nothing < action.find("claimButton_->set_sensitive("));
+  UR_EXPECT_EQ(1u, count(action, "ClaimableRao()"));
+  UR_EXPECT_TRUE(LedgerFunctionBody(page, "void ClaimAlphaSheet::OnClaimPressed()")
+                     .find("{\n  if (busy_ || ended_) return;\n") == 0);
+  // v2: the rows' end (ClaimProgress::Ended), which their claim's Done and the
+  // give-up set (ClaimInFlight::End: SnLedgerCtf_ThePressEndsWithItsOutcome)
+  const std::string rebuild = LedgerFunctionBody(page, "void LedgerClaimSheet::Rebuild()");
+  const size_t nothingV2 = rebuild.find("const bool ended = progress_->Ended();\n"
+                                        "  const int64_t rao = ended ? 0 : progress_->ClaimableRao();");
+  UR_EXPECT_TRUE(nothingV2 != std::string::npos && nothingV2 < rebuild.find("claimButton_->set_label(") &&
+                 nothingV2 < rebuild.find("claimButton_->set_sensitive("));
+  UR_EXPECT_EQ(1u, count(rebuild, "ClaimableRao()"));
+  UR_EXPECT_TRUE(rebuild.find("claimButton_->set_label(progress_->ClaimsBoth() && !ended\n") != std::string::npos);
+  const std::string sheet =
+      LedgerFunctionBody(page, "LedgerClaimSheet::LedgerClaimSheet(Gtk::Window& parent, std::string coldkey,");
+  UR_EXPECT_TRUE(sheet.find("if (progress_->Busy() || progress_->Ended() || progress_->ClaimableRao() <= 0) return;") !=
+                 std::string::npos);
+}
+
+// No claim starts from a stale read: StartClaim and StartLedgerClaim refuse,
+// past the one-claim check, unless their kind's read since the last claim's end
+// has answered (the claims Ready, the accounts Ready), as Apple's session starts
+// no claim but from such a read. Each sheet's Claim waits for that read too,
+// beside the other kind's claim (claim_held), and the page redraws an open
+// sheet as its kind's read starts and answers (ApplyClaims, ApplyLedger), so
+// Claim is never offered for a press that would be refused
+UR_TEST(SnLedgerCtf_NoClaimStartsFromAStaleRead) {
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  struct Guard {
+    const char* claim;
+    const char* claiming;
+    const char* refuse;
+    const char* start;
+  };
+  const Guard guards[] = {
+      {"void EarningsPage::StartClaim(", "  if (epochs.empty() || Claiming()) return;\n",
+       "  if (claimsState_ != Fetch::Ready) {\n"
+       "    g_message(\"earnings: claim refused: the claims are read again since the last claim\");\n"
+       "    return;\n"
+       "  }\n",
+       "const uint64_t claim = claim_.Start();"},
+      {"void EarningsPage::StartLedgerClaim()", "  if (Claiming()) return;\n",
+       "  if (ledgerLoad_ != snledger::Load::Ready) {\n"
+       "    g_message(\"earnings: v2 claim refused: the accounts are read again since the last claim\");\n"
+       "    return;\n"
+       "  }\n",
+       "const uint64_t claim = ledgerClaim_.Start("},
+  };
+  for (const Guard& guard : guards) {
+    const std::string start = LedgerFunctionBody(page, guard.claim);
+    const size_t claiming = start.find(guard.claiming);
+    const size_t refuse = start.find(guard.refuse);
+    UR_EXPECT_TRUE_MSG(guard.claim, claiming != std::string::npos && refuse != std::string::npos &&
+                                        claiming < refuse && refuse < start.find(guard.start) &&
+                                        refuse < start.find("if (!CanCallApi()) {"));
+  }
+  const std::string openV1 = LedgerFunctionBody(page, "void EarningsPage::OpenClaimSheet(bool allowActions)");
+  UR_EXPECT_TRUE(openV1.find("sheet->claim_held = [this] { return ledgerClaim_.InFlight() || "
+                             "claimsState_ != Fetch::Ready; };") != std::string::npos);
+  const std::string openV2 = LedgerFunctionBody(page, "void EarningsPage::OnLedgerClaim()");
+  UR_EXPECT_TRUE(openV2.find("sheet->claim_held = [this] { return claim_.InFlight() || "
+                             "ledgerLoad_ != snledger::Load::Ready; };") != std::string::npos);
+  // each kind's read redraws an open sheet of its kind, as its last step
+  for (const auto& [apply, redraw] :
+       {std::pair<const char*, const char*>{"void EarningsPage::ApplyClaims(",
+                                            "if (auto open = claimSheet_.lock()) open->Redraw();\n}"},
+        std::pair<const char*, const char*>{"void EarningsPage::ApplyLedger(",
+                                            "if (auto open = ledgerClaimSheet_.lock()) open->Redraw();\n}"}}) {
+    const std::string body = LedgerFunctionBody(page, apply);
+    UR_EXPECT_TRUE_MSG(apply, body.size() > std::string(redraw).size() &&
+                                  body.compare(body.size() - std::string(redraw).size(), std::string::npos, redraw) == 0);
+  }
+}
+
 // The v1 Claims that open the claim sheet, the unclaimed tile's and the payout
 // line's, are snpayout::V1ClaimEnabled's, on the claims read: while a read is
 // out (a claim's Done starts one) what the page holds is the read before it's,
@@ -3327,7 +3471,8 @@ UR_TEST(SnLedgerCtf_TheSheetsFigureIsWired) {
 // The v1 sheet's figure while its claim runs is what the claim is moving, the
 // epochs it sends, as Claim named them (every app, 2026-11-12), where it read 0
 // before; its Claim names no amount while there is nothing to claim, never
-// "Claim 0"; and at Done the figure is what Claim would claim again
+// "Claim 0"; and at Done the figure is what the claim left, with no Claim from
+// it (SnLedgerCtf_ASheetOffersNoClaimAfterItsClaimEnds)
 UR_TEST(SnLedgerCtf_TheV1SheetsFigureDuringAClaim) {
   const std::string page = ReadLedgerSource("EarningsPage.cpp");
   const std::string rows = LedgerFunctionBody(page, "void ClaimAlphaSheet::RebuildRows()");
