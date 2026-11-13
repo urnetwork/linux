@@ -2212,16 +2212,6 @@ msgctxt "connect_seeker_wallet"
 msgid "Connect a wallet with the Saga Genesis or Seeker Pre-Order Token"
 msgstr "เชื่อมกระเป๋ากับ Saga Genesis หรือ Seeker Pre-Order Token"
 
-#. Overflow menu item next to “Connect Bittensor wallet” on the Earnings screen, and the title of the Solana connect sheet/card: connect a Solana USDC payout wallet (wallet app, or manual address entry). USDC payouts continue until the migration to Bittensor completes.
-msgctxt "connect_solana_wallet"
-msgid "Connect Solana wallet"
-msgstr "เชื่อมต่อกระเป๋าเงิน Solana"
-
-#. Note at the top of the Solana connect sheet/card, above the wallet-app button and the manual-entry link.
-msgctxt "connect_solana_wallet_note"
-msgid "Connect a Solana wallet app, or enter a Solana USDC address manually."
-msgstr "เชื่อมต่อแอปกระเป๋าเงิน Solana หรือป้อนที่อยู่ USDC บน Solana ด้วยตนเอง"
-
 #. Add sign-in method sheet (android): the wallet option's explanation.
 msgctxt "connect_solana_wallet_to_add_sign_in_method"
 msgid "Connect a Solana wallet to add it as a sign-in method."
@@ -2946,11 +2936,6 @@ msgstr "ตามค่าเริ่มต้น คุณจะได้ร�
 
 #. Generic default choice label, e.g. the app split rule combo state meaning no rule.
 msgctxt "default_option"
-msgid "Default"
-msgstr "ค่าเริ่มต้น"
-
-#. Call to action
-msgctxt "default_wallet"
 msgid "Default"
 msgstr "ค่าเริ่มต้น"
 
@@ -5416,10 +5401,6 @@ msgctxt "enter_a_password"
 msgid "Enter a password"
 msgstr "กรอกรหัสผ่าน"
 
-msgctxt "enter_a_solana_usdc_wallet_address"
-msgid "Enter a Solana USDC wallet address"
-msgstr "ป้อนที่อยู่กระเป๋าเงิน USDC บน Solana"
-
 #. Fallback link to paste an ss58 address.
 msgctxt "enter_address_manually"
 msgid "Enter address manually"
@@ -5510,11 +5491,6 @@ msgctxt "error_connecting_wallet"
 msgid "There was an error connecting your wallet."
 msgstr "เกิดข้อผิดพลาดในการเชื่อมต่อกระเป๋าเงินของคุณ"
 
-#. Snackbar shown when connecting a wallet fails, with the underlying error message. Used in Main/Account/Wallets/WalletsView.swift.
-msgctxt "error_connecting_wallet_with_reason"
-msgid "There was an error connecting your wallet: {}"
-msgstr "เกิดข้อผิดพลาดในการเชื่อมต่อกระเป๋าเงินของคุณ: {}"
-
 #. Snackbar shown when creating the user's network fails. Used in ContentView.swift, Main/Account/AccountRootView.swift and Main/Connect/ConnectView-iOS.swift.
 msgctxt "error_creating_network"
 msgid "There was an error creating your network. Please try again later."
@@ -5554,11 +5530,6 @@ msgstr "เกิดข้อผิดพลาดในการส่งลิ
 msgctxt "error_sending_verification_code"
 msgid "There was an error sending the verification code."
 msgstr "เกิดข้อผิดพลาดในการส่งรหัสยืนยัน"
-
-#. Snackbar shown when setting the default payout wallet fails, with the underlying error message. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "error_setting_default_wallet_with_reason"
-msgid "Error setting default wallet: {}"
-msgstr "เกิดข้อผิดพลาดในการตั้งค่ากระเป๋าเงินเริ่มต้น: {}"
 
 #. Add sign-in method sheet (android): Google sign-in failed or was cancelled.
 msgctxt "error_signing_in_with_google"
@@ -6384,11 +6355,6 @@ msgctxt "invalid_referral_code_please_try_again"
 msgid "Invalid referral code. Please try again."
 msgstr "รหัสผู้อ้างอิงไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง"
 
-#. Validation error under the manual address field when the address is not a valid Solana address (parallel to invalid_ss58_address).
-msgctxt "invalid_solana_address"
-msgid "That is not a valid Solana address."
-msgstr "ที่อยู่ Solana นี้ไม่ถูกต้อง"
-
 #. Validation error for a coldkey address.
 msgctxt "invalid_ss58_address"
 msgid "That is not a valid Bittensor address."
@@ -6971,11 +6937,6 @@ msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"
 msgstr "อัตราส่วนผู้ใช้/IP ต่ำที่สุดสำหรับการเข้าถึงเนื้อหา"
 
-#. Wallet Screen
-msgctxt "make_default"
-msgid "Make default"
-msgstr "ตั้งเป็นกระเป๋ารับยอด"
-
 #. Split tunnel settings: button opening the app split rules sheet.
 msgctxt "manage_apps"
 msgid "Manage apps"
@@ -7528,11 +7489,6 @@ msgctxt "no_wallets_found_alert_content"
 msgid "No Solana wallets were found installed on this device. Please install a wallet and try again."
 msgstr "ไม่พบการติดตั้งแอพกระเป๋า Solana บนเครื่องนี้ โปรดติดตั้ง"
 
-#. Body of the no-wallet alert (android) and note (iOS) of the Solana payout wallet's connect sheet, when no wallet app on the device can connect (android: no wallet app answers the Mobile Wallet Adapter request, as reported with Brave Wallet installed; iOS: neither Phantom nor Solflare is installed). A typed address works with any wallet, so the line points at the sheet's manual entry, naming its Enter address manually control in that control's own words (enter_address_manually); the android alert also offers that control as its action. Signing in needs a wallet app and keeps no_wallets_found_alert_content.
-msgctxt "no_wallets_found_enter_address_manually"
-msgid "No compatible Solana wallet app was found on this device. Choose “Enter address manually” to paste your wallet address instead."
-msgstr "ไม่พบแอปกระเป๋าเงิน Solana ที่รองรับบนอุปกรณ์นี้ เลือก “ป้อนที่อยู่ด้วยตนเอง” เพื่อวางที่อยู่กระเป๋าเงินของคุณแทน"
-
 #. Empty value: the VLESS settings show it for no security and no flow (all apps), and the Referrals section shows it on windows and linux when no referral network is linked.
 msgctxt "none"
 msgid "None"
@@ -7875,16 +7831,6 @@ msgstr "ได้รับการชำระเงินแล้ว"
 msgctxt "payment_received_title"
 msgid "Payment received"
 msgstr "ได้รับการชำระเงินแล้ว"
-
-#. Snackbar shown after the payout wallet is changed. Used in Main/Account/Wallet/WalletView.swift.
-msgctxt "payout_wallet_updated"
-msgid "Payout wallet updated"
-msgstr "อัปเดตกระเป๋ารับยอดจ่ายแล้ว"
-
-#. Status line or snackbar after removing the payout wallet made another of the account's wallets the payout wallet (the server promotes the newest other Solana or Polygon wallet). The placeholder is the new payout wallet's shortened address, its first and last four characters around an ellipsis.
-msgctxt "payouts_now_go_to"
-msgid "Payouts now go to {}."
-msgstr "การจ่ายจะส่งไปที่ {} แล้ว"
 
 #. Post quantum identity panel: peer identity count indicator, singular.
 msgctxt "peer_count_one"
@@ -8977,16 +8923,6 @@ msgstr "ลบกฎ"
 msgctxt "remove_this_sign_in_method"
 msgid "Remove this sign-in method?"
 msgstr "ลบวิธีลงชื่อเข้าใช้นี้หรือไม่"
-
-#. Used in Main/Account/AccountNavStackView.swift.
-msgctxt "remove_wallet"
-msgid "Remove wallet"
-msgstr "ลบกระเป๋าเงิน"
-
-#. Body of the remove confirmation for the payout wallet (the title is remove_wallet). Removing the payout wallet makes another of the account's active Solana or Polygon wallets the payout wallet when there is one (the server picks it; payouts_now_go_to names it after the removal), and holds USDC payouts until the user connects a wallet when there is none.
-msgctxt "remove_wallet_moves_or_holds_payouts"
-msgid "USDC payouts move to another of your Solana or Polygon wallets, or are held until you connect one."
-msgstr "การจ่าย USDC จะย้ายไปยังกระเป๋าเงิน Solana หรือ Polygon อื่นของคุณ หรือจะถูกพักไว้จนกว่าคุณจะเชื่อมต่อกระเป๋าเงิน"
 
 #. Reset link sent
 msgctxt "resend_reset_link"
@@ -10582,11 +10518,6 @@ msgctxt "solana_wallet"
 msgid "Solana wallet"
 msgstr "กระเป๋าเงิน Solana"
 
-#. Error in the Solana payout wallet's connect sheet of the desktop apps (macOS, Windows, Linux) when the ur.io wallet bridge page returns extension_not_found: the chosen wallet's browser extension is not in this browser. The argument is the wallet product name (Phantom or Solflare). The sheet also takes a typed address, which works with any wallet, so the line points at its Enter address manually control, named in that control's own words (enter_address_manually). Signing in has no manual entry and keeps bittensor_error_extension_not_found.
-msgctxt "solana_wallet_error_extension_not_found"
-msgid "The {} extension was not found in this browser. Install it and try again, or choose “Enter address manually” to paste your wallet address."
-msgstr "ไม่พบส่วนขยาย {} ในเบราว์เซอร์นี้ ติดตั้งส่วนขยายแล้วลองอีกครั้ง หรือเลือก “ป้อนที่อยู่ด้วยตนเอง” เพื่อวางที่อยู่กระเป๋าเงินของคุณ"
-
 #. Solana wallet error in the desktop apps (macOS, Windows, Linux) when the ur.io wallet bridge page returns session_not_found: the browser no longer has the wallet connection made in the connect step (another browser or a private window, or its site data was cleared), so nothing was signed. Starting again reconnects the wallet (Phantom or Solflare).
 msgctxt "solana_wallet_error_session_not_found"
 msgid "The wallet connection wasn't found in this browser. Start again to reconnect your wallet."
@@ -11024,10 +10955,6 @@ msgstr "************"
 msgctxt "symbol_space"
 msgid " "
 msgstr " "
-
-msgctxt "symbol_tao"
-msgid "τ"
-msgstr "τ"
 
 #. Toggle that makes the device report the location of the longest-connected provider (Android mock location) instead of the real location.
 msgctxt "sync_device_location_with_oldest_provider"
@@ -11749,24 +11676,10 @@ msgctxt "urnetwork_vpn_started"
 msgid "URnetwork VPN started"
 msgstr "URnetwork VPN เริ่มทำงานแล้ว"
 
-#. Second paragraph of the Solana connect sheet/card, and the body line under a connected Solana wallet.
-msgctxt "usdc_payouts_until_migration"
-msgid "USDC payouts continue to this wallet until the migration to Bittensor is complete."
-msgstr "การจ่าย USDC จะยังเข้ากระเป๋าเงินนี้จนกว่าการย้ายไปยัง Bittensor จะเสร็จสมบูรณ์"
-
 #. Payment: the chain to send on. Shown wherever a USDC payment is requested, because USDC exists on many chains and a transfer sent on the wrong one is lost.
 msgctxt "usdc_solana_network_only"
 msgid "Send USDC on the Solana network only. USDC sent on any other network will not arrive."
 msgstr "ส่ง USDC บนเครือข่าย Solana เท่านั้น USDC ที่ส่งบนเครือข่ายอื่นจะไม่เข้าบัญชี"
-
-#. The last USDC payout still pending since provider payouts moved to the UR subnet; shown on the Solana wallet block and, while no Solana wallet is connected, next to the wallet actions, only while a USDC amount is pending. Mirrors the email headline.
-msgctxt "usdc_waiting"
-msgid "Final USDC payout: {} USDC waiting"
-msgstr "การจ่าย USDC ครั้งสุดท้าย: {} USDC รอการโอน"
-
-msgctxt "usdc_wallet_address"
-msgid "USDC wallet address"
-msgstr "ที่อยู่กระเป๋าเงิน USDC"
 
 #. Toggle on the import screen: also apply the extender settings carried by the code.
 msgctxt "use_extender_settings"
@@ -12189,11 +12102,6 @@ msgstr "กระเป๋าเงินนี้ยังไม่ได้เ
 msgctxt "wallet_not_retroactive"
 msgid "Connect a wallet to earn SN25α from the next epoch. Earlier epochs are not settled retroactively."
 msgstr "เชื่อมต่อกระเป๋าเงินเพื่อรับ SN25α ตั้งแต่อีพอคถัดไป อีพอคก่อนหน้าจะไม่ถูกชำระย้อนหลัง"
-
-#. Accessibility label of the three-dot overflow button next to “Connect Bittensor wallet” and on the connected Bittensor wallet block.
-msgctxt "wallet_options"
-msgid "Wallet options"
-msgstr "ตัวเลือกกระเป๋าเงิน"
 
 #. Error shown when signing in with a wallet fails.
 msgctxt "wallet_sign_in_failed"
