@@ -1017,7 +1017,7 @@ msgctxt "balance_code_already_redeemed_message"
 msgid "This balance code has already been redeemed. If you redeemed it earlier, the data is already on your balance."
 msgstr "この残高コードはすでに引き換えられています。以前に引き換えた場合、データはすでに残高に反映されています。"
 
-#. Redeem balance code: confirmation of the data a redeemed code added to the network's balance (amount is a formatted byte count, e.g. "5.00 GiB"). A balance code is data only: never a plan or Pro upgrade.
+#. Redeem balance code: confirmation of the data a redeemed code added to the network's balance (amount is a formatted byte count, e.g. "5.00 GiB"). Data codes only: a redeemed Pro gift code confirms with gift_pro_redeemed instead.
 msgctxt "balance_code_data_added"
 msgid "{} of data added to your balance."
 msgstr "{} のデータが残高に追加されました。"
@@ -1026,6 +1026,11 @@ msgstr "{} のデータが残高に追加されました。"
 msgctxt "balance_code_invalid_message"
 msgid "That balance code isn't valid. Check the code and try again."
 msgstr "この残高コードは無効です。コードを確認してもう一度お試しください。"
+
+#. The redeemed balance codes list's amount for a Pro gift code, in place of a data amount such as "+10 GiB". Short, like a data amount.
+msgctxt "balance_code_pro_year"
+msgid "A year of Pro"
+msgstr "Pro 1 年分"
 
 #. Confirmation shown after a balance code is redeemed.
 msgctxt "balance_code_redeemed"
@@ -6024,6 +6029,21 @@ msgctxt "get_urnetwork_free_for_life_by_participating"
 msgid "Get URnetwork free for life by participating"
 msgstr "参加するだけでURnetworkを一生無料で利用できます"
 
+#. The plan row's line across from the plan, for Pro that came from a gift code, where a store subscription's Manage button would be: a gift year doesn't renew and has nothing to manage. The gift's twin of crypto_does_not_renew.
+msgctxt "gift_does_not_renew"
+msgid "A gift. It doesn't renew."
+msgstr "ギフトです。自動更新はされません。"
+
+#. Confirmation shown after a Pro gift code is redeemed: the code grants a year of Pro, starting now.
+msgctxt "gift_pro_redeemed"
+msgid "A year of Pro is yours."
+msgstr "Pro 1 年分を受け取りました。"
+
+#. Confirmation shown after a Pro gift code is redeemed by someone who already has Pro: the gift's year of Pro is queued after the current Pro period. {date} is the day it starts, formatted by the app for the reader's locale.
+msgctxt "gift_pro_redeemed_queued"
+msgid "Your gift year of Pro starts on {}, after your current Pro period."
+msgstr "ギフトの Pro 1 年分は、現在の Pro 期間の終了後、{} から始まります。"
+
 #. Confirmation button that leaves the seedphrase screen after the warning.
 msgctxt "go_back"
 msgid "Go Back"
@@ -10069,6 +10089,11 @@ msgstr "現在は Free プランです。データと機能を増やすには Pr
 msgctxt "site_sub_free_title"
 msgid "Free plan"
 msgstr "Free プラン"
+
+#. ur.io account, Subscription card: the body for Pro from a gift code, which doesn't renew and has nothing to manage or cancel (compare site_sub_active_body).
+msgctxt "site_sub_gift_body"
+msgid "Your Pro plan is a gift. It doesn't renew, so there's nothing to manage or cancel."
+msgstr "Pro プランはギフトです。自動更新はされないため、管理や解約の必要はありません。"
 
 #. Subscription: manage-on-platform button ({platform})
 msgctxt "site_sub_manage_on"

@@ -124,8 +124,9 @@ struct AccountBalance {
   // the store's last read failed with none loaded since (PlanReadFailed)
   bool planReadFailed = false;
   bool guest = false;
-  // SubscriptionStoreFamily: Manage Subscription shows only for "stripe", and
-  // "crypto" (a one-time crypto year) reads "does not renew"
+  // SubscriptionStoreFamily: Manage Subscription shows only for "stripe",
+  // "crypto" (a one-time crypto year) reads "does not renew", and "gift" (a
+  // gift code's year of Pro) reads "A gift. It doesn't renew."
   std::string subscriptionStoreFamily;
   // A one-time crypto year's renewal notice is due (CryptoTermNoticeDue), and
   // the local date its grace ends, which the notice names.
@@ -352,6 +353,8 @@ class AccountPage : public Gtk::Box {
   Gtk::Widget* cryptoTermRow_ = nullptr;
   Gtk::Label* cryptoTermLine_ = nullptr;
   Gtk::Widget* doesNotRenewRow_ = nullptr;
+  // a gift code's year of Pro: "A gift. It doesn't renew."
+  Gtk::Widget* giftRow_ = nullptr;
   // the saved crypto invoice that is not paid yet
   Gtk::Button* paymentInProgressRow_ = nullptr;
   Gtk::Label* paymentInProgressNote_ = nullptr;
