@@ -526,6 +526,11 @@ void SdkHost::ReleaseDeviceRpcDefaultPort() {
 void SdkHost::AdoptSpaceApiLocked() {
   // requires mutex_
   ReportClientInfo(*api_, kAppVersion);
+  // The device's zone and the user's languages ride on sign-up, sign-in and
+  // auth-client (the sdk fills them into each request's args): the campaign
+  // emails are placed in the reader's day and written in their language
+  // (server controller/mail_context.go).
+  api_->setMailLocale(LocalTimeZoneId(), DeviceLanguages());
   // ...and the Api's own sign-out is followed. The sdk clears the account
   // credential the server rejects (a confirmed 401), or the one this app
   // signed out from the account's Sessions list, and says so on the Api it
@@ -2334,7 +2339,10 @@ void SdkHost::AuthNetworkClientWithLocale(const urnet::AuthNetworkClientArgs& ar
                                           urnet::AuthNetworkClientCallback callback) {
   nlohmann::json json = args;
   json["time_zone"] = LocalTimeZoneId();
-  json["locale"] = ClientEventLocale();
+  // the user's first language; the sdk adds the whole list (setMailLocale).
+  // An unknown one is left out, never sent as "en".
+  const std::string locale = ClientEventLocale();
+  if (!locale.empty()) json["locale"] = locale;
   const std::string body = json.dump();
   auto* fn = new urnet::AuthNetworkClientCallback(std::move(callback));
   urnet_api_auth_network_client(api_->handle(), body.c_str(),
