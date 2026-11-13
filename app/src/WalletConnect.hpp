@@ -7,7 +7,11 @@
 // Solana (Phantom / Solflare) is a TWO-hop flow — connect, then signMessage —
 // and carries the SAME NaCl-box envelope the SDK decodes. Crypto is the SDK's
 // (generateWalletKeyPair / generateSharedSecret / encrypt/decryptData / base58)
-// so it's wire-compatible with Apple's CryptoKit path.
+// so it's wire-compatible with Apple's CryptoKit path. Every failure of either
+// hop, the code the page comes back with or one this class finds itself,
+// reaches on_error as the message the SDK names for it (FailSolana,
+// SolanaWalletPresentation.hpp), the words every app shows; the page's own
+// English is only logged.
 //
 // Bittensor runs through the SDK's BittensorWalletSession (sdk
 // bittensor_wallet.go), one session per challenge: the session builds the
@@ -86,6 +90,8 @@ class WalletConnect {
   std::function<void(std::string publicKey, Provider)> on_public_key;
   // base64 (solana, NaCl envelope) or 0x-prefixed hex (bittensor, plain params)
   std::function<void(std::string signature)> on_signature;
+  // The failure in the words the flow shows: for a Solana wallet, the SDK's
+  // message for it (FailSolana).
   std::function<void(std::string error)> on_error;
 
  private:
@@ -93,7 +99,20 @@ class WalletConnect {
   static std::optional<Provider> ProviderForHost(const std::string& host);
   bool NewKeyPair();
   std::optional<std::string> SharedSecretBase58() const;  // with walletEncryptionPublicKey_
+  // Bittensor and sso: a browser that would not open `url` answers on_error
+  // with the launcher's words.
   void OpenUrl(const std::string& url);
+  // Solana: a browser that would not open the bridge page fails the step
+  // (FailSolana, as the SDK's wallet_error).
+  void OpenSolanaBridge(Provider p, const std::string& url);
+  // A Solana wallet step failed: on_error answers the SDK's message for `code`
+  // read in the scheme of `source` (urnet::SolanaWalletFailureSource*: the
+  // page's code, or a urnet::SolanaWalletFailure* the app found itself), in
+  // this app's words, with the wallet's name where the message takes it.
+  // `detail`, the page's English or what the app found, is logged and never
+  // shown.
+  void FailSolana(Provider p, const std::string& source, const std::string& code,
+                  const std::string& detail);
   void HandleConnect(Provider p, const std::string& query);
   void HandleSignMessage(Provider p, const std::string& query);
   // urnetwork://bittensor-sign-message?...: judged by the session
