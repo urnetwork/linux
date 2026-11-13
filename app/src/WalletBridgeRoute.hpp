@@ -5,8 +5,10 @@
 //
 // The twin of the windows app's WalletBridgeRoute.h: the same routes, plus the
 // create-network signature (a wallet sign-in that found no network finishes by
-// signing a second challenge), and no Seeker signature request. Header-only and
-// free of GTK and the SDK (tests/WalletBridgeRouteTest.cpp).
+// signing a second challenge), and without the Seeker signature request or the
+// bare connect the Solana payout wallet took its key with (removed with USDC
+// payouts on 2026-11-13). Header-only and free of GTK and the SDK
+// (tests/WalletBridgeRouteTest.cpp).
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
@@ -26,13 +28,11 @@ constexpr bool IsSuperseded(std::string_view error) noexcept {
 // wallet's public key. A wallet being added as a sign-in method (Account >
 // Login methods, AddSignInFlow.hpp) chains its challenge like a sign-in, but
 // its signature is answered to the sheet and never signs in.
-enum class PublicKeyRoute { Drop, AnswerConnect, SignIn, AddSignIn };
+enum class PublicKeyRoute { Drop, SignIn, AddSignIn };
 
-constexpr PublicKeyRoute RoutePublicKey(bool bittensor, bool connectWaiting,
-                                        bool walletSignInWaiting,
+constexpr PublicKeyRoute RoutePublicKey(bool bittensor, bool walletSignInWaiting,
                                         bool walletAddWaiting = false) noexcept {
   if (bittensor) return PublicKeyRoute::Drop;  // no connect hop to chain
-  if (connectWaiting) return PublicKeyRoute::AnswerConnect;
   if (walletAddWaiting) return PublicKeyRoute::AddSignIn;
   return walletSignInWaiting ? PublicKeyRoute::SignIn : PublicKeyRoute::Drop;
 }
@@ -56,8 +56,9 @@ constexpr SignatureRoute RouteSignature(bool signWaiting, bool createWaiting,
 // SdkHost numbers every wallet flow it starts (under its lock), and a step that
 // runs later -- a challenge that arrives after its fetch -- opens the bridge
 // only while its flow is still the newest. A Bittensor connect superseded by a
-// Solana connect while its challenge was being fetched therefore opens no tab,
-// and leaves the Solana keypair (and so its return) intact.
+// Solana wallet being added as a sign-in method while its challenge was being
+// fetched therefore opens no tab, and leaves the Solana keypair (and so its
+// return) intact.
 class FlowCounter {
  public:
   constexpr uint64_t Begin() noexcept { return ++latest_; }

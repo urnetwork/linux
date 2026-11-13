@@ -26,24 +26,18 @@ using urnw::bridge::SignatureRoute;
 // redirect and the key pair lives until the next connect, so the same return
 // can arrive twice; with nothing waiting it is dropped.
 UR_TEST(WalletBridge_AConnectReturnNobodyWaitsForIsDropped) {
-  UR_EXPECT_TRUE(RoutePublicKey(false, false, false) == PublicKeyRoute::Drop);
-}
-
-// A bare connect (the Solana payout wallet) takes the key before a sign-in could.
-UR_TEST(WalletBridge_TheBareConnectIsAnsweredFirst) {
-  UR_EXPECT_TRUE(RoutePublicKey(false, true, true) == PublicKeyRoute::AnswerConnect);
-  UR_EXPECT_TRUE(RoutePublicKey(false, true, false) == PublicKeyRoute::AnswerConnect);
+  UR_EXPECT_TRUE(RoutePublicKey(false, false) == PublicKeyRoute::Drop);
 }
 
 // Signing in with Phantom or Solflare still chains its challenge.
 UR_TEST(WalletBridge_AWalletSignInStillSignsIn) {
-  UR_EXPECT_TRUE(RoutePublicKey(false, false, true) == PublicKeyRoute::SignIn);
+  UR_EXPECT_TRUE(RoutePublicKey(false, true) == PublicKeyRoute::SignIn);
 }
 
 // Bittensor signs in one hop: a public key never chains anything for it.
 UR_TEST(WalletBridge_ABittensorConnectReturnChainsNothing) {
+  UR_EXPECT_TRUE(RoutePublicKey(true, true) == PublicKeyRoute::Drop);
   UR_EXPECT_TRUE(RoutePublicKey(true, true, true) == PublicKeyRoute::Drop);
-  UR_EXPECT_TRUE(RoutePublicKey(true, false, true) == PublicKeyRoute::Drop);
 }
 
 // A signature from a superseded or abandoned tab never reaches
@@ -59,16 +53,16 @@ UR_TEST(WalletBridge_ASignatureNobodyWaitsForNeverSignsIn) {
 }
 
 UR_TEST(WalletBridge_SupersededIsTheHostsOwnWord) {
-  UR_EXPECT_TRUE(IsSuperseded("superseded by a wallet connect request"));
+  UR_EXPECT_TRUE(IsSuperseded("superseded by another sign-in method"));
   UR_EXPECT_FALSE(IsSuperseded("User rejected the request."));
   UR_EXPECT_FALSE(IsSuperseded(""));
   UR_EXPECT_FALSE(IsSuperseded("superseded"));
 }
 
-// "Connect Bittensor wallet" fetches its challenge; meanwhile the user opens the
-// Solana sheet and presses Phantom. When the challenge lands it must not open a
-// Bittensor tab: that bridge call would also reset the Phantom keypair, and the
-// Phantom return could no longer be read.
+// "Connect Bittensor wallet" fetches its challenge; meanwhile the user adds a
+// Solana wallet as a sign-in method and presses Phantom. When the challenge
+// lands it must not open a Bittensor tab: that bridge call would also reset the
+// Phantom keypair, and the Phantom return could no longer be read.
 UR_TEST(WalletBridge_ALateChallengeNeverOpensTheBridgeForAnOlderFlow) {
   FlowCounter flows;
   UR_EXPECT_FALSE(flows.IsCurrent(0));  // before any flow
@@ -118,7 +112,7 @@ std::string FunctionBody(const std::string& source, const std::string& signature
 
 // The counter only protects anything if the host keeps it: every wallet flow
 // start takes a number, the Bittensor connect's challenge checks its number
-// before it opens the bridge, and the Solana connect answers a waiting
+// before it opens the bridge, and a Solana wallet being added answers a waiting
 // Bittensor request itself. A counter nobody checks is the defect this exists
 // for, so "could not read the source" fails.
 UR_TEST(WalletBridge_TheHostChecksItsFlowBeforeALateChallengeOpensTheBridge) {
@@ -128,7 +122,7 @@ UR_TEST(WalletBridge_TheHostChecksItsFlowBeforeALateChallengeOpensTheBridge) {
     return;
   }
   for (const char* flow :
-       {"void SdkHost::ConnectSolanaWallet(", "void SdkHost::SignBittensorConnect(",
+       {"void SdkHost::AddSignInWithSolana(", "void SdkHost::SignBittensorConnect(",
         "void SdkHost::SignInWithSolana(", "void SdkHost::SignInWithBittensor(",
         "void SdkHost::SignInWithSso(", "void SdkHost::CreateNetworkWithPendingWallet("}) {
     const std::string body = FunctionBody(source, flow);
@@ -145,10 +139,10 @@ UR_TEST(WalletBridge_TheHostChecksItsFlowBeforeALateChallengeOpensTheBridge) {
   UR_EXPECT_TRUE_MSG("the Bittensor connect checks its flow before it opens the bridge",
                      opens != std::string::npos && checks != std::string::npos);
 
-  const std::string solana = FunctionBody(source, "void SdkHost::ConnectSolanaWallet(");
-  UR_EXPECT_TRUE_MSG("the Solana connect answers a waiting Bittensor signature request",
+  const std::string solana = FunctionBody(source, "void SdkHost::AddSignInWithSolana(");
+  UR_EXPECT_TRUE_MSG("a Solana wallet being added answers a waiting Bittensor signature request",
                      solana.find("walletSignDone_") != std::string::npos &&
-                         solana.find("\"superseded by a wallet connect request\"") !=
+                         solana.find("\"superseded by another sign-in method\"") !=
                              std::string::npos);
 
   // every superseded reason the host writes carries the prefix IsSuperseded reads

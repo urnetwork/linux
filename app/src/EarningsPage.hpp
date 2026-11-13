@@ -16,17 +16,9 @@
 // account in the provider pool and one in the capture the flag pool: each is a
 // row of its own, and one claim claims both.
 //
-// USDC payouts continue until the migration to Bittensor completes, so the
-// Solana payout wallet stays reachable from here: a three-dot overflow beside
-// the Bittensor actions opens "Connect Solana wallet" (SolanaWalletSheet: the
-// wallet bridge, connect only, or an address entered by hand), a card under the
-// Bittensor block shows the payout wallet with the USDC waiting for it and
-// removes it, and with no payout wallet one "N USDC waiting" line sits above
-// the Bittensor actions. Its three reads (account wallets, payout wallet,
-// account payments) are secondary: they settle the card together, never touch
-// the Bittensor block, and a plain reload keeps the card while they are out.
-// There is no payout history on this surface (support@ur.io holds the old
-// ledger).
+// USDC provider payouts ended on 2026-11-12, so there is no Solana payout
+// wallet, USDC figure or payout history on this surface (support@ur.io holds
+// the old ledger).
 //
 // Three panes, folded by the window's ApplyBreakpoint:
 //   >= 1500  earnings(360) | history(*) | network(380)
@@ -41,11 +33,11 @@
 // NetworkConsent.hpp), the Bittensor wallet
 // block (connect through the bridge, or
 // enter an address manually — validated locally and then against
-// /sn/wallet/validate before anything is sent — and still sign it), the Solana
-// payout wallet card (only with a payout wallet), and the Top 200 tile: the
-// projected place from GET /sn/top/me (the Protocol board's own place) for a
-// network projected inside the top 200 or claimed, with "Claiming opens soon"
-// while binding is closed (ProtocolBoardPresentation.hpp TileFor).
+// /sn/wallet/validate before anything is sent — and still sign it), and the
+// Top 200 tile: the projected place from GET /sn/top/me (the Protocol board's
+// own place) for a network projected inside the top 200 or claimed, with
+// "Claiming opens soon" while binding is closed (ProtocolBoardPresentation.hpp
+// TileFor).
 //
 // Pane B (history): a two-item tab switch over the per-epoch history and the
 // leaderboard. The leaderboard is fetched the FIRST time its tab is looked at.
@@ -94,7 +86,6 @@
 #include "SdkHost.hpp"
 #include "SnLedgerPresentation.hpp"
 #include "SnPayoutPresentation.hpp"
-#include "SolanaWalletPresentation.hpp"
 #include "TransferChart.hpp"
 #include "TransportBar.hpp"
 #include "TransportSheet.hpp"
@@ -248,10 +239,7 @@ class EarningsPage : public Gtk::Box {
   // URNETWORK_PREVIEW_GAS=low puts the claim dialog in its needs-gas state;
   // URNETWORK_PREVIEW_CTF=1 adds a capture the flag account beside the v2
   // tile's pool account and the line of a won slot, and
-  // URNETWORK_PREVIEW_CTF=unavailable that pool as one that could not be read;
-  // URNETWORK_PREVIEW_SOLANA=1 adds a Solana payout wallet with 3.87 USDC
-  // waiting (the card); URNETWORK_PREVIEW_USDC_WAITING=1 the same figure with no
-  // payout wallet (the waiting line above the Bittensor actions).
+  // URNETWORK_PREVIEW_CTF=unavailable that pool as one that could not be read.
   void ApplyPreviewSample();
   // URNETWORK_PREVIEW_CLAIM=1: open the claim dialog over the sample.
   void ShowPreviewClaimDialog();
@@ -552,24 +540,6 @@ class EarningsPage : public Gtk::Box {
   // The schedule's reads go through LoadCtfWins, on the main loop's timers.
   snledger::WinsAfterClaim::Ports WinsAfterClaimPorts();
 
-  // ---- the Solana payout wallet (USDC until the Bittensor migration) ---------
-  // The three-dot overflow (icon-only, named "Wallet options") over `menu`.
-  Gtk::MenuButton* BuildWalletOverflow(const Glib::RefPtr<const Gio::MenuModel>& menu);
-  // A plain reload keeps the card while the reads are out; `reset` (after a
-  // write) hides it until they land.
-  void LoadLegacyWallets(bool reset = false);
-  void ApplyLegacyWallets();  // commits a round once all three reads answered
-  // the round after a removal committed: name the wallet the server promoted
-  void NotifyPromotedPayoutWallet();
-  void RebuildSolanaCard();
-  void OnConnectSolanaWallet();  // the overflow's item: the connect sheet
-  // The sheet linked `walletId`: make it the payout wallet unless a fresh read
-  // shows it already is (one 20 s flow over the read and the switch).
-  void OnSolanaConnected(const std::string& walletId);
-  void SwitchPayoutWallet(const std::string& walletId, uint32_t generation);
-  void OnRemoveSolanaWallet();  // the card's item: the confirmation
-  void RemoveSolanaWallet(const std::string& walletId);
-
   // ---- claim -----------------------------------------------------------------
   void OnClaim();
   void OpenClaimSheet(bool allowActions);
@@ -654,7 +624,6 @@ class EarningsPage : public Gtk::Box {
   Gtk::Image* walletKeyIcon_ = nullptr;
   Gtk::Label* walletKeyAddress_ = nullptr;
   Gtk::Label* walletKeyNote_ = nullptr;
-  Gtk::Label* usdcWaitingLineKey_ = nullptr;  // in the key panel
   Gtk::Label* walletStatus_ = nullptr;
   Gtk::Box* walletConnectedPanel_ = nullptr;
   Gtk::Label* walletAddressLabel_ = nullptr;
@@ -675,24 +644,6 @@ class EarningsPage : public Gtk::Box {
   Gtk::Label* walletSupportingText_ = nullptr;
   Gtk::Button* connectManualButton_ = nullptr;
   Gtk::Label* connectingStatus_ = nullptr;
-  // the Solana payout wallet: the overflow in both Bittensor states, the one
-  // waiting line (a label in each Bittensor panel) and the card
-  Gtk::MenuButton* walletMoreDisconnected_ = nullptr;
-  Gtk::MenuButton* walletMoreConnected_ = nullptr;
-  Gtk::Label* usdcWaitingLine_ = nullptr;           // in the connect panel
-  Gtk::Label* usdcWaitingLineConnected_ = nullptr;  // in the connected panel
-  Gtk::Box* solanaCard_ = nullptr;
-  Gtk::Label* solanaTitle_ = nullptr;
-  Gtk::Label* solanaAddressLabel_ = nullptr;
-  Gtk::Label* solanaDefaultTag_ = nullptr;
-  Gtk::Label* solanaPendingLabel_ = nullptr;
-  Gtk::MenuButton* solanaMore_ = nullptr;
-  // the two overflow menus over the page's "earnings" action group, built once
-  Glib::RefPtr<Gio::SimpleActionGroup> walletActions_;
-  Glib::RefPtr<Gio::SimpleAction> connectSolanaAction_;
-  Glib::RefPtr<Gio::SimpleAction> removeSolanaAction_;
-  Glib::RefPtr<Gio::Menu> connectSolanaMenu_;
-  Glib::RefPtr<Gio::Menu> solanaCardMenu_;
   Gtk::Box* top200Card_ = nullptr;
   Gtk::Box* top200Panel_ = nullptr;
   kit::Snackbar walletInfo_;
@@ -864,10 +815,6 @@ class EarningsPage : public Gtk::Box {
   uint64_t ownFlagsClock_ = 0;
   uint64_t ownFlagsEditedAt_ = 0;
   uint64_t ownFlagsAppliedAt_ = 0;
-  // the Solana payout wallet: the reads the card is drawn from, and the round
-  // of reads in flight (SolanaWalletPresentation.hpp LegacyLoad)
-  solana::LegacyCommitted legacyCommitted_;
-  solana::LegacyLoad legacyLoad_;
 
   // in-flight gates
   bool connecting_ = false;      // bridge / set-wallet in flight
@@ -877,10 +824,6 @@ class EarningsPage : public Gtk::Box {
   bool settingRankingPublic_ = false;
   bool applyingRankingToggle_ = false;  // ECHO GUARD on the public switch
   bool leaderboardRequested_ = false;
-  bool removingSolanaWallet_ = false;
-  // a removal that landed, until the round of reads after it commits
-  std::optional<solana::PayoutRemoval> payoutRemoval_;
-  bool switchingPayoutWallet_ = false;  // the fresh read and the switch after a link
 
   // manual entry validation: the verdict for the address in the box
   std::string checkedAddress_;
@@ -895,8 +838,6 @@ class EarningsPage : public Gtk::Box {
   Flow claimFlow_;     // 6 min an epoch and a minute: the v1 claim, past the SDK's bounds
   Flow ledgerClaimFlow_;  // 3 min + 6 per account: the v2 claim, past the SDK's bounds
   Flow rankingFlow_;   // 20s
-  Flow legacyFlow_;    // 20s: the payout read and POST /account/payout-wallet after a link
-  Flow removeSolanaFlow_;  // 20s: POST /account/wallets/remove
   Flow consentStep_;  // the consent's step: the wallet's minutes, 20s for a call
 
   // the payout consent (NetworkConsent.hpp); its ports reach host_ and epoch_

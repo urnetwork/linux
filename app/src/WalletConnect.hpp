@@ -35,10 +35,8 @@ class WalletConnect {
   enum class Provider { Phantom, Solflare, Bittensor };
 
   // Solana: open the browser to connect the wallet. on_public_key fires on the
-  // urnetwork://<provider>-connect callback. offersManualEntry: the flow also
-  // takes a typed address (the payout wallet's sheet, not a sign-in), so a
-  // connect that finds no extension says so (solana::PayoutBridgeErrorTextFor).
-  void Connect(Provider p, bool offersManualEntry = false);
+  // urnetwork://<provider>-connect callback.
+  void Connect(Provider p);
 
   // Solana: after a successful Connect, ask the wallet to sign `message`.
   // on_signature fires (base64) on the urnetwork://<provider>-sign-message callback.
@@ -111,8 +109,6 @@ class WalletConnect {
   std::optional<std::string> walletEncryptionPublicKey_;
   std::optional<std::string> session_;
   Provider currentProvider_ = Provider::Phantom;
-  // the last Connect's offersManualEntry, for the words of its failure
-  bool connectOffersManualEntry_ = false;
   std::string lastMessage_;
   std::shared_ptr<urnet::BittensorWalletSession> bittensorSession_;
 };

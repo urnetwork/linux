@@ -52,7 +52,6 @@ src/UsageBar.cpp
 src/DataInfoSheet.cpp
 src/EarningsPage.cpp
 src/ProtocolBoard.cpp
-src/SolanaWalletSheet.cpp
 src/StartupFailure.cpp
 src/AccountPage.cpp
 src/ReferralRoyalty.cpp

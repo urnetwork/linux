@@ -89,9 +89,10 @@ The Windows app uses the same SDK surface. Build: meson + ninja.
 - Connect: best available or a chosen location or provider, a globe view,
   connection details (contracts, transport, DNS, split rules) and a kill switch.
 - Provide, extender share and import (QR), and location override (GeoClue).
-- Account, earnings, points and leaderboards, the Solana payout wallet,
-  referrals, redeem codes, upgrade (Stripe checkout), support, settings and
-  licenses.
+- Account, earnings (points, and SN25α claims to a Bittensor wallet) and
+  leaderboards, referrals, redeem codes, upgrade (Stripe checkout), support,
+  settings and licenses. The Solana payout wallet was removed on 2026-11-13:
+  USDC provider payouts ended on 2026-11-12.
 - Tray icon (StatusNotifierItem + `com.canonical.dbusmenu` over raw GDBus),
   hide-to-tray, and launch on system startup (a Settings switch that links
   the autostart template into `~/.config/autostart`; a login then shows only

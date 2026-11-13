@@ -329,15 +329,12 @@ connect
 connect_bittensor_wallet
 connect_bittensor_wallet_to_add_sign_in_method
 connect_options
-connect_solana_wallet
-connect_solana_wallet_note
 connect_solana_wallet_to_add_sign_in_method
 connect_wallet_first
 connected
 connected_provider_count
 connecting_from
 connecting_status_indicator
-connecting_to_wallet
 connection_region
 connection_region_default_resolvers
 connection_region_description
@@ -448,7 +445,6 @@ data_limit_reached
 data_usage
 days_ago_abbrev
 default_daily_data
-default_wallet
 delete_account_2
 dev_action_declined
 dev_actions_are_requests
@@ -765,7 +761,6 @@ enabled_under_auto
 enabled_under_auto_footer
 enter_a_bonus_referral_code
 enter_a_name_for_your_network
-enter_a_solana_usdc_wallet_address
 enter_address_manually
 enter_balance_code
 enter_network_referral_code
@@ -777,7 +772,6 @@ epoch_column_status_linux
 epoch_history
 epoch_row_title
 epoch_share_of_block
-error_connecting_wallet_with_reason
 error_creating_network
 error_deleting_account
 error_sending_feedback
@@ -878,7 +872,6 @@ intro_verifiable_encryption
 invalid_balance_code
 invalid_referral_code
 invalid_referral_code_please_try_again
-invalid_solana_address
 invalid_ss58_address
 ip_address
 ip_count
@@ -1077,8 +1070,6 @@ pay_method_usdc_solana
 pay_method_zcash
 payment_past_due_notice
 payment_past_due_update_payment
-payout_wallet_updated
-payouts_now_go_to
 peer_discovery_disabled
 pending_data_key
 periodic_product_updates
@@ -1236,8 +1227,6 @@ remote_doh_urls
 remote_lowercase
 remove
 remove_rule
-remove_wallet
-remove_wallet_moves_or_holds_payouts
 resend_verify_code
 reset_extenders
 reset_extenders_confirm
@@ -1426,7 +1415,6 @@ sn_status_not_finalized
 solana
 solana_sign_in
 solana_wallet
-solana_wallet_error_extension_not_found
 solana_wallet_error_session_not_found
 solflare
 something_went_wrong
@@ -1540,10 +1528,7 @@ update_password
 update_referral_network
 upgrade
 urnetwork_status
-usdc_payouts_until_migration
 usdc_solana_network_only
-usdc_waiting
-usdc_wallet_address
 use_extender_settings
 use_most_stable_provider
 use_wireguard_socks_https_proxy
@@ -1613,7 +1598,6 @@ wallet_connected
 wallet_connected_to_protocol
 wallet_looks_new_warning
 wallet_not_retroactive
-wallet_options
 wallet_sign_in_failed
 wallet_sign_in_method_added
 wallet_signature_mismatch_linux
