@@ -1449,6 +1449,11 @@ must not look identical).
 
 ### 7.10 Earnings destination
 
+> **Superseded.** This is the Windows WalletPage the port started from. The Linux Earnings page
+> is points-first with SN25α claims to a Bittensor coldkey (`docs/parity/earnings.md`). Its last
+> USDC surfaces (a Solana payout wallet card, its connect sheet and "USDC waiting" lines) were
+> removed on 2026-11-13, because USDC provider payouts ended on 2026-11-12.
+
 Pane A WALLETS (360): pending payout 22sp, unpaid bytes, referrals; payout threshold note;
 upgrade button (non-Pro, non-guest); payout wallets → cards (chain gradient disc with ticker
 Solana/Bittensor/Polygon, masked address `***abc123`, DEFAULT chip) → **WalletDetailSheet**
@@ -2355,8 +2360,10 @@ but note nfpm's version/release split at the last hyphen, §9.3.)
 From the docs site: "URnetwork is a decentralized VPN where egress capacity is provided by
 anyone who wants to participate in the network, called a **provider**. A provider connects to
 a **network space**... Users authenticate with the network space to use the network."
-Two-sided marketplace: providers earn **USDC payouts on Solana** for egress traffic carried;
-any client is potentially a provider. **Free tier with a data cap**; "supporter" raises the
+Two-sided marketplace: providers earn **points, and SN25α paid to a Bittensor coldkey** (since
+2026-10-06) for egress traffic carried; **USDC provider payouts ended on 2026-11-12**, and no
+surface may offer a USDC payout wallet (USDC stays a way to *pay* at checkout). Any client is
+potentially a provider. **Free tier with a data cap**; "supporter" raises the
 cap; **Pro** is a separate entitlement with reserved gold. **Multi-hop/multi-exit**: the
 connect window races and load-balances flows across many provider exits — it is NOT a
 single-tunnel-single-server VPN, and NOT WireGuard. Network spaces: main space host

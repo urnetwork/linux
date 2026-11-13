@@ -150,6 +150,13 @@ Same SDK feeds as the chooser sheet, second consumer. Every row of 2.2's chooser
 
 ## 2.5 WIRING TABLE — Earnings destination (WalletPage.cpp + WalletSheets.cpp)
 
+> **2026-11-13:** USDC provider payouts ended on 2026-11-12 (owner decision 2026-11-13: close out
+> USDC), and the Linux Earnings page dropped the Solana payout wallet (its card, connect sheet and
+> "USDC waiting" lines). Linux no longer calls `getAccountWallets`, `getPayoutWallet`,
+> `setPayoutWallet`, `createAccountWallet`, `walletValidateAddress`, `removeWallet` or
+> `getAccountPayments`, nor `SdkHost::ConnectSolanaWallet`; the sdk drops its payout-wallet API.
+> The rows below are the Windows audit, kept as history.
+
 | Windows call | Underlying | Linux | hpp | Class |
 |---|---|---|---|---|
 | `api().getAccountWallets` / `api().getPayoutWallet` (wallet cards + DEFAULT chip) | Api | `api()` | yes | EXISTS |

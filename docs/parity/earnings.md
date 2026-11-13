@@ -33,7 +33,8 @@
 > `URNETWORK_PREVIEW_PROTOCOL_LINE=1` (scrolled to the Top 200 line) and
 > `URNETWORK_PREVIEW_PROTOCOL_DETAIL=1` (a claimed row's sheet).
 >
-> **2026-09-14 — the Solana payout wallet is back.** USDC payouts continue until the migration to
+> **2026-09-14 — the Solana payout wallet is back** (removed again on 2026-11-13: the next entry).
+> USDC payouts continue until the migration to
 > Bittensor completes, and a network whose payouts are held for want of a wallet is emailed
 > "N USDC waiting", so pane A reaches the Solana payout wallet again. A three-dot overflow
 > (accessible name "Wallet options") sits right of "Connect Bittensor wallet" and, with a coldkey
@@ -57,6 +58,22 @@
 > The rules are `SolanaWalletPresentation.hpp`, host-tested. `URNETWORK_PREVIEW_SOLANA=1` (the
 > card with 3.87 USDC waiting; its remove confirmation opens with Remove disabled) and
 > `URNETWORK_PREVIEW_USDC_WAITING=1` (the line, no wallet) extend the sample.
+>
+> **2026-11-13 — the Solana payout wallet is gone (owner decision 2026-11-13: close out USDC).**
+> USDC provider payouts ended on 2026-11-12 and every unsent payout was closed; provider earnings
+> are SN25α to a Bittensor coldkey (since 2026-10-06). So pane A no longer reaches a USDC payout
+> wallet: the "Wallet options" overflow with "Connect Solana wallet", `SolanaWalletSheet` (the
+> bridge connect, the typed address with its local check and `POST /wallet/validate-address`,
+> `POST /account/wallet`), the switch with `POST /account/payout-wallet`, the card (Default chip,
+> migration note, Remove and its confirmation, "Payouts now go to …") and every "Final USDC
+> payout: N USDC waiting" line are removed, with the three reads that fed them
+> (`getAccountWallets`, `getPayoutWallet`, `getAccountPayments`), `SdkHost::ConnectSolanaWallet`
+> and the bridge's bare-connect route, and the `URNETWORK_PREVIEW_SOLANA` /
+> `URNETWORK_PREVIEW_USDC_WAITING` hooks. `SolanaWalletPresentation.hpp` keeps only the bridge's
+> failure words for a Solana wallet sign-in. Unchanged: the Bittensor wallet block, the payout
+> consent, the key, the claims and Settlement v2, the points, Top 200, signing in with a Solana
+> wallet or adding one as a sign-in method, and paying with USDC at checkout. No surface lists
+> past USDC payouts (support@ur.io holds the old ledger).
 >
 > **2026-11-03 — the one-tap Bittensor key and claims through URnetwork's relay (apple
 > BTEASY.md, the approved mocks' flows 1 to 4).** The SDK's `BittensorLocalKeyFlow` decides every

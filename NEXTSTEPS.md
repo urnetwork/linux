@@ -110,7 +110,9 @@ Bring these to Linux (same cross-platform SDK the apple app uses):
   buttons on the login view, and the `urnetwork://` scheme via GApplication
   `HANDLES_OPEN` + `signal_open`. Needs the ur.io/wallet-connect page **deployed** +
   a real-wallet round-trip test (on-device, same as macOS). The connect-wallet-in-
-  account path (`createAccountWallet`) awaits the account UI.
+  account path (`createAccountWallet`) awaits the account UI. *(Moot since
+  2026-11-13: USDC provider payouts ended on 2026-11-12, and the Solana payout
+  wallet Earnings linked with `createAccountWallet` was removed; sign-in stays.)*
 - [x] **Sign in with Bittensor** (`apple/BITTENSOR.md`, `apple/NEXTSTEPS2.md`) —
   **DONE**: the same bridge, but **one hop** (`provider=bittensor&method=signMessage`)
   and a **plain-query return** (`?address=<ss58>&signature=<0xhex>`, no NaCl
@@ -130,6 +132,9 @@ Bring these to Linux (same cross-platform SDK the apple app uses):
   signature) and the rule that **TAO can never be the payout wallet** (hide "Make
   default"; show "Bittensor wallets are stored for future use and can't receive
   payouts yet."). Noted at the attach point in `MainWindow::BuildHome`.
+  *(Moot: Earnings attaches the coldkey with `POST /sn/wallet` and the payout
+  consent, and there is no payout wallet to choose since USDC provider payouts
+  ended on 2026-11-12; removed from Earnings on 2026-11-13.)*
 - [ ] **Country search** on the add-blocked-location surface (DESKTOP2 remaining).
 - n/a **In-app review prompt** — platform-specific; Snap Store has no in-app
   review API. Omit (like the macOS `requestReview` note).
