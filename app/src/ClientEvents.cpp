@@ -6,17 +6,42 @@
 
 namespace urnw {
 
-std::string ClientEventLocale() {
-  const char* const* names = g_get_language_names();
-  std::string tag = names && names[0] ? names[0] : "";
-  if (tag.empty() || tag == "C" || tag == "POSIX") return "en";
-  // "en_US.UTF-8" -> "en-US"
+namespace {
+
+// A GLib language name as a BCP 47 tag: "en_US.UTF-8" is "en-US"; the C and
+// POSIX locales name no language and are "".
+std::string LanguageNameTag(std::string tag) {
   if (const auto dot = tag.find('.'); dot != std::string::npos) tag.erase(dot);
   if (const auto at = tag.find('@'); at != std::string::npos) tag.erase(at);
+  if (tag.empty() || tag == "C" || tag == "POSIX") return std::string();
   for (auto& c : tag) {
     if (c == '_') c = '-';
   }
   return tag;
+}
+
+}  // namespace
+
+std::string ClientEventLocale() {
+  const char* const* names = g_get_language_names();
+  // an unknown language is not English: the server falls back to the
+  // reader's country for an unknown language, and never for English
+  return LanguageNameTag(names && names[0] ? names[0] : "");
+}
+
+std::vector<std::string> DeviceLanguages() {
+  std::vector<std::string> languages;
+  const char* const* names = g_get_language_names();
+  for (size_t i = 0; names && names[i]; ++i) {
+    std::string tag = LanguageNameTag(names[i]);
+    if (tag.empty()) continue;
+    bool seen = false;
+    for (const auto& language : languages) {
+      if (language == tag) seen = true;
+    }
+    if (!seen) languages.push_back(std::move(tag));
+  }
+  return languages;
 }
 
 std::string LocalTimeZoneId() {

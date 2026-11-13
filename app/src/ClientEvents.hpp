@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace urnw {
 
@@ -77,8 +78,15 @@ class ClientEventQueue {
 };
 
 // The locale tag the events and the client registration carry ("en-US", BCP
-// 47), from the process's language list.
+// 47), from the process's language list. Empty when unknown (the C and POSIX
+// locales): an unknown language is not English.
 std::string ClientEventLocale();
+// The user's languages, most preferred first, as BCP 47 tags, from LANGUAGE,
+// LC_ALL, LC_MESSAGES and LANG (g_get_language_names), each once; empty
+// when none names one. The sdk sends them with sign-up, sign-in and
+// auth-client so the campaign emails are written in the reader's language
+// (Api::setMailLocale).
+std::vector<std::string> DeviceLanguages();
 // The IANA time zone id the client registration carries ("Europe/Berlin"),
 // from the local time zone, resolved through /etc/localtime when GLib only
 // knows it as "localtime" or an offset. Empty when unknown.

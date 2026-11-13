@@ -125,3 +125,25 @@ UR_TEST(ClientInfo_TheDaemonReportsBeforeBuildingADevice) {
   }
   UR_EXPECT_TRUE(CountOf(build, "urnet::newDeviceLocalWith") >= 2);
 }
+
+// With the client info the GUI's Api takes the device's zone and the user's
+// languages, which the sdk sends with sign-up, sign-in and auth-client
+// (Api::setMailLocale): the campaign emails are placed in the reader's day and
+// written in their language. An unknown language (the C locale) is reported
+// as unknown, never as English (campaign review item B, 2026-11-13).
+UR_TEST(ClientInfo_TheAdoptionCarriesTheMailLocale) {
+  const std::string host = ReadCode("SdkHost.cpp");
+  const std::string adopt = FunctionBody(host, "void SdkHost::AdoptSpaceApiLocked()");
+  UR_EXPECT_TRUE_MSG("SdkHost::AdoptSpaceApiLocked is defined", !adopt.empty());
+  UR_EXPECT_TRUE(Before(adopt, "ReportClientInfo(*api_, kAppVersion);",
+                        "api_->setMailLocale(LocalTimeZoneId(), DeviceLanguages());"));
+
+  const std::string events = ReadCode("ClientEvents.cpp");
+  const std::string locale = FunctionBody(events, "std::string ClientEventLocale()");
+  UR_EXPECT_TRUE_MSG("ClientEventLocale is defined", !locale.empty());
+  UR_EXPECT_TRUE_MSG("ClientEventLocale reports an unknown language as English",
+                     !Contains(locale, "\"en\""));
+  const std::string languages = FunctionBody(events, "std::vector<std::string> DeviceLanguages()");
+  UR_EXPECT_TRUE_MSG("DeviceLanguages reads the whole language list",
+                     Contains(languages, "g_get_language_names()"));
+}
