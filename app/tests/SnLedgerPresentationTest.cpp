@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "SnLedgerPresentation.hpp"
+#include "SnPayoutPresentation.hpp"
 
 #ifndef UR_SRC_DIR
 #define UR_SRC_DIR ""
@@ -50,6 +51,7 @@ using urnw::snledger::ClaimRow;
 using urnw::snledger::Failure;
 using urnw::snledger::FailureFor;
 using urnw::snledger::Load;
+using urnw::snledger::NewestRead;
 using urnw::snledger::Phase;
 using urnw::snledger::PoolName;
 using urnw::snledger::RelayAccount;
@@ -2125,6 +2127,179 @@ UR_TEST(SnLedgerCtf_TheFigureDuringAClaimIsWhatItMoves) {
   UR_EXPECT_TRUE(whole.Figure() == std::optional<int64_t>(3'241'000'000 + 615'000'000));
 }
 
+// ---- the reads of the claimable state (owner, 2026-11-12) ----------------------------
+
+// The page's reads of the claims, the accounts and the gas overlap, and their
+// answers land in any order: only the newest read of a kind counts, whichever
+// answer lands first, each kind on its own, and an answer that needs no read
+// (no wallet) drops the reads still out
+UR_TEST(SnLedgerCtf_OnlyTheNewestReadOfAKindCounts) {
+  NewestRead claims;
+  NewestRead accounts;
+  const uint64_t visit = claims.Start();
+  UR_EXPECT_TRUE(claims.Current(visit));
+  const uint64_t done = claims.Start();
+  // the newer read's answer counts, landing first or last; the older one's never
+  UR_EXPECT_TRUE(claims.Current(done));
+  UR_EXPECT_FALSE(claims.Current(visit));
+  UR_EXPECT_TRUE(claims.Current(done));
+  UR_EXPECT_FALSE(claims.Current(visit));
+  // another kind's reads move none of these
+  const uint64_t ledger = accounts.Start();
+  UR_EXPECT_TRUE(accounts.Current(ledger));
+  UR_EXPECT_TRUE(claims.Current(done));
+  accounts.Start();
+  UR_EXPECT_TRUE(claims.Current(done));
+  UR_EXPECT_FALSE(accounts.Current(ledger));
+  // no wallet: the empty layer needs no read, and the read still out drops
+  claims.Start();
+  UR_EXPECT_FALSE(claims.Current(done));
+}
+
+// The page's claims and accounts as EarningsPage::LoadWalletLayer and
+// ApplySnWallet move them (their wiring is
+// SnLedgerCtf_TheReadsOfTheClaimableStateAreWired): Loading from a read's
+// start, keeping the last total, as ApplyClaims(Loading) does; then the newest
+// read's answer, and no older one's. Its Claims are the page's with no claim
+// in flight: the v1 Claim of the unclaimed tile and the payout line
+// (snpayout::V1ClaimEnabled), and the v2 tile's (SectionFor)
+struct WalletLayer {
+  NewestRead claimsReads;
+  NewestRead ledgerReads;
+  bool claimsRead = false;  // the claims read answered: claimsState_ is Ready
+  int64_t totalClaimableRao = 0;
+  Load ledgerLoad = Load::Loading;
+  std::vector<Account> accounts;
+
+  // LoadWalletLayer: the claims and the accounts Loading, and a read of each
+  std::pair<uint64_t, uint64_t> Read() {
+    claimsRead = false;
+    ledgerLoad = Load::Loading;
+    accounts.clear();
+    return {claimsReads.Start(), ledgerReads.Start()};
+  }
+  void ClaimsAnswer(uint64_t read, int64_t total) {
+    if (!claimsReads.Current(read)) return;
+    claimsRead = true;
+    totalClaimableRao = total;
+  }
+  void AccountsAnswer(uint64_t read, std::vector<Account> answer) {
+    if (!ledgerReads.Current(read)) return;
+    ledgerLoad = Load::Ready;
+    accounts = std::move(answer);
+  }
+  // ApplySnWallet with no coldkey: nothing to read, at once
+  void NoWallet() {
+    claimsReads.Start();
+    ledgerReads.Start();
+    claimsRead = true;
+    totalClaimableRao = 0;
+    ledgerLoad = Load::Ready;
+    accounts.clear();
+  }
+  bool V1Claim() const {
+    return urnw::snpayout::V1ClaimEnabled(/*v1InFlight=*/false, claimsRead, totalClaimableRao,
+                                          /*claiming=*/false);
+  }
+  bool V2Claim() const {
+    return SectionFor(true, ledgerLoad, accounts, {}, 0, /*claimConfigured=*/true,
+                      /*claiming=*/false, Tag)
+        .claimEnabled;
+  }
+};
+
+// The race (owner, 2026-11-12: "a stale subnet read can land after the read at
+// Done"). The user comes back to Earnings as a claim of epoch 7 (1 α) and of
+// the pool's account runs: the visit's read starts during the claim and is
+// slow. The claim's Done reads again, and that read finds what the claim paid
+// gone. The visit's read, which still lists it, lands last: it is dropped, so
+// the page keeps the Done's answer and neither Claim is offered on what the
+// claim paid. Landing before the Done's answer instead, it is dropped too: the
+// page stays Loading and both Claims wait until the Done's read answers, though
+// the total the page still holds is the claim's
+UR_TEST(SnLedgerCtf_AReadFromBeforeAClaimsDoneNeverLandsOverIt) {
+  const Account paid = LedgerAccount(1, 42, 5'120'000'000, 5'120'000'000);
+  for (const bool visitAnswersFirst : {false, true}) {
+    WalletLayer page;
+    // the read the claim was pressed on: epoch 7 and the pool's account
+    const auto pressed = page.Read();
+    page.ClaimsAnswer(pressed.first, 1'000'000'000);
+    page.AccountsAnswer(pressed.second, {OnePool()});
+    UR_EXPECT_TRUE(page.V1Claim());
+    UR_EXPECT_TRUE(page.V2Claim());
+    // during the claim the user comes back to Earnings: the visit's read
+    const auto visit = page.Read();
+    // the claim's Done reads again
+    const auto done = page.Read();
+    UR_EXPECT_FALSE(page.V1Claim());
+    UR_EXPECT_FALSE(page.V2Claim());
+    if (visitAnswersFirst) {
+      page.ClaimsAnswer(visit.first, 1'000'000'000);
+      page.AccountsAnswer(visit.second, {OnePool()});
+      UR_EXPECT_FALSE(page.claimsRead);
+      UR_EXPECT_TRUE(page.ledgerLoad == Load::Loading);
+      UR_EXPECT_EQ(int64_t{1'000'000'000}, page.totalClaimableRao);
+      UR_EXPECT_FALSE(page.V1Claim());
+      UR_EXPECT_FALSE(page.V2Claim());
+    }
+    page.ClaimsAnswer(done.first, 0);
+    page.AccountsAnswer(done.second, {paid});
+    UR_EXPECT_TRUE(page.claimsRead);
+    UR_EXPECT_TRUE(page.ledgerLoad == Load::Ready);
+    if (!visitAnswersFirst) {
+      page.ClaimsAnswer(visit.first, 1'000'000'000);
+      page.AccountsAnswer(visit.second, {OnePool()});
+    }
+    UR_EXPECT_EQ(int64_t{0}, page.totalClaimableRao);
+    UR_EXPECT_TRUE(page.accounts.size() == 1 && page.accounts[0].claimableRao == 0);
+    UR_EXPECT_FALSE(page.V1Claim());
+    UR_EXPECT_FALSE(page.V2Claim());
+    // the next read still offers what is left to claim
+    const auto next = page.Read();
+    page.ClaimsAnswer(next.first, 500'000'000);
+    page.AccountsAnswer(next.second, {OnePool()});
+    UR_EXPECT_TRUE(page.V1Claim());
+    UR_EXPECT_TRUE(page.V2Claim());
+  }
+}
+
+// The same with two claims: a v2 claim's Done reads again, and while that read
+// is out a v1 sheet left open during the v2 claim claims epoch 7. The v1
+// claim's Done reads again, and the v2 claim's read, which started before the
+// v1 claim and still lists epoch 7 as claimable, lands last: it is dropped
+UR_TEST(SnLedgerCtf_AReadFromBeforeTheLastOfTwoClaimsIsDropped) {
+  const Account paid = LedgerAccount(1, 42, 5'120'000'000, 5'120'000'000);
+  WalletLayer page;
+  const auto pressed = page.Read();
+  page.ClaimsAnswer(pressed.first, 1'000'000'000);
+  page.AccountsAnswer(pressed.second, {OnePool()});
+  const auto v2Done = page.Read();
+  const auto v1Done = page.Read();
+  page.ClaimsAnswer(v1Done.first, 0);
+  page.AccountsAnswer(v1Done.second, {paid});
+  UR_EXPECT_FALSE(page.V1Claim());
+  page.ClaimsAnswer(v2Done.first, 1'000'000'000);
+  page.AccountsAnswer(v2Done.second, {paid});
+  UR_EXPECT_EQ(int64_t{0}, page.totalClaimableRao);
+  UR_EXPECT_FALSE(page.V1Claim());
+  UR_EXPECT_FALSE(page.V2Claim());
+}
+
+// A wallet read that finds no coldkey empties the claims and the accounts at
+// once, an answer that needs no read: a read still out for the coldkey before
+// (a claim's Done's, say) is dropped when it lands, and puts nothing back
+UR_TEST(SnLedgerCtf_NoColdkeyDropsTheReadsStillOut) {
+  WalletLayer page;
+  const auto out = page.Read();
+  page.NoWallet();
+  page.ClaimsAnswer(out.first, 1'000'000'000);
+  page.AccountsAnswer(out.second, {OnePool()});
+  UR_EXPECT_EQ(int64_t{0}, page.totalClaimableRao);
+  UR_EXPECT_TRUE(page.accounts.empty());
+  UR_EXPECT_FALSE(page.V1Claim());
+  UR_EXPECT_FALSE(page.V2Claim());
+}
+
 // ---- the page's wiring and English, read from the sources ----------------------
 
 std::string ReadLedgerSource(const std::string& relative) {
@@ -2289,10 +2464,15 @@ UR_TEST(SnLedgerOneClaimAtATime) {
                  std::string::npos);
   UR_EXPECT_TRUE(page.find("claiming_") == std::string::npos);
   // the v1 tiles' Claim opens the v1 claim in flight, and waits for a v2 one
-  // (SnLedgerCtf_AV1SheetOpenedDuringTheClaimDrawsItsAnswers)
-  UR_EXPECT_TRUE(page.find("claimButton_->set_sensitive(claim_.InFlight() || (ready && totalClaimableRao_ > 0 && "
-                           "!Claiming()));") != std::string::npos);
-  UR_EXPECT_TRUE(page.find("payoutClaimButton_->set_sensitive(view.showClaim && (claim_.InFlight() || !Claiming()));") !=
+  // (SnLedgerCtf_AV1SheetOpenedDuringTheClaimDrawsItsAnswers; the rule is
+  // snpayout::V1ClaimEnabled's, and SnLedgerCtf_TheV1ClaimWaitsForTheClaimsRead
+  // pins both Claims to it)
+  UR_EXPECT_TRUE(page.find("claimButton_->set_sensitive(\n"
+                           "      snpayout::V1ClaimEnabled(claim_.InFlight(), ready, totalClaimableRao_, Claiming()));") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(page.find("payoutClaimButton_->set_sensitive(\n"
+                           "      view.showClaim && snpayout::V1ClaimEnabled(claim_.InFlight(), claimsState_ == Fetch::Ready,\n"
+                           "                                                 totalClaimableRao_, Claiming()));") !=
                  std::string::npos);
   for (const std::string* body : {&v1, &v2}) {
     size_t count = 0;
@@ -2866,8 +3046,9 @@ UR_TEST(SnLedgerCtf_TheV1ClaimsAnswersAreWired) {
     UR_EXPECT_TRUE_MSG(drawn, open.find(drawn) != std::string::npos);
   }
   // and the v1 tiles' Claim opens it while it is in flight (SnLedgerOneClaimAtATime)
-  UR_EXPECT_TRUE(page.find("claimButton_->set_sensitive(claim_.InFlight() || (ready && totalClaimableRao_ > 0 && "
-                           "!Claiming()));") != std::string::npos);
+  UR_EXPECT_TRUE(page.find("claimButton_->set_sensitive(\n"
+                           "      snpayout::V1ClaimEnabled(claim_.InFlight(), ready, totalClaimableRao_, Claiming()));") !=
+                 std::string::npos);
 }
 
 // The v2 sheet's Claim waits for a v1 claim in flight: the relay's "Claim it
@@ -2925,6 +3106,136 @@ UR_TEST(SnLedgerCtf_ThePayoutLinesClaimFollowsBothClaims) {
     }
     UR_EXPECT_EQ(3u, payout);  // the start, the watchdog, the Done
   }
+}
+
+// The reads of the claimable state are numbered as they start, and only the
+// newest read of each kind counts (SnLedgerCtf_AReadFromBeforeAClaimsDoneNeverLandsOverIt):
+// LoadWalletLayer starts a read of the claims and one of the accounts as it
+// shows both Loading, and each answer checks its kind's newest read right
+// after the load's epoch, before it applies anything; LoadGas the same for the
+// gas; a wallet read that finds no coldkey supersedes both reads; and these
+// are the three kinds' only reads, so no answer lands unchecked. Each claim's
+// Done starts both again (LoadWalletLayer after its settle:
+// SnLedgerClaimSheetWiring, SnLedgerCtf_TheV1ClaimsAnswersAreWired)
+UR_TEST(SnLedgerCtf_TheReadsOfTheClaimableStateAreWired) {
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  const std::string layer = LedgerFunctionBody(page, "void EarningsPage::LoadWalletLayer()");
+  const size_t loading = layer.find("  ApplyClaims(std::nullopt, 0, Fetch::Loading);\n"
+                                    "  ApplyLedger(snledger::Load::Loading, {}, {}, ledgerConfigured_);\n");
+  const size_t started = layer.find("  const uint64_t claimsRead = claimsReads_.Start();\n"
+                                    "  const uint64_t ledgerRead = ledgerReads_.Start();\n");
+  UR_EXPECT_TRUE(loading != std::string::npos && started != std::string::npos && loading < started);
+  UR_EXPECT_TRUE(started < layer.find("sn::FetchClaims(") && started < layer.find("sn::FetchLedger("));
+  struct Answer {
+    const char* name;
+    const std::string* body;
+    const char* call;
+    const char* post;
+    const char* guard;
+    std::vector<const char*> applies;
+  };
+  const std::string gas = LedgerFunctionBody(page, "void EarningsPage::LoadGas()");
+  const Answer answers[] = {
+      {"claims", &layer, "sn::FetchClaims(host_, [this, epoch, seen, claimsRead](",
+       "PostToMain([this, epoch, seen, claimsRead, ",
+       "      if (*epoch != seen) return;\n"
+       "      if (!claimsReads_.Current(claimsRead)) return;",
+       {"ApplyClaims(std::nullopt, 0, Fetch::Failed, text);", "ApplyClaims(std::move(claims), total, Fetch::Ready"}},
+      {"accounts", &layer, "sn::FetchLedger(host_, [this, epoch, seen, ledgerRead](",
+       "PostToMain([this, epoch, seen, ledgerRead, ",
+       "      if (*epoch != seen) return;\n"
+       "      if (!ledgerReads_.Current(ledgerRead)) return;",
+       {"ApplyLedger(snledger::Load::Unavailable, {}, {}, configured);",
+        "ApplyLedger(snledger::Load::Ready, *accounts, unavailable, configured);"}},
+      {"gas", &gas, "sn::FetchGas(host_, [this, epoch, seen, read](",
+       "PostToMain([this, epoch, seen, read, ",
+       "      if (*epoch != seen) return;\n"
+       "      if (!gasReads_.Current(read)) return;",
+       {"ApplyGas(std::move(gas));"}},
+  };
+  for (const Answer& answer : answers) {
+    const std::string& body = *answer.body;
+    const size_t call = body.find(answer.call);
+    const size_t post = body.find(answer.post, call);
+    const size_t guard = body.find(answer.guard, post);
+    // the guard is the answer's first step: nothing between the PostToMain and it
+    const size_t open = body.find("{\n", post);
+    UR_EXPECT_TRUE_MSG(answer.name, call != std::string::npos && post != std::string::npos &&
+                                        guard != std::string::npos && open != std::string::npos &&
+                                        open + 2 == guard);
+    for (const char* apply : answer.applies) {
+      const size_t at = body.find(apply, guard);
+      UR_EXPECT_TRUE_MSG(apply, at != std::string::npos && guard < at);
+    }
+  }
+  UR_EXPECT_TRUE(gas.find("const uint64_t read = gasReads_.Start();") < gas.find("sn::FetchGas("));
+  // no coldkey: the empty layer at once, and the reads still out drop
+  const std::string wallet = LedgerFunctionBody(page, "void EarningsPage::ApplySnWallet(");
+  const size_t none = wallet.find("if (!wallet_) {");
+  const size_t superseded = wallet.find("    claimsReads_.Start();\n    ledgerReads_.Start();\n", none);
+  UR_EXPECT_TRUE(none != std::string::npos && superseded != std::string::npos &&
+                 superseded < wallet.find("claims_.clear();", none));
+  // these are the only reads of the three kinds, and the only starts
+  const auto count = [&page](const std::string& what) {
+    size_t n = 0;
+    for (size_t at = page.find(what); at != std::string::npos; at = page.find(what, at + 1)) ++n;
+    return n;
+  };
+  UR_EXPECT_EQ(1u, count("sn::FetchClaims("));
+  UR_EXPECT_EQ(1u, count("sn::FetchLedger("));
+  UR_EXPECT_EQ(1u, count("sn::FetchGas("));
+  UR_EXPECT_EQ(2u, count("claimsReads_.Start()"));
+  UR_EXPECT_EQ(2u, count("ledgerReads_.Start()"));
+  UR_EXPECT_EQ(1u, count("gasReads_.Start()"));
+  // each claim's Done reads both again
+  for (const char* signature : {"void EarningsPage::StartClaim(", "void EarningsPage::StartLedgerClaim()"}) {
+    const std::string start = LedgerFunctionBody(page, signature);
+    const size_t done = start.find(".done = [this, alive, claim, generation] {");
+    UR_EXPECT_TRUE_MSG(signature, done != std::string::npos &&
+                                      start.find("LoadWalletLayer();", done) != std::string::npos);
+  }
+  const std::string header = ReadLedgerSource("EarningsPage.hpp");
+  for (const char* member : {"  snledger::NewestRead claimsReads_;\n", "  snledger::NewestRead ledgerReads_;\n",
+                             "  snledger::NewestRead gasReads_;\n"}) {
+    UR_EXPECT_TRUE_MSG(member, header.find(member) != std::string::npos);
+  }
+}
+
+// The v1 Claims that open the claim sheet, the unclaimed tile's and the payout
+// line's, are snpayout::V1ClaimEnabled's, on the claims read: while a read is
+// out (a claim's Done starts one) what the page holds is the read before it's,
+// whose total may still count what the claim paid, so both wait. The sheet
+// waits too: between claims it lists the claims as last read, so it does not
+// open while a read is out, as the v2 sheet does not, and says it is loading;
+// a v1 claim in flight opens it with the claim's own rows
+UR_TEST(SnLedgerCtf_TheV1ClaimWaitsForTheClaimsRead) {
+  const std::string page = ReadLedgerSource("EarningsPage.cpp");
+  const std::string tile = LedgerFunctionBody(page, "void EarningsPage::RebuildUnclaimedTile()");
+  UR_EXPECT_TRUE(tile.find("const bool ready = claimsState_ == Fetch::Ready;") != std::string::npos);
+  UR_EXPECT_TRUE(tile.find("claimButton_->set_sensitive(\n"
+                           "      snpayout::V1ClaimEnabled(claim_.InFlight(), ready, totalClaimableRao_, Claiming()));") !=
+                 std::string::npos);
+  const std::string payout = LedgerFunctionBody(page, "void EarningsPage::RebuildPayoutLine()");
+  UR_EXPECT_TRUE(payout.find("payoutClaimButton_->set_sensitive(\n"
+                             "      view.showClaim && snpayout::V1ClaimEnabled(claim_.InFlight(), claimsState_ == Fetch::Ready,\n"
+                             "                                                 totalClaimableRao_, Claiming()));") !=
+                 std::string::npos);
+  // no other sensitivity for either, and none by the rule before
+  const auto count = [&page](const std::string& what) {
+    size_t n = 0;
+    for (size_t at = page.find(what); at != std::string::npos; at = page.find(what, at + 1)) ++n;
+    return n;
+  };
+  UR_EXPECT_EQ(1u, count("payoutClaimButton_->set_sensitive("));
+  UR_EXPECT_EQ(2u, count("snpayout::V1ClaimEnabled("));
+  UR_EXPECT_EQ(0u, count("(ready && totalClaimableRao_ > 0 && !Claiming())"));
+  UR_EXPECT_EQ(0u, count("(claim_.InFlight() || !Claiming())"));
+  const std::string open = LedgerFunctionBody(page, "void EarningsPage::OnClaim()");
+  const size_t waits = open.find("  if (!claim_.InFlight() && claimsState_ == Fetch::Loading) {\n"
+                                 "    Notify(T_(\"loading\", \"Loading...\"), kit::Snackbar::Severity::Info);\n"
+                                 "    return;\n"
+                                 "  }\n");
+  UR_EXPECT_TRUE(waits != std::string::npos && waits < open.find("OpenClaimSheet(CanCallApi());"));
 }
 
 // The sheet draws ClaimProgress's figure: none while its total is not known,

@@ -843,6 +843,32 @@ class ClaimInFlight {
   bool inFlight_ = false;
 };
 
+// The page's reads of what a claim takes, the v1 epoch claims and the v2
+// accounts, and of the gas balance, one for each kind. They overlap: a visit's
+// load, a wallet connect and every claim's Done start them, and their answers
+// land in any order. A read that started before a claim's Done may still list
+// what the claim paid, which is why the Done reads again; its answer must never
+// land over the Done's. So each read is numbered as it starts, and only the
+// newest read of its kind counts: an older answer is dropped however late it
+// lands. The page shows the claims and the accounts as Loading from a read's
+// start (EarningsPage::LoadWalletLayer), so it waits for its newest read in any
+// case, and Claim waits with it: every claim's Done starts a read of both
+// kinds, so neither Claim is offered from a read that started before the last
+// claim's Done (owner, 2026-11-12). The gas shown stays as it was until the
+// newest read of it answers. Main loop only.
+class NewestRead {
+ public:
+  // A read starts, or an answer that needs no read supersedes those still out
+  // (no wallet: nothing to read): its number, which its answer carries.
+  uint64_t Start() { return ++started_; }
+  // Whether the answer of read `read` counts: no read of its kind started
+  // after it.
+  bool Current(uint64_t read) const { return read == started_; }
+
+ private:
+  uint64_t started_ = 0;
+};
+
 // The Transaction link of URnetwork's claim (the claim relay's 4d): the
 // explorer page the SDK names from the chain settings (ClaimTxUrl), opened in
 // the browser only when it is a web page, an https URL with nothing that isn't

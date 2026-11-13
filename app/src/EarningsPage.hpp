@@ -764,6 +764,12 @@ class EarningsPage : public Gtk::Box {
   snledger::Load ledgerLoad_ = snledger::Load::Loading;
   bool ledgerConfigured_ = false;  // the chain settings name the v2 vault: v2 Claim shows
   std::optional<SnGasInfo> gas_;
+  // the reads of the claims, the accounts and the gas, each kind's numbered as
+  // they start: only the newest read's answer counts, so one from before a
+  // claim's Done never lands over the Done's (LoadWalletLayer, LoadGas)
+  snledger::NewestRead claimsReads_;
+  snledger::NewestRead ledgerReads_;
+  snledger::NewestRead gasReads_;
   std::optional<urnet::ReliabilityWindow> reliability_;
   Fetch reliabilityState_ = Fetch::Loading;
   urnet::LeaderboardEarnersList leaderboard_;

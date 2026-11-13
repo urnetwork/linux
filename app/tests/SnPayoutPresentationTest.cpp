@@ -89,6 +89,24 @@ UR_TEST(SnPayoutSomethingClaimableAddsClaim) {
   UR_EXPECT_TRUE(view.showClaim);
 }
 
+// The v1 Claim that opens the claim sheet (the unclaimed tile's, the payout
+// line's): the v1 claim in flight opens it whatever the reads say; otherwise it
+// waits for the claims read, which a claim's Done starts (owner, 2026-11-12: a
+// read from before the Done may still list what the claim paid), for something
+// claimable, and for no claim of either kind in flight
+UR_TEST(SnPayoutTheV1ClaimWaitsForTheClaimsRead) {
+  using urnw::snpayout::V1ClaimEnabled;
+  UR_EXPECT_TRUE(V1ClaimEnabled(false, true, 3'241'000'000, false));
+  // a read out: the total the page holds is the read before it's
+  UR_EXPECT_FALSE(V1ClaimEnabled(false, false, 3'241'000'000, false));
+  UR_EXPECT_FALSE(V1ClaimEnabled(false, true, 0, false));
+  // a v2 claim in flight: the gas key sends one claim at a time
+  UR_EXPECT_FALSE(V1ClaimEnabled(false, true, 3'241'000'000, true));
+  // the v1 claim in flight opens its sheet, read or not, claimable or not
+  UR_EXPECT_TRUE(V1ClaimEnabled(true, false, 0, true));
+  UR_EXPECT_TRUE(V1ClaimEnabled(true, true, 3'241'000'000, true));
+}
+
 UR_TEST(SnPayoutWithoutTheScheduleTheExplanationStandsAlone) {
   const PayoutLineView view = Line(true, true, 1, std::nullopt);
   UR_EXPECT_TRUE(view.kind == LineKind::Schedule);

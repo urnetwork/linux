@@ -3187,19 +3187,26 @@ void EarningsPage::LoadEarnings() {
 
 // The subnet layer: the vault's view of this network's epochs, the coldkey's
 // v2 accounts and the gas key. Only with an attached wallet — without one
-// there is nothing to read.
+// there is nothing to read. The claims and the accounts show Loading from here
+// until this read answers: a visit, a wallet connect and every claim's Done
+// read them again, and only the newest read of each counts (snledger::
+// NewestRead), so a read still out from before a claim's Done, which may list
+// what the claim paid, never lands over the Done's.
 void EarningsPage::LoadWalletLayer() {
   if (!wallet_ || !CanCallApi()) return;
   ApplyClaims(std::nullopt, 0, Fetch::Loading);
   ApplyLedger(snledger::Load::Loading, {}, {}, ledgerConfigured_);
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
-  sn::FetchClaims(host_, [this, epoch, seen](std::optional<std::vector<SnClaimRow>> claims,
-                                              int64_t total, std::string err,
-                                              std::optional<snpayout::EpochSchedule> schedule) {
-    PostToMain([this, epoch, seen, claims = std::move(claims), total, err = std::move(err),
-                schedule] {
+  const uint64_t claimsRead = claimsReads_.Start();
+  const uint64_t ledgerRead = ledgerReads_.Start();
+  sn::FetchClaims(host_, [this, epoch, seen, claimsRead](
+                             std::optional<std::vector<SnClaimRow>> claims, int64_t total,
+                             std::string err, std::optional<snpayout::EpochSchedule> schedule) {
+    PostToMain([this, epoch, seen, claimsRead, claims = std::move(claims), total,
+                err = std::move(err), schedule] {
       if (*epoch != seen) return;
+      if (!claimsReads_.Current(claimsRead)) return;  // a newer read of the claims decides
       if (!claims) {
         g_warning("earnings: sn claims failed: %s", err.c_str());
         Glib::ustring text;
@@ -3223,12 +3230,14 @@ void EarningsPage::LoadWalletLayer() {
       ApplyClaims(std::move(claims), total, Fetch::Ready, {}, schedule);
     });
   });
-  sn::FetchLedger(host_, [this, epoch, seen](std::optional<std::vector<snledger::Account>> accounts,
-                                              std::vector<snledger::UnavailablePool> unavailable,
-                                              bool configured, std::string err) {
-    PostToMain([this, epoch, seen, accounts = std::move(accounts),
+  sn::FetchLedger(host_, [this, epoch, seen, ledgerRead](
+                             std::optional<std::vector<snledger::Account>> accounts,
+                             std::vector<snledger::UnavailablePool> unavailable, bool configured,
+                             std::string err) {
+    PostToMain([this, epoch, seen, ledgerRead, accounts = std::move(accounts),
                 unavailable = std::move(unavailable), configured, err = std::move(err)] {
       if (*epoch != seen) return;
+      if (!ledgerReads_.Current(ledgerRead)) return;  // a newer read of the accounts decides
       if (!accounts) {
         g_warning("earnings: sn ledger accounts failed: %s", err.c_str());
         ApplyLedger(snledger::Load::Unavailable, {}, {}, configured);
@@ -3240,12 +3249,17 @@ void EarningsPage::LoadWalletLayer() {
   LoadGas();
 }
 
+// The gas key and its balance, which both sheets' top-up and Claim follow. The
+// newest read decides (snledger::NewestRead): one from before a claim spent gas
+// never lands over a read since.
 void EarningsPage::LoadGas() {
   auto epoch = epoch_;
   const uint64_t seen = *epoch_;
-  sn::FetchGas(host_, [this, epoch, seen](std::optional<SnGasInfo> gas, std::string err) {
-    PostToMain([this, epoch, seen, gas = std::move(gas), err = std::move(err)] {
+  const uint64_t read = gasReads_.Start();
+  sn::FetchGas(host_, [this, epoch, seen, read](std::optional<SnGasInfo> gas, std::string err) {
+    PostToMain([this, epoch, seen, read, gas = std::move(gas), err = std::move(err)] {
       if (*epoch != seen) return;
+      if (!gasReads_.Current(read)) return;  // a newer read of the gas decides
       if (!gas) g_message("earnings: sn gas key unavailable: %s", err.c_str());
       ApplyGas(std::move(gas));
     });
@@ -3368,7 +3382,11 @@ void EarningsPage::ApplySnWallet(std::optional<SnWalletInfo> wallet, Fetch state
     kit::SetTextOrCollapse(*walletStatus_, {});
   }
   if (!wallet_) {
-    // no wallet: the subnet layer is empty by definition
+    // no wallet: the subnet layer is empty by definition, an answer that
+    // needs no read, and a read still out for the coldkey before counts no
+    // more (snledger::NewestRead)
+    claimsReads_.Start();
+    ledgerReads_.Start();
     claims_.clear();
     totalClaimableRao_ = 0;
     claimsState_ = Fetch::Ready;
@@ -3559,7 +3577,12 @@ void EarningsPage::RebuildPayoutLine() {
           : Glib::ustring());
   setColdkeyButton_->set_visible(setColdkey);
   payoutClaimButton_->set_visible(view.showClaim);
-  payoutClaimButton_->set_sensitive(view.showClaim && (claim_.InFlight() || !Claiming()));
+  // as the tile's Claim: while the claims read is out (after a visit, a wallet
+  // connect or a claim's Done) the total is the read before it's, which may
+  // still count what a claim paid
+  payoutClaimButton_->set_sensitive(
+      view.showClaim && snpayout::V1ClaimEnabled(claim_.InFlight(), claimsState_ == Fetch::Ready,
+                                                 totalClaimableRao_, Claiming()));
 }
 
 void EarningsPage::RebuildUnclaimedTile() {
@@ -3590,8 +3613,10 @@ void EarningsPage::RebuildUnclaimedTile() {
   kit::SetTextOrCollapse(*unclaimedStatus_, status);
   // Claim waits while a claim is in flight, but the v1 claim's own opens its
   // sheet on the claim in progress, whatever the read says, as the v2 tile's
-  // does for its claim
-  claimButton_->set_sensitive(claim_.InFlight() || (ready && totalClaimableRao_ > 0 && !Claiming()));
+  // does for its claim; and it waits for the claims read, which a claim's Done
+  // starts again
+  claimButton_->set_sensitive(
+      snpayout::V1ClaimEnabled(claim_.InFlight(), ready, totalClaimableRao_, Claiming()));
   // the first claim tile shown carries the claim card's disclaimer
   SetBittensorFundsDisclaimer(*unclaimedDisclaimer_, keys_->Card().claim_funds_disclaimer);
 }
@@ -5407,6 +5432,15 @@ void EarningsPage::OnClaim() {
   }
   if (sheet_ || (sheet_open && sheet_open())) {
     g_message("earnings: claim dialog suppressed — a modal is already open");
+    return;
+  }
+  // Between claims the sheet lists the claims as last read. While a read is
+  // out (after a visit, a wallet connect or a claim's Done) that is the read
+  // before it, which may still list what a claim paid, so the sheet waits for
+  // it, as both Claims that open it do (snpayout::V1ClaimEnabled) and as the
+  // v2 sheet does. A v1 claim in flight opens with its own rows.
+  if (!claim_.InFlight() && claimsState_ == Fetch::Loading) {
+    Notify(T_("loading", "Loading..."), kit::Snackbar::Severity::Info);
     return;
   }
   OpenClaimSheet(CanCallApi());

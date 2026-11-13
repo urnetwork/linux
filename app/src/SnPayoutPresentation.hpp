@@ -84,6 +84,19 @@ inline PayoutLineView PayoutLineFor(bool walletKnown, bool hasColdkey, int64_t t
   return view;
 }
 
+// Whether the v1 Claim that opens the claim sheet, the unclaimed tile's and the
+// payout line's, can be pressed. It opens the v1 claim in flight whatever the
+// reads say. Otherwise it waits for the claims read to answer (`claimsRead`),
+// for something claimable, and for no claim of either kind in flight (the gas
+// key sends one claim at a time). The page shows the claims as Loading from a
+// read's start, and a claim's Done starts one, so Claim is never offered from
+// a read that started before the last claim's Done: until the Done's read
+// answers, what the page still holds may list the epochs the claim paid.
+inline bool V1ClaimEnabled(bool v1InFlight, bool claimsRead, int64_t totalClaimableRao,
+                           bool claiming) {
+  return v1InFlight || (claimsRead && totalClaimableRao > 0 && !claiming);
+}
+
 // "2026-10-13 02:00": a schedule time in the reader's local time, given the
 // zone's offset from UTC at that instant (the page asks GLib per instant, so a
 // daylight change before the expiry is honored). Civil-from-days, so no locale.
