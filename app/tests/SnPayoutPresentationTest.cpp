@@ -1,11 +1,10 @@
 // The SN payout line under the points on the Earnings page
 // (SnPayoutPresentation.hpp): which line shows (no coldkey, nothing claimable,
-// claimable), the current epoch's end, claim-open and expiry times formatted
-// from the SDK's epoch schedule, and, with the Solana card's decision, that the
-// final USDC payout line shows only while USDC is pending. The page needs GTK
-// and the SDK, so its wiring and its English fallbacks (which must be the
-// catalog's msgids, or every locale shows the stale English) are read from the
-// sources and po/en.po.
+// claimable), and the current epoch's end, claim-open and expiry times
+// formatted from the SDK's epoch schedule. The page needs GTK and the SDK, so
+// its wiring and its English fallbacks (which must be the catalog's msgids, or
+// every locale shows the stale English) are read from the sources and
+// po/en.po.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -17,7 +16,6 @@
 #include <vector>
 
 #include "SnPayoutPresentation.hpp"
-#include "SolanaWalletPresentation.hpp"
 
 #ifndef UR_SRC_DIR
 #define UR_SRC_DIR ""
@@ -123,19 +121,6 @@ UR_TEST(SnPayoutTimesAreLocalDatesAndTimesFromTheEpochData) {
   UR_EXPECT_TRUE(view.expiry == "2026-12-15 01:59");
 }
 
-UR_TEST(SnPayoutTheFinalUsdcLineShowsOnlyWhileUsdcIsPending) {
-  using urnw::solana::CardFor;
-  using urnw::solana::CardView;
-  const urnw::solana::LegacyReads reads{true, true, true};
-  const CardView pending = CardFor(true, reads, std::nullopt, 3'870'000'000);
-  UR_EXPECT_TRUE(pending.showWaitingLine);
-  UR_EXPECT_FALSE(pending.showCard);
-  UR_EXPECT_TRUE(pending.pendingUsd == "3.87");
-  UR_EXPECT_FALSE(CardFor(true, reads, std::nullopt, 0).showWaitingLine);
-  UR_EXPECT_FALSE(CardFor(true, reads, std::nullopt, 4'000'000).showWaitingLine);
-  UR_EXPECT_FALSE(CardFor(false, reads, std::nullopt, 3'870'000'000).showWaitingLine);
-}
-
 // ---- the page's wiring and English, read from the sources ----------------------
 
 std::string ReadSnPayoutSource(const std::string& relative) {
@@ -185,7 +170,7 @@ UR_TEST(SnPayoutEnglishMatchesTheCatalogMsgids) {
   const std::string catalog = ReadSnPayoutSource("../po/en.po");
   UR_EXPECT_TRUE(!catalog.empty());
   for (const char* key : {"sn_payout_schedule", "sn_payout_schedule_times",
-                          "set_coldkey_to_get_paid", "set_coldkey", "usdc_waiting",
+                          "set_coldkey_to_get_paid", "set_coldkey",
                           "claims_open_after_finalization"}) {
     const std::vector<std::string> fallbacks = Fallbacks(page, key);
     if (fallbacks.empty()) UR_FAIL(std::string("EarningsPage.cpp does not show ") + key);
@@ -197,8 +182,6 @@ UR_TEST(SnPayoutEnglishMatchesTheCatalogMsgids) {
       }
     }
   }
-  UR_EXPECT_TRUE(catalog.find("msgid \"Final USDC payout: {} USDC waiting\"") !=
-                 std::string::npos);
   UR_EXPECT_TRUE(catalog.find("msgctxt \"payouts_amount_threshold\"") == std::string::npos);
   UR_EXPECT_TRUE(catalog.find("Claims open 48 hours") == std::string::npos);
 }

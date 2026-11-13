@@ -89,11 +89,10 @@ UR_TEST(AddSignIn_AnAddSsoReturnNeverSignsIn) {
 // A wallet being added chains its challenge, and its signature goes to
 // add-auth ahead of any sign-in still waiting.
 UR_TEST(AddSignIn_AnAddedWalletsSignatureNeverSignsIn) {
-  UR_EXPECT_TRUE(RoutePublicKey(false, false, false, true) == PublicKeyRoute::AddSignIn);
-  UR_EXPECT_TRUE(RoutePublicKey(false, false, true, true) == PublicKeyRoute::AddSignIn);
-  // a bare connect still answers first; bittensor has no connect hop
-  UR_EXPECT_TRUE(RoutePublicKey(false, true, false, true) == PublicKeyRoute::AnswerConnect);
-  UR_EXPECT_TRUE(RoutePublicKey(true, false, false, true) == PublicKeyRoute::Drop);
+  UR_EXPECT_TRUE(RoutePublicKey(false, false, true) == PublicKeyRoute::AddSignIn);
+  UR_EXPECT_TRUE(RoutePublicKey(false, true, true) == PublicKeyRoute::AddSignIn);
+  // bittensor has no connect hop
+  UR_EXPECT_TRUE(RoutePublicKey(true, false, true) == PublicKeyRoute::Drop);
 
   UR_EXPECT_TRUE(RouteSignature(false, false, false, true) == SignatureRoute::AnswerAdd);
   UR_EXPECT_TRUE(RouteSignature(false, false, true, true) == SignatureRoute::AnswerAdd);

@@ -621,28 +621,6 @@ class SdkHost {
                             const urnet::SnNetworkConsentChallengeResult& challenge,
                             std::function<void(WalletSignature)> done);
 
-  // The same bridge as a plain CONNECT for a Solana wallet (Phantom / Solflare):
-  // no challenge and no signature. The bridge connects the wallet and the
-  // urnetwork://<provider>-connect return hands back its base58 public key,
-  // which `done` receives as-is (the server validates it on POST /account/wallet,
-  // which takes no signature -- android's MWA connect and apple's
-  // connectPhantomWallet did the same). The Earnings page links it as the USDC
-  // payout wallet. The bridge is this request's from the moment it starts: a
-  // connect still waiting and a Bittensor signature request still waiting
-  // (SignBittensorConnect) are answered "superseded by a wallet connect
-  // request", and a challenge still being fetched for an older flow will not
-  // open the bridge over it (walletFlows_). Any later wallet flow answers this
-  // one "superseded by ..." in turn. `done` runs where the answer arrives: on the
-  // GTK main loop for a deep link, on the caller's own thread when the browser
-  // cannot be opened; callers marshal with PostToMain either way.
-  struct SolanaConnectResult {
-    bool ok = false;
-    std::string address;  // base58 public key
-    std::string error;
-  };
-  void ConnectSolanaWallet(WalletConnect::Provider provider,
-                           std::function<void(SolanaConnectResult)> done);
-
   // ---- add a sign-in method to the signed-in network (AddSignInFlow.hpp) ----
   // Account > Login methods. Each runs the login's own flow (the provider's web
   // flow, the wallet bridge, the Bittensor session with purpose "add") but ends
@@ -1660,9 +1638,6 @@ class SdkHost {
   // there is neither
   bool AddBlockActionOverrideLocked(const urnet::BlockActionOverride& override_);
   void SetupWalletCallbacks();
-  // Answers a ConnectSolanaWallet that is still waiting with `reason` (another
-  // wallet flow is taking the bridge). Takes mutex_: never call it holding it.
-  void CancelPendingSolanaConnect(const std::string& reason);
   // Whether `flow` is still the newest wallet flow (walletFlows_); logs the drop
   // when it is not. Takes mutex_.
   bool WalletFlowIsCurrent(uint64_t flow);
@@ -2253,10 +2228,6 @@ class SdkHost {
   // The Bittensor wallet the last sign-in used (guarded by mutex_): the
   // create-network signature asks the same wallet.
   std::string bittensorWalletId_;
-  // ConnectSolanaWallet (guarded by mutex_, like walletSignDone_): consumed by the
-  // connect return (on_public_key) or a bridge error (on_error), or answered
-  // "superseded by ..." by the next wallet flow.
-  std::function<void(SolanaConnectResult)> walletConnectDone_;
   // Guarded by mutex_: every wallet flow start takes the next number, and a step
   // that runs later (a challenge arriving after its fetch) opens the bridge only
   // while its flow is still the newest (WalletBridgeRoute.hpp FlowCounter).

@@ -232,7 +232,6 @@ executable('urnetwork-gui',
     'src/DeveloperPage.cpp',
     'src/EarningsPage.cpp',
     'src/ProtocolBoard.cpp',
-    'src/SolanaWalletSheet.cpp',
     'src/BittensorWalletChooser.cpp',
     # the one-tap Bittensor key: its Secret Service store, polkit's check, its
     # flow's host, the Key screen and the claim relay (apple BTEASY.md)
@@ -573,8 +572,7 @@ install_data('assets/carousel/LoginCarousel1.jpg',
 # ExtenderStatus, the provider extender row's reading of ExtenderProvideStatus
 # and the statistics sections' visibility, the compact count and count-rate
 # labels, the extender share/import decisions, the reset's owed re-send and its
-# call sites, the Solana payout wallet's card
-# and connect-sheet rules, the Settlement v2 tile and its claim sheet's
+# call sites, the Settlement v2 tile and its claim sheet's
 # progress, the payout consent's states, steps and refusals, the wallet
 # bridge's return routing, the dual-stack
 # tunnel policy and v6 capture set, the updater's release selection (the one
@@ -653,10 +651,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/CheckoutSessionModeTest.cpp',
     'tests/CheckoutBridgeErrorTest.cpp',
     'tests/ServerRefusalTextTest.cpp',
-    'tests/SolanaWalletPresentationTest.cpp',
     'tests/SolanaBridgeErrorTest.cpp',
-    'tests/PayoutNoExtensionTest.cpp',
-    'tests/PayoutPromotionWiringTest.cpp',
     'tests/SnPayoutPresentationTest.cpp',
     'tests/SnClaimStatusTest.cpp',
     'tests/SnClaimStatusWiringTest.cpp',

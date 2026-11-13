@@ -133,8 +133,6 @@ UR_TEST(SolanaBridgeError_TheCodeReachesTheUser) {
                            "p == WalletConnect::Provider::Solflare ? \"Solflare\" : \"Phantom\""}) {
     UR_EXPECT_TRUE_MSG(want, localized.find(want) != std::string::npos);
   }
-  // (the connect step also says whether its Connect offered manual entry:
-  // PayoutNoExtensionTest)
   const std::string delivery =
       "on_error(LocalizedBridgeError(p, params[\"errorCode\"], pageText";
   for (const char* handler :
