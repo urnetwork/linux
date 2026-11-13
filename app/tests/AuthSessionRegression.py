@@ -17,13 +17,21 @@ for name in ('CaptureAuthEpoch', 'NoteApiError', 'StartLogin', 'LoginWithPasswor
              'LoginWithSeedphrase', 'VerifyCode', 'CreateNetwork', 'CreateInstantAccount',
              'ConfirmInstantAccount', 'HandleNetworkCreateResult', 'AuthLoginWithSso',
              'AuthLoginWithWallet', 'RegisterNetworkClient', 'FinishNetworkClientRegistration',
+             'NoteAbandonedClient', 'RemoveAbandonedClientLocked', 'ServerSignOutLocked',
+             'HasRefusedSignIn', 'RetryRefusedSignIn',
              'Logout', 'LogoutNow', 'NetworkServerChangeAllowed'):
-    result_type = 'uint64_t' if name == 'CaptureAuthEpoch' else 'bool' if name == 'NetworkServerChangeAllowed' else 'void'
+    result_type = 'uint64_t' if name == 'CaptureAuthEpoch' else 'bool' if name in ('NetworkServerChangeAllowed', 'HasRefusedSignIn') else 'void'
     start = source.index(result_type + ' SdkHost::' + name + '(')
     end = source.index('\n}\n', start) + 3
     methods.append(source[start:end])
 start = source.index('std::string NormalizeSeedphrase(')
 methods.insert(0, source[start:source.index('\n}\n', start) + 3])
+start = source.index('client_limit::Prompt ToClientLimitPrompt(const std::string&')
+end = source.index('\n}\n', source.index('client_limit::Prompt ToClientLimitPrompt(const std::optional', start)) + 3
+methods.insert(0, source[start:end])
+start = source.index('constexpr auto kServerSignOutWait =')
+end = source.index('\n}  // namespace', start)
+methods.insert(0, source[start:end])
 # The actual policy is exercised below; pin it before the space/SDK can change.
 space_start = source.index('bool SdkHost::ApplyNetworkServer(')
 space_body = source[space_start:source.index('\n}\n', space_start)]

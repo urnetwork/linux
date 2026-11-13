@@ -9,6 +9,7 @@
 #include "TestHarness.hpp"
 
 #include <initializer_list>
+#include <regex>
 #include <string>
 
 #include "WiringSource.hpp"
@@ -42,7 +43,18 @@ bool Has(const std::string& text, const std::string& needle) {
   return false;
 }
 
+bool UsesPresentationConfirmations(const std::string& text) {
+  return std::regex_search(text, std::regex(R"(\bp\s*\.\s*confirmations(?:Required)?\b)"));
+}
+
 }  // namespace
+
+UR_TEST(CryptoPayWiring_ConfirmationCheckDistinguishesTheStepFromThePresentation) {
+  UR_EXPECT_FALSE(UsesPresentationConfirmations("step.confirmations, step.confirmationsRequired"));
+  UR_EXPECT_TRUE(UsesPresentationConfirmations("p.confirmations"));
+  UR_EXPECT_TRUE(UsesPresentationConfirmations("p.confirmationsRequired"));
+  UR_EXPECT_TRUE(UsesPresentationConfirmations("p . confirmations"));
+}
 
 // The row sits directly above the buy button, after the plan cards and the
 // offer line, and the button follows the method.
@@ -262,10 +274,11 @@ UR_TEST(CryptoPayWiring_TheUriIsCheckedBeforeItIsShownOrOpened) {
                   "const crypto_pay::Step& step = p.steps[index];",
                   "if (step.status == crypto_pay::kStatusPending) {",
                   "} else if (step.status == crypto_pay::kStatusConfirming) {",
-                  "step.confirmationsRequired);",
+                  "step.confirmations,", "step.confirmationsRequired);",
                   "const bool done = step.progress == crypto_pay::kStepDone;",
                   "const bool current = step.progress == crypto_pay::kStepCurrent;"});
-  UR_EXPECT_FALSE(Contains(steps, "StepKind") || Contains(steps, "p.confirmations"));
+  // Match the presentation identifier, not the suffix of step.confirmations.
+  UR_EXPECT_FALSE(Contains(steps, "StepKind") || UsesPresentationConfirmations(steps));
   // Open in wallet never hands over the qr text (TAO's QR is a bare address)
   UR_EXPECT_FALSE(Contains(render, "openUri_ = qrText"));
   UR_EXPECT_FALSE(Contains(render, "openWallet_->set_visible(p.showQr);"));

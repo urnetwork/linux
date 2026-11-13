@@ -357,7 +357,6 @@ control_doh_error_url_invalid
 control_doh_urls
 control_doh_urls_description
 control_doh_urls_hint
-control_doh_urls_next_connect
 control_doh_urls_reset
 control_doh_urls_saved
 control_doh_use_china
