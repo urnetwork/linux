@@ -836,9 +836,11 @@ UR_TEST(CryptoPay_SignOutWipesTheStorage) {
 }
 
 // A one-time crypto year does not renew, and the Stripe portal never manages it.
+// A gift code's year of Pro has its own line (ShowsGiftDoesNotRenew), never the
+// crypto one, which asks to pay again.
 UR_TEST(CryptoPay_ACryptoStoreDoesNotRenew) {
   UR_EXPECT_TRUE(cp::StoreDoesNotRenew("crypto"));
-  for (const char* family : {"stripe", "apple", "google", "other", ""}) {
+  for (const char* family : {"stripe", "apple", "google", "gift", "other", ""}) {
     UR_EXPECT_FALSE(cp::StoreDoesNotRenew(family));
   }
 }

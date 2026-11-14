@@ -1983,10 +1983,16 @@ void MainWindow::BuildHome() {
   accountPage_->on_retry_plan = [this] { balance_.FetchNow(); };
   // the data-usage group's info button: the sheet reads the balance store
   accountPage_->on_open_data_info = [this] { OpenDataInfo(); };
-  // The redeem sheet needs the balance store (it starts confirmation polling),
-  // which the page deliberately does not hold — so the window opens it.
+  // The redeem sheet needs the balance store (it reads the balance once a code
+  // is redeemed), which the page deliberately does not hold — so the window
+  // opens it, and refreshes the page's redeemed-codes pane after a redeem.
   accountPage_->on_open_redeem = [this] {
-    if (!redeemSheet_) redeemSheet_ = std::make_unique<RedeemCodeSheet>(*this, host_, balance_);
+    if (!redeemSheet_) {
+      redeemSheet_ = std::make_unique<RedeemCodeSheet>(*this, host_, balance_);
+      redeemSheet_->on_redeemed = [this] {
+        if (accountPage_) accountPage_->LoadBalanceCodes();
+      };
+    }
     redeemSheet_->Open();
   };
   accountPage_->sheet_open = [this] { return sheetOpen_; };

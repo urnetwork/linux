@@ -17,6 +17,7 @@
 
 #include "AddSignInFlow.hpp"
 #include "AuthViews.hpp"
+#include "BalanceCodeRedeem.hpp"  // IsProGiftCode: a gift code's row
 #include "BittensorKeyHost.hpp"
 #include "BittensorWalletChooser.hpp"
 #include "BrandIcons.hpp"
@@ -1836,7 +1837,7 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   ApplyPlanAccount();
 
   // the Stripe customer portal only manages a Stripe subscription: a free
-  // network, or a store or crypto subscription, got the portal's raw error
+  // network, or a store, crypto or gift subscription, got the portal's raw error
   if (portalRow_) portalRow_->set_visible(ShowsManageSubscription(balance_.subscriptionStoreFamily));
 
   // A renewal whose payment did not go through, which its store is still
@@ -1860,6 +1861,13 @@ void AccountPage::ApplyBalance(const AccountBalance& snapshot) {
   if (doesNotRenewRow_) {
     doesNotRenewRow_->set_visible(!termNotice && balance_.isPro &&
                                   crypto_pay::StoreDoesNotRenew(balance_.subscriptionStoreFamily));
+  }
+  // A gift code's year of Pro: someone else paid for it and nothing renews it,
+  // so the line says so where Manage Subscription would be, and nothing offers
+  // to manage, cancel or pay for it.
+  if (giftRow_) {
+    giftRow_->set_visible(balance_.isPro &&
+                          ShowsGiftDoesNotRenew(balance_.subscriptionStoreFamily));
   }
 
   // 2. the confirmation ring: active AND visible exactly while the poll runs.
@@ -2053,6 +2061,14 @@ void AccountPage::BuildPlanPane() {
                             kProsePadY);
     doesNotRenewRow_ = row.root;
     doesNotRenewRow_->set_visible(false);
+    content->append(*row.root);
+  }
+  // 1c. a gift code's year of Pro (ApplyBalance): the crypto line's twin,
+  //     with nothing to renew, manage or cancel
+  {
+    auto row = MakeProseRow(T_("gift_does_not_renew", "A gift. It doesn't renew."), kProsePadY);
+    giftRow_ = row.root;
+    giftRow_->set_visible(false);
     content->append(*row.root);
   }
 
@@ -2633,11 +2649,17 @@ void AccountPage::RenderBalanceCodes() {
   for (const auto& code : codes_) {
     auto row = kit::MakePaneTableRow(weights, kRowCode, 1);
     row.cells[0]->set_text(MaskSecret(code.secret));
-    // '+' + the compact byte count. Deliberately a literal concatenation and
-    // NOT a store key: the spec's string table for this destination carries no
-    // "+{}" entry, and inventing one (or borrowing Earnings' plus_amount)
-    // would put a key on this surface the spec does not have.
-    row.cells[1]->set_text("+" + FormatByteCountCompact(code.balance_byte_count));
+    if (IsProGiftCode(code.kind)) {
+      // a gift code's year of Pro adds no data (BalanceCodeRedeem.hpp): never
+      // "+0 B" (mmm/GIFTOFPRIVACY.md §10.5)
+      row.cells[1]->set_text(T_("balance_code_pro_year", "A year of Pro"));
+    } else {
+      // '+' + the compact byte count. Deliberately a literal concatenation and
+      // NOT a store key: the spec's string table for this destination carries
+      // no "+{}" entry, and inventing one (or borrowing Earnings' plus_amount)
+      // would put a key on this surface the spec does not have.
+      row.cells[1]->set_text("+" + FormatByteCountCompact(code.balance_byte_count));
+    }
     row.cells[2]->set_text(DatePrefix(code.redeem_time));
     codesPanel_->append(*row.root);
   }

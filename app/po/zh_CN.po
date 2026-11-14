@@ -1017,7 +1017,7 @@ msgctxt "balance_code_already_redeemed_message"
 msgid "This balance code has already been redeemed. If you redeemed it earlier, the data is already on your balance."
 msgstr "此余额码已被兑换。如果您之前已兑换过，数据已计入您的余额。"
 
-#. Redeem balance code: confirmation of the data a redeemed code added to the network's balance (amount is a formatted byte count, e.g. "5.00 GiB"). A balance code is data only: never a plan or Pro upgrade.
+#. Redeem balance code: confirmation of the data a redeemed code added to the network's balance (amount is a formatted byte count, e.g. "5.00 GiB"). Data codes only: a redeemed Pro gift code confirms with gift_pro_redeemed instead.
 msgctxt "balance_code_data_added"
 msgid "{} of data added to your balance."
 msgstr "已向您的余额添加 {} 数据。"
@@ -1026,6 +1026,11 @@ msgstr "已向您的余额添加 {} 数据。"
 msgctxt "balance_code_invalid_message"
 msgid "That balance code isn't valid. Check the code and try again."
 msgstr "该余额码无效。请检查后重试。"
+
+#. The redeemed balance codes list's amount for a Pro gift code, in place of a data amount such as "+10 GiB". Short, like a data amount.
+msgctxt "balance_code_pro_year"
+msgid "A year of Pro"
+msgstr "一年 Pro"
 
 #. Confirmation shown after a balance code is redeemed.
 msgctxt "balance_code_redeemed"
@@ -6113,6 +6118,21 @@ msgstr "开始使用"
 msgctxt "get_urnetwork_free_for_life_by_participating"
 msgid "Get URnetwork free for life by participating"
 msgstr "通过参与，终身免费获得 URnetwork"
+
+#. The plan row's line across from the plan, for Pro that came from a gift code, where a store subscription's Manage button would be: a gift year doesn't renew and has nothing to manage. The gift's twin of crypto_does_not_renew.
+msgctxt "gift_does_not_renew"
+msgid "A gift. It doesn't renew."
+msgstr "获赠，不会自动续订。"
+
+#. Confirmation shown after a Pro gift code is redeemed: the code grants a year of Pro, starting now.
+msgctxt "gift_pro_redeemed"
+msgid "A year of Pro is yours."
+msgstr "您已获得一年 Pro。"
+
+#. Confirmation shown after a Pro gift code is redeemed by someone who already has Pro: the gift's year of Pro is queued after the current Pro period. {date} is the day it starts, formatted by the app for the reader's locale.
+msgctxt "gift_pro_redeemed_queued"
+msgid "Your gift year of Pro starts on {}, after your current Pro period."
+msgstr "您获赠的一年 Pro 将在当前 Pro 期限结束后，于 {} 开始。"
 
 #. Confirmation button that leaves the seedphrase screen after the warning.
 msgctxt "go_back"
@@ -11417,6 +11437,11 @@ msgstr "您当前使用免费方案。升级到 Pro 可获得更多流量和功�
 msgctxt "site_sub_free_title"
 msgid "Free plan"
 msgstr "免费方案"
+
+#. ur.io account, Subscription card: the body for Pro from a gift code, which doesn't renew and has nothing to manage or cancel (compare site_sub_active_body).
+msgctxt "site_sub_gift_body"
+msgid "Your Pro plan is a gift. It doesn't renew, so there's nothing to manage or cancel."
+msgstr "您的 Pro 方案是获赠的，不会自动续订，因此无需管理或取消。"
 
 #. Subscription: manage-on-platform button ({platform})
 msgctxt "site_sub_manage_on"

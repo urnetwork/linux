@@ -117,7 +117,9 @@ class SubscriptionBalanceStore {
   bool IsGuest() const { return isGuest_; }
   // the current subscription's store family (urnet::classifySubscriptionStore:
   // "stripe", "apple", "google", "crypto" for a one-time USDC, Zcash or
-  // Monero year, which never renews, or "other"), "" without a subscription
+  // Monero year, which never renews, "gift" for a gift code's year of Pro,
+  // which never renews either, or "other"), "" without a subscription. A gift
+  // gives way to another store that is still active (PlanStoreFamily).
   const std::string& SubscriptionStoreFamily() const { return subscriptionStoreFamily_; }
   // Set once when a free -> paid upgrade is first detected (mac
   // didDetectUpgradeToPro), so the app can reset provide mode to never at the

@@ -10,6 +10,7 @@
 #include "AccountPlanRows.hpp"
 #include "AppPrefs.hpp"
 #include "CryptoPay.hpp"
+#include "ManageSubscription.hpp"
 #include "PaymentPastDue.hpp"
 
 #include <algorithm>
@@ -27,6 +28,8 @@ namespace urnw {
 static_assert(std::string_view(urnet::ShownPlanPro) == account_plan::kShownPlanPro);
 static_assert(std::string_view(urnet::ShownPlanFree) == account_plan::kShownPlanFree);
 static_assert(std::string_view(urnet::ShownPlanUnknown) == account_plan::kShownPlanUnknown);
+// ...and ManageSubscription.hpp a gift year's store family
+static_assert(std::string_view(urnet::SubscriptionStoreGift) == kStoreFamilyGift);
 
 namespace {
 constexpr unsigned kBackgroundPollingSeconds = 30;   // mac backgroundPollingInterval
@@ -291,9 +294,19 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
             // the server: right even after a refresh cleared the jwt claim
             serverGuest_ = result->guest.value_or(false);
             isGuest_ = IsGuestNetwork(jwtGuest_, serverGuest_);
-            subscriptionStoreFamily_ =
+            // A gift year is the plan's store only while no other store is
+            // active: a subscriber who pays and redeems a gift keeps that
+            // store's controls (ManageSubscription.hpp PlanStoreFamily).
+            std::vector<std::string> activeFamilies;
+            if (result->subscriptions) {
+              for (const auto& subscription : *result->subscriptions) {
+                activeFamilies.push_back(urnet::classifySubscriptionStore(subscription.store));
+              }
+            }
+            subscriptionStoreFamily_ = PlanStoreFamily(
                 serverIsPro ? urnet::classifySubscriptionStore(result->current_subscription->store)
-                            : std::string();
+                            : std::string(),
+                activeFamilies);
             if (serverIsPro) {
               // A Pro confirmation resolves an earlier confirmation give-up,
               // even when it lands late (background poll, next window focus):
