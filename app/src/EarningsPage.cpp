@@ -6356,8 +6356,9 @@ void EarningsPage::BuildPointsNetworkBlock() {
     auto row = MakePaddedRow(8);
     row.content->append(*MakeWrappedNote(
         T_("points_leaderboard_description",
-           "All-time points. A block is one finalized epoch; the streak counts consecutive "
-           "blocks with points, ending at the latest one."),
+           "All-time points. A block is one week; the streak counts consecutive blocks with "
+           "points, and a week whose points couldn't be awarded, or are still being awarded, "
+           "doesn't break it."),
         "ur-row-note"));
     pointsGroup_->append(*row.root);
   }
