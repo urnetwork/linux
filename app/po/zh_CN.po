@@ -7042,7 +7042,7 @@ msgctxt "login_verify_header"
 msgid "You've got mail"
 msgstr "您有邮件"
 
-#. Points leaderboard: secondary stat, the best run of consecutive blocks with points.
+#. Points leaderboard: secondary stat, the best run of consecutive weeks (blocks) with points; a week whose points couldn't be awarded doesn't break a run.
 msgctxt "longest_streak"
 msgid "Longest streak"
 msgstr "最长连续"
@@ -8105,8 +8105,8 @@ msgstr "已获得积分"
 
 #. Points leaderboard: the explanation under the list header.
 msgctxt "points_leaderboard_description"
-msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
-msgstr "历史累计积分。一个区块是一个已确认的周期；连续统计直到最新区块的连续得分区块数。"
+msgid "All-time points. A block is one week; the streak counts consecutive blocks with points, and a week whose points couldn't be awarded, or are still being awarded, doesn't break it."
+msgstr "历史累计积分。一个区块为一周；连续统计连续得分的区块数，积分未能发放或仍在发放中的一周不会中断连续。"
 
 #. Points leaderboard: shown when no network has points yet (every ranked network is listed, so the list is empty only before the first snapshot).
 msgctxt "points_leaderboard_empty"
@@ -12292,7 +12292,7 @@ msgctxt "step_two"
 msgid "Step 2"
 msgstr "步骤 2"
 
-#. Points leaderboard: stat tile label and sort chip. Consecutive blocks with points.
+#. Points leaderboard: stat tile label and sort chip. Consecutive weeks (blocks) with points; a week whose points couldn't be awarded, or are still being awarded, doesn't break it.
 msgctxt "streak"
 msgid "Streak"
 msgstr "连续"

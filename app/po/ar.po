@@ -7112,7 +7112,7 @@ msgctxt "login_verify_header"
 msgid "You've got mail"
 msgstr "لديك بريد إلكتروني"
 
-#. Points leaderboard: secondary stat, the best run of consecutive blocks with points.
+#. Points leaderboard: secondary stat, the best run of consecutive weeks (blocks) with points; a week whose points couldn't be awarded doesn't break a run.
 msgctxt "longest_streak"
 msgid "Longest streak"
 msgstr "أطول سلسلة"
@@ -8210,8 +8210,8 @@ msgstr "النقاط المكتسبة"
 
 #. Points leaderboard: the explanation under the list header.
 msgctxt "points_leaderboard_description"
-msgid "All-time points. A block is one finalized epoch; the streak counts consecutive blocks with points, ending at the latest one."
-msgstr "النقاط منذ البداية. الكتلة هي فترة مكتملة واحدة؛ وتحسب السلسلة الكتل المتتالية ذات النقاط حتى آخر كتلة."
+msgid "All-time points. A block is one week; the streak counts consecutive blocks with points, and a week whose points couldn't be awarded, or are still being awarded, doesn't break it."
+msgstr "النقاط منذ البداية. الكتلة هي أسبوع واحد؛ وتحسب السلسلة الكتل المتتالية ذات النقاط، ولا يقطعها أسبوع تعذّر منح نقاطه أو ما زال منحها جاريًا."
 
 #. Points leaderboard: shown when no network has points yet (every ranked network is listed, so the list is empty only before the first snapshot).
 msgctxt "points_leaderboard_empty"
@@ -12487,7 +12487,7 @@ msgctxt "step_two"
 msgid "Step 2"
 msgstr "الخطوة2"
 
-#. Points leaderboard: stat tile label and sort chip. Consecutive blocks with points.
+#. Points leaderboard: stat tile label and sort chip. Consecutive weeks (blocks) with points; a week whose points couldn't be awarded, or are still being awarded, doesn't break it.
 msgctxt "streak"
 msgid "Streak"
 msgstr "السلسلة"
