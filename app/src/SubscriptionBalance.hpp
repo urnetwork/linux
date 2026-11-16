@@ -104,6 +104,12 @@ class SubscriptionBalanceStore {
   // (visible and focused) polling before it gives up.
   void StartConfirmationPolling();
   void ClearPurchaseConfirmationTimeout();
+  // The purchase being confirmed was refused (the upgrade sheet's card
+  // payment report, CardPaymentReport.hpp): nothing will land, so the
+  // confirmation ends now. Unlike a give-up it raises no timed-out flag (and
+  // clears one a give-up raised), since nothing is on its way; the
+  // background poll takes over again. Emits when it changed anything.
+  void StopConfirmationPolling();
 
   bool IsPro() const { return isPro_; }
   // The sdk's decision of what the plan value shows

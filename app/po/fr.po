@@ -1835,6 +1835,11 @@ msgctxt "checkout_confirming_purchase"
 msgid "We're confirming your purchase. Your plan will update automatically."
 msgstr "Nous confirmons votre achat. Votre plan sera mis à jour automatiquement."
 
+#. Shown when the server refuses a Stripe card for the yearly plan's free trial because the card's security code (CVC) check failed (verify-stripe-checkout answers error.code incorrect_cvc). The card was not saved and nothing was or will be charged; the trial did not start. Shown with a Try again action that opens a new payment form. Apps: the Android builds outside Google Play, the macOS direct download, Windows and Linux; the site: the checkout return page.
+msgctxt "checkout_error_incorrect_cvc"
+msgid "Your card's security code (CVC) didn't match. Check the card details and try again."
+msgstr "Le code de sécurité (CVC) de votre carte ne correspond pas. Vérifiez les informations de la carte et réessayez."
+
 #. Checkout error in the desktop apps (the macOS direct download, Windows and Linux) when the ur.io checkout page hands back stripe_unavailable: Stripe's payment form could not be loaded in the checkout page (usually no internet connection, or a network that blocks it). Nothing was charged.
 msgctxt "checkout_error_payment_form_unavailable"
 msgid "The payment form couldn't load. Check your internet connection, then try again."
