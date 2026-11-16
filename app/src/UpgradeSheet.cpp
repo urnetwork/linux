@@ -977,7 +977,20 @@ CardRefusalStage UpgradeSheet::RefusalStage() const {
 
 bool UpgradeSheet::EnsureWebView() {
   if (webView_) return true;
-  GtkWidget* view = webkit_web_view_new();
+  // The payment pages get a network session of their own, made with this view
+  // and gone with it. It accepts third-party cookies, which WebKitGTK's
+  // default policy refuses: a bank's 3D Secure challenge runs in a frame
+  // inside Stripe's frame on ur.io, and a challenge page that keeps its
+  // session in a cookie fails without it, and the card with it. Ephemeral,
+  // so nothing the pages store outlives the view, which each checkout attempt
+  // makes anew. No other view shares it, and the default session keeps the
+  // default policy.
+  WebKitNetworkSession* session = webkit_network_session_new_ephemeral();
+  webkit_cookie_manager_set_accept_policy(webkit_network_session_get_cookie_manager(session),
+                                          WEBKIT_COOKIE_POLICY_ACCEPT_ALWAYS);
+  GtkWidget* view =
+      GTK_WIDGET(g_object_new(WEBKIT_TYPE_WEB_VIEW, "network-session", session, nullptr));
+  g_object_unref(session);  // the view holds its own reference
   if (!view) return false;  // webkit unusable at runtime -> hosted checkout
   webView_ = view;
   // the pay page's posted {type:"ur-pay"} message: a page-side bridge forwards

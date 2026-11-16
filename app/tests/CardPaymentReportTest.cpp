@@ -1,7 +1,8 @@
 // A refused card payment (CardPaymentReport.hpp): what the card payment
 // report's answer means, where a refusal shows and what it ends, and how the
-// upgrade sheet and the balance store carry it out. The sheet and the store
-// need GTK and the SDK, so their wiring is read as text.
+// upgrade sheet, the balance store and the payment web view carry it out.
+// The sheet, the store and the web view need GTK, WebKit and the SDK, so
+// their wiring is read as text.
 //
 // The server refuses a yearly trial whose card failed the CVC check (POST
 // /subscription/verify-stripe-checkout answers status invalid with
@@ -12,6 +13,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
+#include <filesystem>
 #include <initializer_list>
 #include <string>
 
@@ -247,4 +249,34 @@ UR_TEST(CardPaymentReport_TheStoreEndsTheConfirmationWithoutAGiveUp) {
   for (const char* file : {"MainWindow.cpp", "Onboarding.cpp", "AccountPage.cpp"}) {
     UR_EXPECT_TRUE_MSG(file, !Contains(ReadCode(file), "StopConfirmationPolling("));
   }
+}
+
+// The payment web view (the pay sheet and the embedded checkout) gets an
+// ephemeral network session of its own that accepts third-party cookies, for
+// the banks' 3D Secure challenges in Stripe's frame. Nothing else in the app
+// changes WebKit's cookie policy or uses the default session.
+UR_TEST(CardPaymentReport_ThePaymentViewHasItsOwnCookieSession) {
+  const std::string sheet = Sheet();
+  const std::string body = FunctionBody(sheet, "bool UpgradeSheet::EnsureWebView() {");
+  InOrder(body, {"if (webView_) return true;",
+                 "WebKitNetworkSession* session = webkit_network_session_new_ephemeral();",
+                 "webkit_cookie_manager_set_accept_policy(webkit_network_session_get_cookie_manager(session),",
+                 "WEBKIT_COOKIE_POLICY_ACCEPT_ALWAYS",
+                 "g_object_new(WEBKIT_TYPE_WEB_VIEW, \"network-session\", session, nullptr)",
+                 "g_object_unref(session);", "if (!view) return false;", "webView_ = view;"});
+  UR_EXPECT_FALSE(Contains(sheet, "webkit_web_view_new()"));
+  size_t sources = 0;
+  for (const auto& entry : std::filesystem::recursive_directory_iterator(UR_SRC_DIR)) {
+    const std::string ext = entry.path().extension().string();
+    if (!entry.is_regular_file() || (ext != ".cpp" && ext != ".hpp")) continue;
+    ++sources;
+    const std::string relative = std::filesystem::relative(entry.path(), UR_SRC_DIR).string();
+    const std::string code = ReadCode(relative);
+    UR_EXPECT_TRUE_MSG(relative, !Contains(code, "webkit_network_session_get_default"));
+    if (relative != "UpgradeSheet.cpp") {
+      UR_EXPECT_TRUE_MSG(relative, !Contains(code, "webkit_cookie_manager_set_accept_policy"));
+      UR_EXPECT_TRUE_MSG(relative, !Contains(code, "webkit_web_view_new"));
+    }
+  }
+  UR_EXPECT_TRUE(sources > 100);
 }

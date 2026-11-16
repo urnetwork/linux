@@ -970,8 +970,9 @@ urnetwork_tests = executable('urnetwork-tests',
               # Account plan pane the same way, and every source for the wire's
               # update_payment_url.
               # CardPaymentReportTest reads the upgrade sheet's card payment
-              # report and refusal, the balance store's confirmation stop and
-              # po/ the same way.
+              # report, refusal and web view session, the balance store's
+              # confirmation stop and po/ the same way, and every source for
+              # WebKit's cookie policy.
               # SlowInternetWiringTest reads the slow-internet feed's host, window,
               # tray, Connect page and Settings call sites, meson.build and the
               # tray art the same way.

@@ -31,6 +31,9 @@
 //     Embedded Checkout and hands control back over the urnetwork:// scheme
 //     (intercepted in "decide-policy"; the navigation never leaves the
 //     webview). Only compiled when meson found webkitgtk-6.0 (UR_HAVE_WEBKIT).
+//     The webview (both pages) has an ephemeral network session of its own
+//     that accepts third-party cookies, for the banks' 3D Secure challenges
+//     (EnsureWebView); nothing else in the app uses it.
 //   * hosted (fallback): ui_mode "hosted" -> open checkout_url in the system
 //     browser. Used when the app was built without webkit, when the webview
 //     cannot be created at runtime, when the embedded session request fails,
