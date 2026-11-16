@@ -1,6 +1,7 @@
 // What the upgrade sheet and Manage subscription say when the server refuses
 // (ServerRefusalText.hpp): a code with a line of its own reads as that line
-// alone, invalid_request and start_failed as the screen's own line, and any
+// alone (incorrect_cvc, the card payment report's refused trial card, among
+// them), invalid_request and start_failed as the screen's own line, and any
 // other code or none as the screen's own line with the server's words under
 // it. The screens word their refusals with it (UpgradeSheet.cpp and
 // AccountPage.cpp, read as text: they need GTK and the SDK).
@@ -87,6 +88,7 @@ const std::vector<CodeLine>& CodeLines() {
       CodeLine{"already_subscribed", "site_payment_error_already_subscribed"},
       CodeLine{"plan_unavailable", "site_payment_error_plan_unavailable"},
       CodeLine{"checkout_unavailable", "checkout_error_unavailable"},
+      CodeLine{"incorrect_cvc", "checkout_error_incorrect_cvc"},
       CodeLine{"no_customer", "site_subscription_error_no_customer"},
       CodeLine{"store_unavailable", "site_subscription_error_store_unavailable"},
   };
@@ -119,6 +121,9 @@ UR_TEST(ServerRefusalText_CodesWithALineReadAlone) {
            Source{"plan_unavailable", "This plan is not available right now. Try again later."},
            Source{"checkout_unavailable",
                   "Checkout isn't available right now. Please try again later."},
+           Source{"incorrect_cvc",
+                  "Your card's security code (CVC) didn't match. Check the card details and try "
+                  "again."},
            Source{"no_customer", "This network has no Stripe billing details."},
            Source{"store_unavailable",
                   "Stripe could not be reached just now. Try again in a moment."},

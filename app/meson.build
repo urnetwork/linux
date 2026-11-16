@@ -651,6 +651,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/CheckoutSessionModeTest.cpp',
     'tests/CheckoutBridgeErrorTest.cpp',
     'tests/ServerRefusalTextTest.cpp',
+    'tests/CardPaymentReportTest.cpp',
     'tests/SolanaBridgeErrorTest.cpp',
     'tests/SnPayoutPresentationTest.cpp',
     'tests/SnClaimStatusTest.cpp',
@@ -968,6 +969,10 @@ urnetwork_tests = executable('urnetwork-tests',
               # PaymentPastDueTest reads the balance store, the window and the
               # Account plan pane the same way, and every source for the wire's
               # update_payment_url.
+              # CardPaymentReportTest reads the upgrade sheet's card payment
+              # report, refusal and web view session, the balance store's
+              # confirmation stop and po/ the same way, and every source for
+              # WebKit's cookie policy.
               # SlowInternetWiringTest reads the slow-internet feed's host, window,
               # tray, Connect page and Settings call sites, meson.build and the
               # tray art the same way.

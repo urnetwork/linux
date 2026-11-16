@@ -1,16 +1,19 @@
 // What the upgrade sheet and Manage subscription say when the server refuses
-// to start a checkout or to open the billing portal (UpgradeSheet.cpp
-// RequestSession, AccountPage.cpp OpenCustomerPortal; ur.io
-// src/lib/paymentFailure.js parity).
+// to start a checkout, refuses a finished card payment, or refuses to open
+// the billing portal (UpgradeSheet.cpp RequestSession and ReportCardPayment,
+// AccountPage.cpp OpenCustomerPortal; ur.io src/lib/paymentFailure.js
+// parity).
 //
 // The server refuses with a stable error.code beside its English message
-// (server PurchaseErrorCode* for POST /stripe/create-checkout-session,
+// (server PurchaseErrorCode* for POST /stripe/create-checkout-session and the
+// card payment report, POST /subscription/verify-stripe-checkout;
 // SubscriptionErrorCode* for POST /stripe/customer-portal). The rule is
 // ur.io's:
 //   - a code with a line of its own reads as that line alone:
 //     already_subscribed, plan_unavailable and checkout_unavailable from the
-//     checkout session, no_customer and store_unavailable from the billing
-//     portal;
+//     checkout session, incorrect_cvc from the card payment report (a yearly
+//     trial whose card failed the CVC check: no Pro, the card detached),
+//     no_customer and store_unavailable from the billing portal;
 //   - invalid_request and start_failed read as the screen's own line alone (a
 //     request this app got wrong, or a start that did not happen and can be
 //     tried again);
@@ -73,6 +76,12 @@ inline ServerRefusalText ServerRefusalTextFor(std::string_view code,
   if (code == "checkout_unavailable") {
     return {{"checkout_error_unavailable",
              "Checkout isn't available right now. Please try again later."},
+            std::string()};
+  }
+  if (code == "incorrect_cvc") {
+    return {{"checkout_error_incorrect_cvc",
+             "Your card's security code (CVC) didn't match. Check the card details and try "
+             "again."},
             std::string()};
   }
   if (code == "no_customer") {

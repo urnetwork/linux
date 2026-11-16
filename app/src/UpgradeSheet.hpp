@@ -7,6 +7,13 @@
 // purchase still lands later; the background poll and the next launch pick it
 // up). The finished payment is also reported to the server by its Stripe id
 // (ReportCardPayment), so a late webhook no longer keeps a paid plan on Free.
+// The report is also how a refused card payment comes back (a yearly trial
+// whose card failed the CVC check, incorrect_cvc; CardPaymentReport.hpp): the
+// attempt is over, the confirmation ends, and the sheet goes back to the
+// options with the refusal's line under the button, which reads Try again and
+// starts a new payment sheet or checkout session. It does so from waiting,
+// from timed out, and from the options; a hidden sheet shows it at its next
+// open.
 //
 // Three checkout paths, tried in order (mmm/onboarding/PLAN.md: inline
 // Stripe, never an external browser while a web view exists):
@@ -24,6 +31,9 @@
 //     Embedded Checkout and hands control back over the urnetwork:// scheme
 //     (intercepted in "decide-policy"; the navigation never leaves the
 //     webview). Only compiled when meson found webkitgtk-6.0 (UR_HAVE_WEBKIT).
+//     The webview (both pages) has an ephemeral network session of its own
+//     that accepts third-party cookies, for the banks' 3D Secure challenges
+//     (EnsureWebView); nothing else in the app uses it.
 //   * hosted (fallback): ui_mode "hosted" -> open checkout_url in the system
 //     browser. Used when the app was built without webkit, when the webview
 //     cannot be created at runtime, when the embedded session request fails,
@@ -43,11 +53,14 @@
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 
 #include <gtkmm.h>
 
+#include "CardPaymentReport.hpp"
 #include "CryptoPay.hpp"
 #include "DataInfoSheet.hpp"
 #include "OfferCard.hpp"
@@ -130,8 +143,20 @@ class UpgradeSheet : public Gtk::Window {
   // instead of waiting for the webhook: the payment sheet's subscription, or
   // the checkout session's. Called where the confirmation poll starts, once
   // per attempt; the sdk asks again while the answer is pending. A credited
-  // answer reads the balance at once; the state still follows the balance.
+  // answer reads the balance at once; the state still follows the balance. A
+  // refusal (an answer with an error) ends the attempt (OnCardPaymentRefused).
   void ReportCardPayment(bool paySheet);
+  // The card payment report of attempt `attempt` came back refused, with the
+  // server's code and English words: when it is still the sheet's to show
+  // (CardRefusalActionFor), the confirmation this attempt started ends and the
+  // sheet goes back to the options with the refusal, now or at its next open.
+  // Final for the attempt: nothing falls through to another checkout path.
+  void OnCardPaymentRefused(uint64_t attempt, const std::string& code, const std::string& message);
+  // The options, with refusal_ on the error line under the button, which
+  // reads Try again (JoinLabel).
+  void ShowCardRefusal();
+  // Where the sheet is, as far as a refusal cares.
+  CardRefusalStage RefusalStage() const;
   void SetState(State state);
   // The refusal for a guest network (PurchaseRefusalFor): no fallback, no
   // error line; the sheet hides and on_guest_sign_in_required runs.
@@ -166,6 +191,21 @@ class UpgradeSheet : public Gtk::Window {
   std::string paySheetSubscriptionId_;
   std::string checkoutSessionId_;
   bool cardPaymentReported_ = false;  // ReportCardPayment ran for this attempt
+  // Every purchase the sheet starts (a checkout or an invoice) is a new
+  // attempt: a refused card payment is shown only for the latest one.
+  uint64_t attempt_ = 0;
+  // the latest card attempt's plan: Try again repeats it, and its events name it
+  bool attemptYearly_ = true;
+  // the network the latest card attempt was for: the sheet outlives a sign-out
+  std::string attemptNetwork_;
+  // A refused card attempt's words on the options' error line, "" without
+  // one; while set, the button reads Try again for that plan with the card.
+  Glib::ustring refusal_;
+  // refused while the sheet was hidden: its next Open shows refusal_
+  bool refusalAtOpen_ = false;
+  // Orphans the card payment report's callback when the sheet goes: the sdk
+  // can answer a pending hosted checkout about 21 minutes after the report.
+  std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 
   Gtk::Box* optionsBox_ = nullptr;
   Gtk::Box* waitingBox_ = nullptr;

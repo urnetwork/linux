@@ -19,6 +19,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "CardPaymentReport.hpp"
 #include "CheckoutBridgeError.hpp"
 #include "CheckoutCrashRoute.hpp"
 #include "CheckoutSessionMode.hpp"
@@ -39,6 +40,14 @@ constexpr const char* kStoreStripe = "stripe";
 // controller.go StripeItemPro*).
 constexpr const char* kItemProMonthly = "pro_monthly";
 constexpr const char* kItemProYearly = "pro_yearly";
+
+// The signed-in network's id, "" without a session. The sheet outlives a
+// sign-out, and a refused card attempt is shown only to its own network.
+std::string SignedInNetworkId(SdkHost& host) {
+  if (!host.IsLoggedIn()) return std::string();
+  const std::optional<urnet::ByJwt> byJwt = host.ParseByJwt();
+  return byJwt && byJwt->NetworkId ? *byJwt->NetworkId : std::string();
+}
 
 #ifdef UR_HAVE_WEBKIT
 // The ur.io bridge page (mmm/ur.io react EmbeddedCheckout.jsx): mounts
@@ -203,6 +212,7 @@ void UpgradeSheet::BuildUi() {
     // the last choice, remembered on this device
     host_.CryptoInvoice().SetPaymentMethod(method);
     errorLabel_->set_visible(false);
+    refusal_.clear();  // a refused card attempt's line went with it
     ApplyMethod();
   };
   optionsBox_->append(*methodRow_);
@@ -504,7 +514,9 @@ void UpgradeSheet::EmitPurchase(const char* outcome, const std::string& errorCla
   // and SOL share the solana store), buys the yearly plan, and has no trial;
   // the card's is Stripe's, with its plan's product.
   const bool coin = crypto_pay::IsCoin(purchaseMethod_);
-  const bool yearly = coin || plans_->Yearly();
+  // the card attempt's plan, which a refusal landing on reopened options
+  // still names whatever the cards show by then
+  const bool yearly = coin || attemptYearly_;
   const PriceTierView& tier = balance_.Tier();
   const OfferView& offer = balance_.Offer();
   const bool offerPrice = coin ? purchasePlan_ == crypto_pay::kPlanYearlyOnboarding : offer.active;
@@ -555,11 +567,20 @@ void UpgradeSheet::Open(bool freeRefresh) {
     freeRefreshTicker_.Stop();
   }
   errorLabel_->set_visible(false);
+  // a card attempt refused while the sheet was hidden: this open shows it on
+  // the options (not over a confirmation or an invoice going on); any other
+  // open starts without one
+  const bool showRefusal = refusalAtOpen_ && SignedInNetworkId(host_) == attemptNetwork_ &&
+                           !balance_.IsPolling() &&
+                           !crypto_pay::InvoiceInProgress(host_.CryptoInvoice().State());
+  refusalAtOpen_ = false;
+  if (!showRefusal) refusal_.clear();
   cryptoStarting_ = false;
   unavailableAsset_.clear();
   methodPicked_ = false;
   ApplyPrices();
-  plans_->Select(true);
+  // yearly, or the refused attempt's plan, which Try again repeats
+  plans_->Select(showRefusal ? attemptYearly_ : true);
   // the method this device chose last, while the server still offers it
   RefreshMethods();
   SelectMethod(host_.CryptoInvoice().PaymentMethod());
@@ -571,6 +592,7 @@ void UpgradeSheet::Open(bool freeRefresh) {
     ShowInvoice();
   } else {
     SetState(State::Options);
+    if (showRefusal) ShowCardRefusal();
   }
   present();
 }
@@ -591,6 +613,8 @@ void UpgradeSheet::OpenCryptoCheckout(const std::string& asset, const std::strin
   freeRefreshBox_->set_visible(false);
   freeRefreshTicker_.Stop();
   errorLabel_->set_visible(false);
+  refusal_.clear();
+  refusalAtOpen_ = false;
   cryptoStarting_ = false;
   unavailableAsset_.clear();
   methodPicked_ = true;  // the onboarding's row picked it
@@ -619,6 +643,8 @@ void UpgradeSheet::OpenInvoice() {
   freeRefreshBox_->set_visible(false);
   freeRefreshTicker_.Stop();
   errorLabel_->set_visible(false);
+  refusal_.clear();
+  refusalAtOpen_ = false;
   cryptoStarting_ = false;
   methodPicked_ = false;
   ApplyPrices();
@@ -634,6 +660,14 @@ void UpgradeSheet::StartCheckout() {
   if (state_ == State::Launching || !host_.IsLoggedIn()) return;
   SetState(State::Launching);
   errorLabel_->set_visible(false);
+  // a new attempt: an older one's refusal is no longer the sheet's to show,
+  // and the button names this attempt's plan again
+  ++attempt_;
+  attemptYearly_ = plans_->Yearly();
+  attemptNetwork_ = SignedInNetworkId(host_);
+  refusal_.clear();
+  refusalAtOpen_ = false;
+  joinLabel_->set_text(JoinLabel());
   purchaseEmitted_ = false;
   paySheetSubscriptionId_.clear();
   checkoutSessionId_.clear();
@@ -837,30 +871,126 @@ void UpgradeSheet::ReportCardPayment(bool paySheet) {
     args.session_id = checkoutSessionId_;
   }
   cardPaymentReported_ = true;
+  // the attempt this report is for: its refusal is the sheet's to show only
+  // while the sheet is still on it
+  const uint64_t attempt = attempt_;
+  std::weak_ptr<bool> alive = alive_;
   host_.api().reportStripePurchase(
-      args, [this](std::optional<urnet::VerifyStorePurchaseResult> result,
-                   std::optional<std::string> err) {
-        // once, after the sdk's retries. No epoch check: the payment was made
-        // whatever the sheet shows now, and the sheet lives with its window.
-        PostToMain([this, result = std::move(result), err = std::move(err)] {
+      args, [this, alive, attempt](std::optional<urnet::VerifyStorePurchaseResult> result,
+                                   std::optional<std::string> err) {
+        // once, after the sdk's retries, which for a pending hosted checkout
+        // go on for about 21 minutes. No epoch check: the payment was made
+        // whatever the sheet shows now. The sheet may be gone by then.
+        PostToMain([this, alive, attempt, result = std::move(result), err = std::move(err)] {
+          if (!alive.lock()) return;
           if (err) std::fprintf(stderr, "[upgrade] card payment report failed: %s\n", err->c_str());
           if (!result) return;
-          std::fprintf(stderr, "[upgrade] card payment report: %s\n", result->status.c_str());
-          // the server holds the credit: read the balance now, which also
-          // takes a timed-out wait to the success state
-          if (result->status == urnet::PurchaseReportStatusCredited ||
-              result->status == urnet::PurchaseReportStatusAlreadyCredited) {
-            balance_.FetchNow();
+          // a refusal says why: the server's code and its English words
+          const bool refused = result->error.has_value();
+          const std::string code =
+              refused ? result->error->code.value_or(std::string()) : std::string();
+          std::fprintf(stderr, "[upgrade] card payment report: %s%s%s\n", result->status.c_str(),
+                       code.empty() ? "" : " ", code.c_str());
+          const bool credited = result->status == urnet::PurchaseReportStatusCredited ||
+                                result->status == urnet::PurchaseReportStatusAlreadyCredited;
+          switch (CardReportOutcomeFor(credited, refused)) {
+            case CardReportOutcome::Credited:
+              // the server holds the credit: read the balance now, which also
+              // takes a timed-out wait to the success state
+              balance_.FetchNow();
+              return;
+            case CardReportOutcome::Refused:
+              // the server's last word on the purchase; today a yearly trial
+              // whose card failed the CVC check (incorrect_cvc): no Pro, and
+              // the card was detached, so nothing will land
+              OnCardPaymentRefused(attempt, code, result->error->message);
+              return;
+            case CardReportOutcome::Confirming:
+              return;  // the confirmation poll decides
           }
         });
       });
+}
+
+void UpgradeSheet::OnCardPaymentRefused(uint64_t attempt, const std::string& code,
+                                        const std::string& message) {
+  const CardRefusalStage stage = RefusalStage();
+  // the sheet's latest attempt, for the network signed in now
+  const bool latest = attempt == attempt_ && SignedInNetworkId(host_) == attemptNetwork_;
+  const CardRefusalAction action = CardRefusalActionFor(latest, stage, get_visible());
+  // an older attempt's, or the sheet went on to a new checkout, an invoice
+  // or a success
+  if (action == CardRefusalAction::Ignore) return;
+  // Final for the attempt: whatever of it might still answer is dropped, and
+  // nothing goes on to another checkout path. Try again starts a new payment
+  // sheet or checkout session.
+  ++*epoch_;
+  // Nothing will land: the confirmation this attempt started ends, without
+  // the timed-out state's "no need to buy again".
+  if (CardRefusalEndsConfirmation(stage)) balance_.StopConfirmationPolling();
+  if (!purchaseEmitted_) {
+    EmitPurchase("failed", code.empty() ? std::string("refused") : code);
+    purchaseEmitted_ = true;
+  }
+  // the code's own line (incorrect_cvc), else the sheet's own line with the
+  // server's words under it (ServerRefusalText.hpp)
+  const ServerRefusalText refusal =
+      ServerRefusalTextFor(code, message, kUpgradeSheetRefusalLine);
+  refusal_ = ServerRefusalDisplay(T_(refusal.line.key, refusal.line.english), refusal);
+  if (action == CardRefusalAction::ShowAtOpen) {
+    // hidden: the sheet leaves the wait now, and its next open shows the refusal
+    refusalAtOpen_ = true;
+    SetState(State::Options);
+    return;
+  }
+  ShowCardRefusal();
+}
+
+void UpgradeSheet::ShowCardRefusal() {
+  SetState(State::Options);
+  errorLabel_->set_text(refusal_);
+  errorLabel_->set_visible(true);
+  // Try again, for the refused attempt's plan with the card
+  joinLabel_->set_text(JoinLabel());
+}
+
+CardRefusalStage UpgradeSheet::RefusalStage() const {
+  switch (state_) {
+    case State::Options:
+      return CardRefusalStage::Options;
+    case State::Launching:
+      return CardRefusalStage::Starting;
+    case State::Checkout:
+    case State::Invoice:
+      return CardRefusalStage::Paying;
+    case State::Waiting:
+      return CardRefusalStage::Waiting;
+    case State::TimedOut:
+      return CardRefusalStage::TimedOut;
+    case State::Success:
+      return CardRefusalStage::Success;
+  }
+  return CardRefusalStage::Success;
 }
 
 #ifdef UR_HAVE_WEBKIT
 
 bool UpgradeSheet::EnsureWebView() {
   if (webView_) return true;
-  GtkWidget* view = webkit_web_view_new();
+  // The payment pages get a network session of their own, made with this view
+  // and gone with it. It accepts third-party cookies, which WebKitGTK's
+  // default policy refuses: a bank's 3D Secure challenge runs in a frame
+  // inside Stripe's frame on ur.io, and a challenge page that keeps its
+  // session in a cookie fails without it, and the card with it. Ephemeral,
+  // so nothing the pages store outlives the view, which each checkout attempt
+  // makes anew. No other view shares it, and the default session keeps the
+  // default policy.
+  WebKitNetworkSession* session = webkit_network_session_new_ephemeral();
+  webkit_cookie_manager_set_accept_policy(webkit_network_session_get_cookie_manager(session),
+                                          WEBKIT_COOKIE_POLICY_ACCEPT_ALWAYS);
+  GtkWidget* view =
+      GTK_WIDGET(g_object_new(WEBKIT_TYPE_WEB_VIEW, "network-session", session, nullptr));
+  g_object_unref(session);  // the view holds its own reference
   if (!view) return false;  // webkit unusable at runtime -> hosted checkout
   webView_ = view;
   // the pay page's posted {type:"ur-pay"} message: a page-side bridge forwards
@@ -1187,6 +1317,9 @@ Glib::ustring UpgradeSheet::JoinLabel() const {
   if (crypto_pay::IsCoin(method_)) {
     return Format(T_("crypto_pay_button", "Pay with {}"), PaymentMethodName(method_).raw());
   }
+  // a refused card attempt's line is showing: the button tries its plan again,
+  // with a new payment sheet or checkout session
+  if (!refusal_.empty() && plans_->Yearly() == attemptYearly_) return T_("try_again", "Try again");
   // only the yearly plan carries the trial: the button says what the click does
   return PlanPicker::CtaLabel(plans_->Yearly());
 }
@@ -1201,6 +1334,10 @@ void UpgradeSheet::StartCrypto(const std::string& plan) {
   }
   SetState(State::Launching);
   errorLabel_->set_visible(false);
+  // a new attempt: an earlier card attempt's refusal is no longer the sheet's
+  ++attempt_;
+  refusal_.clear();
+  refusalAtOpen_ = false;
   purchaseEmitted_ = false;
   purchaseMethod_ = method_;
   purchasePlan_ = plan;

@@ -610,4 +610,18 @@ void SubscriptionBalanceStore::ClearPurchaseConfirmationTimeout() {
   Emit();
 }
 
+void SubscriptionBalanceStore::StopConfirmationPolling() {
+  const bool confirming = gate_.Confirming();
+  if (!confirming && !purchaseConfirmationTimedOut_) return;
+  purchaseConfirmationTimedOut_ = false;
+  if (confirming) {
+    pollingTimer_.disconnect();
+    gate_.Stop();
+    // back to the cadence a free network reads its balance at (a give-up
+    // went back to it already). Nothing changed, so no read now.
+    if (started_ && !isPro_) StartBackgroundPolling(/*fetchNow=*/false);
+  }
+  Emit();
+}
+
 }  // namespace urnw
