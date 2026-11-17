@@ -363,7 +363,7 @@ UR_TEST(LogUploadWiring_TheGuiHandsOverItsOwnLogFilesByDescriptor) {
   UR_EXPECT_TRUE(!open.empty());
   UR_EXPECT_TRUE(Ahead(open, "urnet::flushGlog();", "urnet::uploadLogsInventory()"));
   UR_EXPECT_TRUE(Contains(open, "files.Size() >= logupload::kMaxGuiLogFiles"));
-  UR_EXPECT_TRUE(Contains(open, "logupload::LooksLikeGlogFileName(info.Name)"));
+  UR_EXPECT_TRUE(Contains(open, "logupload::LooksLikeGuiLogFileName(info.Name)"));
   UR_EXPECT_TRUE(Contains(open, "O_RDONLY | O_CLOEXEC | O_NOFOLLOW"));
   UR_EXPECT_TRUE(Ahead(open, "S_ISREG(fileStat.st_mode)", "files.Add(info.Name, fd);"));
   const std::string daemon = UploadFunctionBody(
