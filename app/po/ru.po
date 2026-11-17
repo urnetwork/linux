@@ -10514,6 +10514,16 @@ msgctxt "site_app_top200_apply_hotkey_sig"
 msgid "Apply hotkey signature"
 msgstr "Применить подпись hotkey"
 
+#. App top200: what the mainnet fleet commands need; the page shows the document's download link and SHA-256 right after this line
+msgctxt "site_app_top200_authority"
+msgid "Mainnet commands need the reviewed fleet runtime authority document. Download it, then pass its path with --mainnet-runtime-authority and this SHA-256 with --mainnet-runtime-authority-sha256:"
+msgstr "Командам в mainnet нужен проверенный документ полномочий среды выполнения парка. Скачайте его и укажите путь в --mainnet-runtime-authority, а этот SHA-256 в --mainnet-runtime-authority-sha256:"
+
+#. App top200: link that downloads the reviewed fleet runtime authority document
+msgctxt "site_app_top200_authority_link"
+msgid "Download the fleet runtime authority document"
+msgstr "Скачать документ полномочий среды выполнения парка"
+
 #. App top200: validity epochs missing, not whole numbers, or reversed
 msgctxt "site_app_top200_bad_epochs"
 msgid "Enter the validity epochs as whole numbers, the last one no earlier than the first."
@@ -10543,6 +10553,11 @@ msgstr "Создать привязки"
 msgctxt "site_app_top200_calldata"
 msgid "Binding calldata"
 msgstr "Calldata привязки"
+
+#. App top200 and the Earnings tile: link to the docs page on claiming a spot with btcli and provider
+msgctxt "site_app_top200_cli_guide"
+msgid "Claim from the command line"
+msgstr "Занять место из командной строки"
 
 #. App top200: the current epoch, from GET /sn/head
 msgctxt "site_app_top200_current_epoch"
@@ -10589,6 +10604,36 @@ msgctxt "site_app_top200_intro"
 msgid "Head miners are the top {cutoff} networks by routable egress IP breadth. A head spot is paid natively by the subnet every tempo, straight to your coldkey."
 msgstr "Ведущие майнеры — это {cutoff} лучших сетей по разнообразию маршрутизируемых исходящих IP. Подсеть нативно оплачивает ведущее место в каждом tempo — прямо на ваш coldkey."
 
+#. App top200 limits: a commitment past 100,800 blocks (14 days) can't bind new devices, so a fleet adding devices later publishes again
+msgctxt "site_app_top200_limit_commitment_age"
+msgid "A commitment older than 14 days can't bind new devices, so publish again before adding devices later."
+msgstr "Коммитмент старше 14 дней не может привязать новые устройства, поэтому перед добавлением устройств опубликуйте его заново."
+
+#. App top200 limits: at most 7 devices per fleet draw ahead into the validator's measured cohort (cohort 1,500 over 200 seats); a bound device outside it has left the pool and earns nothing
+msgctxt "site_app_top200_limit_devices"
+msgid "Bind at most 7 devices, unless the others are already measured. At most 7 devices per fleet draw ahead of the rest to be measured by the validator. A bound device that isn't measured earns no head score and has left the pool, so it earns nothing."
+msgstr "Привязывайте не больше 7 устройств, если только остальные уже не измеряются. В каждом парке приоритет на измерение валидатором получают не больше 7 устройств. Привязанное устройство, которое не измеряется, не получает балла ведущего майнера и уже вышло из пула, поэтому ничего не зарабатывает."
+
+#. App top200 limits: a spot pays only while the validator steers, in proportion to EMA score and not rank; the head channel is 3% of miner emission before epoch 8 and 5% from epoch 8, when capture the flag splits the providers' tenth pool 4/10, CTF 1/10, head 5/10 (sn CAPTURETHEFLAG.md §2.1)
+msgctxt "site_app_top200_limit_pay"
+msgid "A spot pays only while the SN25 validator steers its weights, and in proportion to your score, not your rank. All selected fleets share one channel: 3% of miner emission until epoch 8, and 5% from epoch 8."
+msgstr "Место приносит выплаты, только пока валидатор SN25 управляет своими весами, и пропорционально вашему баллу, а не месту в рейтинге. Все выбранные парки делят один канал: 3 % эмиссии майнеров до эпохи 8 и 5 % начиная с эпохи 8."
+
+#. App top200 limits: a fleet that already published may have to publish again; old-format (Sha256) commitments are not mirrored and a mirror past 100,800 blocks can't bind
+msgctxt "site_app_top200_limit_republish"
+msgid "If you published before, you may need to publish again. Commitments in the old format aren't mirrored, and a mirror older than 14 days can't bind."
+msgstr "Если вы уже публиковали коммитмент, возможно, его нужно опубликовать заново. Коммитменты в старом формате не зеркалируются, а зеркало старше 14 дней не может привязывать устройства."
+
+#. App top200 limits: register within the 3 days before the binding's first epoch, because a zero-emission UID can be replaced after 21,600 blocks of immunity and a binding can wait up to 7 days
+msgctxt "site_app_top200_limit_timing"
+msgid "Register in the 3 days before the epoch your binding starts. A binding starts no earlier than the next epoch, up to 7 days away, and a UID with no emission can be replaced once its immunity ends, about 3 days after it registers."
+msgstr "Регистрируйтесь в течение 3 дней перед эпохой, с которой начинается ваша привязка. Привязка начинается не раньше следующей эпохи, до которой может быть до 7 дней, а UID без эмиссии можно заменить, как только закончится его иммунитет, примерно через 3 дня после регистрации."
+
+#. App top200: heads the limits a customer needs before registering, shown once binding is open
+msgctxt "site_app_top200_limits_title"
+msgid "Before you register"
+msgstr "Прежде чем регистрироваться"
+
 #. App top200: fleet manifest textarea label
 msgctxt "site_app_top200_manifest"
 msgid "Fleet manifest"
@@ -10601,13 +10646,18 @@ msgstr "Этот манифест не совпадает со вставлен�
 
 #. App top200: how to create and publish the fleet manifest and where an app shows its member entry
 msgctxt "site_app_top200_manifest_hint"
-msgid "Write the fleet manifest on a provider device with provider fleet init (the command below, filled in for this deployment; add each other device with --member=<client_id>:<client_key>), then publish its commitment from your hotkey with provider fleet publish. Publishing on mainnet opens once the mainnet fleet runtime is approved. Paste the manifest here with the validity epochs to build each device's binding. The app shows its device's member entry for the manifest under Earnings › Top 200 › Sign fleet binding."
-msgstr "Создайте манифест парка на устройстве провайдера командой provider fleet init (команда ниже, уже заполненная для этого развёртывания; каждое другое устройство добавьте через --member=<client_id>:<client_key>), затем опубликуйте его коммитмент со своего хоткея командой provider fleet publish. Публикация в mainnet откроется, когда будет одобрена среда выполнения парка для mainnet. Вставьте манифест сюда вместе с эпохами действия, чтобы создать привязку для каждого устройства. Приложение показывает запись участника своего устройства для манифеста в разделе Заработок › Топ-200 › Подписать привязку парка."
+msgid "Write the fleet manifest on a provider device with provider fleet init (the command below, filled in for this deployment; add each other device with --member=<client_id>:<client_key>), then publish its commitment from your hotkey with provider fleet publish. Paste the manifest here with the validity epochs to build each device's binding. The app shows its device's member entry for the manifest under Earnings › Top 200 › Sign fleet binding."
+msgstr "Создайте манифест парка на устройстве провайдера командой provider fleet init (команда ниже, уже заполненная для этого развёртывания; каждое другое устройство добавьте через --member=<client_id>:<client_key>), затем опубликуйте его коммитмент со своего хоткея командой provider fleet publish. Вставьте манифест сюда вместе с эпохами действия, чтобы создать привязку для каждого устройства. Приложение показывает запись участника своего устройства для манифеста в разделе Заработок › Топ-200 › Подписать привязку парка."
 
 #. App top200: the manifest's hotkey is not the ss58 hotkey entered in step 1
 msgctxt "site_app_top200_manifest_hotkey_mismatch"
 msgid "The manifest's hotkey is not the hotkey entered in step 1."
 msgstr "Hotkey в манифесте не совпадает с hotkey, указанным на шаге 1."
+
+#. App top200 limits: when the next settlement epoch starts. {when} is an estimated local date and time
+msgctxt "site_app_top200_next_epoch"
+msgid "The next epoch starts about {}."
+msgstr "Следующая эпоха начнётся примерно {}."
 
 #. App top200: status when not eligible
 msgctxt "site_app_top200_not_eligible"
