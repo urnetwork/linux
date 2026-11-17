@@ -317,7 +317,8 @@ std::string SignOutOwedPath() {
   return dir + "/sign_out_owed";
 }
 
-// This process's own glog files for the daemon's log upload (PassedLogFiles.hpp):
+// This process's own log files for the daemon's log upload (PassedLogFiles.hpp):
+// its glog files and its Go crash file (LooksLikeGuiLogFileName):
 // the newest the sdk's upload would take from this process (its inventory,
 // within the upload's cap), at most logupload::kMaxGuiLogFiles, each opened
 // here with this process's rights. glog is flushed first, so the lines written
@@ -330,7 +331,7 @@ logupload::PassedLogFiles OpenGuiLogFiles() {
     if (!inventory) return files;
     for (const urnet::LogFileInfo& info : *inventory) {
       if (files.Size() >= logupload::kMaxGuiLogFiles) break;
-      if (!logupload::LooksLikeGlogFileName(info.Name)) continue;
+      if (!logupload::LooksLikeGuiLogFileName(info.Name)) continue;
       // non-blocking for the open only, so that nothing but a regular file can
       // hold this thread, and blocking again for the reads
       const int fd = ::open(info.Path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK);

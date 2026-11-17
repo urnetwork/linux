@@ -92,6 +92,19 @@ UR_TEST(PassedLogFiles_OnlyGlogNamesAreLogFileNames) {
   UR_EXPECT_FALSE(urnw::logupload::LooksLikeGlogFileName(std::string(250, 'a') + ".log.INFO.1"));
 }
 
+// Besides its glog files the GUI hands over its Go crash file, which the sdk
+// writes when the GUI dies of a Go fatal and its upload takes as it takes them
+// (sdk log_special_files.go); nothing else.
+UR_TEST(PassedLogFiles_TheGuisGoCrashFileIsALogFile) {
+  for (const char* name : {"urnetwork-gui.host.user.log.INFO.20260901-000000.101", "go-crash.txt"}) {
+    UR_EXPECT_TRUE_MSG(name, urnw::logupload::LooksLikeGuiLogFileName(name));
+  }
+  for (const char* name : {"", "jwt", "settings.json", "go-crash.txt.tmp", ".go-crash.txt",
+                           "a/go-crash.txt", "go-crash.log", "urnetwork-gui.INFO"}) {
+    UR_EXPECT_TRUE_MSG(name, !urnw::logupload::LooksLikeGuiLogFileName(name));
+  }
+}
+
 // The GUI's files reach the daemon process over the control socket as
 // descriptors attached to the request's frame: the daemon reads them whole,
 // from their start, without opening any path, and the GUI may close its own
@@ -210,6 +223,25 @@ UR_TEST(PassedLogFiles_TheDaemonKeepsOnlyRegularFilesUnderGlogNames) {
   UR_EXPECT_FALSE(IsOpen(logFd));
   ::close(unnamedFd);
   ::close(pipeFds[1]);
+}
+
+// The daemon keeps the GUI's Go crash file beside its glog files, a regular
+// file under that name, as the sdk's upload takes it.
+UR_TEST(PassedLogFiles_TheDaemonKeepsTheGuisGoCrashFile) {
+  TestingDir dir;
+  const std::string crashPath = dir.Write("go-crash.txt", "panic: test\n");
+  const int crashFd = OpenForReading(crashPath);
+  std::vector<int> queued = {crashFd};
+  const std::vector<std::string> names = {"go-crash.txt"};
+  urnw::logupload::PassedLogFiles files = urnw::logupload::TakePassedLogFiles(queued, names);
+  UR_EXPECT_EQ(1, files.Size());
+  if (files.Size() == 1) {
+    UR_EXPECT_TRUE(files.Files()[0].name == "go-crash.txt");
+    UR_EXPECT_TRUE(ReadFromStart(files.Files()[0].fd) == "panic: test\n");
+  }
+  UR_EXPECT_EQ(0, queued.size());
+  files.CloseAll();
+  UR_EXPECT_FALSE(IsOpen(crashFd));
 }
 
 // No more than one request's worth is taken, whatever the request names.

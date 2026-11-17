@@ -59,6 +59,18 @@ inline bool LooksLikeGlogFileName(std::string_view name) {
   });
 }
 
+// The GUI's Go crash file, which the sdk writes beside its glog files when the
+// GUI dies of a Go fatal (sdk crash_output.go). It is not a glog name, and the
+// sdk's upload takes it as it takes them (sdk log_special_files.go, which masks
+// it), so without it a crash of the GUI never reached support.
+inline constexpr const char* kGuiGoCrashFileName = "go-crash.txt";
+
+// A name the GUI hands over and the daemon keeps: a glog name, or the GUI's Go
+// crash file.
+inline bool LooksLikeGuiLogFileName(std::string_view name) {
+  return LooksLikeGlogFileName(name) || name == kGuiGoCrashFileName;
+}
+
 // Log files open by descriptor, each under its glog name, owned: closed when
 // this is destroyed or CloseAll runs. Move-only, so a descriptor has one owner
 // from the GUI's open (or the daemon's receive) to its close.
@@ -117,7 +129,8 @@ class PassedLogFiles {
 
 // The daemon's half: pairs the descriptors that came with an upload_logs frame
 // (`queuedFds`, in the order they came) with the names the request gave them,
-// and takes them off the queue. A pair whose name is not a glog name, or whose
+// and takes them off the queue. A pair whose name is not one the GUI hands over
+// (LooksLikeGuiLogFileName), or whose
 // descriptor is not a regular file (a directory, a pipe, a socket, a device),
 // is closed and left out, as is everything past kMaxGuiLogFiles. Descriptors
 // with no name stay queued; the server closes them once no frame is pending.
@@ -128,7 +141,7 @@ inline PassedLogFiles TakePassedLogFiles(std::vector<int>& queuedFds,
   for (size_t i = 0; i < count; ++i) {
     const int fd = queuedFds[i];
     struct stat fileStat{};
-    if (!LooksLikeGlogFileName(names[i]) || ::fstat(fd, &fileStat) != 0 ||
+    if (!LooksLikeGuiLogFileName(names[i]) || ::fstat(fd, &fileStat) != 0 ||
         !S_ISREG(fileStat.st_mode)) {
       ::close(fd);
       continue;
