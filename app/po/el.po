@@ -7728,8 +7728,8 @@ msgstr "Συμμετέχετε στο δίκτυο και αποκτήστε δ�
 
 #. Call to action
 msgctxt "participate_intro_details"
-msgid "URnetwork is powered by the world's largest, safest,\nand most decentralized ingress and egress protocol."
-msgstr "Το URnetwork τροφοδοτείται από το μεγαλύτερο, ασφαλέστερο\nκαι πιο αποκεντρωμένο πρωτόκολλο εισόδου και εξόδου στον κόσμο."
+msgid "URnetwork is powered by a decentralized ingress and egress protocol,\nrun on community devices in a large selection of countries."
+msgstr "Το URnetwork τροφοδοτείται από ένα αποκεντρωμένο πρωτόκολλο εισόδου και εξόδου\nπου τρέχει σε συσκευές της κοινότητας σε μεγάλη επιλογή χωρών."
 
 #. Label for the password input field.
 msgctxt "password_label"

@@ -7747,8 +7747,8 @@ msgstr "Dołącz do sieci i uzyskaj bezpłatny dostęp do wersji społecznościo
 
 #. Call to action
 msgctxt "participate_intro_details"
-msgid "URnetwork is powered by the world's largest, safest,\nand most decentralized ingress and egress protocol."
-msgstr "URnetwork opiera się na największym, najbezpieczniejszym i najbardziej\nzdecentralizowanym na świecie protokole wejścia i wyjścia."
+msgid "URnetwork is powered by a decentralized ingress and egress protocol,\nrun on community devices in a large selection of countries."
+msgstr "URnetwork opiera się na zdecentralizowanym protokole wejścia i wyjścia,\ndziałającym na urządzeniach społeczności w wielu krajach."
 
 #. Label for the password input field.
 msgctxt "password_label"

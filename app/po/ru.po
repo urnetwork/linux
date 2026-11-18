@@ -7837,8 +7837,8 @@ msgstr "Участвуйте в сети и получите бесплатны�
 
 #. Call to action
 msgctxt "participate_intro_details"
-msgid "URnetwork is powered by the world's largest, safest,\nand most decentralized ingress and egress protocol."
-msgstr "В основе URnetwork — самый крупный, безопасный\nи децентрализованный в мире протокол входа и выхода трафика."
+msgid "URnetwork is powered by a decentralized ingress and egress protocol,\nrun on community devices in a large selection of countries."
+msgstr "В основе URnetwork — децентрализованный протокол входа и выхода трафика,\nработающий на устройствах сообщества в большом выборе стран."
 
 #. Label for the password input field.
 msgctxt "password_label"

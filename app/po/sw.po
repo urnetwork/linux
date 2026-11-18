@@ -7728,8 +7728,8 @@ msgstr "Shiriki katika mtandao na upate ufikiaji wa bure wa toleo la jamii."
 
 #. Call to action
 msgctxt "participate_intro_details"
-msgid "URnetwork is powered by the world's largest, safest,\nand most decentralized ingress and egress protocol."
-msgstr "URnetwork inaendeshwa na itifaki ya kuingia na kutoka\niliyo kubwa, salama na iliyogatuliwa zaidi duniani."
+msgid "URnetwork is powered by a decentralized ingress and egress protocol,\nrun on community devices in a large selection of countries."
+msgstr "URnetwork inaendeshwa na itifaki ya kuingia na kutoka iliyogatuliwa,\ninayoendeshwa kwenye vifaa vya jamii katika nchi nyingi."
 
 #. Label for the password input field.
 msgctxt "password_label"
