@@ -9472,6 +9472,11 @@ msgctxt "sessions_device_cli"
 msgid "Command line"
 msgstr "Befehlszeile"
 
+#. Sessions screen (Account > Sessions), row line 1: the device label of a session the browser extension signed in (the sdk's LastUsed.DeviceKind extension: device type web from the extension's Chrome or Firefox build), in place of Web.
+msgctxt "sessions_device_extension"
+msgid "Browser extension"
+msgstr "Browsererweiterung"
+
 #. Sessions screen (Account > Sessions), row line 1: the device type of a session signed in from the iOS app, before its app version. The operating system's name, unchanged in every language.
 msgctxt "sessions_device_ios"
 msgid "iOS"
@@ -9617,7 +9622,7 @@ msgctxt "sessions_limit_reached"
 msgid "Too many active sessions. Sign out sessions you no longer use in Account > Sessions, then try again."
 msgstr "Zu viele aktive Sitzungen. Melde unter Konto > Sitzungen die Sitzungen ab, die du nicht mehr nutzt, und versuche es dann erneut."
 
-#. Sign-in screens: a sign-in, or a sign-in with a code, was refused because the account holds its cap of active sessions (the sdk's SessionErrorCodeLimitReached). This device is not signed in, so the line sends the user to a device that is. Nothing was signed out. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
+#. Sign-in screens, the browser extension's code sign-in among them: a sign-in, or a sign-in with a code, was refused because the account holds its cap of active sessions (the sdk's SessionErrorCodeLimitReached). This device is not signed in, so the line sends the user to a device that is. Nothing was signed out. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
 msgctxt "sessions_limit_reached_sign_in"
 msgid "Too many active sessions. On a device that's signed in to this account, go to Account > Sessions and sign out sessions you no longer use, then try again."
 msgstr "Zu viele aktive Sitzungen. Öffne auf einem Gerät, das bei diesem Konto angemeldet ist, Konto > Sitzungen, melde die Sitzungen ab, die du nicht mehr nutzt, und versuche es dann erneut."

@@ -60,7 +60,9 @@ struct LastUse {
   std::string region;
   std::string country;
   std::string countryCode;  // lower-case ISO alpha-2, or empty
-  std::string deviceType;   // android ios macos windows linux web cli server unknown
+  // the sdk's device kind (LastUsed.DeviceKind): android ios macos windows
+  // linux web extension (the browser extension) cli server unknown
+  std::string deviceType;
   std::string appVersion;   // empty when unknown
 };
 
@@ -201,6 +203,11 @@ inline Device DeviceFor(const std::string& deviceType) {
   if (deviceType == "windows") return {{"sessions_device_windows", "Windows"}, G::DeviceWindows};
   if (deviceType == "linux") return {{"sessions_device_linux", "Linux"}, G::DeviceLinux};
   if (deviceType == "web") return {{"sessions_device_web", "Web"}, G::DeviceWeb};
+  // the browser extension's own sign-in (urnet::SessionDeviceKindExtension): a
+  // browser, with the web logo
+  if (deviceType == "extension") {
+    return {{"sessions_device_extension", "Browser extension"}, G::DeviceWeb};
+  }
   if (deviceType == "cli") return {{"sessions_device_cli", "Command line"}, G::DeviceCli};
   if (deviceType == "server") return {{"sessions_device_server", "Server"}, G::DeviceServer};
   return {{"sessions_device_unknown", "Unknown device"}, G::DeviceUnknown};

@@ -169,7 +169,10 @@ sessions::Snapshot SnapshotOf(const urnet::ClientSessionSnapshot& source) {
         use.region = used.getRegion();
         use.country = used.getCountry();
         use.countryCode = used.getCountryCode();
-        use.deviceType = used.getDeviceType();
+        // the sdk's kind names the browser extension; a type from an sdk
+        // without it is the same for every other device
+        use.deviceType = used.getDeviceKind();
+        if (use.deviceType.empty()) use.deviceType = used.getDeviceType();
         use.appVersion = used.getAppVersion();
         session.lastUse = std::move(use);
       }

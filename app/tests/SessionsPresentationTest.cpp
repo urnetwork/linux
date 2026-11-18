@@ -187,6 +187,7 @@ UR_TEST(Sessions_EveryDeviceTypeHasItsLabelAndLogo) {
       {"windows", "Windows", MdiGlyph::DeviceWindows},
       {"linux", "Linux", MdiGlyph::DeviceLinux},
       {"web", "Web", MdiGlyph::DeviceWeb},
+      {"extension", "Browser extension", MdiGlyph::DeviceWeb},  // the sdk's device kind
       {"cli", "Command line", MdiGlyph::DeviceCli},
       {"server", "Server", MdiGlyph::DeviceServer},
       {"unknown", "Unknown device", MdiGlyph::DeviceUnknown},
