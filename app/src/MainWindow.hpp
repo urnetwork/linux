@@ -249,8 +249,8 @@ class MainWindow : public Gtk::ApplicationWindow {
   // The sdk reported that the server rejected the account's sign-in while this
   // device's client stays signed in (SdkHost::SetAccountSignInRequiredHandler),
   // marshaled here: the normal Logout() after this app signed its own session
-  // out, else a notice that the account needs a sign-in again, the tunnel left
-  // as it is.
+  // out, else a notice that the account needs a sign-in again, with the words
+  // its cause allows, the tunnel left as it is.
   void OnAccountSignInRequired(const auth_logout::Report& report);
   void ApplyAuthState(bool loggedIn);
   // ONE READING IN, EVERY WINDOW SURFACE OUT. There is no SetConnected(bool)

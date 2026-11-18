@@ -426,8 +426,11 @@ class SdkHost {
   // (Api.addAccountSignInRequiredListener; REVOKE-FINAL.md §10): the sdk has
   // cleared the account's credential and kept the device's, so the tunnel
   // carries on, and what manages the account needs a sign-in again. The report
-  // carries the sign-in it was heard in (its cause is ""). The handler runs on
-  // an sdk thread and must only marshal (MainWindow::OnAccountSignInRequired).
+  // carries the cause its listener read (Api.getAccountSignInRequiredCause:
+  // auth_logout::kSessionRevoked when the server confirmed the account's
+  // session was revoked, else "") and the sign-in it was heard in. The handler
+  // runs on an sdk thread and must only marshal
+  // (MainWindow::OnAccountSignInRequired).
   using AccountSignInRequiredHandler = std::function<void(auth_logout::Report report)>;
   using JwtRefreshedHandler = std::function<void()>;
   // The ONE connection feed. It replaced a string push whose five call sites

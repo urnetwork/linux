@@ -2621,10 +2621,12 @@ void MainWindow::OnAuthLogout(const auth_logout::Report& report) {
 // §10). When this app signed its own session out from Sessions, its normal
 // sign-out follows, as that confirmation said (REVOKE-UI-FINAL.md §4).
 // Otherwise the account was signed out from elsewhere: nothing disconnects or
-// signs out by itself, and the window says, in §5's generic words, that the
-// account needs a sign-in again, on a warning that stays until dismissed (the
-// Sessions page says the same from its own controller). A report of a sign-in
-// that has ended does nothing (AuthLogout.hpp AccountSignInStepFor).
+// signs out by itself, and the window says that the account needs a sign-in
+// again, on a warning that stays until dismissed (the Sessions page says the
+// same from its own controller). It says "This session was signed out from
+// another device." first only for the sdk's trusted cause (§5,
+// AuthLogout.hpp AccountSignInNotice). A report of a sign-in that has ended
+// does nothing (AccountSignInStepFor).
 void MainWindow::OnAccountSignInRequired(const auth_logout::Report& report) {
   switch (auth_logout::AccountSignInStepFor(host_.SignsOut(report), report, ownSessionSignOut_)) {
     case auth_logout::AccountSignInStep::None:
@@ -2635,11 +2637,15 @@ void MainWindow::OnAccountSignInRequired(const auth_logout::Report& report) {
       host_.Logout();
       return;
     case auth_logout::AccountSignInStep::Notice:
-      g_message("auth: the server rejected the account's sign-in; this device stays signed in");
+      g_message("auth: the server rejected the account's sign-in (cause \"%s\"); this device "
+                "stays signed in",
+                report.cause.c_str());
       if (shell_) {
-        shell_->snackbar().Show(
-            T_("sessions_sign_in_required", "Sign in again to manage sessions."),
-            kit::Snackbar::Severity::Warning);
+        const auto lookup = [](const auth_logout::Text& text) {
+          return std::string(T_(text.key, text.english));
+        };
+        shell_->snackbar().Show(auth_logout::AccountSignInNotice(report, lookup),
+                                kit::Snackbar::Severity::Warning);
       }
       return;
   }

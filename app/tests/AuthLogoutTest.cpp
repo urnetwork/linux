@@ -5,13 +5,21 @@
 // and the bound DeviceRemote's listeners each report, signs the app out once,
 // however their posts interleave with the sign-out. The window drives these
 // the way App below does (ApiSignOutWiringTest pins MainWindow and SdkHost to
-// it); nothing here waits, races or reads a clock.
+// it); nothing here waits, races or reads a clock. The account's sign-in
+// needed while this device stays signed in follows the same rule for its
+// notice's words.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
+#include <fstream>
+#include <sstream>
 #include <string>
 
 #include "AuthLogout.hpp"
+
+#ifndef UR_SRC_DIR
+#define UR_SRC_DIR ""
+#endif
 
 namespace a = urnw::auth_logout;
 
@@ -228,4 +236,47 @@ UR_TEST(AuthLogout_AnAccountSignInNeededSignsOutOnlyAfterOwnSignOut) {
   UR_EXPECT_EQ(0u, ownSignedOut.signIn);
   UR_EXPECT_TRUE(a::AccountSignInStepFor(tracker.SignsOut(later), later, ownSignedOut) ==
                  a::AccountSignInStep::Notice);
+  // the step does not read the cause: a trusted one is a notice too
+  const a::Report revoked = tracker.Hear(a::kSessionRevoked);
+  UR_EXPECT_TRUE(a::AccountSignInStepFor(tracker.SignsOut(revoked), revoked, none) ==
+                 a::AccountSignInStep::Notice);
+}
+
+// The notice's words (REVOKE-UI-FINAL.md §5), in the English sources: the
+// generic sign-in line, after "This session was signed out from another
+// device." only for the server's trusted cause, the same rule the sign-in
+// page's notice follows. "" and every other cause name no other device.
+UR_TEST(AuthLogout_AnAccountSignInNoticeNamesAnotherDeviceOnlyForTheTrustedCause) {
+  const auto english = [](const a::Text& text) { return std::string(text.english); };
+  a::Report report;
+  report.signIn = 1;
+  report.cause = a::kSessionRevoked;
+  UR_EXPECT_TRUE(a::AccountSignInNotice(report, english) ==
+                 "This session was signed out from another device. Sign in again to manage sessions.");
+  for (const char* other : {"", "SESSION_REVOKED", "session_revoked ", "revoked", "signed_out",
+                            "own session signed out from Sessions"}) {
+    report.cause = other;
+    UR_EXPECT_TRUE_MSG(std::string("\"") + other + "\"",
+                       a::AccountSignInNotice(report, english) == "Sign in again to manage sessions.");
+  }
+  // each part is looked up by its key, one lookup each
+  std::string asked;
+  const auto keys = [&asked](const a::Text& text) {
+    asked += std::string(text.key) + ";";
+    return std::string("[") + text.key + "]";
+  };
+  report.cause = a::kSessionRevoked;
+  UR_EXPECT_TRUE(a::AccountSignInNotice(report, keys) ==
+                 "[sessions_signed_out_remotely] [sessions_sign_in_required]");
+  UR_EXPECT_TRUE(asked == "sessions_signed_out_remotely;sessions_sign_in_required;");
+  // both are the catalog's entries, byte for byte
+  std::ifstream in(std::string(UR_SRC_DIR) + "/../po/en.po", std::ios::binary);
+  UR_EXPECT_TRUE(in.good());
+  std::stringstream buffer;
+  buffer << in.rdbuf();
+  for (const a::Text& text : {a::kSignedOutRemotelyText, a::kSignInRequiredText}) {
+    const std::string entry =
+        std::string("msgctxt \"") + text.key + "\"\nmsgid \"" + text.english + "\"\n";
+    UR_EXPECT_TRUE_MSG(entry, buffer.str().find(entry) != std::string::npos);
+  }
 }

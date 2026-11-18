@@ -560,13 +560,18 @@ void SdkHost::AdoptSpaceApiLocked() {
   // stays signed in: when the client is not of that sign-in's session, the sdk
   // clears only the account's credential and says the account's sign-in is
   // needed instead of signing out (REVOKE-FINAL.md §10). It is reported with
-  // the sign-in it was heard in, as a sign-out is; the window decides what
-  // follows (MainWindow::OnAccountSignInRequired). Replaced with every Api, so
-  // a replaced one's report cannot reach the next account.
+  // the sign-in it was heard in, as a sign-out is, and with its cause
+  // (Api.getAccountSignInRequiredCause, set before the listeners run), read
+  // the same way through the same handle of its own; the window decides what
+  // follows and what its notice says (MainWindow::OnAccountSignInRequired).
+  // Replaced with every Api, so a replaced one's report cannot reach the next
+  // account.
   apiAccountSignInSub_.reset();
-  apiAccountSignInSub_.emplace(api_->addAccountSignInRequiredListener([this] {
-    // an sdk thread: marshal only
-    if (onAccountSignInRequired_) onAccountSignInRequired_(authLogouts_.Hear(std::string()));
+  apiAccountSignInSub_.emplace(api_->addAccountSignInRequiredListener([this, api] {
+    // an sdk thread: read, then marshal only
+    if (onAccountSignInRequired_) {
+      onAccountSignInRequired_(authLogouts_.Hear(api->getAccountSignInRequiredCause()));
+    }
   }));
 }
 
