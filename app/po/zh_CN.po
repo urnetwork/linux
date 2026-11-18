@@ -7799,8 +7799,8 @@ msgstr "参与网络并免费获得社区版的访问权限。"
 
 #. Call to action
 msgctxt "participate_intro_details"
-msgid "URnetwork is powered by the world's largest, safest,\nand most decentralized ingress and egress protocol."
-msgstr "URnetwork 由全球最大、最安全、\n最去中心化的出入口协议驱动。"
+msgid "URnetwork is powered by a decentralized ingress and egress protocol,\nrun on community devices in a large selection of countries."
+msgstr "URnetwork 由去中心化的出入口协议驱动，\n运行在众多国家的社区设备上。"
 
 #. Label for the password input field.
 msgctxt "password_label"

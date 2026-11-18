@@ -7818,8 +7818,8 @@ msgstr "Participa en la red y obtén acceso gratuito a la edición comunitaria."
 
 #. Call to action
 msgctxt "participate_intro_details"
-msgid "URnetwork is powered by the world's largest, safest,\nand most decentralized ingress and egress protocol."
-msgstr "URnetwork funciona con el protocolo de entrada y salida\nmás grande, seguro y descentralizado del mundo."
+msgid "URnetwork is powered by a decentralized ingress and egress protocol,\nrun on community devices in a large selection of countries."
+msgstr "URnetwork funciona con un protocolo descentralizado de entrada y salida,\nque se ejecuta en dispositivos de la comunidad en una amplia selección de países."
 
 #. Label for the password input field.
 msgctxt "password_label"
