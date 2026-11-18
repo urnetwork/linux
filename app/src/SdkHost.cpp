@@ -556,6 +556,18 @@ void SdkHost::AdoptSpaceApiLocked() {
     // an sdk thread: read, then marshal only (MainWindow's handler posts Logout)
     ReportAuthLogout(api->getAuthLogoutCause());
   }));
+  // The server can refuse the account's credential while this device's client
+  // stays signed in: when the client is not of that sign-in's session, the sdk
+  // clears only the account's credential and says the account's sign-in is
+  // needed instead of signing out (REVOKE-FINAL.md §10). It is reported with
+  // the sign-in it was heard in, as a sign-out is; the window decides what
+  // follows (MainWindow::OnAccountSignInRequired). Replaced with every Api, so
+  // a replaced one's report cannot reach the next account.
+  apiAccountSignInSub_.reset();
+  apiAccountSignInSub_.emplace(api_->addAccountSignInRequiredListener([this] {
+    // an sdk thread: marshal only
+    if (onAccountSignInRequired_) onAccountSignInRequired_(authLogouts_.Hear(std::string()));
+  }));
 }
 
 void SdkHost::ReportAuthLogout(std::string cause) {

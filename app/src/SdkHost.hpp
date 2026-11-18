@@ -421,6 +421,14 @@ class SdkHost {
   // -- the ui marshals onto the main loop and, when SignsOut(report), calls
   // Logout().
   using AuthInvalidHandler = std::function<void(auth_logout::Report report)>;
+  // Fired when the server rejected the account's own sign-in while this
+  // device's client, which is not of that sign-in's session, stays signed in
+  // (Api.addAccountSignInRequiredListener; REVOKE-FINAL.md §10): the sdk has
+  // cleared the account's credential and kept the device's, so the tunnel
+  // carries on, and what manages the account needs a sign-in again. The report
+  // carries the sign-in it was heard in (its cause is ""). The handler runs on
+  // an sdk thread and must only marshal (MainWindow::OnAccountSignInRequired).
+  using AccountSignInRequiredHandler = std::function<void(auth_logout::Report report)>;
   using JwtRefreshedHandler = std::function<void()>;
   // The ONE connection feed. It replaced a string push whose five call sites
   // could only ever emit "DESTINATION_SET" or "DISCONNECTED" — a vocabulary
@@ -923,10 +931,14 @@ class SdkHost {
   void SetAuthStateHandler(AuthStateHandler h) { onAuth_ = std::move(h); }
   bool AuthEpochCurrent(uint64_t epoch) const { return signInEpoch_.load() == epoch; }
   void SetAuthInvalidHandler(AuthInvalidHandler h) { onAuthInvalid_ = std::move(h); }
+  void SetAccountSignInRequiredHandler(AccountSignInRequiredHandler h) {
+    onAccountSignInRequired_ = std::move(h);
+  }
   // Whether a report the auth-invalid handler was given still signs the app
   // out: it was heard while signed in, and nothing has signed out or in since.
   // Each listener that hears a rejection reports it (the Api's, and the bound
-  // DeviceRemote's), and only the first of them signs out. Main loop.
+  // DeviceRemote's), and only the first of them signs out. The account
+  // sign-in handler's reports are checked the same way. Main loop.
   bool SignsOut(const auth_logout::Report& report) const { return authLogouts_.SignsOut(report); }
   // The sign-in an action that ends in a sign-out was made in, read as it
   // starts (the account deletion's request): its answer signs out only that
@@ -2288,6 +2300,7 @@ class SdkHost {
   void OnRowConnectDue();
   void RunRowConnect(const std::optional<urnet::ConnectLocation>& location);
   AuthInvalidHandler onAuthInvalid_;
+  AccountSignInRequiredHandler onAccountSignInRequired_;
   JwtRefreshedHandler onJwtRefreshed_;
   ApiUnreachableHandler onApiUnreachable_;
   // Hands a failed call's transport error to onApiUnreachable_ when it is a
@@ -2314,6 +2327,9 @@ class SdkHost {
   // api_ and replaced with it. Declared last so it closes before the handler
   // it calls and before the Api it listens to.
   std::optional<urnet::Sub> apiLogoutSub_;
+  // ...and its account's sign-in needed while this device's client stays
+  // signed in, the same way.
+  std::optional<urnet::Sub> apiAccountSignInSub_;
 };
 
 }  // namespace urnw

@@ -78,6 +78,12 @@ class SessionsPage : public Gtk::Box {
   std::function<bool()> sheet_open;
   std::function<void(bool open)> on_sheet_open_changed;
   std::function<void(const Glib::ustring& message, bool error)> on_snackbar;
+  // This app's own session's sign-out was confirmed, just before it is sent.
+  // The app signs out once it is done (REVOKE-UI-FINAL.md §4): the Api reports
+  // it as a sign-out, or, while this device's client is of another session,
+  // as the account's sign-in needed, which the window then follows with its
+  // sign-out as well (MainWindow::OnAccountSignInRequired).
+  std::function<void()> on_own_session_sign_out;
 
  private:
   // One session's row. Its callbacks name the session by ID, never by place.

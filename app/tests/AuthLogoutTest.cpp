@@ -184,3 +184,48 @@ UR_TEST(AuthLogout_AReportEndsOnlyItsOwnSignIn) {
   UR_EXPECT_EQ(2, app.signOuts);
   UR_EXPECT_EQ(2, app.noticesShown);
 }
+
+// The account's sign-in needed while this device's client stays signed in
+// (Api.addAccountSignInRequiredListener): after this app signed its own
+// session out from Sessions in the same sign-in, its sign-out follows, as the
+// confirmation said; otherwise the window only says the account needs a
+// sign-in again, and nothing signs out or disconnects. A report of a sign-in
+// that has ended, or an own sign-out asked in an earlier sign-in, never signs
+// the next one out.
+UR_TEST(AuthLogout_AnAccountSignInNeededSignsOutOnlyAfterOwnSignOut) {
+  a::Tracker tracker;
+  const a::Report none;  // no own sign-out asked
+  // heard while signed out: nothing
+  const a::Report signedOut = tracker.Hear("");
+  UR_EXPECT_TRUE(a::AccountSignInStepFor(tracker.SignsOut(signedOut), signedOut, none) ==
+                 a::AccountSignInStep::None);
+
+  tracker.SignedIn();
+  // signed out from elsewhere: the notice, never a sign-out
+  const a::Report elsewhere = tracker.Hear("");
+  UR_EXPECT_TRUE(a::AccountSignInStepFor(tracker.SignsOut(elsewhere), elsewhere, none) ==
+                 a::AccountSignInStep::Notice);
+  // this app signed its own session out in this sign-in: its sign-out
+  const a::Report own = tracker.Hear("own session signed out from Sessions");
+  const a::Report afterOwn = tracker.Hear("");
+  UR_EXPECT_TRUE(a::AccountSignInStepFor(tracker.SignsOut(afterOwn), afterOwn, own) ==
+                 a::AccountSignInStep::SignOut);
+
+  // a new sign-in: the own sign-out of the last one is spent, and a report of
+  // the last one does nothing
+  tracker.SignedOut();
+  tracker.SignedIn();
+  const a::Report next = tracker.Hear("");
+  UR_EXPECT_TRUE(a::AccountSignInStepFor(tracker.SignsOut(next), next, own) ==
+                 a::AccountSignInStep::Notice);
+  UR_EXPECT_TRUE(a::AccountSignInStepFor(tracker.SignsOut(afterOwn), afterOwn, own) ==
+                 a::AccountSignInStep::None);
+  // an own sign-out asked while signed out names no sign-in
+  tracker.SignedOut();
+  const a::Report ownSignedOut = tracker.Hear("");
+  tracker.SignedIn();
+  const a::Report later = tracker.Hear("");
+  UR_EXPECT_EQ(0u, ownSignedOut.signIn);
+  UR_EXPECT_TRUE(a::AccountSignInStepFor(tracker.SignsOut(later), later, ownSignedOut) ==
+                 a::AccountSignInStep::Notice);
+}

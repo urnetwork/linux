@@ -329,3 +329,16 @@ UR_TEST(SessionsWiring_AGroupRowKeepsItsFocus) {
   UR_EXPECT_TRUE(Contains(focus, "if (restore(rows_)) return;"));
   UR_EXPECT_TRUE(Contains(focus, "if (restore(group.rows)) return;"));
 }
+
+// This app's own sign-out is announced to the window before it is sent, so the
+// app signs out however the sdk reports it (ApiSignOutWiringTest).
+UR_TEST(SessionsWiring_ThisAppsOwnSignOutIsAnnounced) {
+  const std::string page = ReadCode("SessionsPage.cpp");
+  const std::string confirm = FunctionBody(page, "void SessionsPage::ShowConfirmation(");
+  UR_EXPECT_TRUE(Contains(confirm, "[this, self = confirmation.self] {"));
+  UR_EXPECT_TRUE(Before(confirm, "if (target && self && on_own_session_sign_out) on_own_session_sign_out();",
+                        "if (target) binding_.Revoke(*target);"));
+  const std::string window = ReadCode("MainWindow.cpp");
+  UR_EXPECT_TRUE(Contains(window, "sessionsPage_->on_own_session_sign_out = [this] {\n"
+                                  "    ownSessionSignOut_ = host_.SignInNow("));
+}

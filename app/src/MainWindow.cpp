@@ -415,6 +415,11 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   host_.SetAuthInvalidHandler([this](auth_logout::Report report) {
     PostToMain([this, report] { OnAuthLogout(report); });
   });
+  // The server rejected the account's own sign-in while this device's client
+  // stays signed in (OnAccountSignInRequired): the tunnel is left as it is.
+  host_.SetAccountSignInRequiredHandler([this](auth_logout::Report report) {
+    PostToMain([this, report] { OnAccountSignInRequired(report); });
+  });
   host_.SetApiUnreachableHandler([this](const std::string& error) {
     PostToMain([this, error] { OnApiUnreachable(error); });
   });
@@ -2037,6 +2042,11 @@ void MainWindow::BuildHome() {
   sessionsPage_->on_back = [this] {
     if (shell_) shell_->Navigate("account");
   };
+  // this app's own session's sign-out, in the sign-in it was asked in: the
+  // app's sign-out follows it however the sdk reports it (OnAccountSignInRequired)
+  sessionsPage_->on_own_session_sign_out = [this] {
+    ownSessionSignOut_ = host_.SignInNow("own session signed out from Sessions");
+  };
   accountPage_->on_open_sessions = [this] {
     if (shell_) shell_->Navigate("sessions");
   };
@@ -2604,6 +2614,35 @@ void MainWindow::OnAuthLogout(const auth_logout::Report& report) {
             report.cause.c_str());
   signInNotice_.Arm(report.cause);
   host_.Logout();
+}
+
+// The sdk cleared the account's credential the server rejected and kept this
+// device's client, which is not of that sign-in's session (REVOKE-FINAL.md
+// §10). When this app signed its own session out from Sessions, its normal
+// sign-out follows, as that confirmation said (REVOKE-UI-FINAL.md §4).
+// Otherwise the account was signed out from elsewhere: nothing disconnects or
+// signs out by itself, and the window says, in §5's generic words, that the
+// account needs a sign-in again, on a warning that stays until dismissed (the
+// Sessions page says the same from its own controller). A report of a sign-in
+// that has ended does nothing (AuthLogout.hpp AccountSignInStepFor).
+void MainWindow::OnAccountSignInRequired(const auth_logout::Report& report) {
+  switch (auth_logout::AccountSignInStepFor(host_.SignsOut(report), report, ownSessionSignOut_)) {
+    case auth_logout::AccountSignInStep::None:
+      g_message("auth: an account sign-in report for a sign-in that has ended was dropped");
+      return;
+    case auth_logout::AccountSignInStep::SignOut:
+      g_message("auth: this app signed its own session out; signing out");
+      host_.Logout();
+      return;
+    case auth_logout::AccountSignInStep::Notice:
+      g_message("auth: the server rejected the account's sign-in; this device stays signed in");
+      if (shell_) {
+        shell_->snackbar().Show(
+            T_("sessions_sign_in_required", "Sign in again to manage sessions."),
+            kit::Snackbar::Severity::Warning);
+      }
+      return;
+  }
 }
 
 void MainWindow::ApplyAuthState(bool loggedIn) {

@@ -963,10 +963,12 @@ void SessionsPage::ShowConfirmation(const sessions::Confirmation& confirmation,
   actions->append(*cancel);
   auto* signOut = Gtk::make_managed<Gtk::Button>(Lookup(sessions::kSignOutText));
   signOut->add_css_class("destructive-action");  // red IS the confirmation context
-  signOut->signal_clicked().connect([this] {
+  signOut->signal_clicked().connect([this, self = confirmation.self] {
     // the target, once: a second press cannot send a second revoke
     const std::optional<sessions::Target> target = flow_.Confirm();
     confirmDialog_->set_visible(false);
+    // this app's own session: the window follows it with the app's sign-out
+    if (target && self && on_own_session_sign_out) on_own_session_sign_out();
     if (target) binding_.Revoke(*target);
   });
   actions->append(*signOut);

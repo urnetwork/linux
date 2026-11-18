@@ -77,6 +77,36 @@ class Tracker {
   std::atomic<uint64_t> signedIn_{0};  // the sign-in now; 0 while signed out
 };
 
+// What follows when the sdk reports the account's sign-in needed while this
+// device's client stays signed in (Api.addAccountSignInRequiredListener). The
+// server refused the account's credential and the sdk cleared it, but this
+// device's client is not of that sign-in's session, so the sdk kept it and the
+// tunnel carries on (REVOKE-FINAL.md §10). Its report names the sign-in it was
+// heard in, as a sign-out's does; its cause is "".
+enum class AccountSignInStep {
+  // heard in a sign-in that has ended: nothing
+  None,
+  // this app signed its own session out from Sessions in this sign-in, and the
+  // confirmation said the app signs out (REVOKE-UI-FINAL.md §4): its sign-out
+  SignOut,
+  // the account was signed out from elsewhere: nothing disconnects or signs
+  // out by itself, and the window says the account needs a sign-in again
+  // (§5's generic words)
+  Notice,
+};
+
+// `current`: the report's sign-in is the one signed in now (Tracker::SignsOut).
+// `ownSignOut`: the sign-in in which this app confirmed signing its own session
+// out (Tracker::Hear as it was sent); signIn 0 when it has not.
+inline AccountSignInStep AccountSignInStepFor(bool current, const Report& report,
+                                              const Report& ownSignOut) {
+  if (!current) return AccountSignInStep::None;
+  if (ownSignOut.signIn != 0 && ownSignOut.signIn == report.signIn) {
+    return AccountSignInStep::SignOut;
+  }
+  return AccountSignInStep::Notice;
+}
+
 // The sign-in page's notice for the sign-out a report made: set as the report
 // signs out, shown once as the sign-out reaches the sign-in page, dropped by a
 // sign-in before then. Main loop only.
