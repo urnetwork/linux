@@ -9522,7 +9522,7 @@ msgctxt "sessions_legacy_note"
 msgid "Sign-ins from older app versions appear here once they renew. To end every sign-in, change your sign-in details."
 msgstr "Kuingia kutoka kwenye matoleo ya zamani ya programu kutaonekana hapa kukishasasishwa. Ili kukomesha kuingia kote, badilisha maelezo yako ya kuingia."
 
-#. Shown when the account holds its cap of active sessions and refused a request that would start one, on a page where the user is signed in to the account (ur.io's hosted proxy creation). A button that opens Account > Sessions (sessions_open) is next to it. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
+#. Shown when the account holds its cap of active sessions and refused a request that would start one, while the user is signed in to the account: adding a sign-in method (its verification step) in every app, and creating a hosted proxy on ur.io. On ur.io a button that opens Account > Sessions (sessions_open) is next to it. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
 msgctxt "sessions_limit_reached"
 msgid "Too many active sessions. Sign out sessions you no longer use in Account > Sessions, then try again."
 msgstr "Kuna vipindi vingi mno vilivyo hai. Toka kwenye vipindi usivyotumia tena katika Akaunti > Vipindi, kisha ujaribu tena."

@@ -9581,7 +9581,7 @@ msgctxt "sessions_legacy_note"
 msgid "Sign-ins from older app versions appear here once they renew. To end every sign-in, change your sign-in details."
 msgstr "旧版应用的登录会在续期后显示在这里。要结束所有登录，请更改您的登录信息。"
 
-#. Shown when the account holds its cap of active sessions and refused a request that would start one, on a page where the user is signed in to the account (ur.io's hosted proxy creation). A button that opens Account > Sessions (sessions_open) is next to it. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
+#. Shown when the account holds its cap of active sessions and refused a request that would start one, while the user is signed in to the account: adding a sign-in method (its verification step) in every app, and creating a hosted proxy on ur.io. On ur.io a button that opens Account > Sessions (sessions_open) is next to it. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
 msgctxt "sessions_limit_reached"
 msgid "Too many active sessions. Sign out sessions you no longer use in Account > Sessions, then try again."
 msgstr "活跃会话过多。请在“账户 > 登录会话”中退出不再使用的会话，然后重试。"

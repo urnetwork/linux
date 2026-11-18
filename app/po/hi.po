@@ -9522,7 +9522,7 @@ msgctxt "sessions_legacy_note"
 msgid "Sign-ins from older app versions appear here once they renew. To end every sign-in, change your sign-in details."
 msgstr "पुराने ऐप संस्करणों से किए गए साइन-इन नवीनीकृत होने पर यहाँ दिखेंगे। सभी साइन-इन समाप्त करने के लिए, अपनी साइन-इन जानकारी बदलें।"
 
-#. Shown when the account holds its cap of active sessions and refused a request that would start one, on a page where the user is signed in to the account (ur.io's hosted proxy creation). A button that opens Account > Sessions (sessions_open) is next to it. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
+#. Shown when the account holds its cap of active sessions and refused a request that would start one, while the user is signed in to the account: adding a sign-in method (its verification step) in every app, and creating a hosted proxy on ur.io. On ur.io a button that opens Account > Sessions (sessions_open) is next to it. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
 msgctxt "sessions_limit_reached"
 msgid "Too many active sessions. Sign out sessions you no longer use in Account > Sessions, then try again."
 msgstr "बहुत सारे सक्रिय सत्र हैं। खाता > सत्र में उन सत्रों से साइन आउट करें जिनका आप अब उपयोग नहीं करते, फिर पुनः प्रयास करें।"

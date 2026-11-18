@@ -7,6 +7,7 @@
 
 #include "Formatters.hpp"
 #include "I18n.hpp"
+#include "SessionLimitNotice.hpp"
 #include "Ui.hpp"
 
 namespace urnw {
@@ -75,7 +76,13 @@ class SdkGuestConversionSession : public GuestConversionSession {
                                std::optional<urnet::AuthVerifyResult> result,
                                std::optional<std::string> err) {
                              std::string error;
-                             if (err || !result || result->error) {
+                             if (result && result->error &&
+                                 session_limit::Refused(result->error->code)) {
+                               // the account's session cap refused the
+                               // session the verification mints
+                               error = T_(session_limit::kSignedInBody.key,
+                                          session_limit::kSignedInBody.english);
+                             } else if (err || !result || result->error) {
                                error = FirstMessage(
                                    result && result->error ? result->error->message
                                                            : std::string(),

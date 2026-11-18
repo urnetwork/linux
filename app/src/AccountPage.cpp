@@ -25,6 +25,7 @@
 #include "WalletBridgeRoute.hpp"
 #include "DeleteAccountOutcome.hpp"
 #include "PasswordSignIn.hpp"
+#include "SessionLimitNotice.hpp"
 #include "DisplayText.hpp"
 #include "Formatters.hpp"
 #include "GuestConversionSheet.hpp"
@@ -644,7 +645,10 @@ class AccountAddAuthSheet : public Gtk::Window {
           [epoch, seen, done](std::optional<urnet::AuthVerifyResult> result,
                               std::optional<std::string> err) {
             std::string error;
-            if (err || !result || result->error) {
+            if (result && result->error && session_limit::Refused(result->error->code)) {
+              // the account's session cap refused the session the verification mints
+              error = T_(session_limit::kSignedInBody.key, session_limit::kSignedInBody.english);
+            } else if (err || !result || result->error) {
               error = FirstMessage(
                   result && result->error ? result->error->message : std::string(), err);
               if (error.empty()) error = T_("something_went_wrong", "Something went wrong.");

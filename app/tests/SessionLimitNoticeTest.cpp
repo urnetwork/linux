@@ -80,6 +80,24 @@ UR_TEST(SessionLimitNotice_TheWordsAreTheCatalogs) {
   const std::string entry = std::string("msgctxt \"") + sl::kSignInBody.key + "\"\nmsgid \"" +
                             sl::kSignInBody.english + "\"\n";
   UR_EXPECT_TRUE_MSG(entry, buffer.str().find(entry) != std::string::npos);
+  // a signed-in device's line: it opens Account > Sessions itself
+  UR_EXPECT_TRUE(std::string(sl::kSignedInBody.key) == "sessions_limit_reached");
+  const std::string signedIn = std::string("msgctxt \"") + sl::kSignedInBody.key + "\"\nmsgid \"" +
+                               sl::kSignedInBody.english + "\"\n";
+  UR_EXPECT_TRUE_MSG(signedIn, buffer.str().find(signedIn) != std::string::npos);
+}
+
+// Adding a sign-in method and converting a guest verify the new email or
+// phone with authVerify, which mints a session while this device is signed
+// in: the cap's refusal there says the signed-in line ahead of the server's
+// words.
+UR_TEST(SessionLimitWiring_TheSignedInVerificationsShowTheSignedInLine) {
+  for (const char* source : {"AccountPage.cpp", "GuestConversionSheet.cpp"}) {
+    UR_EXPECT_TRUE_MSG(source, SessionLimitInOrder(wiring::ReadCode(source),
+                                                   {"session_limit::Refused(result->error->code)",
+                                                    "session_limit::kSignedInBody",
+                                                    "FirstMessage("}));
+  }
 }
 
 // Every route that starts a session reads the code from its result, sets the

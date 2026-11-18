@@ -1,4 +1,5 @@
-// The account's cap of active sessions, as the sign-in screens show it
+// The account's cap of active sessions, as the sign-in screens show it, and
+// as a signed-in device's verification of an added sign-in method shows it
 // (session1118 C.md §1, §5 A). Every route that starts a session (a sign-in of
 // any kind, a sign-in with a code, a network's creation, and the device client
 // created right after a sign-in) answers a refusal at the cap as its result,
@@ -39,6 +40,15 @@ inline constexpr client_limit::Text kSignInBody{
     "sessions_limit_reached_sign_in",
     "Too many active sessions. On a device that's signed in to this account, go to Account > "
     "Sessions and sign out sessions you no longer use, then try again."};
+
+// What a screen of a signed-in device says for it (adding a sign-in method,
+// and a guest's conversion, verify the new email or phone with authVerify,
+// which mints a session the app does not install): this device opens
+// Account > Sessions itself.
+inline constexpr client_limit::Text kSignedInBody{
+    "sessions_limit_reached",
+    "Too many active sessions. Sign out sessions you no longer use in Account > Sessions, then try "
+    "again."};
 
 // What a refused sign-in says in place of the server's words: the session
 // cap's line, else the client limit's for its prompt
