@@ -11113,6 +11113,11 @@ msgctxt "test_animation"
 msgid "Test animation"
 msgstr "Перевірити анімацію"
 
+#. Shown inline in the upgrade flow, and as the restore result, when the server refuses an App Store sandbox purchase (a TestFlight build) because the account is not one of its internal testers: the purchase report answers invalid with error code sandbox_purchase (sdk IsSandboxPurchaseRefusal). Test purchases are free, so they unlock nothing. Neutral on purpose: it must never name another way to pay (the App Store's anti-steering rule). Owner 2026-11-17: "Keep buttons, neutral notice" (Shared/ViewModels/AppStoreSubscriptionManager.swift).
+msgctxt "test_purchases_in_test_builds_don_t_unlock_pro"
+msgid "Test purchases in test builds don't unlock Pro."
+msgstr "Тестові покупки в тестових збірках не відкривають Pro."
+
 #. Used in Shared/Views/PurchaseSuccessView.swift.
 msgctxt "thanks_for_building_the_new_internet_with_us"
 msgid "Thanks for building the new internet with us"
