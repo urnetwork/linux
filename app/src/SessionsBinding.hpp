@@ -9,7 +9,8 @@
 //   - SetVisible (the page mapped or not) and SetForeground (the window
 //     presenting or hiding to the tray) go to it as they change.
 //   - Refresh and Revoke go to the attached controller, and nowhere without
-//     one.
+//     one; so do a group opened or closed and a section's Show more, which
+//     only lay the list out again (no request).
 //   - Release unsubscribes, then closes, and orphans every post still on its
 //     way: a listener posts with the generation it was subscribed under, and
 //     Accepts answers yes only for the controller attached now. No snapshot
@@ -42,6 +43,11 @@ class Controller {
   virtual void Refresh() = 0;
   virtual void RevokeSession(const std::string& sessionId) = 0;
   virtual void RevokeOtherSessions() = 0;
+  // A client group opened (its first page of rows) or closed.
+  virtual void SetGroupExpanded(const std::string& groupKind, bool expanded) = 0;
+  // Another page of a section's rows: the device sign-ins (kGroupSignIns) or an
+  // open group.
+  virtual void ShowMoreSessions(const std::string& section) = 0;
   // The controller's latest snapshot, as plain data.
   virtual Snapshot Read() = 0;
   // Drops the page's listener subscription.
@@ -103,6 +109,15 @@ class Binding {
     } else if (!target.sessionId.empty()) {
       controller_->RevokeSession(target.sessionId);
     }
+  }
+
+  // A group heading's activation (ExpandedAfterToggle) and a Show more.
+  void SetGroupExpanded(const std::string& groupKind, bool expanded) {
+    if (controller_) controller_->SetGroupExpanded(groupKind, expanded);
+  }
+
+  void ShowMore(const std::string& section) {
+    if (controller_) controller_->ShowMoreSessions(section);
   }
 
   std::optional<Snapshot> Read() {

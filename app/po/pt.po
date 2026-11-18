@@ -7011,7 +7011,7 @@ msgctxt "manage_devices_load_failed"
 msgid "Couldn't load your devices."
 msgstr "Não foi possível carregar seus dispositivos."
 
-#. Device list: the label of a hosted proxy, a proxy the account runs from ur.io, the browser extension or the API. It takes a slot of the plan while connected, so the user can remove it too.
+#. The label of a hosted proxy, a proxy the account runs from ur.io, the browser extension or the API. Device list: it takes a slot of the plan while connected, so the user can remove it too. Sessions screen (Account > Sessions): row line 1 and the confirmation's {device} for a session in the hosted proxies section (sessions_group_hosted_proxies), in place of a device name.
 msgctxt "manage_devices_proxy"
 msgid "Hosted proxy"
 msgstr "Proxy hospedado"
@@ -9312,10 +9312,30 @@ msgctxt "sessions_action_failed"
 msgid "Couldn't sign out this session. Try again."
 msgstr "Não foi possível terminar esta sessão. Tente novamente."
 
+#. Sessions screen (Account > Sessions), row line 1 and the confirmation's {device}: the label of a session in the section of API clients (sessions_group_api_clients), in place of a device name.
+msgctxt "sessions_client_api_key"
+msgid "API client"
+msgstr "Cliente de API"
+
+#. Sessions screen (Account > Sessions), row line 1 and the confirmation's {device}: the label of a session in the section of paired devices (sessions_group_paired_devices), in place of a device name.
+msgctxt "sessions_client_device"
+msgid "Paired device"
+msgstr "Dispositivo emparelhado"
+
+#. Sessions screen (Account > Sessions), row line 1 and the confirmation's {device}: the label of a session in the section of other clients (sessions_group_other_clients), in place of a device name.
+msgctxt "sessions_client_other"
+msgid "Other client"
+msgstr "Outro cliente"
+
 #. Sessions screen (Account > Sessions): body of the confirmation before signing another session out. {device} is the row's device label ("Android") and {place} its approximate location ("Chicago, Illinois, United States"), both inserted as they are, so no case ending or article can attach to them.
 msgctxt "sessions_confirm_body"
 msgid "{0} in {1} will be signed out."
 msgstr "A sessão {0} ({1}) será terminada."
+
+#. Sessions screen (Account > Sessions): body of the confirmation before signing out a hosted proxy's session. Signing it out ends that proxy for good; the user creates a new proxy to replace it.
+msgctxt "sessions_confirm_body_hosted_proxy"
+msgid "This hosted proxy will stop working. Create a new one to replace it."
+msgstr "Este proxy alojado deixará de funcionar. Crie um novo para o substituir."
 
 #. Sessions screen (Account > Sessions): body of the confirmation before signing another session out, when its location is unknown. {device} is the row's device label ("Android"), inserted as it is.
 msgctxt "sessions_confirm_body_no_place"
@@ -9326,6 +9346,11 @@ msgstr "A sessão {} será terminada."
 msgctxt "sessions_confirm_others_body"
 msgid "Every other session in this list will be signed out. This session stays signed in. Anyone who knows your sign-in details can still sign in again."
 msgstr "Todas as outras sessões desta lista serão terminadas. Esta sessão continua iniciada. Quem souber os seus dados de início de sessão pode voltar a iniciar sessão."
+
+#. Sessions screen (Account > Sessions): body of the confirmation before Sign out all other sessions, when the list has hosted proxies, which that sign-out keeps (sessions_confirm_others_body otherwise). Must not say that every device is signed out: anyone who has the sign-in details can sign in again.
+msgctxt "sessions_confirm_others_body_keeps_proxies"
+msgid "Every other session in this list will be signed out, except hosted proxies. This session stays signed in. Anyone who knows your sign-in details can still sign in again."
+msgstr "Todas as outras sessões desta lista serão terminadas, exceto os proxies alojados. Esta sessão continua iniciada. Quem souber os seus dados de início de sessão pode voltar a iniciar sessão."
 
 #. Sessions screen (Account > Sessions): title of the confirmation before Sign out all other sessions. Cancel is the default.
 msgctxt "sessions_confirm_others_title"
@@ -9396,6 +9421,26 @@ msgstr "Windows"
 msgctxt "sessions_empty"
 msgid "No active sessions"
 msgstr "Nenhuma sessão ativa"
+
+#. Sessions screen (Account > Sessions): the heading of a collapsed section below the device sign-ins, which opens when tapped. {count} is the number of sessions in it, formatted by the app ("1,204", or "10,000+" when the list was too long to read in full). A heading, so the noun does not agree with the count. The section holds the sessions of clients that the account's API keys created (each client has its own).
+msgctxt "sessions_group_api_clients"
+msgid "API clients ({})"
+msgstr "Clientes de API ({})"
+
+#. Sessions screen (Account > Sessions): the heading of a collapsed section below the device sign-ins, which opens when tapped. {count} is the number of sessions in it, formatted by the app ("1,204", or "10,000+" when the list was too long to read in full). A heading, so the noun does not agree with the count. The section holds the sessions of the account's hosted proxies (each proxy has its own).
+msgctxt "sessions_group_hosted_proxies"
+msgid "Hosted proxies ({})"
+msgstr "Proxies alojados ({})"
+
+#. Sessions screen (Account > Sessions): the heading of a collapsed section below the device sign-ins, which opens when tapped. {count} is the number of sessions in it, formatted by the app ("1,204", or "10,000+" when the list was too long to read in full). A heading, so the noun does not agree with the count. The section holds the sessions of the account's other clients, such as older clients' sign-ins.
+msgctxt "sessions_group_other_clients"
+msgid "Other clients ({})"
+msgstr "Outros clientes ({})"
+
+#. Sessions screen (Account > Sessions): the heading of a collapsed section below the device sign-ins, which opens when tapped. {count} is the number of sessions in it, formatted by the app ("1,204", or "10,000+" when the list was too long to read in full). A heading, so the noun does not agree with the count. The section holds the sessions of devices paired (adopted) into the account (each device has its own).
+msgctxt "sessions_group_paired_devices"
+msgid "Paired devices ({})"
+msgstr "Dispositivos emparelhados ({})"
 
 #. Sessions screen (Account > Sessions), end of row line 3: the first 8 characters of the session ID, which the user can copy. {id} is that hex text, e.g. "01a1f3c2".
 msgctxt "sessions_id"
@@ -9477,15 +9522,35 @@ msgctxt "sessions_legacy_note"
 msgid "Sign-ins from older app versions appear here once they renew. To end every sign-in, change your sign-in details."
 msgstr "Os inícios de sessão de versões mais antigas da app aparecem aqui quando forem renovados. Para terminar todos os inícios de sessão, altere os seus dados de início de sessão."
 
+#. Shown when the account holds its cap of active sessions and refused a request that would start one, on a page where the user is signed in to the account (ur.io's hosted proxy creation). A button that opens Account > Sessions (sessions_open) is next to it. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
+msgctxt "sessions_limit_reached"
+msgid "Too many active sessions. Sign out sessions you no longer use in Account > Sessions, then try again."
+msgstr "Demasiadas sessões ativas. Termine as sessões que já não utiliza em Conta > Sessões e tente novamente."
+
+#. Sign-in screens: a sign-in, or a sign-in with a code, was refused because the account holds its cap of active sessions (the sdk's SessionErrorCodeLimitReached). This device is not signed in, so the line sends the user to a device that is. Nothing was signed out. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
+msgctxt "sessions_limit_reached_sign_in"
+msgid "Too many active sessions. On a device that's signed in to this account, go to Account > Sessions and sign out sessions you no longer use, then try again."
+msgstr "Demasiadas sessões ativas. Num dispositivo com sessão iniciada nesta conta, aceda a Conta > Sessões, termine as sessões que já não utiliza e tente novamente."
+
 #. Sessions screen (Account > Sessions): shown when the list failed to load the first time, above the try_again button.
 msgctxt "sessions_load_failed"
 msgid "Couldn't load sessions."
 msgstr "Não foi possível carregar as sessões."
 
+#. Button next to sessions_limit_reached: opens Account > Sessions, where the user signs out sessions they no longer use. 'Sessions' is that screen's name (sessions_title).
+msgctxt "sessions_open"
+msgid "Open Sessions"
+msgstr "Abrir Sessões"
+
 #. Sessions screen (Account > Sessions): non-blocking notice when a refresh failed. The screen keeps showing the list it had.
 msgctxt "sessions_refresh_failed"
 msgid "Couldn't refresh. Showing the last list."
 msgstr "Não foi possível atualizar. A mostrar a última lista."
+
+#. Sessions screen (Account > Sessions): button at the end of a section that shows the section's next rows (the device sign-ins, or an open section such as hosted proxies).
+msgctxt "sessions_show_more"
+msgid "Show more"
+msgstr "Mostrar mais"
 
 #. Sessions screen (Account > Sessions): the screen's state when the account's sign-in was rejected and the user must sign in again. Generic: it names no cause. sessions_signed_out_remotely is the line for when the app knows another device signed this session out.
 msgctxt "sessions_sign_in_required"
@@ -11076,6 +11141,11 @@ msgstr "Concordo com os {terms_start}Termos e Serviços{terms_end} e a {privacy_
 msgctxt "test_animation"
 msgid "Test animation"
 msgstr "Testar animação"
+
+#. Shown inline in the upgrade flow, and as the restore result, when the server refuses an App Store sandbox purchase (a TestFlight build) because the account is not one of its internal testers: the purchase report answers invalid with error code sandbox_purchase (sdk IsSandboxPurchaseRefusal). Test purchases are free, so they unlock nothing. Neutral on purpose: it must never name another way to pay (the App Store's anti-steering rule). Owner 2026-11-17: "Keep buttons, neutral notice" (Shared/ViewModels/AppStoreSubscriptionManager.swift).
+msgctxt "test_purchases_in_test_builds_don_t_unlock_pro"
+msgid "Test purchases in test builds don't unlock Pro."
+msgstr "As compras de teste em versões de teste não desbloqueiam o Pro."
 
 #. Used in Shared/Views/PurchaseSuccessView.swift.
 msgctxt "thanks_for_building_the_new_internet_with_us"

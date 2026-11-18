@@ -46,6 +46,7 @@
 #include "ProvideLifecycle.hpp"
 #include "RowConnectCoalescer.hpp"
 #include "RpcSession.hpp"
+#include "SessionLimitNotice.hpp"
 #include "SignOut.hpp"
 #include "SlowInternet.hpp"
 #include "VerifySendNotice.hpp"
@@ -83,6 +84,11 @@ struct AuthResult {
   // sdk's AuthNetworkClientError.ClientLimitPrompt): the sign-in screens say
   // what to do (client_limit::SignInRefusalBody) instead of the server's words.
   client_limit::Prompt clientLimitPrompt = client_limit::Prompt::None;
+  // The account's cap of active sessions refused the sign-in, or this device's
+  // client after it (the sdk's SessionErrorCodeLimitReached): the sign-in
+  // screens say where to sign sessions out (session_limit::SignInRefusalBody)
+  // instead of the server's words. Nothing is kept to try again.
+  bool sessionLimit = false;
 };
 
 // Outcome of the authLogin account discovery (macOS LoginInitialViewModel
@@ -105,6 +111,8 @@ struct LoginRouting {
   std::string error;
   // Error, from the client limit (AuthResult::clientLimitPrompt)
   client_limit::Prompt clientLimitPrompt = client_limit::Prompt::None;
+  // Error, from the account's cap of active sessions (AuthResult::sessionLimit)
+  bool sessionLimit = false;
 };
 
 // Change notifications for the connect drawer (charts, block actions, dns,
@@ -458,6 +466,8 @@ class SdkHost {
     bool ok = false;
     std::string error;
     std::string seedphrase;  // the caller zeroes its copy after display
+    // the account's cap of active sessions refused it (AuthResult::sessionLimit)
+    bool sessionLimit = false;
   };
   // Instant accounts can be referred too: a validated referral code rides
   // along on the create (empty = none).

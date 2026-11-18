@@ -127,7 +127,9 @@ UR_TEST(ClientLimitWiring_ARefusedSignInCarriesThePrompt) {
 
 // Every sign-in screen that shows a refusal says what to do about the limit
 // instead of the server's words. The verify page's own line is for a bad code,
-// which a code the limit refused afterwards is not.
+// which a code the limit refused afterwards is not. (The account's cap of
+// active sessions takes the same path ahead of the limit:
+// SessionLimitNoticeTest.cpp.)
 UR_TEST(ClientLimitWiring_EverySignInScreenSaysWhatToDo) {
   const std::string window = wiring::ReadCode("MainWindow.cpp");
   UR_EXPECT_TRUE(wiring::Contains(wiring::FunctionBody(window, "void MainWindow::OnSignIn() {"),
@@ -135,25 +137,26 @@ UR_TEST(ClientLimitWiring_EverySignInScreenSaysWhatToDo) {
   UR_EXPECT_TRUE(wiring::Contains(window, "SignInFailureText(r, T_(\"seedphrase_login_failed\""));
   UR_EXPECT_TRUE(wiring::Contains(window, "r, T_(\"instant_account_failed\""));
   UR_EXPECT_TRUE(wiring::Contains(window, "SignInFailureText(r, T_(\"code_sign_in_failed\""));
-  UR_EXPECT_TRUE(wiring::Contains(window, "routing.clientLimitPrompt, routing.error,"));
+  UR_EXPECT_TRUE(wiring::Contains(window, "routing.sessionLimit, routing.clientLimitPrompt, routing.error,"));
   UR_EXPECT_TRUE(wiring::Contains(
       wiring::FunctionBody(window, "void MainWindow::OnWalletAuth(const AuthResult& result) {"),
       "SetLoginError(SignInFailureText("));
-  // the shared words: the prompt's body first, the server's words after
+  // the shared words: the refusal's body first, the server's words after
   const std::string text = wiring::FunctionBody(
-      window, "Glib::ustring SignInFailureText(client_limit::Prompt clientLimitPrompt,");
-  UR_EXPECT_TRUE(ClientLimitInOrder(text, {"client_limit::SignInRefusalBody(clientLimitPrompt)",
+      window, "Glib::ustring SignInFailureText(bool sessionLimit, client_limit::Prompt clientLimitPrompt,");
+  UR_EXPECT_TRUE(ClientLimitInOrder(text, {"session_limit::SignInRefusalBody(sessionLimit, clientLimitPrompt)",
                                            "return T_(body->key, body->english);",
                                            "error.empty()"}));
   // no sign-in screen shows a refusal's raw words by itself any more
   UR_EXPECT_FALSE(wiring::Contains(window, ": r.error.c_str());"));
+  UR_EXPECT_FALSE(wiring::Contains(window, ": account.error.c_str());"));
   UR_EXPECT_FALSE(wiring::Contains(window, "SetLoginError(result.error);"));
 
   const std::string views = wiring::ReadCode("AuthViews.cpp");
   UR_EXPECT_TRUE(ClientLimitInOrder(wiring::FunctionBody(views, "void CreateNetworkPage::OnContinue() {"),
-                                    {"ClientLimitRefusalText(r)", "error_creating_network"}));
+                                    {"SignInRefusalText(r)", "error_creating_network"}));
   UR_EXPECT_TRUE(ClientLimitInOrder(views, {"host_.VerifyCode(userAuth_, code,",
-                                            "ClientLimitRefusalText(r)", "verify_input_invalid"}));
+                                            "SignInRefusalText(r)", "verify_input_invalid"}));
 }
 
 // The window shows the hold while a connection is requested and the sdk's

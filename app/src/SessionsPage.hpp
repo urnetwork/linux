@@ -4,19 +4,24 @@
 //
 //   header  Sessions, progress while a refresh runs, refresh, "‹ Account"
 //   notice  "Couldn't refresh. Showing the last list." over a list kept
-//   body    one row per session, in the controller's order (current first):
-//           the country circle with the device logo, three lines (the device
-//           and version, with "This session"; the place and last use; the
-//           sign-in date, method and short ID, with a copy button for the
-//           full ID) and a flat destructive Sign out; or the screen's state
-//           line (progress, empty, failed with Try again, unsupported,
-//           sign-in required)
+//   body    one row per device sign-in, in the controller's order (current
+//           first): the country circle with the device logo, three lines (the
+//           device and version, with "This session"; the place and last use;
+//           the sign-in date, method and short ID, with a copy button for the
+//           full ID) and a flat destructive Sign out; Show more while there
+//           are more. Then one group per kind of client (hosted proxies, API
+//           clients, paired devices, other clients): a heading button with
+//           its count and a chevron that opens and closes it, and while open
+//           its rows (the same row, its group's label in place of the device)
+//           and Show more. Or the screen's state line (progress, empty,
+//           failed with Try again, unsupported, sign-in required)
 //   bottom  Sign out all other sessions, what Last used means, and the note
 //           on older sign-ins while coverage is partial
 //
 // Everything is the shared controller's (sdk ClientSessionViewController,
-// opened on the account's Api in this process): the list, the 30 s polling
-// while visible, the operations and their retries, the refusals.
+// opened on the account's Api in this process): the list and its layout into
+// sections and pages, the 30 s polling while visible, the operations and
+// their retries, the refusals.
 // SessionsBinding.hpp carries the lifecycle and SessionsPresentation.hpp every
 // decision; this file is the GTK. The controller's listener runs on an sdk
 // thread and only posts to the main loop, where the post is dropped unless the
@@ -90,15 +95,41 @@ class SessionsPage : public Gtk::Box {
     Gtk::Button* signOut = nullptr;
   };
 
+  // One client group: its heading, its rows while open and their Show more.
+  // Its callbacks name the group by kind, never by place.
+  struct GroupWidgets {
+    std::string kind;
+    Gtk::Box* root = nullptr;
+    Gtk::Button* header = nullptr;  // opens and closes the group
+    Gtk::Label* heading = nullptr;  // "Hosted proxies (1,204)"
+    Gtk::Image* chevron = nullptr;
+    Gtk::Box* rowsBox = nullptr;
+    std::vector<RowWidgets> rows;
+    Gtk::Widget* moreRow = nullptr;
+  };
+
   void BuildPane();
   bool CanCallApi();
   sessions::Words MakeWords() const;
   void EnsureController();
   void ReadSnapshot();
   void Render();
-  void RenderRows(const sessions::Words& words, int64_t now);
+  // Reconciles one section's rows in `box` with `listed` (KeyedReconcile.hpp);
+  // `section` is where they are listed (kGroupSignIns or a group's kind).
+  void RenderRows(Gtk::Box& box, std::vector<RowWidgets>& rows,
+                  const std::vector<sessions::Session>& listed, const std::string& section,
+                  const sessions::Words& words, int64_t now);
+  void ClearRows(Gtk::Box& box, std::vector<RowWidgets>& rows);
   RowWidgets BuildRow(const std::string& sessionId);
   void UpdateRow(RowWidgets& row, const sessions::Row& text, sessions::ActionView view);
+  void RenderGroups(const sessions::Words& words, int64_t now);
+  GroupWidgets BuildGroup(const std::string& kind);
+  // `listed`: the group's rows while open (none while closed)
+  void UpdateGroup(GroupWidgets& group, const sessions::GroupView& view,
+                   const std::vector<sessions::Session>& listed, const sessions::Words& words,
+                   int64_t now);
+  void ClearGroups();
+  void ToggleGroup(const std::string& kind);
   void RenderOthers(const sessions::Screen& screen);
   void PressSignOut(const sessions::Target& target);
   // `keyNeedsBackup`: this app's own session leaves an unsaved one-tap key
@@ -132,7 +163,10 @@ class SessionsPage : public Gtk::Box {
   Gtk::Label* stateText_ = nullptr;
   Gtk::Button* retryButton_ = nullptr;
   Gtk::Box* rowsBox_ = nullptr;
-  std::vector<RowWidgets> rows_;
+  std::vector<RowWidgets> rows_;           // the device sign-ins
+  Gtk::Widget* signInsMoreRow_ = nullptr;  // their Show more
+  Gtk::Box* groupsBox_ = nullptr;
+  std::vector<GroupWidgets> groups_;       // in the controller's order
   Gtk::Widget* othersRow_ = nullptr;
   Gtk::Button* othersButton_ = nullptr;
   Gtk::Box* othersStatus_ = nullptr;

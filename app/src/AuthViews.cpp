@@ -51,11 +51,13 @@ Gtk::Label* MakeStepHeading(const Glib::ustring& text) {
   return heading;
 }
 
-// What the network's concurrent client limit says when it refused this
-// device's client at the end of the step (client_limit::SignInRefusalBody, the
-// sdk's prompt): an upgrade or a freed slot. Empty for any other refusal.
-Glib::ustring ClientLimitRefusalText(const AuthResult& r) {
-  const client_limit::Text* body = client_limit::SignInRefusalBody(r.clientLimitPrompt);
+// What the step says when the account's cap of active sessions refused it, or
+// the network's concurrent client limit refused this device's client at its
+// end (session_limit::SignInRefusalBody): where to sign sessions out, or the
+// client limit's upgrade or freed slot. Empty for any other refusal.
+Glib::ustring SignInRefusalText(const AuthResult& r) {
+  const client_limit::Text* body =
+      session_limit::SignInRefusalBody(r.sessionLimit, r.clientLimitPrompt);
   return body ? Glib::ustring(T_(body->key, body->english)) : Glib::ustring();
 }
 
@@ -333,10 +335,10 @@ void CreateNetworkPage::OnContinue() {
         return;
       }
       if (!r.ok) {
-        const Glib::ustring clientLimit = ClientLimitRefusalText(r);
+        const Glib::ustring refusal = SignInRefusalText(r);
         errorLabel_->set_text(
-            !clientLimit.empty()
-                ? clientLimit
+            !refusal.empty()
+                ? refusal
                 : r.error.empty()
                       ? Glib::ustring(T_("error_creating_network",
                                          "There was an error creating your network. Please try again later."))
@@ -562,12 +564,13 @@ void VerifyPage::Submit() {
         // clear the code so retyping re-triggers the auto-submit (mac parity;
         // the changed handler clears the error, so set the message after)
         code_->set_text("");
-        // A code that verified, whose device the client limit then refused, is
-        // not a bad code: say what to do about the limit instead.
-        const Glib::ustring clientLimit = ClientLimitRefusalText(r);
+        // A code that verified, whose sign-in the account's cap of active
+        // sessions or whose device the client limit then refused, is not a bad
+        // code: say what to do about the cap or the limit instead.
+        const Glib::ustring refusal = SignInRefusalText(r);
         errorLabel_->set_text(
-            !clientLimit.empty()
-                ? clientLimit
+            !refusal.empty()
+                ? refusal
                 : Glib::ustring(T_("verify_input_invalid",
                                    "There was a problem authenticating your verification code.")));
         return;

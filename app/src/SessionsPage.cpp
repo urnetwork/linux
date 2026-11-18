@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <exception>
+#include <string_view>
 #include <utility>
 
 #include "BittensorKeyHost.hpp"
@@ -13,6 +14,7 @@
 #include "Formatters.hpp"
 #include "I18n.hpp"
 #include "KeyedReconcile.hpp"
+#include "LeaderboardIndicator.hpp"
 #include "Ui.hpp"
 #include "UrTheme.hpp"
 
@@ -26,7 +28,25 @@ constexpr int kProsePadY = 10;       // the notes under the list
 constexpr int kStateTopPx = 48;      // the state line, down from the header
 constexpr int kCopyGlyphPx = 14;
 constexpr int kRefreshGlyphPx = 16;
+constexpr int kChevronPx = 11;       // a group heading's, as the pane kit's row buttons
 constexpr int kConfirmWidth = 320;   // the remove-login-method confirm's width
+
+// The sections SessionsPresentation.hpp names are the sdk's.
+static_assert(std::string_view(sessions::kGroupSignIns) ==
+                  std::string_view(urnet::ClientSessionGroupSignIns),
+              "the device sign-ins' section is the sdk's");
+static_assert(std::string_view(sessions::kGroupHostedProxies) ==
+                  std::string_view(urnet::ClientSessionGroupHostedProxies),
+              "the hosted proxies' group is the sdk's");
+static_assert(std::string_view(sessions::kGroupApiClients) ==
+                  std::string_view(urnet::ClientSessionGroupApiClients),
+              "the API clients' group is the sdk's");
+static_assert(std::string_view(sessions::kGroupPairedDevices) ==
+                  std::string_view(urnet::ClientSessionGroupPairedDevices),
+              "the paired devices' group is the sdk's");
+static_assert(std::string_view(sessions::kGroupOtherClients) ==
+                  std::string_view(urnet::ClientSessionGroupOtherClients),
+              "the other clients' group is the sdk's");
 
 // A line's text in a tone: a pango run beats the class colour (AccountPage's
 // SetToned; the text is escaped, so metadata stays plain text).
@@ -74,6 +94,21 @@ Gtk::Widget* MakeProseRow(Gtk::Label*& line, const Glib::ustring& text) {
   return host;
 }
 
+// §5 C: a section's Show more, a flat button on a pane row of its own under
+// the section's rows; hidden until the section has more to show.
+Gtk::Widget* MakeShowMoreRow(std::function<void()> press) {
+  auto* host = kit::MakePaneRow(0);
+  auto* more = Gtk::make_managed<Gtk::Button>(Lookup(sessions::kShowMoreText));
+  more->add_css_class("flat");
+  more->set_halign(Gtk::Align::START);
+  more->set_margin_top(kProsePadY);
+  more->set_margin_bottom(kProsePadY);
+  more->signal_clicked().connect(std::move(press));
+  if (auto* inner = dynamic_cast<Gtk::Box*>(host->get_first_child())) inner->append(*more);
+  host->set_visible(false);
+  return host;
+}
+
 GdkRGBA RgbaOf(const std::string& hex) {
   const Rgba color = ParseHexColor(hex, ParseHexColor(sessions::kUnknownCountryColorHex, Rgba{}));
   return GdkRGBA{static_cast<float>(color.r), static_cast<float>(color.g),
@@ -83,7 +118,8 @@ GdkRGBA RgbaOf(const std::string& hex) {
 // ---- the sdk's snapshot, as plain data -----------------------------------------
 // Every typed getter, copied over; a field the sdk reports as nil (a handle of
 // 0) is simply absent. The C ABI hands times over as Unix MILLISECONDS
-// (CreateTime); SessionLastUsed.UnixTime is seconds already.
+// (CreateTime); SessionLastUsed.UnixTime is seconds already. The sections, the
+// counts and the pages are copied as the controller laid them out.
 
 sessions::Error ErrorOf(const urnet::ClientSessionError& error) {
   sessions::Error out;
@@ -107,13 +143,10 @@ sessions::Action ActionOf(const urnet::ClientSessionAction& action) {
 sessions::Snapshot SnapshotOf(const urnet::ClientSessionSnapshot& source) {
   sessions::Snapshot out;
   if (!source) return out;
-  out.loaded = source.getLoaded();
-  out.loading = source.getLoading();
-  out.refreshing = source.getRefreshing();
-  out.supported = source.getSupported();
-  out.currentSessionId = source.getCurrentSessionId();
-  out.legacyCoverage = source.getLegacyCoverage();
-  if (urnet::NetworkSessionInfoList list = source.getSessions()) {
+  // a section's rows: the device sign-ins, or an open group's
+  const auto sessionsOf = [](const urnet::NetworkSessionInfoList& list) {
+    std::vector<sessions::Session> rows;
+    if (!list) return rows;
     const int64_t count = list.len();
     for (int64_t i = 0; i < count; ++i) {
       urnet::NetworkSessionInfo info = list.get(i);
@@ -140,7 +173,33 @@ sessions::Snapshot SnapshotOf(const urnet::ClientSessionSnapshot& source) {
         use.appVersion = used.getAppVersion();
         session.lastUse = std::move(use);
       }
-      out.sessions.push_back(std::move(session));
+      rows.push_back(std::move(session));
+    }
+    return rows;
+  };
+  out.loaded = source.getLoaded();
+  out.loading = source.getLoading();
+  out.refreshing = source.getRefreshing();
+  out.supported = source.getSupported();
+  out.currentSessionId = source.getCurrentSessionId();
+  out.legacyCoverage = source.getLegacyCoverage();
+  out.sessions = sessionsOf(source.getSessions());
+  out.sessionCount = source.getSessionCount();
+  out.sessionsHasMore = source.getSessionsHasMore();
+  out.otherSessionCount = source.getOtherSessionCount();
+  out.truncated = source.getTruncated();
+  if (urnet::ClientSessionGroupList groups = source.getGroups()) {
+    const int64_t count = groups.len();
+    for (int64_t i = 0; i < count; ++i) {
+      urnet::ClientSessionGroup group = groups.get(i);
+      if (!group) continue;
+      sessions::Group copy;
+      copy.kind = group.getKind();
+      copy.count = group.getCount();
+      copy.expanded = group.getExpanded();
+      copy.hasMore = group.getHasMore();
+      copy.sessions = sessionsOf(group.getSessions());
+      out.groups.push_back(std::move(copy));
     }
   }
   if (urnet::ClientSessionError error = source.getError()) out.error = ErrorOf(error);
@@ -174,6 +233,12 @@ class SdkController final : public sessions::Controller {
     controller_.revokeSession(sessionId);
   }
   void RevokeOtherSessions() override { controller_.revokeOtherSessions(); }
+  void SetGroupExpanded(const std::string& groupKind, bool expanded) override {
+    controller_.setGroupExpanded(groupKind, expanded);
+  }
+  void ShowMoreSessions(const std::string& section) override {
+    controller_.showMoreSessions(section);
+  }
   sessions::Snapshot Read() override {
     try {
       return SnapshotOf(controller_.getSnapshot());
@@ -287,8 +352,14 @@ void SessionsPage::BuildPane() {
     content->append(*stateBox_);
   }
 
+  // the device sign-ins, a page at a time, then the groups of the clients'
+  // sessions (§5 C)
   rowsBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
   content->append(*rowsBox_);
+  signInsMoreRow_ = MakeShowMoreRow([this] { binding_.ShowMore(sessions::kGroupSignIns); });
+  content->append(*signInsMoreRow_);
+  groupsBox_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+  content->append(*groupsBox_);
 
   // §4: Sign out all other sessions, at the bottom of the list
   {
@@ -346,6 +417,8 @@ sessions::Words SessionsPage::MakeWords() const {
   words.relativeTime = [](int64_t secondsAgo) { return RelativeTime(secondsAgo); };
   words.date = [](int64_t unixSeconds) { return LocalDate(unixSeconds); };
   words.dateTime = [](int64_t unixSeconds) { return LocalDateTime(unixSeconds); };
+  // the locale's thousands grouping, as the Earnings boards group their ranks
+  words.count = [](int64_t count) { return leaderboard::GroupedRank(count); };
   return words;
 }
 
@@ -473,68 +546,200 @@ void SessionsPage::Render() {
   if (line) SetToned(*stateText_, failed ? kUrDanger : kUrTextMuted, Lookup(*line));
 
   if (screen.body == sessions::Body::Rows) {
-    RenderRows(MakeWords(), g_get_real_time() / G_USEC_PER_SEC);
+    const sessions::Words words = MakeWords();
+    const int64_t now = g_get_real_time() / G_USEC_PER_SEC;
+    RenderRows(*rowsBox_, rows_, snapshot_.sessions, sessions::kGroupSignIns, words, now);
+    RenderGroups(words, now);
   } else {
-    for (const RowWidgets& row : rows_) rowsBox_->remove(*row.root);
-    rows_.clear();
+    ClearRows(*rowsBox_, rows_);
+    ClearGroups();
   }
+  signInsMoreRow_->set_visible(screen.signInsMore);
   noticeRow_->set_visible(screen.refreshFailed);
   RenderOthers(screen);
   helpRow_->set_visible(screen.lastUsedHelp);
   legacyRow_->set_visible(screen.legacyNote);
 }
 
-// The rows, reconciled by session ID (KeyedReconcile.hpp): a row still listed
-// is rewritten in place, so its Sign out keeps the keyboard focus and a screen
-// reader its place across the polls; a new session is inserted, a gone one
-// removed.
-void SessionsPage::RenderRows(const sessions::Words& words, int64_t now) {
+// One section's rows, reconciled by session ID (KeyedReconcile.hpp): a row
+// still listed is rewritten in place, so its Sign out keeps the keyboard focus
+// and a screen reader its place across the polls; a new session is inserted,
+// a gone one removed.
+void SessionsPage::RenderRows(Gtk::Box& box, std::vector<RowWidgets>& rows,
+                              const std::vector<sessions::Session>& listed,
+                              const std::string& section, const sessions::Words& words,
+                              int64_t now) {
   std::vector<std::string> wanted;
-  wanted.reserve(snapshot_.sessions.size());
-  for (const sessions::Session& session : snapshot_.sessions) wanted.push_back(session.sessionId);
+  wanted.reserve(listed.size());
+  for (const sessions::Session& session : listed) wanted.push_back(session.sessionId);
   std::vector<std::string> onScreen;
-  onScreen.reserve(rows_.size());
-  for (const RowWidgets& row : rows_) onScreen.push_back(row.sessionId);
+  onScreen.reserve(rows.size());
+  for (const RowWidgets& row : rows) onScreen.push_back(row.sessionId);
 
   const auto colorHexFor = [](const std::string& code) { return urnet::getColorHex(code); };
   const auto render = [&](RowWidgets& row, size_t wantedIndex) {
-    const sessions::Session& session = snapshot_.sessions[wantedIndex];
-    UpdateRow(row, sessions::RowFor(snapshot_, session, words, now, colorHexFor),
+    const sessions::Session& session = listed[wantedIndex];
+    UpdateRow(row, sessions::RowFor(snapshot_, session, words, now, colorHexFor, section),
               sessions::ActionViewOf(sessions::ActionFor(snapshot_, session.sessionId)));
   };
   for (const reconcile::Step& step : reconcile::Plan(onScreen, wanted)) {
     switch (step.kind) {
       case reconcile::StepKind::Remove:
-        rowsBox_->remove(*rows_[step.index].root);
-        rows_.erase(rows_.begin() + static_cast<std::ptrdiff_t>(step.index));
+        box.remove(*rows[step.index].root);
+        rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(step.index));
         break;
       case reconcile::StepKind::Update:
-        render(rows_[step.index], step.wantedIndex);
+        render(rows[step.index], step.wantedIndex);
         break;
       case reconcile::StepKind::Move: {
-        RowWidgets row = std::move(rows_[step.from]);
-        rows_.erase(rows_.begin() + static_cast<std::ptrdiff_t>(step.from));
+        RowWidgets row = std::move(rows[step.from]);
+        rows.erase(rows.begin() + static_cast<std::ptrdiff_t>(step.from));
         render(row, step.wantedIndex);
         if (step.index == 0) {
-          rowsBox_->reorder_child_at_start(*row.root);
+          box.reorder_child_at_start(*row.root);
         } else {
-          rowsBox_->reorder_child_after(*row.root, *rows_[step.index - 1].root);
+          box.reorder_child_after(*row.root, *rows[step.index - 1].root);
         }
-        rows_.insert(rows_.begin() + static_cast<std::ptrdiff_t>(step.index), std::move(row));
+        rows.insert(rows.begin() + static_cast<std::ptrdiff_t>(step.index), std::move(row));
         break;
       }
       case reconcile::StepKind::Insert: {
         RowWidgets row = BuildRow(wanted[step.wantedIndex]);
         render(row, step.wantedIndex);
         if (step.index == 0) {
-          rowsBox_->insert_child_at_start(*row.root);
+          box.insert_child_at_start(*row.root);
         } else {
-          rowsBox_->insert_child_after(*row.root, *rows_[step.index - 1].root);
+          box.insert_child_after(*row.root, *rows[step.index - 1].root);
         }
-        rows_.insert(rows_.begin() + static_cast<std::ptrdiff_t>(step.index), std::move(row));
+        rows.insert(rows.begin() + static_cast<std::ptrdiff_t>(step.index), std::move(row));
         break;
       }
     }
+  }
+}
+
+void SessionsPage::ClearRows(Gtk::Box& box, std::vector<RowWidgets>& rows) {
+  for (const RowWidgets& row : rows) box.remove(*row.root);
+  rows.clear();
+}
+
+// §5 C: the client groups, reconciled by kind as the rows are by session ID:
+// a group still listed keeps its widgets, so its heading keeps the keyboard
+// focus as the group opens and closes.
+void SessionsPage::RenderGroups(const sessions::Words& words, int64_t now) {
+  const std::vector<sessions::GroupView> views = sessions::GroupsFor(snapshot_, words);
+  std::vector<std::string> wanted;
+  wanted.reserve(views.size());
+  for (const sessions::GroupView& view : views) wanted.push_back(view.kind);
+  std::vector<std::string> onScreen;
+  onScreen.reserve(groups_.size());
+  for (const GroupWidgets& group : groups_) onScreen.push_back(group.kind);
+
+  // GroupsFor keeps the snapshot's order: a view and its group share an index
+  const auto render = [&](GroupWidgets& group, size_t wantedIndex) {
+    UpdateGroup(group, views[wantedIndex], snapshot_.groups[wantedIndex].sessions, words, now);
+  };
+  for (const reconcile::Step& step : reconcile::Plan(onScreen, wanted)) {
+    switch (step.kind) {
+      case reconcile::StepKind::Remove:
+        groupsBox_->remove(*groups_[step.index].root);
+        groups_.erase(groups_.begin() + static_cast<std::ptrdiff_t>(step.index));
+        break;
+      case reconcile::StepKind::Update:
+        render(groups_[step.index], step.wantedIndex);
+        break;
+      case reconcile::StepKind::Move: {
+        GroupWidgets group = std::move(groups_[step.from]);
+        groups_.erase(groups_.begin() + static_cast<std::ptrdiff_t>(step.from));
+        render(group, step.wantedIndex);
+        if (step.index == 0) {
+          groupsBox_->reorder_child_at_start(*group.root);
+        } else {
+          groupsBox_->reorder_child_after(*group.root, *groups_[step.index - 1].root);
+        }
+        groups_.insert(groups_.begin() + static_cast<std::ptrdiff_t>(step.index),
+                       std::move(group));
+        break;
+      }
+      case reconcile::StepKind::Insert: {
+        GroupWidgets group = BuildGroup(wanted[step.wantedIndex]);
+        render(group, step.wantedIndex);
+        if (step.index == 0) {
+          groupsBox_->insert_child_at_start(*group.root);
+        } else {
+          groupsBox_->insert_child_after(*group.root, *groups_[step.index - 1].root);
+        }
+        groups_.insert(groups_.begin() + static_cast<std::ptrdiff_t>(step.index),
+                       std::move(group));
+        break;
+      }
+    }
+  }
+}
+
+SessionsPage::GroupWidgets SessionsPage::BuildGroup(const std::string& kind) {
+  GroupWidgets group;
+  group.kind = kind;
+  group.root = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+
+  // The heading opens and closes the group: a button, so the keyboard reaches
+  // it and Space or Enter activates it, with the heading for its name and its
+  // expanded state for a screen reader (UpdateGroup). The chevron says the
+  // same to the eye and is hidden from the accessibility tree.
+  group.header = Gtk::make_managed<Gtk::Button>();
+  group.header->add_css_class("ur-pane-row");
+  auto* grid = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, kRowGap);
+  grid->set_hexpand(true);
+  group.heading = MakeLine("ur-row-title");
+  group.heading->set_hexpand(true);
+  group.heading->set_valign(Gtk::Align::CENTER);
+  grid->append(*group.heading);
+  group.chevron = Gtk::make_managed<Gtk::Image>();
+  group.chevron->set_from_icon_name("go-next-symbolic");
+  group.chevron->set_pixel_size(kChevronPx);
+  group.chevron->add_css_class("ur-label-faint");
+  group.chevron->set_valign(Gtk::Align::CENTER);
+  kit::MarkDecorative(*group.chevron);
+  grid->append(*group.chevron);
+  group.header->set_child(*grid);
+  group.header->signal_clicked().connect([this, kind] { ToggleGroup(kind); });
+  group.root->append(*group.header);
+
+  // its rows while open, the device sign-ins' rows; then their Show more
+  group.rowsBox = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
+  group.rowsBox->set_visible(false);
+  group.root->append(*group.rowsBox);
+  group.moreRow = MakeShowMoreRow([this, kind] { binding_.ShowMore(kind); });
+  group.root->append(*group.moreRow);
+  return group;
+}
+
+void SessionsPage::UpdateGroup(GroupWidgets& group, const sessions::GroupView& view,
+                               const std::vector<sessions::Session>& listed,
+                               const sessions::Words& words, int64_t now) {
+  // the count is the controller's, in the locale's grouping; plain text
+  group.heading->set_text(view.heading);
+  kit::SetAccessibleLabel(*group.header, view.heading);
+  group.chevron->set_from_icon_name(view.expanded ? "go-down-symbolic" : "go-next-symbolic");
+  gtk_accessible_update_state(GTK_ACCESSIBLE(group.header->gobj()), GTK_ACCESSIBLE_STATE_EXPANDED,
+                              view.expanded ? TRUE : FALSE, -1);
+  // a closed group carries no rows, and its rows go with its closing
+  RenderRows(*group.rowsBox, group.rows, listed, view.kind, words, now);
+  group.rowsBox->set_visible(view.expanded);
+  group.moreRow->set_visible(view.showMore);
+}
+
+void SessionsPage::ClearGroups() {
+  for (const GroupWidgets& group : groups_) groupsBox_->remove(*group.root);
+  groups_.clear();
+}
+
+// A heading's activation: the open group closed, the closed one opened, as the
+// latest snapshot has it. The controller lays the list out again (no request)
+// and its listener's post renders it.
+void SessionsPage::ToggleGroup(const std::string& kind) {
+  if (const std::optional<bool> expanded = sessions::ExpandedAfterToggle(snapshot_, kind)) {
+    binding_.SetGroupExpanded(kind, *expanded);
   }
 }
 
@@ -776,16 +981,24 @@ void SessionsPage::ShowConfirmation(const sessions::Confirmation& confirmation,
 }
 
 // After the confirmation: the focus back on the control that opened it, when it
-// is still there and still takes a press.
+// is still there and still takes a press, among the device sign-ins or in an
+// open group.
 void SessionsPage::RestoreFocus(const sessions::Target& target) {
   if (target.others) {
     if (othersRow_->get_visible() && othersButton_->get_sensitive()) othersButton_->grab_focus();
     return;
   }
-  for (RowWidgets& row : rows_) {
-    if (row.sessionId != target.sessionId) continue;
-    if (row.signOut->get_sensitive()) row.signOut->grab_focus();
-    return;
+  const auto restore = [&target](std::vector<RowWidgets>& rows) {
+    for (RowWidgets& row : rows) {
+      if (row.sessionId != target.sessionId) continue;
+      if (row.signOut->get_sensitive()) row.signOut->grab_focus();
+      return true;
+    }
+    return false;
+  };
+  if (restore(rows_)) return;
+  for (GroupWidgets& group : groups_) {
+    if (restore(group.rows)) return;
   }
 }
 

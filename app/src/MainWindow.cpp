@@ -47,21 +47,24 @@ std::string LocalDateText(const std::string& rfc3339) {
   return when.to_local().format("%x").raw();
 }
 
-// What a sign-in screen says for a refused sign-in: when the network's client
-// limit refused this device's client, what to do (an upgrade, or a freed slot:
-// client_limit::SignInRefusalBody, the sdk's prompt), never the server's words
-// (with x402 on they were the payment terms); otherwise the server's message,
-// or the screen's own line when it sent none.
-Glib::ustring SignInFailureText(client_limit::Prompt clientLimitPrompt, const std::string& error,
-                                const char* screenLine) {
-  if (const client_limit::Text* body = client_limit::SignInRefusalBody(clientLimitPrompt)) {
+// What a sign-in screen says for a refused sign-in: when the account's cap of
+// active sessions refused it, where to sign sessions out (a device that is
+// signed in, Account > Sessions); when the network's client limit refused this
+// device's client, what to do (an upgrade, or a freed slot: the sdk's
+// prompt); never the server's words for either (with x402 on the client
+// limit's were the payment terms; session_limit::SignInRefusalBody). Otherwise
+// the server's message, or the screen's own line when it sent none.
+Glib::ustring SignInFailureText(bool sessionLimit, client_limit::Prompt clientLimitPrompt,
+                                const std::string& error, const char* screenLine) {
+  if (const client_limit::Text* body =
+          session_limit::SignInRefusalBody(sessionLimit, clientLimitPrompt)) {
     return T_(body->key, body->english);
   }
   return error.empty() ? Glib::ustring(screenLine) : Glib::ustring(error);
 }
 
 Glib::ustring SignInFailureText(const AuthResult& r, const char* screenLine) {
-  return SignInFailureText(r.clientLimitPrompt, r.error, screenLine);
+  return SignInFailureText(r.sessionLimit, r.clientLimitPrompt, r.error, screenLine);
 }
 }  // namespace
 namespace {
@@ -1855,10 +1858,10 @@ void MainWindow::OnInstantSubmit() {
       instantReferralCode_->set_sensitive(true);
       instantCreate_->set_sensitive(instantTerms_->get_active());
       if (!account.ok) {
-        instantError_->set_text(account.error.empty()
-                                    ? T_("instant_account_failed",
-                                         "Could not create the account. Please try again.")
-                                    : account.error.c_str());
+        // the account's cap of active sessions says where to sign sessions out
+        instantError_->set_text(SignInFailureText(
+            account.sessionLimit, client_limit::Prompt::None, account.error,
+            T_("instant_account_failed", "Could not create the account. Please try again.")));
         return;
       }
       // the phrase is shown BEFORE the device registers: confirming is the
@@ -2254,7 +2257,7 @@ void MainWindow::OnGetStarted() {
           break;
         case LoginRoute::Error:
           loginError_.set_text(SignInFailureText(
-              routing.clientLimitPrompt, routing.error,
+              routing.sessionLimit, routing.clientLimitPrompt, routing.error,
               T_("there_was_an_error_logging_in", "There was an error logging in")));
           break;
       }

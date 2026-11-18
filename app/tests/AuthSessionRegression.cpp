@@ -19,9 +19,11 @@
 #include <vector>
 #include "ConnectionRegion.hpp"
 #include "ClientLimitNotice.hpp"
+#include "SessionLimitNotice.hpp"
 
 namespace region = urnw::region;
 namespace client_limit = urnw::client_limit;
+namespace session_limit = urnw::session_limit;
 
 using Task = std::function<void()>;
 std::deque<Task> mainTasks, workerTasks, storageTasks;
@@ -128,10 +130,10 @@ struct Obligation { signout::Delivery Begin(int) { return signout::Delivery::Del
 struct Backoff { void NoteSuccess() {} void NoteFailure(long) {} };
 struct ConnectCommandQueue { enum class Kind { Connect, Disconnect, Device }; bool signingOut=false; void BeginSignOut() { signingOut=true; } void EndSignOut() { signingOut=false; } bool SigningOut() const { return signingOut; } };
 enum class DrawerEvent { DeviceLifecycle };
-struct AuthResult { bool ok=false, verification_required=false; std::string error, authAllowed; bool sso=false, sso_needs_network=false, wallet_needs_network=false; client_limit::Prompt clientLimitPrompt=client_limit::Prompt::None; };
-struct InstantAccount { bool ok=false; std::string seedphrase, error; };
+struct AuthResult { bool ok=false, verification_required=false; std::string error, authAllowed; bool sso=false, sso_needs_network=false, wallet_needs_network=false; client_limit::Prompt clientLimitPrompt=client_limit::Prompt::None; bool sessionLimit=false; };
+struct InstantAccount { bool ok=false; std::string seedphrase, error; bool sessionLimit=false; };
 enum class LoginRoute { Error, Login, Password, IncorrectAuth, Create };
-struct LoginRouting { LoginRoute route=LoginRoute::Error; std::string userAuth,error,authAllowed; client_limit::Prompt clientLimitPrompt=client_limit::Prompt::None; };
+struct LoginRouting { LoginRoute route=LoginRoute::Error; std::string userAuth,error,authAllowed; client_limit::Prompt clientLimitPrompt=client_limit::Prompt::None; bool sessionLimit=false; };
 struct WalletSignature { std::string error; };
 AuthResult VerificationRequired(std::optional<std::string>) { return {false,true,""}; }
 
@@ -265,6 +267,58 @@ int main() {
       Check(retries==1 && answers==1 && !h.HasRefusedSignIn(),"successful retry clears refusal without answering original callback twice");
       h.Logout(); Drain();
       Check(h.api_->signedOutTokens==std::vector<std::string>{"A"},"server signs out before the leaving credential is cleared");
+    }
+    // The account's cap of active sessions refuses a sign-in as the route's
+    // result (sdk api_session_limit.go): every sign-in route hands its screen the
+    // cap's flag with the sdk's words, registers no device client, keeps nothing
+    // to retry and signs nothing in; a refusal with any other code is the
+    // server's words as before (the retention cap's code included).
+    {
+      const urnet::Error limit{"Too many active sessions.",std::string("session_limit_reached"),std::nullopt};
+      const urnet::Error retained{"Too many retained sessions.",std::string("session_retention_limit_reached"),std::nullopt};
+      for (const urnet::Error& refusal : {limit, retained}) for (int kind=0;kind<9;++kind) {
+        Fresh(); SdkHost h; int answers=0, unreachable=0; bool flagged=false, words=false;
+        h.hasClientJwt_=false; h.signedOut_=true;
+        h.onApiUnreachable_=[&](const std::string&) { ++unreachable; };
+        auto done=[&](AuthResult r) { ++answers; flagged=r.sessionLimit; words=!r.ok && r.error==refusal.message && r.clientLimitPrompt==client_limit::Prompt::None; };
+        if(kind==0) { h.LoginWithPassword("user","password",done); h.api_->password.back()(urnet::AuthLoginWithPasswordResult{refusal,std::nullopt,std::nullopt},std::nullopt); }
+        if(kind==1) { h.LoginWithCode("code",done); h.api_->code.back()(urnet::AuthCodeLoginResult{refusal,""},std::nullopt); }
+        if(kind==2) { h.LoginWithSeedphrase("a phrase",done); h.api_->login.back()(urnet::AuthLoginResult{refusal,std::nullopt,std::nullopt,std::nullopt},std::nullopt); }
+        if(kind==3) { h.VerifyCode("user","code",done); h.api_->verify.back()(urnet::AuthVerifyResult{refusal,std::nullopt},std::nullopt); }
+        if(kind==4) { h.CreateNetwork("name","user","password","",done); h.api_->create.back()(urnet::NetworkCreateResult{refusal,std::nullopt,std::nullopt,std::nullopt},std::nullopt); }
+        if(kind==5) {
+          h.StartLogin("user",[&](LoginRouting r) { ++answers; flagged=r.sessionLimit; words=r.route==LoginRoute::Error && r.error==refusal.message; });
+          h.api_->login.back()(urnet::AuthLoginResult{refusal,std::nullopt,std::nullopt,std::nullopt},std::nullopt);
+        }
+        if(kind==6 || kind==7) {
+          h.walletAuthEpoch_=h.CaptureAuthEpoch(); h.walletFlows_.Begin(); h.walletAuthDone_=done;
+          if(kind==6) h.AuthLoginWithSso("google","token"); else h.AuthLoginWithWallet("A","signature","message","solana");
+          h.api_->login.back()(urnet::AuthLoginResult{refusal,std::nullopt,std::nullopt,std::nullopt},std::nullopt);
+        }
+        if(kind==8) {
+          h.CreateInstantAccount("",[&](InstantAccount a) { ++answers; flagged=a.sessionLimit; words=!a.ok && a.error==refusal.message; });
+          h.api_->create.back()(urnet::NetworkCreateResult{refusal,std::nullopt,std::nullopt,std::nullopt},std::nullopt);
+        }
+        Drain();
+        const std::string route="sign-in route "+std::to_string(kind)+" ("+*refusal.code+")";
+        Check(answers==1 && words,route+": the screen gets the refusal once, with the sdk's words");
+        Check(flagged==(refusal.code==limit.code),route+": only the session cap's code is the cap's refusal");
+        Check(h.registrations.empty() && unreachable==0,route+": nothing registers, nothing reads as unreachable");
+        Check(!h.HasRefusedSignIn() && h.signedOut_ && !h.hasClientJwt_,route+": nothing is kept to retry, nothing signs in");
+      }
+      // ...and the device client the sign-in then registers: no device list, no retry
+      for (const urnet::Error& refusal : {limit, retained}) {
+        Fresh(); SdkHost h; int answers=0, clientLimitRefusals=0; bool flagged=false, words=false;
+        h.hasClientJwt_=false; h.signedOut_=true;
+        h.onClientLimitRefusal_=[&](client_limit::Prompt) { ++clientLimitRefusals; };
+        h.RegisterNetworkClient("A",[&](AuthResult r) { ++answers; flagged=r.sessionLimit; words=!r.ok && r.error==refusal.message && r.clientLimitPrompt==client_limit::Prompt::None; },h.CaptureAuthEpoch()); Drain();
+        h.registrations.back()(urnet::AuthNetworkClientResult{refusal,std::nullopt,std::nullopt},std::nullopt); Drain();
+        const std::string route="device client ("+*refusal.code+")";
+        Check(answers==1 && words,route+": the screen gets the refusal once, with the sdk's words");
+        Check(flagged==(refusal.code==limit.code),route+": only the session cap's code is the cap's refusal");
+        Check(clientLimitRefusals==0 && !h.HasRefusedSignIn(),route+": no device list is offered and nothing is kept to retry");
+        Check(h.signedOut_ && !h.hasClientJwt_ && h.localState_->client.empty(),route+": the refused sign-in does not sign in");
+      }
     }
     {
       Fresh(); SdkHost h; bool cancelled=false;
