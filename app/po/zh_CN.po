@@ -8980,6 +8980,11 @@ msgctxt "regions"
 msgid "Regions"
 msgstr "地区"
 
+#. Title of the release notes sheet, opened by tapping the version in Account; also the version row's accessibility hint. The note itself comes from release-notes/latest.yaml.
+msgctxt "release_notes"
+msgid "Release notes"
+msgstr "发行说明"
+
 #. Call to action
 msgctxt "reliability"
 msgid "Reliability"
