@@ -2669,6 +2669,16 @@ msgctxt "crypto_fine_print_yearly"
 msgid "A one-time payment for a year of Pro. It doesn't renew, and there's no free trial."
 msgstr "一次性支付一年 Pro 费用。不会自动续订，也不含免费试用。"
 
+#. Crypto invoice, Bitcoin only: shown in place of crypto_invoice_quote_expired and its Refresh quote button for up to 3 hours after a Bitcoin quote expires with nothing received yet. The server sees a Bitcoin payment only once it is confirmed (mined), so one sent in time may still be on its way, and it is credited at the quoted price. "pay another way" refers to the button crypto_invoice_pay_another_way.
+msgctxt "crypto_invoice_bitcoin_awaiting_confirmation"
+msgid "This quote expired. A payment you sent before it expired is credited at this price once it confirms, which can take up to 3 hours. If you didn't send one, pay another way."
+msgstr "此报价已过期。在过期前发送的付款将在确认后按此价格入账，确认最多可能需要 3 小时。如果你尚未付款，请使用其他方式支付。"
+
+#. Crypto invoice, Bitcoin only: shown under the quote's countdown while the invoice can be paid. The server sees a Bitcoin payment only once it is confirmed (mined), which can take hours, and credits a payment sent before the quote expires at the quoted price if it confirms within 3 hours of the expiry. "this price" is the price on the invoice. Bitcoin is a product name.
+msgctxt "crypto_invoice_bitcoin_confirmation_time"
+msgid "Bitcoin payments can take up to 3 hours to confirm. A payment sent before the quote expires is credited at this price."
+msgstr "Bitcoin 付款最多可能需要 3 小时才能确认。在报价过期前发送的付款将按此价格入账。"
+
 #. Crypto invoice, Bitcoin only: the network to send on, shown with the address. Bitcoin sent on another network is not credited to this payment. The Bitcoin counterpart of usdc_solana_network_only. Bitcoin is a product name.
 msgctxt "crypto_invoice_bitcoin_network_only"
 msgid "Send only Bitcoin on the Bitcoin network to this address. Bitcoin sent on any other network won't be credited."
@@ -7799,8 +7809,8 @@ msgstr "参与网络并免费获得社区版的访问权限。"
 
 #. Call to action
 msgctxt "participate_intro_details"
-msgid "URnetwork is powered by the world's largest, safest,\nand most decentralized ingress and egress protocol."
-msgstr "URnetwork 由全球最大、最安全、\n最去中心化的出入口协议驱动。"
+msgid "URnetwork is powered by a decentralized ingress and egress protocol,\nrun on community devices in a large selection of countries."
+msgstr "URnetwork 由去中心化的出入口协议驱动，\n运行在众多国家的社区设备上。"
 
 #. Label for the password input field.
 msgctxt "password_label"
@@ -8979,6 +8989,11 @@ msgstr "重新生成助记词？"
 msgctxt "regions"
 msgid "Regions"
 msgstr "地区"
+
+#. Title of the release notes sheet, opened by tapping the version in Account; also the version row's accessibility hint. The note itself comes from release-notes/latest.yaml.
+msgctxt "release_notes"
+msgid "Release notes"
+msgstr "发行说明"
 
 #. Call to action
 msgctxt "reliability"
@@ -10615,10 +10630,10 @@ msgctxt "site_app_top200_limit_commitment_age"
 msgid "A commitment older than 14 days can't bind new devices, so publish again before adding devices later."
 msgstr "超过 14 天的承诺无法绑定新设备，因此以后添加设备前请重新发布。"
 
-#. App top200 limits: at most 7 devices per fleet draw ahead into the validator's measured cohort (cohort 1,500 over 200 seats); a bound device outside it has left the pool and earns nothing
+#. App top200 limits: at most 7 devices per fleet draw ahead into the validator's measured cohort (cohort 1,500 over 200 seats), direct devices only since a proxy slot shows no head score; a bound device outside it has left the pool and earns nothing
 msgctxt "site_app_top200_limit_devices"
-msgid "Bind at most 7 devices, unless the others are already measured. At most 7 devices per fleet draw ahead of the rest to be measured by the validator. A bound device that isn't measured earns no head score and has left the pool, so it earns nothing."
-msgstr "最多绑定 7 台设备，除非其他设备已在接受测量。每个设备群最多 7 台设备可优先接受验证者测量。已绑定但未被测量的设备没有头部分数，也已离开资金池，因此没有任何收益。"
+msgid "Bind at most 7 devices, direct ones only, unless the others are already measured. At most 7 devices per fleet draw ahead of the rest to be measured by the validator. A bound device that isn't measured earns no head score and has left the pool, so it earns nothing, and a proxy slot shows no head score at all."
+msgstr "最多绑定 7 台设备，且只绑定直连设备，除非其他设备已在接受测量。每个设备群最多 7 台设备可优先接受验证者测量。已绑定但未被测量的设备没有头部分数，也已离开资金池，因此没有任何收益；代理槽位则完全没有头部分数。"
 
 #. App top200 limits: a spot pays only while the validator steers, in proportion to EMA score and not rank; the head channel is 3% of miner emission before epoch 8 and 5% from epoch 8, when capture the flag splits the providers' tenth pool 4/10, CTF 1/10, head 5/10 (sn CAPTURETHEFLAG.md §2.1)
 msgctxt "site_app_top200_limit_pay"
