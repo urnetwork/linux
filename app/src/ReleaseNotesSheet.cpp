@@ -13,6 +13,13 @@
 #include "Ui.hpp"
 #include "UrTheme.hpp"
 
+// The build stamp (meson passes -DUR_APP_VERSION): the line under the note's
+// title names the version the App version row the user pressed shows. The
+// fallback keeps this TU self-contained the way SettingsPage.cpp's does.
+#ifndef UR_APP_VERSION
+#define UR_APP_VERSION "0.0.0"
+#endif
+
 // The installed data dir (meson passes -DUR_PKGDATADIR); the shared ladder
 // (RuntimePaths.hpp) prefixes $APPDIR inside an AppImage and falls back to the
 // build tree's assets/.
@@ -91,7 +98,7 @@ Gtk::Label* MakeWrappedLabel(const Glib::ustring& text, const char* cssClass) {
 // GTK keeps a direction per widget and never hands it down (a widget without
 // one takes the default, not its parent's), so a subtree takes it widget by
 // widget: the boxes for their packing, the labels for alignment and for the
-// order of neutral runs such as "2026.11 · 19.11.2026".
+// order of neutral runs such as "2026.11.18-1101907820 · 19.11.2026".
 void SetDirectionDeep(Gtk::Widget& widget, Gtk::TextDirection direction) {
   widget.set_direction(direction);
   for (Gtk::Widget* child = widget.get_first_child(); child != nullptr;
@@ -165,9 +172,10 @@ void ReleaseNotesSheet::AppendNote(Gtk::Box& column, const release_notes::Note& 
   head->set_margin_top(kInset);
   head->set_margin_bottom(16);
   head->append(*MakeWrappedLabel(note.title, "ur-step-heading"));
-  // the note's own version and date, never the running build's version
+  // the running build's version, as the App version row shows it, beside the
+  // note's date (owner 2026-11-19); the note's own version is not shown
   head->append(*MakeWrappedLabel(
-      release_notes::MetaLine(notes_->version, LocalNoteDate(notes_->date)), "ur-caption"));
+      release_notes::MetaLine(UR_APP_VERSION, LocalNoteDate(notes_->date)), "ur-caption"));
   if (!note.intro.empty()) {
     auto* intro = MakeWrappedLabel(note.intro, "ur-body");
     intro->set_margin_top(8);

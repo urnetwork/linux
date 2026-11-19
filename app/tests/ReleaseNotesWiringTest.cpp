@@ -3,8 +3,9 @@
 // it, through the shared runtime ladder; the App version row opens the sheet
 // only when the file gave a note, and is the plain value row otherwise; the row
 // names the app's version and carries the store's hint; the sheet shows the
-// note of the UI's catalog under the note's own version and date, laid out in
-// the note's language's direction, and its text is never markup.
+// note of the UI's catalog under that same app version and the note's date
+// (never the note's own version), laid out in the note's language's
+// direction, and its text is never markup.
 //
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
@@ -84,7 +85,7 @@ UR_TEST(ReleaseNotesWiring_TheVersionRowOpensTheNoteOnlyWhenThereIsOne) {
   UR_EXPECT_EQ(size_t{1}, CountOf(page, "std::make_unique<ReleaseNotesSheet>("));
 }
 
-UR_TEST(ReleaseNotesWiring_TheSheetShowsTheUisNoteUnderItsOwnVersion) {
+UR_TEST(ReleaseNotesWiring_TheSheetShowsTheUisNoteUnderTheAppVersion) {
   const std::string sheet = ReadCode("ReleaseNotesSheet.cpp");
   // the catalog gettext loaded names the UI's language; the same lookup T_ makes
   NotesInOrder(FunctionBody(sheet, "std::string UiCatalogLanguage() {"),
@@ -101,14 +102,21 @@ UR_TEST(ReleaseNotesWiring_TheSheetShowsTheUisNoteUnderItsOwnVersion) {
   NotesInOrder(FunctionBody(sheet, "void SetDirectionDeep(Gtk::Widget& widget,"),
                {"widget.set_direction(direction);", "widget.get_first_child()",
                 "child->get_next_sibling()", "SetDirectionDeep(*child, direction);"});
-  // the line under the title is the note's own version and date; the running
-  // build's version is the About row's alone
+  // the line under the title is the running build's version, the very stamp
+  // the App version row shows, and the note's date (owner 2026-11-19); the
+  // note's own version is never shown
   NotesInOrder(FunctionBody(sheet, "void ReleaseNotesSheet::AppendNote("),
                {"note.title",
-                "release_notes::MetaLine(notes_->version, LocalNoteDate(notes_->date))",
+                "release_notes::MetaLine(UR_APP_VERSION, LocalNoteDate(notes_->date))",
                 "note.intro", "kit::MakePaneGroupHeader(section.heading)", "section.items",
                 "kit::MarkDecorative(*bullet);"});
-  UR_EXPECT_FALSE(Contains(sheet, "UR_APP_VERSION"));
+  UR_EXPECT_FALSE(Contains(sheet, "notes_->version"));
+  UR_EXPECT_FALSE(Contains(sheet, ".version"));
+  NotesInOrder(FunctionBody(ReadCode("SettingsPage.cpp"),
+                            "void SettingsPage::BuildVersionSection(Gtk::Box& host) {"),
+               {"kit::MakePaneTwoLineRowButton(T_(\"app_version\", \"App version\")",
+                "ApplyFieldState(*appRow.value, SettingsFieldState::Loaded, "
+                "UR_APP_VERSION);"});
   // the note's text is data from a generated file: set, never parsed as markup
   UR_EXPECT_FALSE(Contains(sheet, "set_markup("));
 }

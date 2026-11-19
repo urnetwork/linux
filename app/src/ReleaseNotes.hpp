@@ -62,7 +62,9 @@ struct Note {
 };
 
 struct ReleaseNotes {
-  std::string version;  // the release as people see it ("2026.11")
+  // the release as people see it ("2026.11"); required, but not shown: the
+  // sheet names the running build's version (MetaLine)
+  std::string version;
   std::string date;     // YYYY-MM-DD
   // store locale code -> its note; always carries kFallbackLocale
   std::map<std::string, Note> locales;
@@ -291,10 +293,11 @@ inline bool IsRightToLeft(const std::string& locale) {
   return language == "ar" || language == "he";
 }
 
-// The line under the note's title: the note's own version and its date,
-// "2026.11 · 19.11.2026", either half omitted when empty (the Licenses sheet's
-// "version · spdx" form). Never the running build's version: a later build
-// carries the same note, and that version beside this date would read wrong.
+// The line under the note's title: the running build's version, exactly as
+// the App version row shows it, and the note's date, "2026.11.18-1101907820 ·
+// 19.11.2026", either half omitted when empty (the Licenses sheet's
+// "version · spdx" form). The note's own version is not shown (owner
+// 2026-11-19).
 inline std::string MetaLine(const std::string& version, const std::string& date) {
   if (version.empty()) return date;
   if (date.empty()) return version;

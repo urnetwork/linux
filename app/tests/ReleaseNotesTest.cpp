@@ -4,8 +4,8 @@
 // UI's catalog by the store's one rule: the exact locale, then the bare
 // language, then another region of it, never across Chinese scripts, then en,
 // with the po names (pt_BR, zh_CN) read as the store's codes (pt-BR, zh). The
-// note keeps its own language's direction, and the line under its title is
-// its own version and date.
+// note keeps its own language's direction, and the line under its title joins
+// the running build's version and the note's date.
 //
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
@@ -374,11 +374,13 @@ UR_TEST(ReleaseNotes_TheNoteKeepsItsOwnLanguagesDirection) {
   UR_EXPECT_TRUE(release_notes::IsRightToLeft(release_notes::PickLocale(NotesIn({"ar"}), "ar")));
 }
 
-UR_TEST(ReleaseNotes_TheMetaLineIsTheNotesVersionAndDate) {
-  // the note's own version, never the running build's
-  const ReleaseNotes notes = ParsedFull();
-  UR_EXPECT_TRUE(release_notes::MetaLine(notes.version, "19.11.2026") == "2026.11 · 19.11.2026");
-  UR_EXPECT_TRUE(release_notes::MetaLine("2026.11", "") == "2026.11");
+UR_TEST(ReleaseNotes_TheMetaLineIsTheAppVersionAndTheNotesDate) {
+  // the running build's version, as the App version row shows it (the sheet
+  // passes UR_APP_VERSION, ReleaseNotesWiringTest), beside the note's date
+  UR_EXPECT_TRUE(release_notes::MetaLine("2026.11.18-1101907820", "19.11.2026") ==
+                 "2026.11.18-1101907820 · 19.11.2026");
+  UR_EXPECT_TRUE(release_notes::MetaLine("0.0.0", "11/19/2026") == "0.0.0 · 11/19/2026");
+  UR_EXPECT_TRUE(release_notes::MetaLine("2026.11.18-1101907820", "") == "2026.11.18-1101907820");
   UR_EXPECT_TRUE(release_notes::MetaLine("", "19.11.2026") == "19.11.2026");
 }
 
