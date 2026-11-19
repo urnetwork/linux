@@ -13,13 +13,6 @@
 #include "Ui.hpp"
 #include "UrTheme.hpp"
 
-// The build stamp (meson passes -DUR_APP_VERSION): the version the sheet names
-// is the one the row the user pressed shows. The fallback keeps this TU
-// self-contained the way SettingsPage.cpp's does.
-#ifndef UR_APP_VERSION
-#define UR_APP_VERSION "0.0.0"
-#endif
-
 // The installed data dir (meson passes -DUR_PKGDATADIR); the shared ladder
 // (RuntimePaths.hpp) prefixes $APPDIR inside an AppImage and falls back to the
 // build tree's assets/.
@@ -95,6 +88,18 @@ Gtk::Label* MakeWrappedLabel(const Glib::ustring& text, const char* cssClass) {
   return label;
 }
 
+// GTK keeps a direction per widget and never hands it down (a widget without
+// one takes the default, not its parent's), so a subtree takes it widget by
+// widget: the boxes for their packing, the labels for alignment and for the
+// order of neutral runs such as "2026.11 · 19.11.2026".
+void SetDirectionDeep(Gtk::Widget& widget, Gtk::TextDirection direction) {
+  widget.set_direction(direction);
+  for (Gtk::Widget* child = widget.get_first_child(); child != nullptr;
+       child = child->get_next_sibling()) {
+    SetDirectionDeep(*child, direction);
+  }
+}
+
 }  // namespace
 
 std::shared_ptr<const release_notes::ReleaseNotes> BundledReleaseNotes() {
@@ -120,8 +125,14 @@ ReleaseNotesSheet::ReleaseNotesSheet(Gtk::Window& parent,
   auto* column = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
   // the UI's language does not change while the app runs: chosen once
   if (notes_) {
-    if (const release_notes::Note* note = release_notes::PickNote(*notes_, UiCatalogLanguage())) {
-      AppendNote(*column, *note);
+    const std::string locale = release_notes::PickLocale(*notes_, UiCatalogLanguage());
+    if (const auto it = notes_->locales.find(locale); it != notes_->locales.end()) {
+      AppendNote(*column, it->second);
+      // The note in its own language's direction, the chrome (the window and
+      // Close) in the UI's: the English fallback reads left to right in an
+      // Arabic or Hebrew UI.
+      SetDirectionDeep(*column, release_notes::IsRightToLeft(locale) ? Gtk::TextDirection::RTL
+                                                                     : Gtk::TextDirection::LTR);
     }
   }
 
@@ -154,8 +165,9 @@ void ReleaseNotesSheet::AppendNote(Gtk::Box& column, const release_notes::Note& 
   head->set_margin_top(kInset);
   head->set_margin_bottom(16);
   head->append(*MakeWrappedLabel(note.title, "ur-step-heading"));
+  // the note's own version and date, never the running build's version
   head->append(*MakeWrappedLabel(
-      release_notes::MetaLine(UR_APP_VERSION, LocalNoteDate(notes_->date)), "ur-caption"));
+      release_notes::MetaLine(notes_->version, LocalNoteDate(notes_->date)), "ur-caption"));
   if (!note.intro.empty()) {
     auto* intro = MakeWrappedLabel(note.intro, "ur-body");
     intro->set_margin_top(8);

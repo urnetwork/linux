@@ -1,7 +1,10 @@
 // Settings -> About -> App version: the release note this build bundles
-// (ReleaseNotes.hpp), in the sheet idiom of its neighbour Licenses. The note's
-// title, the running version and the note's date under it, the intro, then
-// each section under its heading as a bulleted list, and Close.
+// (ReleaseNotes.hpp), in the sheet idiom of its neighbour Licenses, by the one
+// rule every app follows (the localization store's README, "Release notes").
+// The note's title, the note's own version and date under it (the row keeps
+// the app's version), the intro, then each section under its heading as a
+// bulleted list, and Close. The note is laid out in its own language's
+// direction and the window and Close in the UI's.
 //
 // The note is a local file, so the sheet needs no session, device or daemon.
 // It is read once per process (BundledReleaseNotes), and the version row is a

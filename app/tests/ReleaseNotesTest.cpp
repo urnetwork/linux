@@ -1,8 +1,11 @@
 // The bundled release note (src/ReleaseNotes.hpp): the file the store
 // generates parses, a file that is not a note is refused without throwing, a
 // locale's malformed note falls back to en, and the note is chosen for the
-// UI's catalog: its locale, then its language, then en, with the po names
-// (pt_BR, zh_CN) read as the store's codes (pt-BR, zh).
+// UI's catalog by the store's one rule: the exact locale, then the bare
+// language, then another region of it, never across Chinese scripts, then en,
+// with the po names (pt_BR, zh_CN) read as the store's codes (pt-BR, zh). The
+// note keeps its own language's direction, and the line under its title is
+// its own version and date.
 //
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
@@ -273,43 +276,110 @@ UR_TEST(ReleaseNotes_TheCatalogHeaderNamesTheLanguage) {
   UR_EXPECT_TRUE(release_notes::CatalogLanguage("Language:\n").empty());
 }
 
-UR_TEST(ReleaseNotes_TheNoteIsTheLocalesThenTheLanguagesThenEn) {
-  const ReleaseNotes notes = ParsedFull();
-  // exact, from the catalog's po name or a store code, in any case
+// The store locale PickLocale chooses, "(none)" for none.
+std::string LocaleFor(const ReleaseNotes& notes, const std::string& uiLocale) {
+  const std::string locale = release_notes::PickLocale(notes, uiLocale);
+  return locale.empty() ? std::string("(none)") : locale;
+}
+
+// en plus each of `codes`, every note titled with its own code.
+ReleaseNotes NotesIn(const std::vector<std::string>& codes) {
+  std::string locales = R"("en": {"title": "en"})";
+  for (const std::string& code : codes) {
+    locales += ", \"" + code + "\": {\"title\": \"" + code + "\"}";
+  }
+  return release_notes::Parse(R"({"version": "2026.11", "date": "2026-11-19", "locales": {)" +
+                              locales + "}}")
+      .value_or(ReleaseNotes{});
+}
+
+void ExpectLocale(const ReleaseNotes& notes, const std::string& uiLocale,
+                  const std::string& expected) {
+  const std::string got = LocaleFor(notes, uiLocale);
+  UR_EXPECT_TRUE_MSG("the UI's \"" + uiLocale + "\" reads " + got + ", not " + expected,
+                     got == expected);
+}
+
+UR_TEST(ReleaseNotes_TheNoteIsTheExactLocalesThenItsLanguagesThenEn) {
+  const ReleaseNotes notes = ParsedFull();  // en, de, pt-BR
+  // exact, from the catalog's po name or a store code, in any case, and as the
+  // file spells it
+  ExpectLocale(notes, "pt_BR", "pt-BR");
+  ExpectLocale(notes, "pt-BR", "pt-BR");
+  ExpectLocale(notes, "pt-br", "pt-BR");
+  ExpectLocale(notes, "de", "de");
   UR_EXPECT_TRUE(TitleFor(notes, "pt_BR") == "Novidades");
-  UR_EXPECT_TRUE(TitleFor(notes, "pt-BR") == "Novidades");
-  UR_EXPECT_TRUE(TitleFor(notes, "pt-br") == "Novidades");
-  UR_EXPECT_TRUE(TitleFor(notes, "de") == "Neuigkeiten");
-  // the language's note: de_AT is de; pt_PT is not pt-BR, and there is no pt
-  UR_EXPECT_TRUE(TitleFor(notes, "de_AT") == "Neuigkeiten");
-  UR_EXPECT_TRUE(TitleFor(notes, "pt_PT") == "What's new");
-  UR_EXPECT_TRUE(TitleFor(notes, "pt") == "What's new");
+  // the same language in another form: de_AT reads de, and pt_PT and pt,
+  // which have no note of their own and no pt, read pt-BR
+  ExpectLocale(notes, "de_AT", "de");
+  ExpectLocale(notes, "pt_PT", "pt-BR");
+  ExpectLocale(notes, "pt", "pt-BR");
   // en, for every other language and for none
+  ExpectLocale(notes, "fr", "en");
+  ExpectLocale(notes, "zh_CN", "en");
+  ExpectLocale(notes, "", "en");
+  ExpectLocale(notes, "C", "en");
   UR_EXPECT_TRUE(TitleFor(notes, "fr") == "What's new");
-  UR_EXPECT_TRUE(TitleFor(notes, "zh_CN") == "What's new");
-  UR_EXPECT_TRUE(TitleFor(notes, "") == "What's new");
-  UR_EXPECT_TRUE(TitleFor(notes, "C") == "What's new");
-  // Simplified Chinese is the store's zh, which zh_CN's catalog reads; zh_HK
-  // has its own note, or zh's
-  const auto chinese = release_notes::Parse(R"json({
-    "version": "2026.11", "date": "2026-11-19",
-    "locales": {"en": {"title": "What's new"}, "zh": {"title": "新功能"},
-                "zh-HK": {"title": "新功能 (HK)"}}
-  })json");
-  UR_EXPECT_TRUE(chinese.has_value());
-  if (!chinese) return;
-  UR_EXPECT_TRUE(TitleFor(*chinese, "zh_CN") == "新功能");
-  UR_EXPECT_TRUE(TitleFor(*chinese, "zh_HK") == "新功能 (HK)");
-  UR_EXPECT_TRUE(TitleFor(*chinese, "zh_TW") == "新功能");
   // no en: nothing to fall back to (Parse never returns such notes)
+  UR_EXPECT_TRUE(release_notes::PickLocale(ReleaseNotes{}, "en").empty());
   UR_EXPECT_TRUE(release_notes::PickNote(ReleaseNotes{}, "en") == nullptr);
 }
 
-UR_TEST(ReleaseNotes_TheMetaLineJoinsVersionAndDate) {
-  UR_EXPECT_TRUE(release_notes::MetaLine("2026.11.18-1101907820", "11/19/2026") ==
-                 "2026.11.18-1101907820 · 11/19/2026");
-  UR_EXPECT_TRUE(release_notes::MetaLine("0.0.0", "") == "0.0.0");
-  UR_EXPECT_TRUE(release_notes::MetaLine("", "11/19/2026") == "11/19/2026");
+UR_TEST(ReleaseNotes_TheBareLanguageComesBeforeAnotherRegion) {
+  const ReleaseNotes notes = NotesIn({"pt", "pt-PT", "es-419", "es-MX"});
+  UR_EXPECT_EQ(size_t{5}, notes.locales.size());
+  ExpectLocale(notes, "pt_BR", "pt");     // bare pt, before the other region pt-PT
+  ExpectLocale(notes, "pt_PT", "pt-PT");  // exact
+  ExpectLocale(notes, "es_MX", "es-MX");  // exact
+  ExpectLocale(notes, "es", "es-419");    // no bare es: another region, the first by code
+  ExpectLocale(notes, "es_ES", "es-419");
+  ExpectLocale(notes, "es_419", "es-419");
+  ExpectLocale(notes, "fr_CA", "en");
+}
+
+UR_TEST(ReleaseNotes_ANoteNeverCrossesChineseScripts) {
+  // the store's zh is Simplified and zh-HK Traditional
+  const ReleaseNotes both = NotesIn({"zh", "zh-HK"});
+  ExpectLocale(both, "zh_CN", "zh");
+  ExpectLocale(both, "zh_HK", "zh-HK");
+  ExpectLocale(both, "zh_TW", "zh-HK");
+  ExpectLocale(both, "zh-Hant", "zh-HK");
+  ExpectLocale(both, "zh_MO", "zh-HK");
+  ExpectLocale(both, "zh-Hans", "zh");
+  ExpectLocale(both, "zh_SG", "zh");
+  ExpectLocale(both, "zh-Hans-HK", "zh");  // the script subtag outranks the region
+  // only Simplified: a Traditional UI reads en, never zh
+  const ReleaseNotes simplified = NotesIn({"zh"});
+  ExpectLocale(simplified, "zh_HK", "en");
+  ExpectLocale(simplified, "zh_TW", "en");
+  ExpectLocale(simplified, "zh_CN", "zh");
+  // only Traditional: a Simplified UI reads en, never zh-HK
+  const ReleaseNotes traditional = NotesIn({"zh-HK"});
+  ExpectLocale(traditional, "zh_CN", "en");
+  ExpectLocale(traditional, "zh", "en");
+  ExpectLocale(traditional, "zh_TW", "zh-HK");
+}
+
+UR_TEST(ReleaseNotes_TheNoteKeepsItsOwnLanguagesDirection) {
+  for (const char* rtl : {"ar", "he", "ar_EG", "ar-EG", "he_IL.UTF-8", "AR"}) {
+    UR_EXPECT_TRUE_MSG(rtl, release_notes::IsRightToLeft(rtl));
+  }
+  for (const char* ltr : {"en", "de", "fr", "pt-BR", "zh", "zh-HK", "hi", "", "C"}) {
+    UR_EXPECT_TRUE_MSG(ltr, !release_notes::IsRightToLeft(ltr));
+  }
+  // an Arabic UI with no Arabic note reads en, laid out left to right
+  const ReleaseNotes notes = ParsedFull();
+  const std::string locale = release_notes::PickLocale(notes, "ar");
+  UR_EXPECT_TRUE(locale == "en" && !release_notes::IsRightToLeft(locale));
+  UR_EXPECT_TRUE(release_notes::IsRightToLeft(release_notes::PickLocale(NotesIn({"ar"}), "ar")));
+}
+
+UR_TEST(ReleaseNotes_TheMetaLineIsTheNotesVersionAndDate) {
+  // the note's own version, never the running build's
+  const ReleaseNotes notes = ParsedFull();
+  UR_EXPECT_TRUE(release_notes::MetaLine(notes.version, "19.11.2026") == "2026.11 · 19.11.2026");
+  UR_EXPECT_TRUE(release_notes::MetaLine("2026.11", "") == "2026.11");
+  UR_EXPECT_TRUE(release_notes::MetaLine("", "19.11.2026") == "19.11.2026");
 }
 
 }  // namespace

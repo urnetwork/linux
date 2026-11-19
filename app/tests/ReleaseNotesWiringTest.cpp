@@ -2,8 +2,9 @@
 // Settings page need GTK). The build installs the file where the sheet reads
 // it, through the shared runtime ladder; the App version row opens the sheet
 // only when the file gave a note, and is the plain value row otherwise; the row
-// names its version and carries the store's hint; the sheet shows the note of
-// the UI's catalog under the running version, and its text is never markup.
+// names the app's version and carries the store's hint; the sheet shows the
+// note of the UI's catalog under the note's own version and date, laid out in
+// the note's language's direction, and its text is never markup.
 //
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
@@ -83,20 +84,31 @@ UR_TEST(ReleaseNotesWiring_TheVersionRowOpensTheNoteOnlyWhenThereIsOne) {
   UR_EXPECT_EQ(size_t{1}, CountOf(page, "std::make_unique<ReleaseNotesSheet>("));
 }
 
-UR_TEST(ReleaseNotesWiring_TheSheetShowsTheUisNoteUnderTheRunningVersion) {
+UR_TEST(ReleaseNotesWiring_TheSheetShowsTheUisNoteUnderItsOwnVersion) {
   const std::string sheet = ReadCode("ReleaseNotesSheet.cpp");
   // the catalog gettext loaded names the UI's language; the same lookup T_ makes
   NotesInOrder(FunctionBody(sheet, "std::string UiCatalogLanguage() {"),
                {"g_dgettext(GETTEXT_PACKAGE, \"\")", "release_notes::CatalogLanguage("});
+  // the note in its own language's direction, set on the note's widgets only:
+  // the scroller and Close are the chrome and keep the UI's
   const std::string ctor = FunctionBody(sheet, "ReleaseNotesSheet::ReleaseNotesSheet(");
   NotesInOrder(ctor, {"set_title(T_(\"release_notes\", \"Release notes\"));",
-                      "release_notes::PickNote(*notes_, UiCatalogLanguage())",
-                      "AppendNote(*column, *note);", "T_(\"close\", \"Close\")"});
+                      "release_notes::PickLocale(*notes_, UiCatalogLanguage())",
+                      "AppendNote(*column, it->second);", "SetDirectionDeep(*column,",
+                      "release_notes::IsRightToLeft(locale)", "scroll_->set_child(*column);",
+                      "T_(\"close\", \"Close\")", "root->append(*close);"});
+  UR_EXPECT_EQ(size_t{1}, CountOf(ctor, "SetDirectionDeep("));
+  NotesInOrder(FunctionBody(sheet, "void SetDirectionDeep(Gtk::Widget& widget,"),
+               {"widget.set_direction(direction);", "widget.get_first_child()",
+                "child->get_next_sibling()", "SetDirectionDeep(*child, direction);"});
+  // the line under the title is the note's own version and date; the running
+  // build's version is the About row's alone
   NotesInOrder(FunctionBody(sheet, "void ReleaseNotesSheet::AppendNote("),
                {"note.title",
-                "release_notes::MetaLine(UR_APP_VERSION, LocalNoteDate(notes_->date))",
+                "release_notes::MetaLine(notes_->version, LocalNoteDate(notes_->date))",
                 "note.intro", "kit::MakePaneGroupHeader(section.heading)", "section.items",
                 "kit::MarkDecorative(*bullet);"});
+  UR_EXPECT_FALSE(Contains(sheet, "UR_APP_VERSION"));
   // the note's text is data from a generated file: set, never parsed as markup
   UR_EXPECT_FALSE(Contains(sheet, "set_markup("));
 }

@@ -15,12 +15,18 @@
 // `en` is the one locale the store requires. The intro and a section's heading
 // are optional, and the sections may be empty.
 //
-// THE NOTE IS IN THE LANGUAGE OF THE UI AROUND IT. The catalog gettext loaded
-// for the app's domain names its language in its header ("Language: pt_BR",
-// po/*.po), and that is the po name of a store locale: pt_BR is pt-BR, zh_CN is
-// zh (gen/store.mjs LINUX_LOCALE maps them the other way). The note is that
-// locale's, else its language's (es-MX falls back to es), else en's. With no
-// catalog loaded the UI is English, and so is the note.
+// Every app shows it by one rule (the localization store's README, "Release
+// notes"). THE NOTE IS IN THE LANGUAGE OF THE UI AROUND IT. The catalog gettext
+// loaded for the app's domain names its language in its header ("Language:
+// pt_BR", po/*.po), and that is the po name of a store locale: pt_BR is pt-BR,
+// zh_CN is zh (gen/store.mjs LINUX_LOCALE maps them the other way). The note is
+// that exact locale's; else the same language's in another form, the bare
+// language first (pt-BR reads pt) and then another region of it (pt-PT reads
+// pt-BR), never across Chinese scripts (the store's zh is Simplified, zh-HK
+// Traditional); else en's. With no catalog loaded the UI is English, and so is
+// the note. The note is laid out in its own language's direction
+// (IsRightToLeft), so the English fallback reads left to right in an Arabic or
+// Hebrew UI.
 //
 // A file that does not parse, or that lacks the version, the date or a usable
 // en note, is no release note at all: Parse refuses it and the version row
@@ -84,6 +90,34 @@ inline std::string Trim(const std::string& text) {
 inline std::string Lower(std::string text) {
   for (char& c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
   return text;
+}
+
+// The language subtag of a locale code, lowercased: "pt" of "pt-BR".
+inline std::string LanguageOf(const std::string& code) {
+  return Lower(code.substr(0, code.find('-')));
+}
+
+// What a locale falls back within: its language, except that Chinese splits by
+// script, which a note never crosses. The store's zh is Simplified and zh-HK
+// Traditional, so zh-Hant and the Traditional regions (HK, TW, MO) are
+// "zh-hant" and every other zh is "zh-hans"; an explicit script subtag wins
+// over the region (zh-Hans-HK is Simplified).
+inline std::string FamilyOf(const std::string& code) {
+  const std::string lower = Lower(code);
+  const std::string language = LanguageOf(lower);
+  if (language != "zh") return language;
+  std::string traditionalRegion;
+  size_t start = lower.find('-');
+  while (start != std::string::npos) {
+    const size_t end = lower.find('-', start + 1);
+    const std::string subtag =
+        lower.substr(start + 1, end == std::string::npos ? std::string::npos : end - start - 1);
+    if (subtag == "hans") return "zh-hans";
+    if (subtag == "hant") return "zh-hant";
+    if (subtag == "hk" || subtag == "tw" || subtag == "mo") traditionalRegion = subtag;
+    start = end;
+  }
+  return traditionalRegion.empty() ? "zh-hans" : "zh-hant";
 }
 
 // An optional string field: absent or null is "", a string is its trimmed
@@ -212,30 +246,55 @@ inline std::string CatalogLanguage(const std::string& header) {
   return std::string();
 }
 
-// The note to show for the UI's locale (a gettext name or a store code): that
-// locale's, else its language's, else en's. Matched without regard to case.
-// nullptr only for notes that carry no en, which Parse never returns.
-inline const Note* PickNote(const ReleaseNotes& notes, const std::string& uiLocale) {
-  const auto find = [&notes](const std::string& code) -> const Note* {
-    if (code.empty()) return nullptr;
-    const std::string want = detail::Lower(code);
+// The store locale whose note to show for the UI's locale (a gettext name or a
+// store code), as the file spells it; codes match without regard to case. That
+// exact locale; else the same language in another form, the bare language
+// first (pt-BR reads pt) and then another region of it, the first by code
+// (pt-PT reads pt-BR, es reads es-419), never across Chinese scripts (zh_CN
+// reads only zh, zh_HK and zh_TW only zh-HK); else en. "" only for notes that
+// carry no en, which Parse never returns.
+inline std::string PickLocale(const ReleaseNotes& notes, const std::string& uiLocale) {
+  const auto find = [&notes](const std::string& lowerCode) -> std::string {
     for (const auto& entry : notes.locales) {
-      if (detail::Lower(entry.first) == want) return &entry.second;
+      if (detail::Lower(entry.first) == lowerCode) return entry.first;
     }
-    return nullptr;
+    return std::string();
   };
-  const std::string code = StoreLocale(uiLocale);
-  if (const Note* exact = find(code)) return exact;
-  const size_t dash = code.find('-');
-  if (dash != std::string::npos) {
-    if (const Note* language = find(code.substr(0, dash))) return language;
+  const std::string want = detail::Lower(StoreLocale(uiLocale));
+  if (!want.empty()) {
+    if (std::string exact = find(want); !exact.empty()) return exact;
+    const std::string family = detail::FamilyOf(want);
+    // the bare language, unless it is the other script (zh for zh-TW)
+    const std::string bare = detail::LanguageOf(want);
+    if (detail::FamilyOf(bare) == family) {
+      if (std::string language = find(bare); !language.empty()) return language;
+    }
+    for (const auto& entry : notes.locales) {  // a std::map: by code
+      if (detail::FamilyOf(entry.first) == family) return entry.first;
+    }
   }
   return find(kFallbackLocale);
 }
 
-// The line under the note's title: the running version and the note's date,
-// "2026.11.18-1101907820 · 19.11.2026", either half omitted when empty (the
-// Licenses sheet's "version · spdx" form).
+// The note PickLocale chooses; nullptr only for notes that carry no en.
+inline const Note* PickNote(const ReleaseNotes& notes, const std::string& uiLocale) {
+  const auto it = notes.locales.find(PickLocale(notes, uiLocale));
+  return it == notes.locales.end() ? nullptr : &it->second;
+}
+
+// Whether a note in this locale is laid out right to left: the store's
+// right-to-left languages, Arabic and Hebrew. A note keeps its own language's
+// direction whatever the UI's, so the English fallback reads left to right
+// (its alignment and its punctuation) in an Arabic or Hebrew UI.
+inline bool IsRightToLeft(const std::string& locale) {
+  const std::string language = detail::LanguageOf(StoreLocale(locale));
+  return language == "ar" || language == "he";
+}
+
+// The line under the note's title: the note's own version and its date,
+// "2026.11 · 19.11.2026", either half omitted when empty (the Licenses sheet's
+// "version · spdx" form). Never the running build's version: a later build
+// carries the same note, and that version beside this date would read wrong.
 inline std::string MetaLine(const std::string& version, const std::string& date) {
   if (version.empty()) return date;
   if (date.empty()) return version;
