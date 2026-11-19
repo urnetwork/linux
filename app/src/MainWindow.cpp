@@ -2644,8 +2644,12 @@ void MainWindow::OnAccountSignInRequired(const auth_logout::Report& report) {
         const auto lookup = [](const auth_logout::Text& text) {
           return std::string(T_(text.key, text.english));
         };
+        // until the user closes it: the sdk keeps it across restarts until
+        // then (SdkHost::DismissAccountSignInNotice), or the next sign-in or
+        // sign-out
         shell_->snackbar().Show(auth_logout::AccountSignInNotice(report, lookup),
-                                kit::Snackbar::Severity::Warning);
+                                kit::Snackbar::Severity::Warning, std::nullopt,
+                                [this] { host_.DismissAccountSignInNotice(); });
       }
       return;
   }

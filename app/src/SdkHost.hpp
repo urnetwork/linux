@@ -934,9 +934,23 @@ class SdkHost {
   void SetAuthStateHandler(AuthStateHandler h) { onAuth_ = std::move(h); }
   bool AuthEpochCurrent(uint64_t epoch) const { return signInEpoch_.load() == epoch; }
   void SetAuthInvalidHandler(AuthInvalidHandler h) { onAuthInvalid_ = std::move(h); }
+  // The window sets it once it can show the notice, and a notice the sdk kept
+  // from before a restart is reported to it then (ReportKeptAccountSignInNotice).
   void SetAccountSignInRequiredHandler(AccountSignInRequiredHandler h) {
     onAccountSignInRequired_ = std::move(h);
+    ReportKeptAccountSignInNotice();
   }
+  // The sdk keeps the account sign-in notice across restarts, until it is
+  // dismissed or the next sign-in or sign-out, and reports it again as the
+  // Api's listener is added (AdoptSpaceApiLocked). That is before this host has
+  // read whether it is signed in, and before the window has set its handler,
+  // so that report is heard as no sign-in's and drops: a handler set, and a
+  // space switched to, ask the Api here instead and report it in the sign-in
+  // now.
+  void ReportKeptAccountSignInNotice();
+  // The user closed the account sign-in notice: the sdk keeps it no longer, so
+  // it does not show again after a restart (Api.dismissAccountSignInNotice).
+  void DismissAccountSignInNotice();
   // Whether a report the auth-invalid handler was given still signs the app
   // out: it was heard while signed in, and nothing has signed out or in since.
   // Each listener that hears a rejection reports it (the Api's, and the bound

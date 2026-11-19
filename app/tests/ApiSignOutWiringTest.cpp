@@ -155,9 +155,20 @@ UR_TEST(ApiSignOut_EveryAdoptedApiReportsTheAccountSignInNeeded) {
                         "api_->addAccountSignInRequiredListener([this, api] {"));
   UR_EXPECT_TRUE(Contains(
       adopt, "onAccountSignInRequired_(authLogouts_.Hear(api->getAccountSignInRequiredCause()));"));
-  UR_EXPECT_EQ(1u, CountOf(host, "onAccountSignInRequired_("));
-  UR_EXPECT_EQ(1u, CountOf(host, "getAccountSignInRequiredCause()"));
+  // ...and the notice the sdk kept from before a restart, which it reports as
+  // the listener is added, before the host reads its sign-in and the window
+  // sets its handler: the handler's setter and a space switched to ask the Api
+  // for it and report it in the sign-in now (ReportKeptAccountSignInNotice)
+  const std::string kept = FunctionBody(host, "void SdkHost::ReportKeptAccountSignInNotice()");
+  UR_EXPECT_TRUE(Before(kept, "if (!api_ || !api_->hasAccountSignInNotice()) return;",
+                        "cause = api_->getAccountSignInRequiredCause();"));
+  UR_EXPECT_TRUE(Contains(
+      kept, "if (onAccountSignInRequired_) onAccountSignInRequired_(authLogouts_.Hear(std::move(cause)));"));
+  UR_EXPECT_EQ(2u, CountOf(host, "onAccountSignInRequired_("));
+  UR_EXPECT_EQ(2u, CountOf(host, "getAccountSignInRequiredCause()"));
   UR_EXPECT_EQ(1u, CountOf(host, "addAccountSignInRequiredListener("));
+  const std::string apply = FunctionBody(host, "bool SdkHost::ApplyNetworkServer(");
+  UR_EXPECT_TRUE(Before(apply, "if (onAuth_) onAuth_(loggedIn, authEpoch);", "ReportKeptAccountSignInNotice();"));
   // the subscription closes before its handler and its Api, and after the
   // tracker it reads
   const std::string header = ReadCode("SdkHost.hpp");
@@ -169,6 +180,31 @@ UR_TEST(ApiSignOut_EveryAdoptedApiReportsTheAccountSignInNeeded) {
                         "std::optional<urnet::Sub> apiAccountSignInSub_;"));
   UR_EXPECT_TRUE(Contains(
       header, "using AccountSignInRequiredHandler = std::function<void(auth_logout::Report report)>;"));
+  UR_EXPECT_TRUE(Before(header, "onAccountSignInRequired_ = std::move(h);",
+                        "    ReportKeptAccountSignInNotice();\n  }"));
+}
+
+// The notice shows until the user closes it, or the next sign-in or sign-out,
+// a restart included: the sdk keeps it until then. Its close tells the sdk
+// (Api.dismissAccountSignInNotice), or it would show again at the next start;
+// the snackbar runs a message's onDismissed on the user's close alone.
+UR_TEST(ApiSignOut_ClosingTheAccountSignInNoticeEndsItInTheSdk) {
+  const std::string window = ReadCode("MainWindow.cpp");
+  const std::string on = FunctionBody(window, "void MainWindow::OnAccountSignInRequired(");
+  UR_EXPECT_TRUE(Contains(on, "kit::Snackbar::Severity::Warning, std::nullopt,\n"
+                              "                                [this] { host_.DismissAccountSignInNotice(); });"));
+  const std::string host = ReadCode("SdkHost.cpp");
+  const std::string dismiss = FunctionBody(host, "void SdkHost::DismissAccountSignInNotice()");
+  UR_EXPECT_TRUE(Before(dismiss, "std::scoped_lock lock(mutex_);",
+                        "if (api_) api_->dismissAccountSignInNotice();"));
+  const std::string kit = ReadCode("PaneKit.cpp");
+  UR_EXPECT_TRUE(Contains(kit, "dismiss->signal_clicked().connect([this] { Dismiss(); });"));
+  const std::string close = FunctionBody(kit, "void Snackbar::Dismiss()");
+  UR_EXPECT_TRUE(Before(close, "std::function<void()> dismissed = std::move(onDismissed_);", "Hide();"));
+  UR_EXPECT_TRUE(Before(close, "Hide();", "if (dismissed) dismissed();"));
+  // replaced, timed out or hidden by the app: not the user's close
+  UR_EXPECT_TRUE(Contains(FunctionBody(kit, "void Snackbar::Hide()"), "onDismissed_ = nullptr;"));
+  UR_EXPECT_TRUE(Contains(FunctionBody(kit, "void Snackbar::Show("), "onDismissed_ = std::move(onDismissed);"));
 }
 
 // The window marshals the report and decides by AccountSignInStepFor: this

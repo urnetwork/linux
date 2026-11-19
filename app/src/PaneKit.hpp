@@ -268,15 +268,22 @@ class Snackbar {
   Snackbar();
   Gtk::Widget& root();  // overlay this at the window bottom-center
 
+  // onDismissed runs when the user closes this message, and only then: not
+  // when it times out, another message replaces it, or Hide() takes it off.
   void Show(const Glib::ustring& message, Severity severity = Severity::Info,
-            std::optional<int> durationMs = std::nullopt);
+            std::optional<int> durationMs = std::nullopt,
+            std::function<void()> onDismissed = nullptr);
   void Hide();
 
  private:
+  // the close: the message's onDismissed, then Hide()
+  void Dismiss();
+
   Gtk::Revealer revealer_;
   Gtk::Box bar_{Gtk::Orientation::HORIZONTAL, 12};
   Gtk::Label message_;
   sigc::connection timer_;
+  std::function<void()> onDismissed_;
 };
 
 // ---- DESIGNSTYLE "Placeholders, not pop-in" -----------------------------------

@@ -688,7 +688,7 @@ Snackbar::Snackbar() {
   dismiss->add_css_class("flat");
   dismiss->set_valign(Gtk::Align::CENTER);
   SetAccessibleLabel(*dismiss, "Dismiss");
-  dismiss->signal_clicked().connect([this] { Hide(); });
+  dismiss->signal_clicked().connect([this] { Dismiss(); });
   bar_.append(*dismiss);
 
   revealer_.set_child(bar_);
@@ -705,8 +705,10 @@ Snackbar::Snackbar() {
 Gtk::Widget& Snackbar::root() { return revealer_; }
 
 void Snackbar::Show(const Glib::ustring& message, Severity severity,
-                    std::optional<int> durationMs) {
+                    std::optional<int> durationMs, std::function<void()> onDismissed) {
   timer_.disconnect();  // a second message restarts the window
+  // a message replaced is not dismissed: only the new one's close counts
+  onDismissed_ = std::move(onDismissed);
   message_.set_text(message);
   bar_.remove_css_class("ur-snackbar-error");
   bar_.remove_css_class("ur-snackbar-success");
@@ -737,7 +739,14 @@ void Snackbar::Show(const Glib::ustring& message, Severity severity,
 
 void Snackbar::Hide() {
   timer_.disconnect();
+  onDismissed_ = nullptr;
   revealer_.set_reveal_child(false);
+}
+
+void Snackbar::Dismiss() {
+  std::function<void()> dismissed = std::move(onDismissed_);
+  Hide();
+  if (dismissed) dismissed();
 }
 
 }  // namespace urnw::kit

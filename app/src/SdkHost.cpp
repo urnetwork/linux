@@ -575,6 +575,21 @@ void SdkHost::AdoptSpaceApiLocked() {
   }));
 }
 
+void SdkHost::ReportKeptAccountSignInNotice() {
+  std::string cause;
+  {
+    std::scoped_lock lock(mutex_);
+    if (!api_ || !api_->hasAccountSignInNotice()) return;
+    cause = api_->getAccountSignInRequiredCause();
+  }
+  if (onAccountSignInRequired_) onAccountSignInRequired_(authLogouts_.Hear(std::move(cause)));
+}
+
+void SdkHost::DismissAccountSignInNotice() {
+  std::scoped_lock lock(mutex_);
+  if (api_) api_->dismissAccountSignInNotice();
+}
+
 void SdkHost::ReportAuthLogout(std::string cause) {
   // the sign-in it was heard in goes with it: a second listener's report of
   // the same rejection, or one that lands after a sign-out, signs nothing out
@@ -1100,6 +1115,8 @@ bool SdkHost::ApplyNetworkServer(const std::string& hostName, const std::string&
   // LoggedOut — a fresh server has no jwt — and saying so is the point: the
   // old session is genuinely gone.
   if (onAuth_) onAuth_(loggedIn, authEpoch);
+  // ...and its account sign-in notice, kept in its storage, in its sign-in
+  ReportKeptAccountSignInNotice();
   EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
   // stop_tunnel retired the old server's provider-only device with the rest; a
   // space this device is already signed in to provides again on its own.
