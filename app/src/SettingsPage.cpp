@@ -24,6 +24,7 @@
 #include "ManageDevicesPresentation.hpp"  // the Device pane's Manage devices row
 #include "PaneKit.hpp"
 #include "PostQuantumIdentity.hpp"  // ProviderIdentitiesSheet (reused as-is)
+#include "ReleaseNotesSheet.hpp"
 #include "SettingsFold.hpp"
 #include "SlowInternet.hpp"
 #include "SplitRulesSheet.hpp"      // reused as-is (the split-rule editor)
@@ -1596,9 +1597,28 @@ void SettingsPage::BuildVersionSection(Gtk::Box& host) {
   ApplyFieldState(*sdkValue, SettingsFieldState::Loaded, sdkVersion);
 
   // The value is a compile-time constant — no round trip, and "0.0.0"
-  // outside a release build is the correct answer, not a bug.
-  auto* appValue = AddValueRow(host, T_("app_version", "App version"));
-  ApplyFieldState(*appValue, SettingsFieldState::Loaded, UR_APP_VERSION);
+  // outside a release build is the correct answer, not a bug. With the bundled
+  // release note readable the row opens it (ReleaseNotesSheet.hpp); without
+  // one it stays the plain value row, so a missing or broken file never offers
+  // a sheet with nothing in it.
+  if (!BundledReleaseNotes()) {
+    auto* appValue = AddValueRow(host, T_("app_version", "App version"));
+    ApplyFieldState(*appValue, SettingsFieldState::Loaded, UR_APP_VERSION);
+    return;
+  }
+  auto appRow = kit::MakePaneTwoLineRowButton(T_("app_version", "App version"), {}, kRowTall);
+  ApplyFieldState(*appRow.value, SettingsFieldState::Loaded, UR_APP_VERSION);
+  // The version is the row's fact and the release notes what it opens: the
+  // store's accessibility hint for this row, which is the pointer's tooltip
+  // too (the click-to-copy texts' idiom, Ui.cpp MakeCopyTextButton).
+  const Glib::ustring hint = T_("release_notes", "Release notes");
+  kit::SetAccessibleLabel(*appRow.root,
+                          Glib::ustring(T_("app_version", "App version")) + ", " + UR_APP_VERSION);
+  gtk_accessible_update_property(GTK_ACCESSIBLE(appRow.root->gobj()),
+                                 GTK_ACCESSIBLE_PROPERTY_DESCRIPTION, hint.c_str(), -1);
+  appRow.root->set_tooltip_text(hint);
+  appRow.root->signal_clicked().connect([this] { ShowReleaseNotesSheet(); });
+  host.append(*appRow.root);
 }
 
 // ---- Pane C: Licenses -------------------------------------------------------
@@ -2009,6 +2029,17 @@ void SettingsPage::ShowLicensesSheet() {
   if (root == nullptr) return;
   if (!licensesSheet_) licensesSheet_ = std::make_unique<LicensesSheet>(*root);
   licensesSheet_->Open();
+}
+
+void SettingsPage::ShowReleaseNotesSheet() {
+  Gtk::Window* root = RootWindow();
+  if (root == nullptr) return;
+  if (!releaseNotesSheet_) {
+    auto notes = BundledReleaseNotes();
+    if (!notes) return;  // the row is a plain value then, so nothing asks
+    releaseNotesSheet_ = std::make_unique<ReleaseNotesSheet>(*root, std::move(notes));
+  }
+  releaseNotesSheet_->Open();
 }
 
 void SettingsPage::ShowVlessSheet() {

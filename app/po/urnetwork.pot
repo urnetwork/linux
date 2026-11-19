@@ -9009,6 +9009,11 @@ msgctxt "regions"
 msgid "Regions"
 msgstr ""
 
+#. Title of the release notes sheet, opened by tapping the version in Account; also the version row's accessibility hint. The note itself comes from release-notes/latest.yaml.
+msgctxt "release_notes"
+msgid "Release notes"
+msgstr ""
+
 #. Call to action
 msgctxt "reliability"
 msgid "Reliability"

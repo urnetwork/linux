@@ -12,7 +12,8 @@
 //   Pane B "Device" — what this machine IS: the Device group (name, spec),
 //     Post Quantum Identity, then Advanced (the advanced-mode toggle and
 //     Save logs).
-//   Pane C "About" — what the app IS: the version rows, Licenses, and Stay
+//   Pane C "About" — what the app IS: the version rows (App version opens
+//     the bundled release notes, ReleaseNotesSheet.hpp), Licenses, and Stay
 //     in touch.
 //
 // A foldable pane owns no content without a second door (SettingsFold.hpp):
@@ -74,6 +75,9 @@ class ProviderIdentitiesSheet;
 class SettingsDeviceNameSheet;
 class SettingsBlockedLocationsSheet;
 class LicensesSheet;
+// The bundled release note, which the App version row opens
+// (ReleaseNotesSheet.hpp).
+class ReleaseNotesSheet;
 // The VLESS editor (VlessSheet.hpp); the login screen's network sheet opens
 // its own instance for the same space.
 class VlessSheet;
@@ -185,6 +189,7 @@ class SettingsPage : public Gtk::Box {
   void ShowExcludeAppsSheet();
   void ShowIdentitySheet();
   void ShowLicensesSheet();
+  void ShowReleaseNotesSheet();
   void ShowVlessSheet();
 
   // ---- helpers -------------------------------------------------------------
@@ -279,6 +284,7 @@ class SettingsPage : public Gtk::Box {
   std::unique_ptr<SplitRulesSheet> splitRulesSheet_;
   std::unique_ptr<ProviderIdentitiesSheet> identitiesSheet_;
   std::unique_ptr<LicensesSheet> licensesSheet_;
+  std::unique_ptr<ReleaseNotesSheet> releaseNotesSheet_;
   std::unique_ptr<VlessSheet> vlessSheet_;
   std::unique_ptr<ExcludeAppsSheet> excludeAppsSheet_;
   std::unique_ptr<Gtk::Window> confirmDialog_;  // the uninstall confirmation

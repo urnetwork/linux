@@ -65,6 +65,7 @@ src/GuestConversionSheet.cpp
 src/HomeShell.cpp
 src/KillSwitchCopy.hpp
 src/LicensesSheet.cpp
+src/ReleaseNotesSheet.cpp
 src/OfferCard.cpp
 src/Onboarding.cpp
 src/PlanPicker.cpp

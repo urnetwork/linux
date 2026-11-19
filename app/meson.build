@@ -229,6 +229,8 @@ executable('urnetwork-gui',
     'src/VlessSheet.cpp',
     'src/UpdateChecker.cpp',
     'src/LicensesSheet.cpp',
+    # the bundled release note, opened from Settings > About's App version row
+    'src/ReleaseNotesSheet.cpp',
     'src/DeveloperPage.cpp',
     'src/EarningsPage.cpp',
     'src/ProtocolBoard.cpp',
@@ -530,6 +532,14 @@ install_data('assets/urnetwork-tray-disconnected.png',
 install_data('assets/world-110m.json',
              install_dir : get_option('datadir') / 'urnetwork')
 
+# The bundled release note, which Settings > About's App version row opens
+# (src/ReleaseNotesSheet.cpp reads it from the pkgdatadir, assets/ in a build
+# tree). The localization store generates it from its release-notes/latest.yaml
+# (`npm run gen`); it is never hand-edited. Without this install every packaged
+# build would show the version as a plain value that opens nothing.
+install_data('assets/release-notes.json',
+             install_dir : get_option('datadir') / 'urnetwork')
+
 # The crowned-frog referral mascot (Account's royalty badge). Without this
 # install the asset resolves ONLY out of a build tree — every packaged build
 # and every AppImage would silently render the badge as a bare sentence.
@@ -595,7 +605,8 @@ install_data('assets/carousel/LoginCarousel1.jpg',
 # log files that ride in it by descriptor over a socketpair, how a launch
 # reaches the running instance and how it answers, the user's autostart entry
 # behind the startup toggle, the Settings panes' fold and pane A's second
-# doors, and the daemon
+# doors, the bundled release note's reading and the locale it is shown in, and
+# the daemon
 # control protocol: framing,
 # version
 # negotiation in both directions, SDK-build agreement, peer-credential
@@ -821,6 +832,8 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/PaymentPastDueTest.cpp',
     'tests/SlowInternetTest.cpp',
     'tests/SlowInternetWiringTest.cpp',
+    'tests/ReleaseNotesTest.cpp',
+    'tests/ReleaseNotesWiringTest.cpp',
     'src/GlobeGeometry.cpp',
     'src/WorldTopology.cpp',
     'src/ProviderLocationRow.cpp',
@@ -979,6 +992,9 @@ urnetwork_tests = executable('urnetwork-tests',
               # ProFeaturesWiringTest reads the Pro features notice's window,
               # Connect page and device list call sites and meson.build the same
               # way.
+              # ReleaseNotesTest reads the bundled assets/release-notes.json, and
+              # ReleaseNotesWiringTest the version row, its sheet, meson.build and
+              # po/POTFILES.in the same way.
               '-DUR_SRC_DIR="' + meson.project_source_root() / 'src' + '"'] +
              exhaustive_switch_args,
   install : false)
