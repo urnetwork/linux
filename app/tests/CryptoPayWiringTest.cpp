@@ -323,6 +323,49 @@ UR_TEST(CryptoPayWiring_TheInvoiceReadsInTheContractsOrder) {
   InOrder(draw, {"kPaper", "crypto_pay::QrModulePixels(side, count)", "kInk"});
 }
 
+// Bitcoin's confirmation grace (mmm/BTCPAY.md §16.8), wired: the host carries
+// the SDK's AwaitingConfirmation and the coin's two lines as it hands them
+// out, with no clock of this app's; the view puts the awaiting line in the
+// countdown's row where the expired line is and the confirmation line under
+// the row, shows each by the presentation's word alone, and looks each up as
+// the coin's other lines are, never with copy of its own.
+UR_TEST(CryptoPayWiring_BitcoinsConfirmationGrace) {
+  const std::string host = ReadCode("CryptoInvoiceHost.cpp");
+  const std::string viewOf =
+      FunctionBody(host, "crypto_pay::InvoiceView ViewOf(const urnet::CryptoInvoiceState& state) {");
+  InOrder(viewOf, {"view.secondsLeft = state.seconds_left;",
+                   "view.awaitingConfirmation = state.awaiting_confirmation;",
+                   "if (const auto lines = urnet::cryptoAssetLinesFor(state.asset)) {",
+                   "view.lines.noPaymentLinkNote = {lines->no_payment_link_note_key, lines->no_payment_link_note};",
+                   "view.lines.confirmationNote = {lines->confirmation_note_key, lines->confirmation_note};",
+                   "view.lines.awaitingConfirmationNote = {lines->awaiting_confirmation_note_key,",
+                   "lines->awaiting_confirmation_note};"});
+  UR_EXPECT_FALSE(Contains(host, "confirmation_grace_seconds"));
+
+  const std::string view = ReadCode("CryptoInvoiceView.cpp");
+  const std::string build = FunctionBody(view, "CryptoInvoiceView::CryptoInvoiceView() :");
+  InOrder(build, {"countdownRow_->append(*countdown_);", "countdownRow_->append(*expired_);",
+                  "awaiting_ = MakeLine();", "countdownRow_->append(*awaiting_);",
+                  "countdownRow_->append(*refresh_);", "append(*countdownRow_);",
+                  "confirmationNote_ = MakeLine(\"dim-label\");",
+                  "confirmationNote_->add_css_class(\"caption\");", "append(*confirmationNote_);",
+                  "append(*steps_);"});
+  const std::string render = FunctionBody(view, "void CryptoInvoiceView::Render(");
+  InOrder(render, {"countdownRow_->set_visible(p.showCountdown || p.expired || p.showAwaitingConfirmationNote ||",
+                   "expired_->set_visible(p.expired);",
+                   "const crypto_pay::CoinLine& awaiting = p.awaitingConfirmationNote;",
+                   "awaiting_->set_text(LabelText(awaiting.key, awaiting.english));",
+                   "awaiting_->set_visible(p.showAwaitingConfirmationNote);",
+                   "refresh_->set_visible(p.showRefresh);",
+                   "const crypto_pay::CoinLine& confirmation = p.confirmationNote;",
+                   "confirmationNote_->set_text(LabelText(confirmation.key, confirmation.english));",
+                   "confirmationNote_->set_visible(p.showConfirmationNote);"});
+  // the lines are the SDK's: neither the view nor the rules name their keys
+  for (const char* file : {"CryptoInvoiceView.cpp", "CryptoPay.hpp", "CryptoInvoiceHost.cpp"}) {
+    UR_EXPECT_TRUE_MSG(file, !Contains(ReadCode(file), "crypto_invoice_bitcoin_"));
+  }
+}
+
 // No AdwToggleGroup (the AppImage's libadwaita 1.5 lacks it): linked toggle
 // buttons in one group, named "Pay with".
 UR_TEST(CryptoPayWiring_TheRowIsLinkedToggleButtons) {

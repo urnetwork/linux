@@ -71,7 +71,9 @@ class CryptoInvoiceHost {
   bool StartInvoice(const std::string& asset, const std::string& plan);
   void Requote();
   // "Pay another way", or giving up on a failed invoice: with nothing
-  // received the saved invoice goes; once money arrived it is only hidden.
+  // received the saved invoice goes; once money arrived, or while Bitcoin's
+  // confirmation grace runs (a payment sent in time may still confirm,
+  // mmm/BTCPAY.md §16.8), it is only hidden.
   void Dismiss();
 
   // The method last chosen on this device ("" when none), and remembering one.

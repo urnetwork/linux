@@ -135,6 +135,33 @@ cp::InvoiceView OpenXmr() {
   return v;
 }
 
+// An open, payable Bitcoin invoice as the host hands it over: Monero's, with
+// Bitcoin's answers beside the state (its network line and warning, a payment
+// link, no memo, no wallets) and the two lines of its confirmation grace
+// (mmm/BTCPAY.md §16.8), as the SDK's crypto_pay.go spells them.
+cp::InvoiceView OpenBtc() {
+  cp::InvoiceView v = OpenXmr();
+  v.asset = "btc";
+  v.ticker = "BTC";
+  v.address = "bc1q" + std::string(38, 'q');
+  v.amount = "0.00061234";
+  v.uri = "bitcoin:" + v.address + "?amount=0.00061234&label=URnetwork&message=URnetwork%20Pro%20yearly";
+  v.qrText = v.uri;
+  v.remaining = "0.00061234";
+  v.lines.networkLine = {"crypto_network_bitcoin", "Bitcoin network"};
+  v.lines.networkWarning = {"crypto_invoice_bitcoin_network_only",
+                            "Send only Bitcoin on the Bitcoin network to this address. Bitcoin sent on "
+                            "any other network won't be credited."};
+  v.lines.confirmationNote = {"crypto_invoice_bitcoin_confirmation_time",
+                              "Bitcoin payments can take up to 3 hours to confirm. A payment sent before "
+                              "the quote expires is credited at this price."};
+  v.lines.awaitingConfirmationNote = {
+      "crypto_invoice_bitcoin_awaiting_confirmation",
+      "This quote expired. A payment you sent before it expired is credited at this price once it "
+      "confirms, which can take up to 3 hours. If you didn't send one, pay another way."};
+  return v;
+}
+
 // "pending=done seen=current confirming=upcoming 0/1 paid=upcoming": each
 // step's status, how it is drawn, and the confirming step's counts.
 std::string Kinds(const std::vector<cp::Step>& steps) {
@@ -146,6 +173,40 @@ std::string Kinds(const std::vector<cp::Step>& steps) {
       out += " " + std::to_string(step.confirmations) + "/" + std::to_string(step.confirmationsRequired);
     }
   }
+  return out;
+}
+
+// What the invoice shows, top to bottom ("qr open_wallet amount address
+// countdown refresh steps(...) pay_another_way"): two presentations that read
+// the same show the same.
+std::string Shown(const cp::InvoicePresentation& p) {
+  std::string out;
+  const auto add = [&out](bool shown, const std::string& part) {
+    if (!shown) return;
+    if (!out.empty()) out += " ";
+    out += part;
+  };
+  add(p.showByHandLine, "by_hand");
+  add(p.showQr, "qr");
+  add(p.showOpenWallet, "open_wallet");
+  add(p.showAmount, "amount");
+  add(p.showAddress, "address");
+  add(p.showNetworkWarning, "warning");
+  add(p.showMemo, "memo");
+  add(p.showCountdown, "countdown");
+  add(p.expired, "expired");
+  add(p.awaitingConfirmation, "awaiting");
+  add(p.showAwaitingConfirmationNote, "awaiting_note");
+  add(p.showRefresh, p.refreshEnabled ? "refresh" : "refresh(disabled)");
+  add(p.showConfirmationNote, "confirmation_note");
+  add(!p.steps.empty(), "steps(" + Kinds(p.steps) + ")");
+  add(p.showRemaining, "remaining");
+  add(p.review, "review");
+  add(p.showWallets, "wallets");
+  add(p.zcashNote, "zcash_note");
+  add(p.notice == cp::InvoiceNotice::Unavailable, "unavailable");
+  add(p.notice == cp::InvoiceNotice::Failed, "failed");
+  add(p.showPayAnotherWay, "pay_another_way");
   return out;
 }
 
@@ -718,6 +779,136 @@ UR_TEST(CryptoPay_TheNewCoinsLinksAndWarnings) {
     // a coin the SDK lists no wallets for has no such line, never an empty one
     UR_EXPECT_TRUE_MSG(c.asset, !p.showWallets && p.walletsText.empty());
   }
+}
+
+// Bitcoin's confirmation grace (mmm/BTCPAY.md §16.8): the server credits a
+// Bitcoin payment sent within the quote at its price while it is mined within
+// 3 hours of the expiry. While the quote can be paid, the coin's line saying
+// so shows under the countdown, and the rest is a payable quote's. Only with
+// the countdown, and no other coin has the line.
+UR_TEST(CryptoPay_BitcoinsConfirmationLineShowsWithTheCountdown) {
+  cp::InvoiceView v = OpenBtc();
+  cp::InvoicePresentation p = cp::PresentInvoice(v);
+  UR_EXPECT_TRUE(p.showCountdown && p.countdownText == "29:59");
+  UR_EXPECT_TRUE(p.showConfirmationNote);
+  UR_EXPECT_TRUE(p.confirmationNote == v.lines.confirmationNote);
+  UR_EXPECT_TRUE(p.showQr && p.qrText == v.uri && p.showOpenWallet);
+  UR_EXPECT_TRUE(p.showAmount && p.amountText == "0.00061234 BTC");
+  UR_EXPECT_TRUE(p.showAddress && p.showNetworkWarning);
+  UR_EXPECT_TRUE(p.showRefresh && p.refreshEnabled);
+  UR_EXPECT_FALSE(p.expired || p.awaitingConfirmation || p.showAwaitingConfirmationNote);
+  UR_EXPECT_TRUE_MSG(Shown(p), Shown(p) == "qr open_wallet amount address warning countdown refresh "
+                                           "confirmation_note steps(pending=current seen=upcoming "
+                                           "confirming=upcoming 0/1 paid=upcoming) pay_another_way");
+  // a re-quote in flight: the countdown, and its line, stay
+  v.refreshing = true;
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_TRUE(p.showCountdown && p.showConfirmationNote && p.showRefresh && !p.refreshEnabled);
+  // only with the countdown: not for a top-up, while confirming, in review,
+  // once paid, before the first status or once the server says expired
+  for (const char* status : {"seen", "confirming", "review", "paid", "", "expired"}) {
+    cp::InvoiceView other = OpenBtc();
+    other.status = status;
+    const cp::InvoicePresentation q = cp::PresentInvoice(other);
+    UR_EXPECT_TRUE_MSG(status, !q.showCountdown && !q.showConfirmationNote);
+  }
+  // nor once the countdown ran out with the grace over (the SDK no longer
+  // awaits): the expired line and Refresh quote, as before the grace
+  v = OpenBtc();
+  v.secondsLeft = 0;
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_FALSE(p.showConfirmationNote || p.awaitingConfirmation || p.showAwaitingConfirmationNote);
+  UR_EXPECT_TRUE_MSG(Shown(p), Shown(p) == "expired refresh pay_another_way");
+  // every other coin has neither line (the SDK's lines for it): its payable
+  // quote reads as it did
+  UR_EXPECT_TRUE(Shown(cp::PresentInvoice(OpenXmr())) ==
+                 "qr open_wallet amount address countdown refresh steps(pending=current "
+                 "seen=upcoming confirming=upcoming 0/1 paid=upcoming) pay_another_way");
+  UR_EXPECT_TRUE(cp::PresentInvoice(OpenXmr()).confirmationNote.key.empty());
+}
+
+// Through Bitcoin's confirmation grace (mmm/BTCPAY.md §16.8): the countdown ran
+// out with nothing received, but the server sees a Bitcoin payment only once it
+// is mined, so one sent in time may still be on its way, and it is credited at
+// the quoted price. The SDK says so (AwaitingConfirmation; the invoice is still
+// pending). Not the expired line and no Refresh quote, which the server refuses
+// then: the coin's awaiting line in their place. Nothing to pay with, as once
+// expired; the waiting steps and Pay another way, as while pending.
+UR_TEST(CryptoPay_BitcoinsGraceAwaitsAPaymentSentInTime) {
+  cp::InvoiceView v = OpenBtc();
+  v.secondsLeft = 0;
+  v.awaitingConfirmation = true;
+  cp::InvoicePresentation p = cp::PresentInvoice(v);
+  UR_EXPECT_TRUE(p.awaitingConfirmation);
+  UR_EXPECT_FALSE(p.expired);
+  UR_EXPECT_FALSE(p.showRefresh || p.refreshEnabled);
+  UR_EXPECT_TRUE(p.showAwaitingConfirmationNote);
+  UR_EXPECT_TRUE(p.awaitingConfirmationNote == v.lines.awaitingConfirmationNote);
+  UR_EXPECT_FALSE(p.showQr || p.showOpenWallet || p.showAmount || p.showAddress ||
+                  p.showNetworkWarning || p.showMemo || p.showWallets);
+  UR_EXPECT_TRUE(p.qrText.empty());
+  UR_EXPECT_FALSE(p.showCountdown || p.showConfirmationNote);
+  UR_EXPECT_TRUE(Kinds(p.steps) == "pending=current seen=upcoming confirming=upcoming 0/1 paid=upcoming");
+  UR_EXPECT_TRUE(p.showPayAnotherWay);
+  UR_EXPECT_TRUE(p.notice == cp::InvoiceNotice::None);
+  UR_EXPECT_TRUE_MSG(Shown(p), Shown(p) == "awaiting awaiting_note steps(pending=current "
+                                           "seen=upcoming confirming=upcoming 0/1 paid=upcoming) "
+                                           "pay_another_way");
+  // still a payment going on: Account's "Payment in progress" opens it again
+  UR_EXPECT_TRUE(cp::InvoiceInProgress(v));
+  // a re-quote already in flight when the quote ran out changes none of it
+  v.refreshing = true;
+  UR_EXPECT_TRUE(Shown(cp::PresentInvoice(v)) == Shown(p));
+  v.refreshing = false;
+
+  // the payment is mined in the grace: the invoice goes on as any does
+  v.status = "confirming";
+  v.awaitingConfirmation = false;  // the SDK's flag holds only while pending
+  v.steps = {MakeStep("pending", "done"), MakeStep("seen", "done"), MakeStep("confirming", "current", 0, 1),
+             MakeStep("paid", "upcoming")};
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_TRUE_MSG(Shown(p), Shown(p) == "steps(pending=done seen=done confirming=current 0/1 "
+                                           "paid=upcoming)");
+
+  // the grace ends with nothing mined: the SDK stops awaiting, and the server
+  // then says expired. The expired line and Refresh quote, as before.
+  v = OpenBtc();
+  v.secondsLeft = 0;
+  UR_EXPECT_TRUE(Shown(cp::PresentInvoice(v)) == "expired refresh pay_another_way");
+  v.status = "expired";
+  UR_EXPECT_TRUE(Shown(cp::PresentInvoice(v)) == "expired refresh pay_another_way");
+
+  // The SDK's flag counts only for an open invoice still pending: any other
+  // shows exactly what it shows without it.
+  for (const char* status : {"expired", "seen", "confirming", "review", "paid", "unknown", ""}) {
+    cp::InvoiceView flagged = OpenBtc();
+    flagged.secondsLeft = 0;
+    flagged.status = status;
+    flagged.awaitingConfirmation = true;
+    cp::InvoiceView plain = flagged;
+    plain.awaitingConfirmation = false;
+    UR_EXPECT_TRUE_MSG(status, Shown(cp::PresentInvoice(flagged)) == Shown(cp::PresentInvoice(plain)));
+  }
+  for (const char* phase : {"starting", "failed", "none"}) {
+    cp::InvoiceView flagged = OpenBtc();
+    flagged.phase = phase;
+    flagged.secondsLeft = 0;
+    flagged.awaitingConfirmation = true;
+    cp::InvoiceView plain = flagged;
+    plain.awaitingConfirmation = false;
+    UR_EXPECT_TRUE_MSG(phase, Shown(cp::PresentInvoice(flagged)) == Shown(cp::PresentInvoice(plain)));
+  }
+
+  // awaiting with no line for the coin: still no expired line and no Refresh
+  // quote, which the server would refuse; nothing stands in their place
+  v = OpenBtc();
+  v.secondsLeft = 0;
+  v.awaitingConfirmation = true;
+  v.lines.awaitingConfirmationNote = {};
+  p = cp::PresentInvoice(v);
+  UR_EXPECT_TRUE(p.awaitingConfirmation);
+  UR_EXPECT_FALSE(p.expired || p.showRefresh || p.showAwaitingConfirmationNote);
+  UR_EXPECT_TRUE(p.showPayAnotherWay);
 }
 
 // The marks' files (BrandIcons.cpp CoinMark): an icon key names an installed
