@@ -1,7 +1,9 @@
 // The sign-out the sdk reports when the server rejects this app's sign-in
 // (Api.addAuthLogoutListener, and the bound DeviceRemote's), as the app follows
 // it: one sign-out for one rejection, and on the sign-in page the notice its
-// cause allows (REVOKE-UI-FINAL.md §5).
+// cause allows (REVOKE-UI-FINAL.md §5). Also the account's sign-in needed
+// while this device stays signed in (AccountSignInStep), whose notice says what
+// its cause allows the same way.
 //
 // The cause. The sdk sets it before its listeners run (Api.getAuthLogoutCause,
 // Device.getAuthLogoutCause) and a new sign-in clears it, so each listener
@@ -30,6 +32,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <utility>
 
@@ -76,6 +79,64 @@ class Tracker {
   std::atomic<uint64_t> next_{0};
   std::atomic<uint64_t> signedIn_{0};  // the sign-in now; 0 while signed out
 };
+
+// What follows when the sdk reports the account's sign-in needed while this
+// device's client stays signed in (Api.addAccountSignInRequiredListener). The
+// server refused the account's credential and the sdk cleared it, but this
+// device's client is not of that sign-in's session, so the sdk kept it and the
+// tunnel carries on (REVOKE-FINAL.md §10). Its report names the sign-in it was
+// heard in, as a sign-out's does, and carries the cause its listener read
+// (Api.getAccountSignInRequiredCause, set before the listeners run):
+// kSessionRevoked when the server confirmed the account's sign-in session was
+// revoked, signed out from another device; "" otherwise.
+enum class AccountSignInStep {
+  // heard in a sign-in that has ended: nothing
+  None,
+  // this app signed its own session out from Sessions in this sign-in, and the
+  // confirmation said the app signs out (REVOKE-UI-FINAL.md §4): its sign-out.
+  // The sdk reports that sign-out as AuthLogout since d0b457f7, so this only
+  // runs with an older sdk; it stays as the fallback
+  SignOut,
+  // the account was signed out from elsewhere: nothing disconnects or signs
+  // out by itself, and the window says the account needs a sign-in again
+  // (AccountSignInNotice)
+  Notice,
+};
+
+// `current`: the report's sign-in is the one signed in now (Tracker::SignsOut).
+// `ownSignOut`: the sign-in in which this app confirmed signing its own session
+// out (Tracker::Hear as it was sent); signIn 0 when it has not.
+inline AccountSignInStep AccountSignInStepFor(bool current, const Report& report,
+                                              const Report& ownSignOut) {
+  if (!current) return AccountSignInStep::None;
+  if (ownSignOut.signIn != 0 && ownSignOut.signIn == report.signIn) {
+    return AccountSignInStep::SignOut;
+  }
+  return AccountSignInStep::Notice;
+}
+
+// A line the window shows: a store key and its English (the gettext msgid).
+struct Text {
+  const char* key;
+  const char* english;
+};
+
+inline constexpr Text kSignedOutRemotelyText{"sessions_signed_out_remotely",
+                                             "This session was signed out from another device."};
+inline constexpr Text kSignInRequiredText{"sessions_sign_in_required",
+                                          "Sign in again to manage sessions."};
+
+// The Notice step's words (REVOKE-UI-FINAL.md §5): "Sign in again to manage
+// sessions.", after "This session was signed out from another device." only
+// for the trusted cause (SignedOutRemotely); any other cause, "" included,
+// names no other device. `lookup` is the catalog's (T_).
+inline std::string AccountSignInNotice(const Report& report,
+                                       const std::function<std::string(const Text&)>& lookup) {
+  if (SignedOutRemotely(report.cause)) {
+    return lookup(kSignedOutRemotelyText) + " " + lookup(kSignInRequiredText);
+  }
+  return lookup(kSignInRequiredText);
+}
 
 // The sign-in page's notice for the sign-out a report made: set as the report
 // signs out, shown once as the sign-out reaches the sign-in page, dropped by a

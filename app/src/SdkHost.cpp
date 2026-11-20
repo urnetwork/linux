@@ -355,6 +355,10 @@ static_assert(std::string_view(auth_logout::kSessionRevoked) ==
                   std::string_view(urnet::AuthLogoutCauseSessionRevoked),
               "the sign-in page's notice reads the sdk's session-revoked cause");
 
+static_assert(std::string_view(session_limit::kRefusalCode) ==
+                  std::string_view(urnet::SessionErrorCodeLimitReached),
+              "the sign-in screens read the sdk's session cap refusal");
+
 // Device::getAuthLogoutCause through a handle the caller does not own: a device
 // listener runs on an sdk thread, where device_ is not its to read, and the
 // DeviceRemote it was added on is not shared. A handle released meanwhile
@@ -552,6 +556,38 @@ void SdkHost::AdoptSpaceApiLocked() {
     // an sdk thread: read, then marshal only (MainWindow's handler posts Logout)
     ReportAuthLogout(api->getAuthLogoutCause());
   }));
+  // The server can refuse the account's credential while this device's client
+  // stays signed in: when the client is not of that sign-in's session, the sdk
+  // clears only the account's credential and says the account's sign-in is
+  // needed instead of signing out (REVOKE-FINAL.md §10). It is reported with
+  // the sign-in it was heard in, as a sign-out is, and with its cause
+  // (Api.getAccountSignInRequiredCause, set before the listeners run), read
+  // the same way through the same handle of its own; the window decides what
+  // follows and what its notice says (MainWindow::OnAccountSignInRequired).
+  // Replaced with every Api, so a replaced one's report cannot reach the next
+  // account.
+  apiAccountSignInSub_.reset();
+  apiAccountSignInSub_.emplace(api_->addAccountSignInRequiredListener([this, api] {
+    // an sdk thread: read, then marshal only
+    if (onAccountSignInRequired_) {
+      onAccountSignInRequired_(authLogouts_.Hear(api->getAccountSignInRequiredCause()));
+    }
+  }));
+}
+
+void SdkHost::ReportKeptAccountSignInNotice() {
+  std::string cause;
+  {
+    std::scoped_lock lock(mutex_);
+    if (!api_ || !api_->hasAccountSignInNotice()) return;
+    cause = api_->getAccountSignInRequiredCause();
+  }
+  if (onAccountSignInRequired_) onAccountSignInRequired_(authLogouts_.Hear(std::move(cause)));
+}
+
+void SdkHost::DismissAccountSignInNotice() {
+  std::scoped_lock lock(mutex_);
+  if (api_) api_->dismissAccountSignInNotice();
 }
 
 void SdkHost::ReportAuthLogout(std::string cause) {
@@ -678,6 +714,14 @@ void SdkHost::StartLogin(const std::string& userAuth, std::function<void(LoginRo
     if (result->user_auth && !result->user_auth->empty()) {
       routing.userAuth = *result->user_auth;  // the normalized echo
     }
+    // the account's cap of active sessions: the screen says where to sign
+    // sessions out (SessionLimitNotice.hpp), not the server's words
+    if (result->error && session_limit::Refused(result->error->code)) {
+      routing.error = result->error->message;
+      routing.sessionLimit = true;
+      done(routing);
+      return;
+    }
     if (result->error && !result->error->message.empty()) {
       routing.error = result->error->message;
       done(routing);
@@ -690,6 +734,7 @@ void SdkHost::StartLogin(const std::string& userAuth, std::function<void(LoginRo
         routed.route = r.ok ? LoginRoute::Login : LoginRoute::Error;
         routed.error = r.error;
         routed.clientLimitPrompt = r.clientLimitPrompt;
+        routed.sessionLimit = r.sessionLimit;
         done(routed);
       }, authEpoch);
       return;
@@ -730,6 +775,13 @@ void SdkHost::LoginWithPassword(const std::string& userAuth, const std::string& 
     NoteApiError(err);
     if (err) { done({false, false, *err}); return; }
     if (!result) { done({false, false, "no result"}); return; }
+    // the account's cap of active sessions: not an incorrect password
+    if (result->error && session_limit::Refused(result->error->code)) {
+      AuthResult refused{false, false, result->error->message};
+      refused.sessionLimit = true;
+      done(refused);
+      return;
+    }
     if (result->error && !result->error->message.empty()) { done({false, false, result->error->message}); return; }
     if (result->verification_required) {
       done(VerificationRequired(result->verification_required->send_error));
@@ -753,6 +805,13 @@ void SdkHost::LoginWithCode(const std::string& authCode, std::function<void(Auth
     NoteApiError(err);
     if (err) { done({false, false, *err}); return; }
     if (!result) { done({false, false, "no result"}); return; }
+    // the account's cap of active sessions (a code sign-in is a session of its own)
+    if (result->error && session_limit::Refused(result->error->code)) {
+      AuthResult refused{false, false, result->error->message};
+      refused.sessionLimit = true;
+      done(refused);
+      return;
+    }
     if (result->error && !result->error->message.empty()) { done({false, false, result->error->message}); return; }
     if (!result->by_jwt.empty()) { RegisterNetworkClient(result->by_jwt, done, authEpoch); return; }
     done({false, false, "code login returned no jwt"});
@@ -795,6 +854,13 @@ void SdkHost::LoginWithSeedphrase(const std::string& seedphrase,
     NoteApiError(err);
     if (err) { done({false, false, *err}); return; }
     if (!result) { done({false, false, "no result"}); return; }
+    // the account's cap of active sessions: not a wrong phrase
+    if (result->error && session_limit::Refused(result->error->code)) {
+      AuthResult refused{false, false, result->error->message};
+      refused.sessionLimit = true;
+      done(refused);
+      return;
+    }
     if (result->error && !result->error->message.empty()) {
       // a wrong phrase is a form error, not a session error
       done({false, false, result->error->message});
@@ -824,6 +890,13 @@ void SdkHost::CreateInstantAccount(const std::string& referralCode,
     NoteApiError(err);
     if (err || !result) {
       out.error = err ? *err : "no result";
+      if (done) done(out);
+      return;
+    }
+    // the account's cap of active sessions
+    if (result->error && session_limit::Refused(result->error->code)) {
+      out.error = result->error->message;
+      out.sessionLimit = true;
       if (done) done(out);
       return;
     }
@@ -1042,6 +1115,8 @@ bool SdkHost::ApplyNetworkServer(const std::string& hostName, const std::string&
   // LoggedOut — a fresh server has no jwt — and saying so is the point: the
   // old session is genuinely gone.
   if (onAuth_) onAuth_(loggedIn, authEpoch);
+  // ...and its account sign-in notice, kept in its storage, in its sign-in
+  ReportKeptAccountSignInNotice();
   EmitDrawerEvent(DrawerEvent::DeviceLifecycle);
   // stop_tunnel retired the old server's provider-only device with the rest; a
   // space this device is already signed in to provides again on its own.
@@ -1262,6 +1337,14 @@ void SdkHost::HandleNetworkCreateResult(std::optional<urnet::NetworkCreateResult
   NoteApiError(err);
   if (err) { done({false, false, *err}); return; }
   if (!result) { done({false, false, "no result"}); return; }
+  // the account's cap of active sessions, which the sdk reads on every route
+  // that starts one
+  if (result->error && session_limit::Refused(result->error->code)) {
+    AuthResult refused{false, false, result->error->message};
+    refused.sessionLimit = true;
+    done(refused);
+    return;
+  }
   if (result->error && !result->error->message.empty()) {
     done({false, false, result->error->message});
     return;
@@ -1407,6 +1490,13 @@ void SdkHost::VerifyCode(const std::string& userAuth, const std::string& code,
     NoteApiError(err);
     if (err) { done({false, false, *err}); return; }
     if (!result) { done({false, false, "no result"}); return; }
+    // the account's cap of active sessions: the code itself was good
+    if (result->error && session_limit::Refused(result->error->code)) {
+      AuthResult refused{false, false, result->error->message};
+      refused.sessionLimit = true;
+      done(refused);
+      return;
+    }
     if (result->error && !result->error->message.empty()) { done({false, false, result->error->message}); return; }
     if (result->network && !result->network->by_jwt.empty()) {
       RegisterNetworkClient(result->network->by_jwt, done, authEpoch);
@@ -2099,6 +2189,16 @@ void SdkHost::AuthLoginWithSso(const std::string& provider, const std::string& j
     NoteApiError(err);
     if (err) { fail(*err); return; }
     if (!result) { fail("no result"); return; }
+    // the account's cap of active sessions: the screen says where to sign
+    // sessions out, not the sso attempt's generic line
+    if (result->error && session_limit::Refused(result->error->code)) {
+      AuthResult refused;
+      refused.error = result->error->message;
+      refused.sso = true;
+      refused.sessionLimit = true;
+      if (done) done(refused);
+      return;
+    }
     if (result->error && !result->error->message.empty()) { fail(result->error->message); return; }
     if (result->network && !result->network->by_jwt.empty()) {
       RegisterNetworkClient(result->network->by_jwt, done ? done : [](AuthResult) {}, authEpoch);
@@ -2396,6 +2496,13 @@ void SdkHost::AuthLoginWithWallet(const std::string& address, const std::string&
     NoteApiError(err);
     if (err) { if (done) done({false, false, *err}); return; }
     if (!result) { if (done) done({false, false, "no result"}); return; }
+    // the account's cap of active sessions: not the wallet's proof
+    if (result->error && session_limit::Refused(result->error->code)) {
+      AuthResult refused{false, false, result->error->message};
+      refused.sessionLimit = true;
+      if (done) done(refused);
+      return;
+    }
     if (result->error && !result->error->message.empty()) {
       if (done) done({false, false, result->error->message});
       return;
@@ -2489,6 +2596,16 @@ void SdkHost::RegisterNetworkClient(const std::string& byJwt, std::function<void
                   refusedSignIn_ = RefusedSignIn{byJwt, authEpoch};
                 }
                 if (onClientLimitRefusal_) onClientLimitRefusal_(refused.clientLimitPrompt);
+                done(refused);
+                return;
+              }
+              // The account's cap of active sessions refused this device's
+              // client: no plan and no device removal frees it, so nothing is
+              // kept to register again, and the sign-in screens say where to
+              // sign sessions out (session_limit::SignInRefusalBody).
+              if (session_limit::Refused(result->error->code)) {
+                g_message("sign-in: refused by the account's cap of active sessions");
+                refused.sessionLimit = true;
                 done(refused);
                 return;
               }

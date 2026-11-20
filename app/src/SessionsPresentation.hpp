@@ -6,6 +6,14 @@
 // GTK main loop and renders what these functions return; it holds no rule of
 // its own (tests/SessionsPresentationTest.cpp).
 //
+// A network's list can be long: every hosted proxy, every client an API key
+// created and every paired device holds a session of its own. The controller
+// lays the list out for the screen (session1118 C.md §2, §5 C): the device
+// sign-ins a page at a time (Show more), then one group per kind of client,
+// collapsed to its count until it is opened. Which session goes where, the
+// counts, the pages and what Sign out all other sessions signs out are the
+// controller's; this only puts them into words.
+//
 // Every string is a store key and its English (the gettext msgid), which the
 // page looks up; tests/CatalogLookupTest.cpp reads each {key, English} pair
 // here. The metadata the server sends (place names, versions) is shown as
@@ -33,6 +41,16 @@ struct Text {
   const char* english = "";
 };
 
+// ---- the controller's sections ------------------------------------------------
+// By the sdk's names (urnet::ClientSessionGroup*; SessionsPage.cpp asserts each
+// equal): the device sign-ins (Snapshot.sessions), which only Show more takes,
+// and the kinds of client group, in the order the controller lists them.
+inline constexpr const char* kGroupSignIns = "sign_ins";
+inline constexpr const char* kGroupHostedProxies = "hosted_proxies";
+inline constexpr const char* kGroupApiClients = "api_clients";
+inline constexpr const char* kGroupPairedDevices = "paired_devices";
+inline constexpr const char* kGroupOtherClients = "other_clients";
+
 // ---- the controller's snapshot, as plain data --------------------------------
 
 // sdk SessionLastUsed: the server's last observed authenticated use.
@@ -42,7 +60,9 @@ struct LastUse {
   std::string region;
   std::string country;
   std::string countryCode;  // lower-case ISO alpha-2, or empty
-  std::string deviceType;   // android ios macos windows linux web cli server unknown
+  // the sdk's device kind (LastUsed.DeviceKind): android ios macos windows
+  // linux web extension (the browser extension) cli server unknown
+  std::string deviceType;
   std::string appVersion;   // empty when unknown
 };
 
@@ -74,9 +94,29 @@ struct Action {
   std::optional<Error> error;
 };
 
+// sdk ClientSessionGroup: the sessions of one kind of client, collapsed to its
+// count until the screen opens it.
+struct Group {
+  std::string kind;   // kGroupHostedProxies, kGroupApiClients, ...
+  int64_t count = 0;  // all its sessions; a lower bound while the snapshot is truncated
+  bool expanded = false;
+  std::vector<Session> sessions;  // open: the rows to show, in display order; closed: none
+  bool hasMore = false;           // open, with rows past these: Show more
+};
+
 // sdk ClientSessionSnapshot.
 struct Snapshot {
-  std::vector<Session> sessions;  // in the controller's display order
+  // the device sign-ins to show, in the controller's display order (this
+  // session first)
+  std::vector<Session> sessions;
+  int64_t sessionCount = 0;      // every device sign-in, shown or not
+  bool sessionsHasMore = false;  // more device sign-ins than shown: Show more
+  std::vector<Group> groups;     // in display order; a kind with no sessions has none
+  // what Sign out all other sessions signs out: every listed session but this
+  // one and the hosted proxies (the controller's count)
+  int64_t otherSessionCount = 0;
+  // the list was longer than one reload reads: the counts are lower bounds
+  bool truncated = false;
   std::string currentSessionId;
   std::string legacyCoverage;  // "partial" while older sign-ins are not listed
   bool loaded = false;
@@ -125,13 +165,16 @@ inline constexpr Text kLegacyNoteText{
     "change your sign-in details."};
 // the header's way back, "‹ Account"
 inline constexpr Text kAccountText{"account", "Account"};
+// under a section's rows while it has more to show
+inline constexpr Text kShowMoreText{"sessions_show_more", "Show more"};
 
 // The separator between a line's parts.
 inline constexpr const char* kSeparator = " · ";
 
 // What the platform lends the texts: the catalog (T_), the store's {}
-// substitution (I18n.hpp FormatArgs), and the renderings of a time
-// (Formatters.hpp RelativeTime, LocalDate, LocalDateTime).
+// substitution (I18n.hpp FormatArgs), the renderings of a time
+// (Formatters.hpp RelativeTime, LocalDate, LocalDateTime), and a count with
+// the locale's grouping ("1,204").
 struct Words {
   std::function<std::string(const Text&)> lookup;
   std::function<std::string(const std::string& pattern, const std::vector<std::string>& args)>
@@ -139,6 +182,7 @@ struct Words {
   std::function<std::string(int64_t secondsAgo)> relativeTime;
   std::function<std::string(int64_t unixSeconds)> date;
   std::function<std::string(int64_t unixSeconds)> dateTime;
+  std::function<std::string(int64_t count)> count;
 };
 
 // ---- labels, logos and colours (§3.2, §3) ----------------------------------------
@@ -159,6 +203,11 @@ inline Device DeviceFor(const std::string& deviceType) {
   if (deviceType == "windows") return {{"sessions_device_windows", "Windows"}, G::DeviceWindows};
   if (deviceType == "linux") return {{"sessions_device_linux", "Linux"}, G::DeviceLinux};
   if (deviceType == "web") return {{"sessions_device_web", "Web"}, G::DeviceWeb};
+  // the browser extension's own sign-in (urnet::SessionDeviceKindExtension): a
+  // browser, with the web logo
+  if (deviceType == "extension") {
+    return {{"sessions_device_extension", "Browser extension"}, G::DeviceWeb};
+  }
   if (deviceType == "cli") return {{"sessions_device_cli", "Command line"}, G::DeviceCli};
   if (deviceType == "server") return {{"sessions_device_server", "Server"}, G::DeviceServer};
   return {{"sessions_device_unknown", "Unknown device"}, G::DeviceUnknown};
@@ -167,6 +216,36 @@ inline Device DeviceFor(const std::string& deviceType) {
 // The device a session last used (none observed: unknown).
 inline Device DeviceOf(const Session& session) {
   return DeviceFor(session.lastUse ? session.lastUse->deviceType : std::string());
+}
+
+// §5 C: what a client group's row says in place of its device, on line 1 and
+// in its confirmation. A kind this build does not know is the sdk's "any
+// other client".
+inline Text ClientLabelFor(const std::string& groupKind) {
+  if (groupKind == kGroupHostedProxies) return Text{"manage_devices_proxy", "Hosted proxy"};
+  if (groupKind == kGroupApiClients) return Text{"sessions_client_api_key", "API client"};
+  if (groupKind == kGroupPairedDevices) return Text{"sessions_client_device", "Paired device"};
+  return Text{"sessions_client_other", "Other client"};
+}
+
+// What a listed session is called: its device for a device sign-in, its
+// client group's label for a row of a group.
+inline Text LabelFor(const Session& session, const std::string& section) {
+  if (section == kGroupSignIns) return DeviceOf(session).label;
+  return ClientLabelFor(section);
+}
+
+// §5 C: a client group's heading, which takes its count ("Hosted proxies
+// (1,204)"). An unknown kind reads as the other clients, as its rows do.
+inline Text GroupLabelFor(const std::string& groupKind) {
+  if (groupKind == kGroupHostedProxies) {
+    return Text{"sessions_group_hosted_proxies", "Hosted proxies ({})"};
+  }
+  if (groupKind == kGroupApiClients) return Text{"sessions_group_api_clients", "API clients ({})"};
+  if (groupKind == kGroupPairedDevices) {
+    return Text{"sessions_group_paired_devices", "Paired devices ({})"};
+  }
+  return Text{"sessions_group_other_clients", "Other clients ({})"};
 }
 
 // §3.2: how the session signed in. Legacy kinds, and any kind this build does
@@ -243,6 +322,50 @@ inline bool IsThisSession(const Snapshot& snapshot, const Session& session) {
          (!snapshot.currentSessionId.empty() && session.sessionId == snapshot.currentSessionId);
 }
 
+// A session on screen, and the section it is listed in: kGroupSignIns, or the
+// kind of its client group.
+struct Listed {
+  const Session* session = nullptr;
+  std::string section;
+};
+
+// The session with this ID among the device sign-ins and the open groups' rows.
+inline std::optional<Listed> FindListed(const Snapshot& snapshot, const std::string& sessionId) {
+  if (sessionId.empty()) return std::nullopt;
+  for (const Session& session : snapshot.sessions) {
+    if (session.sessionId == sessionId) return Listed{&session, kGroupSignIns};
+  }
+  for (const Group& group : snapshot.groups) {
+    for (const Session& session : group.sessions) {
+      if (session.sessionId == sessionId) return Listed{&session, group.kind};
+    }
+  }
+  return std::nullopt;
+}
+
+// This app's own session is on screen (the controller lists it first among the
+// device sign-ins).
+inline bool HasThisSession(const Snapshot& snapshot) {
+  for (const Session& session : snapshot.sessions) {
+    if (IsThisSession(snapshot, session)) return true;
+  }
+  for (const Group& group : snapshot.groups) {
+    for (const Session& session : group.sessions) {
+      if (IsThisSession(snapshot, session)) return true;
+    }
+  }
+  return false;
+}
+
+// The snapshot has a group of this kind (the controller lists none for a kind
+// with no sessions).
+inline bool HasGroup(const Snapshot& snapshot, const std::string& groupKind) {
+  for (const Group& group : snapshot.groups) {
+    if (group.kind == groupKind) return true;
+  }
+  return false;
+}
+
 // ---- a row (§3) ---------------------------------------------------------------------
 
 struct Row {
@@ -253,21 +376,27 @@ struct Row {
   std::string lastUseFull;   // line 2's full date and time; "" with no use observed
   std::string signedIn;      // line 3: "Signed in 10/03/26 · Google · ID 01a1f3c2"
   std::string signedInFull;  // line 3's full date and time; "" with no time
-  std::string device;        // the device label, which a confirmation names
+  // the device label, or a client group's ("Hosted proxy"), which a
+  // confirmation names
+  std::string device;
   std::string place;         // the place of the last use; "" when unknown
   std::string signOutName;   // "Sign out Android": the row's action, by name
   MdiGlyph glyph = MdiGlyph::DeviceUnknown;
   std::string colorHex;  // the circle
 };
 
+// `section`: where the row is listed (FindListed). A client group's row is the
+// sign-ins' row with its group's label on line 1 in place of the device's
+// (§5 C); the logo stays the device's.
 inline Row RowFor(const Snapshot& snapshot, const Session& session, const Words& words,
                   int64_t nowUnixSeconds,
-                  const std::function<std::string(const std::string&)>& colorHexFor) {
+                  const std::function<std::string(const std::string&)>& colorHexFor,
+                  const std::string& section = kGroupSignIns) {
   Row row;
   row.sessionId = session.sessionId;
   row.thisSession = IsThisSession(snapshot, session);
   const Device device = DeviceOf(session);
-  row.device = words.lookup(device.label);
+  row.device = words.lookup(LabelFor(session, section));
   row.glyph = device.glyph;
   row.colorHex = CountryColorHex(session.lastUse, colorHexFor);
 
@@ -364,12 +493,15 @@ struct Screen {
   Body body = Body::Progress;
   bool refreshing = false;     // the header's progress over the list kept
   bool refreshFailed = false;  // the list kept, with the non-blocking notice
+  bool signInsMore = false;    // Show more under the device sign-ins
   bool signOutOthers = false;  // the bottom button shows
   ActionView signOutOthersView = ActionView::Idle;
   bool lastUsedHelp = false;  // what Last used means
   bool legacyNote = false;    // older sign-ins appear once they renew
 };
 
+// Body::Rows lists the device sign-ins and then the groups; a loaded list with
+// no device sign-in and no group is "No active sessions" (§5 C).
 inline Screen ScreenFor(const Snapshot& snapshot, bool signedIn) {
   Screen screen;
   if (!signedIn) {
@@ -390,24 +522,62 @@ inline Screen ScreenFor(const Snapshot& snapshot, bool signedIn) {
     screen.body = !snapshot.loading && error ? Body::LoadFailed : Body::Progress;
     return screen;
   }
-  screen.body = snapshot.sessions.empty() ? Body::Empty : Body::Rows;
+  const bool listless =
+      snapshot.sessionCount <= 0 && snapshot.sessions.empty() && snapshot.groups.empty();
+  screen.body = listless ? Body::Empty : Body::Rows;
   screen.refreshing = snapshot.refreshing;
   screen.refreshFailed = error.has_value();
+  screen.signInsMore = screen.body == Body::Rows && snapshot.sessionsHasMore;
   screen.lastUsedHelp = screen.body == Body::Rows;
   screen.legacyNote = snapshot.legacyCoverage == "partial";
-  // §4: a current session and at least one other row
-  bool current = false;
-  size_t others = 0;
-  for (const Session& session : snapshot.sessions) {
-    if (IsThisSession(snapshot, session)) {
-      current = true;
-    } else {
-      ++others;
-    }
-  }
-  screen.signOutOthers = current && others > 0;
+  // §5 C: this session, and something for the bulk sign-out to sign out (the
+  // controller's count, which leaves the hosted proxies out)
+  screen.signOutOthers = HasThisSession(snapshot) && snapshot.otherSessionCount > 0;
   screen.signOutOthersView = ActionViewOf(snapshot.bulkAction);
   return screen;
+}
+
+// ---- the client groups (§5 C) ------------------------------------------------------
+
+// A client group as its heading and its foot show it.
+struct GroupView {
+  std::string kind;
+  std::string heading;    // "Hosted proxies (1,204)", "Other clients (10,000+)"
+  bool expanded = false;  // its rows show, and the heading says it is open
+  bool showMore = false;  // open, with rows past those shown: Show more
+};
+
+// A count as a heading shows it: the locale's grouping, and "+" while the
+// counts are lower bounds.
+inline std::string CountText(const Snapshot& snapshot, int64_t count, const Words& words) {
+  return words.count(count) + (snapshot.truncated ? "+" : "");
+}
+
+// The groups in the controller's order.
+inline std::vector<GroupView> GroupsFor(const Snapshot& snapshot, const Words& words) {
+  std::vector<GroupView> views;
+  views.reserve(snapshot.groups.size());
+  for (const Group& group : snapshot.groups) {
+    GroupView view;
+    view.kind = group.kind;
+    view.heading = words.format(words.lookup(GroupLabelFor(group.kind)),
+                                {CountText(snapshot, group.count, words)});
+    view.expanded = group.expanded;
+    view.showMore = group.expanded && group.hasMore;
+    views.push_back(std::move(view));
+  }
+  return views;
+}
+
+// What activating a group's heading asks the controller (SetGroupExpanded):
+// an open group closed, a closed one opened; nothing for a group no longer
+// listed.
+inline std::optional<bool> ExpandedAfterToggle(const Snapshot& snapshot,
+                                               const std::string& groupKind) {
+  for (const Group& group : snapshot.groups) {
+    if (group.kind == groupKind) return !group.expanded;
+  }
+  return std::nullopt;
 }
 
 // The line a body without rows shows; nothing for the rows.
@@ -451,8 +621,12 @@ struct Confirmation {
   bool self = false;                  // this app's session: the app signs out
 };
 
+// `section`: where the session is listed (FindListed). A client group's row is
+// named by its group's label; a hosted proxy's sign-out ends the proxy, and
+// the confirmation says so (§5 C).
 inline Confirmation ConfirmationFor(const Snapshot& snapshot, const Session& session,
-                                    const Words& words) {
+                                    const Words& words,
+                                    const std::string& section = kGroupSignIns) {
   Confirmation confirmation;
   confirmation.target = Target{false, session.sessionId};
   confirmation.title = Text{"sessions_confirm_title", "Sign out this session?"};
@@ -462,7 +636,13 @@ inline Confirmation ConfirmationFor(const Snapshot& snapshot, const Session& ses
                              "This is the session you're using. This app will be signed out."};
     return confirmation;
   }
-  const std::string device = words.lookup(DeviceOf(session).label);
+  if (section == kGroupHostedProxies) {
+    confirmation.body = Text{
+        "sessions_confirm_body_hosted_proxy",
+        "This hosted proxy will stop working. Create a new one to replace it."};
+    return confirmation;
+  }
+  const std::string device = words.lookup(LabelFor(session, section));
   const std::string place = session.lastUse ? PlaceOf(*session.lastUse) : std::string();
   if (place.empty()) {
     confirmation.body = Text{"sessions_confirm_body_no_place", "{} will be signed out."};
@@ -474,14 +654,24 @@ inline Confirmation ConfirmationFor(const Snapshot& snapshot, const Session& ses
   return confirmation;
 }
 
-inline Confirmation OthersConfirmation() {
+// Sign out all other sessions keeps the hosted proxies (the controller's
+// count leaves them out); with a hosted proxies group listed, the body says so.
+inline Confirmation OthersConfirmation(const Snapshot& snapshot) {
   Confirmation confirmation;
   confirmation.target = Target{true, std::string()};
   confirmation.title = Text{"sessions_confirm_others_title", "Sign out all other sessions?"};
-  confirmation.body = Text{
-      "sessions_confirm_others_body",
-      "Every other session in this list will be signed out. This session stays signed in. Anyone "
-      "who knows your sign-in details can still sign in again."};
+  if (HasGroup(snapshot, kGroupHostedProxies)) {
+    confirmation.body = Text{
+        "sessions_confirm_others_body_keeps_proxies",
+        "Every other session in this list will be signed out, except hosted proxies. This "
+        "session stays signed in. Anyone who knows your sign-in details can still sign in "
+        "again."};
+  } else {
+    confirmation.body = Text{
+        "sessions_confirm_others_body",
+        "Every other session in this list will be signed out. This session stays signed in. "
+        "Anyone who knows your sign-in details can still sign in again."};
+  }
   return confirmation;
 }
 
@@ -492,7 +682,8 @@ inline std::string ConfirmationBody(const Confirmation& confirmation, const Word
 // The sign-out gestures between a press and the controller: a press opens one
 // confirmation (never a second, never for a row already signing out or gone,
 // never for the bulk action unless it is offered), Cancel drops it, and only
-// the confirmation's Sign out hands back the target to send, once.
+// the confirmation's Sign out hands back the target to send, once. A row of a
+// client group signs out as a device sign-in's does.
 class SignOutFlow {
  public:
   std::optional<Confirmation> Press(const Snapshot& snapshot, const Target& target,
@@ -505,16 +696,14 @@ class SignOutFlow {
           screen.signOutOthersView == ActionView::Busy) {
         return std::nullopt;
       }
-      confirmation = OthersConfirmation();
+      confirmation = OthersConfirmation(snapshot);
     } else {
-      const auto session =
-          std::find_if(snapshot.sessions.begin(), snapshot.sessions.end(),
-                       [&](const Session& s) { return s.sessionId == target.sessionId; });
-      if (target.sessionId.empty() || session == snapshot.sessions.end()) return std::nullopt;
+      const std::optional<Listed> listed = FindListed(snapshot, target.sessionId);
+      if (!listed) return std::nullopt;
       if (ActionViewOf(ActionFor(snapshot, target.sessionId)) == ActionView::Busy) {
         return std::nullopt;
       }
-      confirmation = ConfirmationFor(snapshot, *session, words);
+      confirmation = ConfirmationFor(snapshot, *listed->session, words, listed->section);
     }
     open_ = confirmation->target;
     return confirmation;

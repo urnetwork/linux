@@ -246,6 +246,12 @@ class MainWindow : public Gtk::ApplicationWindow {
   // (SdkHost::SetAuthInvalidHandler), marshaled here: the normal Logout(), once
   // per rejection, and the sign-in page's notice its cause allows.
   void OnAuthLogout(const auth_logout::Report& report);
+  // The sdk reported that the server rejected the account's sign-in while this
+  // device's client stays signed in (SdkHost::SetAccountSignInRequiredHandler),
+  // marshaled here: the normal Logout() after this app signed its own session
+  // out, else a notice that the account needs a sign-in again, with the words
+  // its cause allows, the tunnel left as it is.
+  void OnAccountSignInRequired(const auth_logout::Report& report);
   void ApplyAuthState(bool loggedIn);
   // ONE READING IN, EVERY WINDOW SURFACE OUT. There is no SetConnected(bool)
   // any more: a bool is what let this window's copy of "connected" age
@@ -301,6 +307,10 @@ class MainWindow : public Gtk::ApplicationWindow {
   // "This session was signed out from another device.", owed to the sign-in
   // page by the sign-out OnAuthLogout made, until ApplyAuthState shows it
   auth_logout::SignInNotice signInNotice_;
+  // The sign-in in which this app confirmed signing its own session out from
+  // Sessions (SdkHost::SignInNow as it was sent); signIn 0 until then. A later
+  // sign-in is another, so it never carries over (OnAccountSignInRequired).
+  auth_logout::Report ownSessionSignOut_;
 
   // ---- the branded initial step (windows LoginPanel parity) ----------------
   LoginCarousel* carousel_ = nullptr;

@@ -46,6 +46,7 @@
 #include "ProvideLifecycle.hpp"
 #include "RowConnectCoalescer.hpp"
 #include "RpcSession.hpp"
+#include "SessionLimitNotice.hpp"
 #include "SignOut.hpp"
 #include "SlowInternet.hpp"
 #include "VerifySendNotice.hpp"
@@ -83,6 +84,11 @@ struct AuthResult {
   // sdk's AuthNetworkClientError.ClientLimitPrompt): the sign-in screens say
   // what to do (client_limit::SignInRefusalBody) instead of the server's words.
   client_limit::Prompt clientLimitPrompt = client_limit::Prompt::None;
+  // The account's cap of active sessions refused the sign-in, or this device's
+  // client after it (the sdk's SessionErrorCodeLimitReached): the sign-in
+  // screens say where to sign sessions out (session_limit::SignInRefusalBody)
+  // instead of the server's words. Nothing is kept to try again.
+  bool sessionLimit = false;
 };
 
 // Outcome of the authLogin account discovery (macOS LoginInitialViewModel
@@ -105,6 +111,8 @@ struct LoginRouting {
   std::string error;
   // Error, from the client limit (AuthResult::clientLimitPrompt)
   client_limit::Prompt clientLimitPrompt = client_limit::Prompt::None;
+  // Error, from the account's cap of active sessions (AuthResult::sessionLimit)
+  bool sessionLimit = false;
 };
 
 // Change notifications for the connect drawer (charts, block actions, dns,
@@ -413,6 +421,17 @@ class SdkHost {
   // -- the ui marshals onto the main loop and, when SignsOut(report), calls
   // Logout().
   using AuthInvalidHandler = std::function<void(auth_logout::Report report)>;
+  // Fired when the server rejected the account's own sign-in while this
+  // device's client, which is not of that sign-in's session, stays signed in
+  // (Api.addAccountSignInRequiredListener; REVOKE-FINAL.md §10): the sdk has
+  // cleared the account's credential and kept the device's, so the tunnel
+  // carries on, and what manages the account needs a sign-in again. The report
+  // carries the cause its listener read (Api.getAccountSignInRequiredCause:
+  // auth_logout::kSessionRevoked when the server confirmed the account's
+  // session was revoked, else "") and the sign-in it was heard in. The handler
+  // runs on an sdk thread and must only marshal
+  // (MainWindow::OnAccountSignInRequired).
+  using AccountSignInRequiredHandler = std::function<void(auth_logout::Report report)>;
   using JwtRefreshedHandler = std::function<void()>;
   // The ONE connection feed. It replaced a string push whose five call sites
   // could only ever emit "DESTINATION_SET" or "DISCONNECTED" — a vocabulary
@@ -458,6 +477,8 @@ class SdkHost {
     bool ok = false;
     std::string error;
     std::string seedphrase;  // the caller zeroes its copy after display
+    // the account's cap of active sessions refused it (AuthResult::sessionLimit)
+    bool sessionLimit = false;
   };
   // Instant accounts can be referred too: a validated referral code rides
   // along on the create (empty = none).
@@ -913,10 +934,28 @@ class SdkHost {
   void SetAuthStateHandler(AuthStateHandler h) { onAuth_ = std::move(h); }
   bool AuthEpochCurrent(uint64_t epoch) const { return signInEpoch_.load() == epoch; }
   void SetAuthInvalidHandler(AuthInvalidHandler h) { onAuthInvalid_ = std::move(h); }
+  // The window sets it once it can show the notice, and a notice the sdk kept
+  // from before a restart is reported to it then (ReportKeptAccountSignInNotice).
+  void SetAccountSignInRequiredHandler(AccountSignInRequiredHandler h) {
+    onAccountSignInRequired_ = std::move(h);
+    ReportKeptAccountSignInNotice();
+  }
+  // The sdk keeps the account sign-in notice across restarts, until it is
+  // dismissed or the next sign-in or sign-out, and reports it again as the
+  // Api's listener is added (AdoptSpaceApiLocked). That is before this host has
+  // read whether it is signed in, and before the window has set its handler,
+  // so that report is heard as no sign-in's and drops: a handler set, and a
+  // space switched to, ask the Api here instead and report it in the sign-in
+  // now.
+  void ReportKeptAccountSignInNotice();
+  // The user closed the account sign-in notice: the sdk keeps it no longer, so
+  // it does not show again after a restart (Api.dismissAccountSignInNotice).
+  void DismissAccountSignInNotice();
   // Whether a report the auth-invalid handler was given still signs the app
   // out: it was heard while signed in, and nothing has signed out or in since.
   // Each listener that hears a rejection reports it (the Api's, and the bound
-  // DeviceRemote's), and only the first of them signs out. Main loop.
+  // DeviceRemote's), and only the first of them signs out. The account
+  // sign-in handler's reports are checked the same way. Main loop.
   bool SignsOut(const auth_logout::Report& report) const { return authLogouts_.SignsOut(report); }
   // The sign-in an action that ends in a sign-out was made in, read as it
   // starts (the account deletion's request): its answer signs out only that
@@ -2278,6 +2317,7 @@ class SdkHost {
   void OnRowConnectDue();
   void RunRowConnect(const std::optional<urnet::ConnectLocation>& location);
   AuthInvalidHandler onAuthInvalid_;
+  AccountSignInRequiredHandler onAccountSignInRequired_;
   JwtRefreshedHandler onJwtRefreshed_;
   ApiUnreachableHandler onApiUnreachable_;
   // Hands a failed call's transport error to onApiUnreachable_ when it is a
@@ -2304,6 +2344,9 @@ class SdkHost {
   // api_ and replaced with it. Declared last so it closes before the handler
   // it calls and before the Api it listens to.
   std::optional<urnet::Sub> apiLogoutSub_;
+  // ...and its account's sign-in needed while this device's client stays
+  // signed in, the same way.
+  std::optional<urnet::Sub> apiAccountSignInSub_;
 };
 
 }  // namespace urnw

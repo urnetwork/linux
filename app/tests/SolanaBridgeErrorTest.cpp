@@ -267,7 +267,7 @@ UR_TEST(SolanaWalletFailure_EveryFlowShowsTheMessage) {
       wiring::FunctionBody(window, "void MainWindow::OnWalletAuth(const AuthResult& result)"),
       "SetLoginError(SignInFailureText("));
   UR_EXPECT_TRUE(wiring::Contains(
-      wiring::FunctionBody(window, "Glib::ustring SignInFailureText(client_limit::Prompt"),
+      wiring::FunctionBody(window, "Glib::ustring SignInFailureText(bool sessionLimit,"),
       "return error.empty() ? Glib::ustring(screenLine) : Glib::ustring(error);"));
   const std::string account = wiring::ReadCode("AccountPage.cpp");
   UR_EXPECT_TRUE(wiring::Contains(

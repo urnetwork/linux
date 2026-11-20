@@ -47,21 +47,24 @@ std::string LocalDateText(const std::string& rfc3339) {
   return when.to_local().format("%x").raw();
 }
 
-// What a sign-in screen says for a refused sign-in: when the network's client
-// limit refused this device's client, what to do (an upgrade, or a freed slot:
-// client_limit::SignInRefusalBody, the sdk's prompt), never the server's words
-// (with x402 on they were the payment terms); otherwise the server's message,
-// or the screen's own line when it sent none.
-Glib::ustring SignInFailureText(client_limit::Prompt clientLimitPrompt, const std::string& error,
-                                const char* screenLine) {
-  if (const client_limit::Text* body = client_limit::SignInRefusalBody(clientLimitPrompt)) {
+// What a sign-in screen says for a refused sign-in: when the account's cap of
+// active sessions refused it, where to sign sessions out (a device that is
+// signed in, Account > Sessions); when the network's client limit refused this
+// device's client, what to do (an upgrade, or a freed slot: the sdk's
+// prompt); never the server's words for either (with x402 on the client
+// limit's were the payment terms; session_limit::SignInRefusalBody). Otherwise
+// the server's message, or the screen's own line when it sent none.
+Glib::ustring SignInFailureText(bool sessionLimit, client_limit::Prompt clientLimitPrompt,
+                                const std::string& error, const char* screenLine) {
+  if (const client_limit::Text* body =
+          session_limit::SignInRefusalBody(sessionLimit, clientLimitPrompt)) {
     return T_(body->key, body->english);
   }
   return error.empty() ? Glib::ustring(screenLine) : Glib::ustring(error);
 }
 
 Glib::ustring SignInFailureText(const AuthResult& r, const char* screenLine) {
-  return SignInFailureText(r.clientLimitPrompt, r.error, screenLine);
+  return SignInFailureText(r.sessionLimit, r.clientLimitPrompt, r.error, screenLine);
 }
 }  // namespace
 namespace {
@@ -411,6 +414,11 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
   // login panel (OnAuthLogout). Logout() fires the auth-state handler.
   host_.SetAuthInvalidHandler([this](auth_logout::Report report) {
     PostToMain([this, report] { OnAuthLogout(report); });
+  });
+  // The server rejected the account's own sign-in while this device's client
+  // stays signed in (OnAccountSignInRequired): the tunnel is left as it is.
+  host_.SetAccountSignInRequiredHandler([this](auth_logout::Report report) {
+    PostToMain([this, report] { OnAccountSignInRequired(report); });
   });
   host_.SetApiUnreachableHandler([this](const std::string& error) {
     PostToMain([this, error] { OnApiUnreachable(error); });
@@ -1855,10 +1863,10 @@ void MainWindow::OnInstantSubmit() {
       instantReferralCode_->set_sensitive(true);
       instantCreate_->set_sensitive(instantTerms_->get_active());
       if (!account.ok) {
-        instantError_->set_text(account.error.empty()
-                                    ? T_("instant_account_failed",
-                                         "Could not create the account. Please try again.")
-                                    : account.error.c_str());
+        // the account's cap of active sessions says where to sign sessions out
+        instantError_->set_text(SignInFailureText(
+            account.sessionLimit, client_limit::Prompt::None, account.error,
+            T_("instant_account_failed", "Could not create the account. Please try again.")));
         return;
       }
       // the phrase is shown BEFORE the device registers: confirming is the
@@ -2033,6 +2041,11 @@ void MainWindow::BuildHome() {
   sessionsPage_->on_sheet_open_changed = [this](bool open) { sheetOpen_ = open; };
   sessionsPage_->on_back = [this] {
     if (shell_) shell_->Navigate("account");
+  };
+  // this app's own session's sign-out, in the sign-in it was asked in: the
+  // app's sign-out follows it however the sdk reports it (OnAccountSignInRequired)
+  sessionsPage_->on_own_session_sign_out = [this] {
+    ownSessionSignOut_ = host_.SignInNow("own session signed out from Sessions");
   };
   accountPage_->on_open_sessions = [this] {
     if (shell_) shell_->Navigate("sessions");
@@ -2254,7 +2267,7 @@ void MainWindow::OnGetStarted() {
           break;
         case LoginRoute::Error:
           loginError_.set_text(SignInFailureText(
-              routing.clientLimitPrompt, routing.error,
+              routing.sessionLimit, routing.clientLimitPrompt, routing.error,
               T_("there_was_an_error_logging_in", "There was an error logging in")));
           break;
       }
@@ -2601,6 +2614,45 @@ void MainWindow::OnAuthLogout(const auth_logout::Report& report) {
             report.cause.c_str());
   signInNotice_.Arm(report.cause);
   host_.Logout();
+}
+
+// The sdk cleared the account's credential the server rejected and kept this
+// device's client, which is not of that sign-in's session (REVOKE-FINAL.md
+// §10). When this app signed its own session out from Sessions, its normal
+// sign-out follows, as that confirmation said (REVOKE-UI-FINAL.md §4).
+// Otherwise the account was signed out from elsewhere: nothing disconnects or
+// signs out by itself, and the window says that the account needs a sign-in
+// again, on a warning that stays until dismissed (the Sessions page says the
+// same from its own controller). It says "This session was signed out from
+// another device." first only for the sdk's trusted cause (§5,
+// AuthLogout.hpp AccountSignInNotice). A report of a sign-in that has ended
+// does nothing (AccountSignInStepFor).
+void MainWindow::OnAccountSignInRequired(const auth_logout::Report& report) {
+  switch (auth_logout::AccountSignInStepFor(host_.SignsOut(report), report, ownSessionSignOut_)) {
+    case auth_logout::AccountSignInStep::None:
+      g_message("auth: an account sign-in report for a sign-in that has ended was dropped");
+      return;
+    case auth_logout::AccountSignInStep::SignOut:
+      g_message("auth: this app signed its own session out; signing out");
+      host_.Logout();
+      return;
+    case auth_logout::AccountSignInStep::Notice:
+      g_message("auth: the server rejected the account's sign-in (cause \"%s\"); this device "
+                "stays signed in",
+                report.cause.c_str());
+      if (shell_) {
+        const auto lookup = [](const auth_logout::Text& text) {
+          return std::string(T_(text.key, text.english));
+        };
+        // until the user closes it: the sdk keeps it across restarts until
+        // then (SdkHost::DismissAccountSignInNotice), or the next sign-in or
+        // sign-out
+        shell_->snackbar().Show(auth_logout::AccountSignInNotice(report, lookup),
+                                kit::Snackbar::Severity::Warning, std::nullopt,
+                                [this] { host_.DismissAccountSignInNotice(); });
+      }
+      return;
+  }
 }
 
 void MainWindow::ApplyAuthState(bool loggedIn) {

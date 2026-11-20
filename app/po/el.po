@@ -2040,7 +2040,7 @@ msgctxt "code_sign_in_failed"
 msgid "Code sign in failed"
 msgstr "Η σύνδεση με κωδικό απέτυχε"
 
-#. Screen reader state of a row that shows or hides a section below it (Advanced, Why?): the section is hidden. The counterpart of expanded.
+#. Screen reader state of a row that shows or hides a section below it (Advanced, Why?): the section is hidden. The counterpart of expanded. Windows: the Sessions page's group headings, read as the heading's item status.
 msgctxt "collapsed"
 msgid "Collapsed"
 msgstr "Συμπτυγμένο"
@@ -5613,7 +5613,7 @@ msgctxt "excluded"
 msgid "Excluded"
 msgstr "Εξαίρεση"
 
-#. Screen reader state of a row that shows or hides a section below it (Advanced, Why?): the section is shown. The counterpart of collapsed.
+#. Screen reader state of a row that shows or hides a section below it (Advanced, Why?): the section is shown. The counterpart of collapsed. Windows: the Sessions page's group headings (Hosted proxies (N)...), read as the heading's item status.
 msgctxt "expanded"
 msgid "Expanded"
 msgstr "Αναπτυγμένο"
@@ -7021,7 +7021,7 @@ msgctxt "manage_devices_load_failed"
 msgid "Couldn't load your devices."
 msgstr "Δεν ήταν δυνατή η φόρτωση των συσκευών σας."
 
-#. Device list: the label of a hosted proxy, a proxy the account runs from ur.io, the browser extension or the API. It takes a slot of the plan while connected, so the user can remove it too.
+#. The label of a hosted proxy, a proxy the account runs from ur.io, the browser extension or the API. Device list: it takes a slot of the plan while connected, so the user can remove it too. Sessions screen (Account > Sessions): row line 1 and the confirmation's {device} for a session in the hosted proxies section (sessions_group_hosted_proxies), in place of a device name.
 msgctxt "manage_devices_proxy"
 msgid "Hosted proxy"
 msgstr "Φιλοξενούμενος διακομιστής μεσολάβησης"
@@ -9327,10 +9327,30 @@ msgctxt "sessions_action_failed"
 msgid "Couldn't sign out this session. Try again."
 msgstr "Δεν ήταν δυνατή η αποσύνδεση αυτής της συνεδρίας. Δοκιμάστε ξανά."
 
+#. Sessions screen (Account > Sessions), row line 1 and the confirmation's {device}: the label of a session in the section of API clients (sessions_group_api_clients), in place of a device name.
+msgctxt "sessions_client_api_key"
+msgid "API client"
+msgstr "Πελάτης API"
+
+#. Sessions screen (Account > Sessions), row line 1 and the confirmation's {device}: the label of a session in the section of paired devices (sessions_group_paired_devices), in place of a device name.
+msgctxt "sessions_client_device"
+msgid "Paired device"
+msgstr "Συζευγμένη συσκευή"
+
+#. Sessions screen (Account > Sessions), row line 1 and the confirmation's {device}: the label of a session in the section of other clients (sessions_group_other_clients), in place of a device name.
+msgctxt "sessions_client_other"
+msgid "Other client"
+msgstr "Άλλος πελάτης"
+
 #. Sessions screen (Account > Sessions): body of the confirmation before signing another session out. {device} is the row's device label ("Android") and {place} its approximate location ("Chicago, Illinois, United States"), both inserted as they are, so no case ending or article can attach to them.
 msgctxt "sessions_confirm_body"
 msgid "{0} in {1} will be signed out."
 msgstr "Η συνεδρία {0} ({1}) θα αποσυνδεθεί."
+
+#. Sessions screen (Account > Sessions): body of the confirmation before signing out a hosted proxy's session. Signing it out ends that proxy for good; the user creates a new proxy to replace it.
+msgctxt "sessions_confirm_body_hosted_proxy"
+msgid "This hosted proxy will stop working. Create a new one to replace it."
+msgstr "Αυτός ο φιλοξενούμενος διακομιστής μεσολάβησης θα σταματήσει να λειτουργεί. Δημιουργήστε έναν νέο για να τον αντικαταστήσετε."
 
 #. Sessions screen (Account > Sessions): body of the confirmation before signing another session out, when its location is unknown. {device} is the row's device label ("Android"), inserted as it is.
 msgctxt "sessions_confirm_body_no_place"
@@ -9341,6 +9361,11 @@ msgstr "Η συνεδρία {} θα αποσυνδεθεί."
 msgctxt "sessions_confirm_others_body"
 msgid "Every other session in this list will be signed out. This session stays signed in. Anyone who knows your sign-in details can still sign in again."
 msgstr "Όλες οι άλλες συνεδρίες αυτής της λίστας θα αποσυνδεθούν. Αυτή η συνεδρία παραμένει συνδεδεμένη. Όποιος γνωρίζει τα στοιχεία σύνδεσής σας μπορεί ακόμη να συνδεθεί ξανά."
+
+#. Sessions screen (Account > Sessions): body of the confirmation before Sign out all other sessions, when the list has hosted proxies, which that sign-out keeps (sessions_confirm_others_body otherwise). Must not say that every device is signed out: anyone who has the sign-in details can sign in again.
+msgctxt "sessions_confirm_others_body_keeps_proxies"
+msgid "Every other session in this list will be signed out, except hosted proxies. This session stays signed in. Anyone who knows your sign-in details can still sign in again."
+msgstr "Όλες οι άλλες συνεδρίες αυτής της λίστας θα αποσυνδεθούν, εκτός από τους φιλοξενούμενους διακομιστές μεσολάβησης. Αυτή η συνεδρία παραμένει συνδεδεμένη. Όποιος γνωρίζει τα στοιχεία σύνδεσής σας μπορεί ακόμη να συνδεθεί ξανά."
 
 #. Sessions screen (Account > Sessions): title of the confirmation before Sign out all other sessions. Cancel is the default.
 msgctxt "sessions_confirm_others_title"
@@ -9371,6 +9396,11 @@ msgstr "Android"
 msgctxt "sessions_device_cli"
 msgid "Command line"
 msgstr "Γραμμή εντολών"
+
+#. Sessions screen (Account > Sessions), row line 1: the device label of a session the browser extension signed in (the sdk's LastUsed.DeviceKind extension: device type web from the extension's Chrome or Firefox build), in place of Web.
+msgctxt "sessions_device_extension"
+msgid "Browser extension"
+msgstr "Επέκταση προγράμματος περιήγησης"
 
 #. Sessions screen (Account > Sessions), row line 1: the device type of a session signed in from the iOS app, before its app version. The operating system's name, unchanged in every language.
 msgctxt "sessions_device_ios"
@@ -9411,6 +9441,26 @@ msgstr "Windows"
 msgctxt "sessions_empty"
 msgid "No active sessions"
 msgstr "Δεν υπάρχουν ενεργές συνεδρίες"
+
+#. Sessions screen (Account > Sessions): the heading of a collapsed section below the device sign-ins, which opens when tapped. {count} is the number of sessions in it, formatted by the app ("1,204", or "10,000+" when the list was too long to read in full). A heading, so the noun does not agree with the count. The section holds the sessions of clients that the account's API keys created (each client has its own).
+msgctxt "sessions_group_api_clients"
+msgid "API clients ({})"
+msgstr "Πελάτες API ({})"
+
+#. Sessions screen (Account > Sessions): the heading of a collapsed section below the device sign-ins, which opens when tapped. {count} is the number of sessions in it, formatted by the app ("1,204", or "10,000+" when the list was too long to read in full). A heading, so the noun does not agree with the count. The section holds the sessions of the account's hosted proxies (each proxy has its own).
+msgctxt "sessions_group_hosted_proxies"
+msgid "Hosted proxies ({})"
+msgstr "Φιλοξενούμενοι διακομιστές μεσολάβησης ({})"
+
+#. Sessions screen (Account > Sessions): the heading of a collapsed section below the device sign-ins, which opens when tapped. {count} is the number of sessions in it, formatted by the app ("1,204", or "10,000+" when the list was too long to read in full). A heading, so the noun does not agree with the count. The section holds the sessions of the account's other clients, such as older clients' sign-ins.
+msgctxt "sessions_group_other_clients"
+msgid "Other clients ({})"
+msgstr "Άλλοι πελάτες ({})"
+
+#. Sessions screen (Account > Sessions): the heading of a collapsed section below the device sign-ins, which opens when tapped. {count} is the number of sessions in it, formatted by the app ("1,204", or "10,000+" when the list was too long to read in full). A heading, so the noun does not agree with the count. The section holds the sessions of devices paired (adopted) into the account (each device has its own).
+msgctxt "sessions_group_paired_devices"
+msgid "Paired devices ({})"
+msgstr "Συζευγμένες συσκευές ({})"
 
 #. Sessions screen (Account > Sessions), end of row line 3: the first 8 characters of the session ID, which the user can copy. {id} is that hex text, e.g. "01a1f3c2".
 msgctxt "sessions_id"
@@ -9492,15 +9542,35 @@ msgctxt "sessions_legacy_note"
 msgid "Sign-ins from older app versions appear here once they renew. To end every sign-in, change your sign-in details."
 msgstr "Οι συνδέσεις από παλαιότερες εκδόσεις της εφαρμογής εμφανίζονται εδώ μόλις ανανεωθούν. Για να τερματίσετε κάθε σύνδεση, αλλάξτε τα στοιχεία σύνδεσής σας."
 
+#. Shown when the account holds its cap of active sessions and refused a request that would start one, while the user is signed in to the account: adding a sign-in method (its verification step) in every app, and creating a hosted proxy on ur.io. On ur.io a button that opens Account > Sessions (sessions_open) is next to it. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
+msgctxt "sessions_limit_reached"
+msgid "Too many active sessions. Sign out sessions you no longer use in Account > Sessions, then try again."
+msgstr "Υπάρχουν πάρα πολλές ενεργές συνεδρίες. Αποσυνδέστε τις συνεδρίες που δεν χρησιμοποιείτε πια από το Λογαριασμός > Συνεδρίες και δοκιμάστε ξανά."
+
+#. Sign-in screens, the browser extension's code sign-in among them: a sign-in, or a sign-in with a code, was refused because the account holds its cap of active sessions (the sdk's SessionErrorCodeLimitReached). This device is not signed in, so the line sends the user to a device that is. Nothing was signed out. 'Account' and 'Sessions' are the names of those screens; keep them as the app names them.
+msgctxt "sessions_limit_reached_sign_in"
+msgid "Too many active sessions. On a device that's signed in to this account, go to Account > Sessions and sign out sessions you no longer use, then try again."
+msgstr "Υπάρχουν πάρα πολλές ενεργές συνεδρίες. Σε μια συσκευή συνδεδεμένη σε αυτόν τον λογαριασμό, μεταβείτε στο Λογαριασμός > Συνεδρίες, αποσυνδέστε τις συνεδρίες που δεν χρησιμοποιείτε πια και δοκιμάστε ξανά."
+
 #. Sessions screen (Account > Sessions): shown when the list failed to load the first time, above the try_again button.
 msgctxt "sessions_load_failed"
 msgid "Couldn't load sessions."
 msgstr "Δεν ήταν δυνατή η φόρτωση των συνεδριών."
 
+#. Button next to sessions_limit_reached: opens Account > Sessions, where the user signs out sessions they no longer use. 'Sessions' is that screen's name (sessions_title).
+msgctxt "sessions_open"
+msgid "Open Sessions"
+msgstr "Άνοιγμα συνεδριών"
+
 #. Sessions screen (Account > Sessions): non-blocking notice when a refresh failed. The screen keeps showing the list it had.
 msgctxt "sessions_refresh_failed"
 msgid "Couldn't refresh. Showing the last list."
 msgstr "Δεν ήταν δυνατή η ανανέωση. Εμφανίζεται η τελευταία λίστα."
+
+#. Sessions screen (Account > Sessions): button at the end of a section that shows the section's next rows (the device sign-ins, or an open section such as hosted proxies).
+msgctxt "sessions_show_more"
+msgid "Show more"
+msgstr "Εμφάνιση περισσότερων"
 
 #. Sessions screen (Account > Sessions): the screen's state when the account's sign-in was rejected and the user must sign in again. Generic: it names no cause. sessions_signed_out_remotely is the line for when the app knows another device signed this session out.
 msgctxt "sessions_sign_in_required"

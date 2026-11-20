@@ -1,9 +1,10 @@
 // The Sessions page's controller lifecycle (SessionsBinding.hpp; REVOKE-UI-FINAL.md
 // §2, §6, §10 "Refresh and lifecycle" and "Races"), with a fake controller
 // that records every call: start and visibility on attach, visibility and
-// foreground forwarded as they change, Refresh and the revokes to the
-// attached controller only, unsubscribe before close, and no post accepted
-// from a released controller or from the previous account's.
+// foreground forwarded as they change, Refresh, the revokes, a group opened
+// or closed and Show more to the attached controller only, unsubscribe before
+// close, and no post accepted from a released controller or from the previous
+// account's.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -35,6 +36,10 @@ class FakeController final : public s::Controller {
     log_->push_back("revoke:" + sessionId);
   }
   void RevokeOtherSessions() override { log_->push_back("revoke-others"); }
+  void SetGroupExpanded(const std::string& groupKind, bool expanded) override {
+    log_->push_back("expand:" + groupKind + (expanded ? ":1" : ":0"));
+  }
+  void ShowMoreSessions(const std::string& section) override { log_->push_back("more:" + section); }
   s::Snapshot Read() override {
     log_->push_back("read");
     return snapshot;
@@ -111,6 +116,51 @@ UR_TEST(SessionsBinding_RefreshAndRevokesGoToTheAttachedController) {
   binding.Revoke(s::Target{true, ""});
   binding.Revoke(s::Target{false, ""});  // no session named: nothing
   UR_EXPECT_TRUE(LogIs(log, {"refresh", "revoke:01a1f3c2", "revoke-others"}));
+}
+
+// C.md §5 C: a group heading's activation and a Show more go to the attached
+// controller, which lays the list out again; detached, they reach nothing.
+UR_TEST(SessionsBinding_GroupsAndShowMoreGoToTheAttachedController) {
+  s::Binding binding;
+  binding.SetGroupExpanded(s::kGroupHostedProxies, true);  // nothing attached
+  binding.ShowMore(s::kGroupSignIns);
+  const Log log = NewLog();
+  binding.Attach(std::make_unique<FakeController>(log), 1);
+  log->clear();
+  binding.SetGroupExpanded(s::kGroupHostedProxies, true);
+  binding.ShowMore(s::kGroupHostedProxies);
+  binding.SetGroupExpanded(s::kGroupHostedProxies, false);
+  binding.ShowMore(s::kGroupSignIns);
+  UR_EXPECT_TRUE(LogIs(log, {"expand:hosted_proxies:1", "more:hosted_proxies",
+                             "expand:hosted_proxies:0", "more:sign_ins"}));
+  // what a heading asks follows the controller's latest snapshot
+  auto controller = std::make_unique<FakeController>(log);
+  FakeController* fake = controller.get();
+  binding.Attach(std::move(controller), 2);
+  s::Group proxies;
+  proxies.kind = s::kGroupHostedProxies;
+  proxies.count = 2;
+  fake->snapshot.loaded = true;
+  fake->snapshot.groups = {proxies};
+  log->clear();
+  std::optional<s::Snapshot> read = binding.Read();
+  if (const std::optional<bool> expanded =
+          read ? s::ExpandedAfterToggle(*read, s::kGroupHostedProxies) : std::nullopt) {
+    binding.SetGroupExpanded(s::kGroupHostedProxies, *expanded);
+  }
+  fake->snapshot.groups[0].expanded = true;
+  read = binding.Read();
+  if (const std::optional<bool> expanded =
+          read ? s::ExpandedAfterToggle(*read, s::kGroupHostedProxies) : std::nullopt) {
+    binding.SetGroupExpanded(s::kGroupHostedProxies, *expanded);
+  }
+  UR_EXPECT_TRUE(LogIs(log, {"read", "expand:hosted_proxies:1", "read", "expand:hosted_proxies:0"}));
+  // released: nothing more reaches it
+  binding.Release();
+  log->clear();
+  binding.SetGroupExpanded(s::kGroupHostedProxies, true);
+  binding.ShowMore(s::kGroupSignIns);
+  UR_EXPECT_TRUE(LogIs(log, {}));
 }
 
 // §6: unsubscribe, then Close(); and nothing lands after.
@@ -214,6 +264,8 @@ UR_TEST(SessionsBinding_AFailedSignOutOfTheOthersIsAskedAgain) {
   fake->snapshot.loaded = true;
   fake->snapshot.currentSessionId = self.sessionId;
   fake->snapshot.sessions = {self, other};
+  fake->snapshot.sessionCount = 2;
+  fake->snapshot.otherSessionCount = 1;  // the controller's count of what it signs out
   fake->snapshot.bulkAction = s::Action{"", false, false, s::Error{true, false, false, false}};
   log->clear();
 
@@ -221,7 +273,8 @@ UR_TEST(SessionsBinding_AFailedSignOutOfTheOthersIsAskedAgain) {
                        [](const std::string& pattern, const std::vector<std::string>&) { return pattern; },
                        [](int64_t) { return std::string("now"); },
                        [](int64_t) { return std::string("D"); },
-                       [](int64_t) { return std::string("DT"); }};
+                       [](int64_t) { return std::string("DT"); },
+                       [](int64_t count) { return std::to_string(count); }};
   const std::optional<s::Snapshot> failed = binding.Read();
   UR_EXPECT_TRUE(failed.has_value());
   UR_EXPECT_TRUE(s::ScreenFor(*failed, true).signOutOthersView == s::ActionView::Failed);

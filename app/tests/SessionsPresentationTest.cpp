@@ -3,9 +3,13 @@
 // sign-in methods for every kind, the country colour and its fallback, the
 // three lines of a row with and without a last use, the screen for every
 // controller state, and the confirmation each sign-out asks before anything
-// is sent. The words are the English sources (the catalog with no translation
-// loaded), pinned against po/en.po at the end; the clock and the dates are
-// fixed strings, so nothing here depends on time or locale.
+// is sent. Then the list at scale (session1118 C.md §5 C): the device sign-ins'
+// Show more, the client groups' headings with their counts, their rows and
+// confirmations, Sign out all other sessions by the controller's count, and
+// the empty state. The words are the English sources (the catalog with no
+// translation loaded), pinned against po/en.po at the end; the clock and the
+// dates are fixed strings and counts are grouped with ",", so nothing here
+// depends on time or locale.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -17,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "LeaderboardIndicator.hpp"
 #include "RelativeTimeSpan.hpp"
 #include "SessionsPresentation.hpp"
 
@@ -81,6 +86,9 @@ s::Words EnglishWords() {
   words.relativeTime = &RelativeEnglish;
   words.date = [](int64_t t) { return "D" + std::to_string(t); };
   words.dateTime = [](int64_t t) { return "DT" + std::to_string(t); };
+  // the page's grouping (LeaderboardIndicator.hpp GroupedRank) with a fixed
+  // separator in place of the locale's
+  words.count = [](int64_t count) { return urnw::leaderboard::GroupedRank(count, ","); };
   return words;
 }
 
@@ -110,7 +118,8 @@ s::Session SessionOf(const std::string& id, bool current, const std::string& kin
   return session;
 }
 
-// A loaded list: this session (linux) and one other (android, Chicago).
+// A loaded list: this session (linux) and one other (android, Chicago), as
+// the controller lays it out: two device sign-ins, one for the bulk sign-out.
 s::Snapshot TwoSessions() {
   s::Snapshot snapshot;
   snapshot.loaded = true;
@@ -122,12 +131,44 @@ s::Snapshot TwoSessions() {
   snapshot.sessions.push_back(SessionOf("aaaaaaaa-0000-0000-0000-000000000001", true, "password", here));
   snapshot.sessions.push_back(
       SessionOf("01a1f3c2-1111-2222-3333-444455556666", false, "google", Chicago(5 * 60)));
+  snapshot.sessionCount = 2;
+  snapshot.otherSessionCount = 1;
   snapshot.currentSessionId = "aaaaaaaa-0000-0000-0000-000000000001";
   return snapshot;
 }
 
 s::Row RowOf(const s::Snapshot& snapshot, size_t index) {
   return s::RowFor(snapshot, snapshot.sessions[index], EnglishWords(), kNow, &FakeColorHex);
+}
+
+// A client group as the controller sends it: open with `rows`, or closed
+// (no rows) with only its count.
+s::Group GroupOf(const std::string& kind, int64_t count, std::vector<s::Session> rows = {},
+                 bool hasMore = false) {
+  s::Group group;
+  group.kind = kind;
+  group.count = count;
+  group.expanded = !rows.empty();
+  group.sessions = std::move(rows);
+  group.hasMore = hasMore;
+  return group;
+}
+
+// The two sessions, then a hosted proxy (open, one row of 1,204) and the API
+// clients (closed, 3). The bulk sign-out signs out the other device sign-in
+// and the API clients, never the proxies.
+s::Snapshot WithGroups() {
+  s::Snapshot snapshot = TwoSessions();
+  s::LastUse proxyUse = Chicago(60);
+  proxyUse.deviceType = "server";
+  proxyUse.appVersion = "";
+  snapshot.groups.push_back(GroupOf(
+      s::kGroupHostedProxies, 1204,
+      {SessionOf("bbbbbbbb-0000-0000-0000-000000000002", false, "legacy_proxy", proxyUse)},
+      /*hasMore=*/true));
+  snapshot.groups.push_back(GroupOf(s::kGroupApiClients, 3));
+  snapshot.otherSessionCount = 1 + 3;
+  return snapshot;
 }
 
 }  // namespace
@@ -146,6 +187,7 @@ UR_TEST(Sessions_EveryDeviceTypeHasItsLabelAndLogo) {
       {"windows", "Windows", MdiGlyph::DeviceWindows},
       {"linux", "Linux", MdiGlyph::DeviceLinux},
       {"web", "Web", MdiGlyph::DeviceWeb},
+      {"extension", "Browser extension", MdiGlyph::DeviceWeb},  // the sdk's device kind
       {"cli", "Command line", MdiGlyph::DeviceCli},
       {"server", "Server", MdiGlyph::DeviceServer},
       {"unknown", "Unknown device", MdiGlyph::DeviceUnknown},
@@ -424,12 +466,16 @@ UR_TEST(Sessions_SignInRequiredAsksToSignInAgainUnlessTheCauseIsKnown) {
   UR_EXPECT_TEXT("please_login_to_urnetwork", s::BodyText(s::Body::NoSession)->key);
 }
 
+// §5 C: shown with this session and something for it to sign out, by the
+// controller's count (OtherSessionCount), not by the rows on screen.
 UR_TEST(Sessions_SignOutAllOthersNeedsThisSessionAndAnother) {
   s::Snapshot snapshot = TwoSessions();
   UR_EXPECT_TRUE(s::ScreenFor(snapshot, true).signOutOthers);
   // this session alone
   s::Snapshot alone = snapshot;
   alone.sessions.pop_back();
+  alone.sessionCount = 1;
+  alone.otherSessionCount = 0;
   UR_EXPECT_FALSE(s::ScreenFor(alone, true).signOutOthers);
   // others, but none of them this one
   s::Snapshot noCurrent = snapshot;
@@ -527,7 +573,7 @@ UR_TEST(Sessions_ConfirmationsNameTheSession) {
   UR_EXPECT_TEXT("This is the session you're using. This app will be signed out.",
                  s::ConfirmationBody(self, words));
   // every other session, never "all devices"
-  const s::Confirmation others = s::OthersConfirmation();
+  const s::Confirmation others = s::OthersConfirmation(snapshot);
   UR_EXPECT_TRUE(others.target.others);
   UR_EXPECT_TEXT("Sign out all other sessions?", others.title.english);
   const std::string body = s::ConfirmationBody(others, words);
@@ -601,10 +647,252 @@ UR_TEST(Sessions_SignOutAllOthersOnlyWhenOffered) {
   // not offered: this session alone, or the bulk action already running
   s::Snapshot alone = snapshot;
   alone.sessions.pop_back();
+  alone.sessionCount = 1;
+  alone.otherSessionCount = 0;
   UR_EXPECT_FALSE(flow.Press(alone, others, words).has_value());
   snapshot.bulkAction = s::Action{"", true, false, std::nullopt};
   UR_EXPECT_FALSE(flow.Press(snapshot, others, words).has_value());
   UR_EXPECT_FALSE(flow.Open());
+}
+
+// ---- the list at scale (C.md §5 C) --------------------------------------------------
+
+// A group's heading is its label with the controller's count in the locale's
+// grouping, in the controller's order; an open group with more rows offers
+// Show more, a closed one never does.
+UR_TEST(Sessions_GroupsHeadTheirCounts) {
+  s::Snapshot snapshot = WithGroups();
+  snapshot.groups.push_back(GroupOf(s::kGroupPairedDevices, 1));
+  snapshot.groups.push_back(GroupOf(s::kGroupOtherClients, 25000));
+  const std::vector<s::GroupView> views = s::GroupsFor(snapshot, EnglishWords());
+  UR_EXPECT_EQ(4u, views.size());
+  if (views.size() != 4) return;
+  UR_EXPECT_TEXT("hosted_proxies", views[0].kind);
+  UR_EXPECT_TEXT("Hosted proxies (1,204)", views[0].heading);
+  UR_EXPECT_TRUE(views[0].expanded && views[0].showMore);
+  UR_EXPECT_TEXT("api_clients", views[1].kind);
+  UR_EXPECT_TEXT("API clients (3)", views[1].heading);
+  UR_EXPECT_FALSE(views[1].expanded);
+  UR_EXPECT_FALSE(views[1].showMore);
+  UR_EXPECT_TEXT("Paired devices (1)", views[2].heading);
+  UR_EXPECT_TEXT("Other clients (25,000)", views[3].heading);
+  // the controller's hasMore on a closed group shows nothing
+  snapshot.groups[1].hasMore = true;
+  UR_EXPECT_FALSE(s::GroupsFor(snapshot, EnglishWords())[1].showMore);
+  // every kind has its label; one this build does not know reads as the
+  // other clients
+  UR_EXPECT_TEXT("sessions_group_hosted_proxies", s::GroupLabelFor(s::kGroupHostedProxies).key);
+  UR_EXPECT_TEXT("sessions_group_api_clients", s::GroupLabelFor(s::kGroupApiClients).key);
+  UR_EXPECT_TEXT("sessions_group_paired_devices", s::GroupLabelFor(s::kGroupPairedDevices).key);
+  UR_EXPECT_TEXT("sessions_group_other_clients", s::GroupLabelFor(s::kGroupOtherClients).key);
+  UR_EXPECT_TEXT("sessions_group_other_clients", s::GroupLabelFor("printers").key);
+}
+
+// A list longer than one reload reads: every count is a lower bound, "N+".
+UR_TEST(Sessions_ATruncatedListsCountsAreLowerBounds) {
+  s::Snapshot snapshot = WithGroups();
+  snapshot.truncated = true;
+  snapshot.groups[0].count = 10000;
+  const std::vector<s::GroupView> views = s::GroupsFor(snapshot, EnglishWords());
+  UR_EXPECT_EQ(2u, views.size());
+  if (views.size() != 2) return;
+  UR_EXPECT_TEXT("Hosted proxies (10,000+)", views[0].heading);
+  UR_EXPECT_TEXT("API clients (3+)", views[1].heading);
+  UR_EXPECT_TEXT("1,204", s::CountText(WithGroups(), 1204, EnglishWords()));
+}
+
+// A group's row is the sign-ins' row with its group's label on line 1 in place
+// of the device (the version still appended when known), and the same label
+// names its action; the logo and the circle stay the device's.
+UR_TEST(Sessions_AGroupRowSaysItsGroupsLabel) {
+  const s::Snapshot snapshot = WithGroups();
+  const s::Session& proxy = snapshot.groups[0].sessions[0];
+  s::Row row = s::RowFor(snapshot, proxy, EnglishWords(), kNow, &FakeColorHex, s::kGroupHostedProxies);
+  UR_EXPECT_TEXT("Hosted proxy", row.title);  // no version reported
+  UR_EXPECT_TEXT("Hosted proxy", row.device);
+  UR_EXPECT_TEXT("Sign out Hosted proxy", row.signOutName);
+  UR_EXPECT_TRUE(row.glyph == MdiGlyph::DeviceServer);
+  UR_EXPECT_TEXT("#3A7BD5", row.colorHex);
+  UR_EXPECT_TEXT("Chicago, Illinois, United States · Last used 1m ago", row.lastUse);
+  UR_EXPECT_FALSE(row.thisSession);
+  // the other kinds, with the version kept
+  s::Session client = SessionOf("cccccccc-0000-0000-0000-000000000003", false, "api_key_client",
+                                Chicago(5 * 60));
+  const std::pair<const char*, const char*> cases[] = {
+      {s::kGroupApiClients, "API client"},
+      {s::kGroupPairedDevices, "Paired device"},
+      {s::kGroupOtherClients, "Other client"},
+      {"printers", "Other client"},
+  };
+  for (const auto& [kind, label] : cases) {
+    row = s::RowFor(snapshot, client, EnglishWords(), kNow, &FakeColorHex, kind);
+    UR_EXPECT_TEXT(std::string(label) + " · 2026.10.8-1067", row.title);
+    UR_EXPECT_TEXT(std::string("Sign out ") + label, row.signOutName);
+    UR_EXPECT_TRUE_MSG(kind, row.glyph == MdiGlyph::DeviceAndroid);
+  }
+  UR_EXPECT_TEXT("manage_devices_proxy", s::ClientLabelFor(s::kGroupHostedProxies).key);
+  UR_EXPECT_TEXT("sessions_client_api_key", s::ClientLabelFor(s::kGroupApiClients).key);
+  UR_EXPECT_TEXT("sessions_client_device", s::ClientLabelFor(s::kGroupPairedDevices).key);
+  UR_EXPECT_TEXT("sessions_client_other", s::ClientLabelFor(s::kGroupOtherClients).key);
+  // a device sign-in keeps its device's label
+  UR_EXPECT_TEXT("Android · 2026.10.8-1067", RowOf(snapshot, 1).title);
+}
+
+// A hosted proxy's sign-out ends the proxy, and its confirmation says so; the
+// other groups' rows are named by their label, with their place.
+UR_TEST(Sessions_AGroupRowsConfirmationNamesItsGroup) {
+  const s::Snapshot snapshot = WithGroups();
+  const s::Words words = EnglishWords();
+  const s::Confirmation proxy = s::ConfirmationFor(snapshot, snapshot.groups[0].sessions[0], words,
+                                                   s::kGroupHostedProxies);
+  UR_EXPECT_FALSE(proxy.self);
+  UR_EXPECT_TEXT("bbbbbbbb-0000-0000-0000-000000000002", proxy.target.sessionId);
+  UR_EXPECT_TEXT("Sign out this session?", proxy.title.english);
+  UR_EXPECT_TEXT("sessions_confirm_body_hosted_proxy", proxy.body.key);
+  UR_EXPECT_TEXT("This hosted proxy will stop working. Create a new one to replace it.",
+                 s::ConfirmationBody(proxy, words));
+  s::Session client = SessionOf("cccccccc-0000-0000-0000-000000000003", false, "api_key_client",
+                                Chicago(5 * 60));
+  UR_EXPECT_TEXT("API client in Chicago, Illinois, United States will be signed out.",
+                 s::ConfirmationBody(s::ConfirmationFor(snapshot, client, words, s::kGroupApiClients),
+                                     words));
+  client.lastUse.reset();
+  UR_EXPECT_TEXT("Paired device will be signed out.",
+                 s::ConfirmationBody(
+                     s::ConfirmationFor(snapshot, client, words, s::kGroupPairedDevices), words));
+  // a device sign-in's is as it was
+  UR_EXPECT_TEXT("Android in Chicago, Illinois, United States will be signed out.",
+                 s::ConfirmationBody(s::ConfirmationFor(snapshot, snapshot.sessions[1], words), words));
+}
+
+// A group's row signs out as a device sign-in's does: found by its ID in its
+// open group, confirmed with its group's words, refused while its sign-out
+// runs (actions are keyed by session ID).
+UR_TEST(Sessions_AGroupRowSignsOutLikeASignIn) {
+  s::Snapshot snapshot = WithGroups();
+  const s::Words words = EnglishWords();
+  const s::Target proxy{false, "bbbbbbbb-0000-0000-0000-000000000002"};
+  const std::optional<s::Listed> listed = s::FindListed(snapshot, proxy.sessionId);
+  UR_EXPECT_TRUE(listed.has_value() && listed->section == s::kGroupHostedProxies);
+  UR_EXPECT_TRUE(s::FindListed(snapshot, "01a1f3c2-1111-2222-3333-444455556666")->section ==
+                 s::kGroupSignIns);
+  UR_EXPECT_FALSE(s::FindListed(snapshot, "").has_value());
+  s::SignOutFlow flow;
+  std::optional<s::Confirmation> confirmation = flow.Press(snapshot, proxy, words);
+  UR_EXPECT_TRUE(confirmation.has_value());
+  if (confirmation) UR_EXPECT_TEXT("sessions_confirm_body_hosted_proxy", confirmation->body.key);
+  const std::optional<s::Target> sent = flow.Confirm();
+  UR_EXPECT_TRUE(sent.has_value() && !sent->others && sent->sessionId == proxy.sessionId);
+  // its sign-out running: no second confirmation, and its row is busy
+  snapshot.actions.push_back(s::Action{proxy.sessionId, false, /*pending=*/true, std::nullopt});
+  UR_EXPECT_FALSE(flow.Press(snapshot, proxy, words).has_value());
+  UR_EXPECT_TRUE(s::ActionViewOf(s::ActionFor(snapshot, proxy.sessionId)) == s::ActionView::Busy);
+  // a closed group's rows are not on screen, so nothing opens for them
+  snapshot.groups[0].expanded = false;
+  snapshot.groups[0].sessions.clear();
+  snapshot.actions.clear();
+  UR_EXPECT_FALSE(flow.Press(snapshot, proxy, words).has_value());
+}
+
+// Sign out all other sessions keeps the hosted proxies: with their group
+// listed the confirmation says so; without one it reads as before.
+UR_TEST(Sessions_SignOutAllOthersSaysItKeepsTheHostedProxies) {
+  const s::Words words = EnglishWords();
+  s::Snapshot snapshot = WithGroups();
+  s::Confirmation others = s::OthersConfirmation(snapshot);
+  UR_EXPECT_TEXT("sessions_confirm_others_body_keeps_proxies", others.body.key);
+  const std::string body = s::ConfirmationBody(others, words);
+  UR_EXPECT_TRUE(body.find("except hosted proxies") != std::string::npos);
+  UR_EXPECT_TRUE(body.find("all devices") == std::string::npos);
+  // the press opens that confirmation
+  s::SignOutFlow flow;
+  const std::optional<s::Confirmation> pressed = flow.Press(snapshot, s::Target{true, ""}, words);
+  UR_EXPECT_TRUE(pressed.has_value());
+  if (pressed) UR_EXPECT_TEXT("sessions_confirm_others_body_keeps_proxies", pressed->body.key);
+  // the API clients only: the plain body
+  snapshot.groups.erase(snapshot.groups.begin());
+  others = s::OthersConfirmation(snapshot);
+  UR_EXPECT_TEXT("sessions_confirm_others_body", others.body.key);
+}
+
+// The bulk sign-out follows the controller's count: hosted proxies alone
+// besides this session leave it nothing to sign out, and rows past those on
+// screen count.
+UR_TEST(Sessions_SignOutAllOthersFollowsTheControllersCount) {
+  s::Snapshot snapshot = WithGroups();
+  UR_EXPECT_TRUE(s::ScreenFor(snapshot, true).signOutOthers);
+  // this session and hosted proxies only: nothing to sign out, so not offered
+  s::Snapshot proxiesOnly = snapshot;
+  proxiesOnly.sessions.pop_back();
+  proxiesOnly.sessionCount = 1;
+  proxiesOnly.groups.pop_back();
+  proxiesOnly.otherSessionCount = 0;
+  UR_EXPECT_FALSE(s::ScreenFor(proxiesOnly, true).signOutOthers);
+  // this session alone on screen, the others behind closed groups: offered
+  s::Snapshot closed = TwoSessions();
+  closed.sessions.pop_back();
+  closed.sessionCount = 1;
+  closed.groups.push_back(GroupOf(s::kGroupApiClients, 3));
+  closed.otherSessionCount = 3;
+  UR_EXPECT_TRUE(s::ScreenFor(closed, true).signOutOthers);
+  // no current session listed: never, whatever the count
+  closed.sessions.clear();
+  closed.sessionCount = 0;
+  closed.currentSessionId.clear();
+  UR_EXPECT_FALSE(s::ScreenFor(closed, true).signOutOthers);
+}
+
+// "No active sessions" is a loaded list with no device sign-in and no group; a
+// list of groups alone is a list.
+UR_TEST(Sessions_EmptyIsNoSignInAndNoGroup) {
+  s::Snapshot snapshot;
+  snapshot.loaded = true;
+  UR_EXPECT_TRUE(s::ScreenFor(snapshot, true).body == s::Body::Empty);
+  snapshot.groups.push_back(GroupOf(s::kGroupHostedProxies, 2));
+  s::Screen screen = s::ScreenFor(snapshot, true);
+  UR_EXPECT_TRUE(screen.body == s::Body::Rows);
+  UR_EXPECT_TRUE(screen.lastUsedHelp);
+  UR_EXPECT_FALSE(screen.signOutOthers);
+  // device sign-ins counted but none shown is a list too (the controller pages)
+  s::Snapshot counted;
+  counted.loaded = true;
+  counted.sessionCount = 1;
+  UR_EXPECT_TRUE(s::ScreenFor(counted, true).body == s::Body::Rows);
+}
+
+// Show more under the device sign-ins follows the controller's SessionsHasMore,
+// and only over a list.
+UR_TEST(Sessions_ShowMoreFollowsTheController) {
+  s::Snapshot snapshot = TwoSessions();
+  UR_EXPECT_FALSE(s::ScreenFor(snapshot, true).signInsMore);
+  snapshot.sessionsHasMore = true;
+  snapshot.sessionCount = 120;
+  UR_EXPECT_TRUE(s::ScreenFor(snapshot, true).signInsMore);
+  snapshot.error = s::Error{false, /*signInRequired=*/true, false, false};
+  UR_EXPECT_FALSE(s::ScreenFor(snapshot, true).signInsMore);
+  UR_EXPECT_FALSE(s::ScreenFor(snapshot, /*signedIn=*/false).signInsMore);
+  UR_EXPECT_TEXT("sessions_show_more", s::kShowMoreText.key);
+  UR_EXPECT_TEXT("Show more", s::kShowMoreText.english);
+}
+
+// A heading's activation asks the controller to close an open group and open a
+// closed one; a group no longer listed asks nothing.
+UR_TEST(Sessions_AHeadingTogglesItsGroup) {
+  const s::Snapshot snapshot = WithGroups();
+  UR_EXPECT_TRUE(s::ExpandedAfterToggle(snapshot, s::kGroupHostedProxies) == std::optional<bool>(false));
+  UR_EXPECT_TRUE(s::ExpandedAfterToggle(snapshot, s::kGroupApiClients) == std::optional<bool>(true));
+  UR_EXPECT_FALSE(s::ExpandedAfterToggle(snapshot, s::kGroupPairedDevices).has_value());
+  UR_EXPECT_FALSE(s::ExpandedAfterToggle(snapshot, s::kGroupSignIns).has_value());
+}
+
+// The section names are the sdk's (SessionsPage.cpp asserts them against the
+// sdk's constants).
+UR_TEST(Sessions_TheSectionNamesAreTheSdks) {
+  UR_EXPECT_TEXT("sign_ins", s::kGroupSignIns);
+  UR_EXPECT_TEXT("hosted_proxies", s::kGroupHostedProxies);
+  UR_EXPECT_TEXT("api_clients", s::kGroupApiClients);
+  UR_EXPECT_TEXT("paired_devices", s::kGroupPairedDevices);
+  UR_EXPECT_TEXT("other_clients", s::kGroupOtherClients);
 }
 
 // ---- every word is the catalog's ----------------------------------------------------
@@ -621,8 +909,13 @@ UR_TEST(Sessions_EveryKeyAndEnglishIsTheCatalogs) {
       s::kSignOutText,      s::kSignOutNamedText,  s::kSignOutOthersText, s::kCancelText,
       s::kSigningOutText,   s::kActionFailedText,  s::kOthersFailedText,  s::kRefreshText,
       s::kTryAgainText,     s::kRefreshFailedText, s::kLastUsedHelpText,  s::kLegacyNoteText,
-      s::kAccountText,      s::kLoadingText,
+      s::kAccountText,      s::kLoadingText,       s::kShowMoreText,
   };
+  for (const char* kind : {s::kGroupHostedProxies, s::kGroupApiClients, s::kGroupPairedDevices,
+                           s::kGroupOtherClients}) {
+    texts.push_back(s::GroupLabelFor(kind));
+    texts.push_back(s::ClientLabelFor(kind));
+  }
   for (const char* type : {"android", "ios", "macos", "windows", "linux", "web", "cli", "server", ""}) {
     texts.push_back(s::DeviceFor(type).label);
   }
@@ -638,10 +931,13 @@ UR_TEST(Sessions_EveryKeyAndEnglishIsTheCatalogs) {
     for (bool others : {false, true}) texts.push_back(*s::ActionStatusText(view, others));
   }
   const s::Snapshot snapshot = TwoSessions();
+  const s::Snapshot withGroups = WithGroups();
   for (const s::Confirmation& confirmation :
        {s::ConfirmationFor(snapshot, snapshot.sessions[0], EnglishWords()),
         s::ConfirmationFor(snapshot, snapshot.sessions[1], EnglishWords()),
-        s::OthersConfirmation()}) {
+        s::OthersConfirmation(snapshot), s::OthersConfirmation(withGroups),
+        s::ConfirmationFor(withGroups, withGroups.groups[0].sessions[0], EnglishWords(),
+                           s::kGroupHostedProxies)}) {
     texts.push_back(confirmation.title);
     texts.push_back(confirmation.body);
   }

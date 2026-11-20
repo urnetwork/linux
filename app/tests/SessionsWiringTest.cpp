@@ -231,3 +231,114 @@ UR_TEST(SessionsWiring_TheRevokedCauseIsTheSdks) {
   UR_EXPECT_TRUE(Contains(copy, "out.signInRequired = error.getSignInRequired();"));
   UR_EXPECT_TRUE(Contains(copy, "out.sessionRevoked = error.getSessionRevoked();"));
 }
+
+// ---- the list at scale (session1118 C.md §5 C) ----------------------------------
+
+// The controller's layout is copied as it is: the counts, the pages, the
+// truncation and each group with its rows, by the same per-session copy as
+// the device sign-ins; the section names are the sdk's, or the GUI does not
+// build.
+UR_TEST(SessionsWiring_TheControllersLayoutIsCopied) {
+  const std::string page = ReadCode("SessionsPage.cpp");
+  const std::string copy = FunctionBody(page, "sessions::Snapshot SnapshotOf(");
+  for (const char* field :
+       {"out.sessions = sessionsOf(source.getSessions());",
+        "out.sessionCount = source.getSessionCount();",
+        "out.sessionsHasMore = source.getSessionsHasMore();",
+        "out.otherSessionCount = source.getOtherSessionCount();",
+        "out.truncated = source.getTruncated();", "source.getGroups()",
+        "copy.kind = group.getKind();", "copy.count = group.getCount();",
+        "copy.expanded = group.getExpanded();", "copy.hasMore = group.getHasMore();",
+        "copy.sessions = sessionsOf(group.getSessions());"}) {
+    UR_EXPECT_TRUE_MSG(field, Contains(copy, field));
+  }
+  for (const char* kind : {"SignIns", "HostedProxies", "ApiClients", "PairedDevices", "OtherClients"}) {
+    const std::string assertion = std::string("static_assert(std::string_view(sessions::kGroup") +
+                                  kind + ") ==\n                  std::string_view(urnet::ClientSessionGroup" +
+                                  kind + "),";
+    UR_EXPECT_TRUE_MSG(assertion, Contains(page, assertion));
+  }
+  // the controller's calls, and nothing of the page's own
+  UR_EXPECT_TRUE(Contains(page, "controller_.setGroupExpanded(groupKind, expanded);"));
+  UR_EXPECT_TRUE(Contains(page, "controller_.showMoreSessions(section);"));
+  const std::string binding = ReadCode("SessionsBinding.hpp");
+  UR_EXPECT_TRUE(Contains(
+      FunctionBody(binding, "void SetGroupExpanded(const std::string& groupKind, bool expanded) {"),
+      "if (controller_) controller_->SetGroupExpanded(groupKind, expanded);"));
+  UR_EXPECT_TRUE(Contains(FunctionBody(binding, "void ShowMore(const std::string& section) {"),
+                          "if (controller_) controller_->ShowMoreSessions(section);"));
+}
+
+// A group's heading is a keyboard-focusable button named by its heading, whose
+// accessible state says whether it is open; activating it asks the controller
+// to open or close it by its latest snapshot. Its rows are the sign-ins' rows,
+// with the group's label; Show more asks the controller for the next page.
+UR_TEST(SessionsWiring_AGroupOpensFromItsHeading) {
+  const std::string page = ReadCode("SessionsPage.cpp");
+  const std::string build = FunctionBody(page, "SessionsPage::GroupWidgets SessionsPage::BuildGroup(");
+  UR_EXPECT_TRUE(Contains(build, "group.header = Gtk::make_managed<Gtk::Button>();"));
+  UR_EXPECT_TRUE(Contains(build, "group.header->add_css_class(\"ur-pane-row\");"));
+  UR_EXPECT_TRUE(Contains(build, "kit::MarkDecorative(*group.chevron);"));
+  UR_EXPECT_TRUE(Contains(build, "group.header->signal_clicked().connect([this, kind] { ToggleGroup(kind); });"));
+  UR_EXPECT_TRUE(Contains(build, "MakeShowMoreRow([this, kind] { binding_.ShowMore(kind); });"));
+  const std::string update = FunctionBody(page, "void SessionsPage::UpdateGroup(");
+  UR_EXPECT_TRUE(Contains(update, "group.heading->set_text(view.heading);"));
+  UR_EXPECT_TRUE(Contains(update, "kit::SetAccessibleLabel(*group.header, view.heading);"));
+  UR_EXPECT_TRUE(Contains(update, "GTK_ACCESSIBLE_STATE_EXPANDED"));
+  UR_EXPECT_TRUE(Contains(update, "view.expanded ? TRUE : FALSE"));
+  UR_EXPECT_TRUE(Contains(update, "RenderRows(*group.rowsBox, group.rows, listed, view.kind, words, now);"));
+  UR_EXPECT_TRUE(Contains(update, "group.rowsBox->set_visible(view.expanded);"));
+  UR_EXPECT_TRUE(Contains(update, "group.moreRow->set_visible(view.showMore);"));
+  const std::string toggle = FunctionBody(page, "void SessionsPage::ToggleGroup(");
+  UR_EXPECT_TRUE(Before(toggle, "sessions::ExpandedAfterToggle(snapshot_, kind)",
+                        "binding_.SetGroupExpanded(kind, *expanded);"));
+  // the rows of every section are built and named by the presentation
+  const std::string rows = FunctionBody(page, "void SessionsPage::RenderRows(");
+  UR_EXPECT_TRUE(Contains(rows, "sessions::RowFor(snapshot_, session, words, now, colorHexFor, section)"));
+  UR_EXPECT_TRUE(Contains(rows, "sessions::ActionViewOf(sessions::ActionFor(snapshot_, session.sessionId))"));
+  // the groups follow the presentation's order and headings
+  UR_EXPECT_TRUE(Contains(FunctionBody(page, "void SessionsPage::RenderGroups("),
+                          "sessions::GroupsFor(snapshot_, words)"));
+  // the counts in the locale's grouping
+  UR_EXPECT_TRUE(Contains(FunctionBody(page, "sessions::Words SessionsPage::MakeWords() const"),
+                          "words.count = [](int64_t count) { return leaderboard::GroupedRank(count); };"));
+}
+
+// Show more under the device sign-ins asks the controller for their next page,
+// and shows while the screen says so; the rows and groups go with a body that
+// has none.
+UR_TEST(SessionsWiring_TheSignInsShowMore) {
+  const std::string page = ReadCode("SessionsPage.cpp");
+  UR_EXPECT_TRUE(Contains(FunctionBody(page, "void SessionsPage::BuildPane()"),
+                          "MakeShowMoreRow([this] { binding_.ShowMore(sessions::kGroupSignIns); });"));
+  const std::string render = FunctionBody(page, "void SessionsPage::Render()");
+  UR_EXPECT_TRUE(Contains(render, "signInsMoreRow_->set_visible(screen.signInsMore);"));
+  UR_EXPECT_TRUE(Contains(render, "RenderRows(*rowsBox_, rows_, snapshot_.sessions, sessions::kGroupSignIns, words, now);"));
+  UR_EXPECT_TRUE(Contains(render, "RenderGroups(words, now);"));
+  UR_EXPECT_TRUE(Before(render, "ClearRows(*rowsBox_, rows_);", "ClearGroups();"));
+  // Show more is the store's
+  UR_EXPECT_TRUE(Contains(FunctionBody(page, "Gtk::Widget* MakeShowMoreRow("),
+                          "Lookup(sessions::kShowMoreText)"));
+}
+
+// After a confirmation the focus goes back to the row's Sign out wherever the
+// row is listed: among the device sign-ins or in an open group.
+UR_TEST(SessionsWiring_AGroupRowKeepsItsFocus) {
+  const std::string page = ReadCode("SessionsPage.cpp");
+  const std::string focus = FunctionBody(page, "void SessionsPage::RestoreFocus(");
+  UR_EXPECT_TRUE(Contains(focus, "if (restore(rows_)) return;"));
+  UR_EXPECT_TRUE(Contains(focus, "if (restore(group.rows)) return;"));
+}
+
+// This app's own sign-out is announced to the window before it is sent, so the
+// app signs out however the sdk reports it (ApiSignOutWiringTest).
+UR_TEST(SessionsWiring_ThisAppsOwnSignOutIsAnnounced) {
+  const std::string page = ReadCode("SessionsPage.cpp");
+  const std::string confirm = FunctionBody(page, "void SessionsPage::ShowConfirmation(");
+  UR_EXPECT_TRUE(Contains(confirm, "[this, self = confirmation.self] {"));
+  UR_EXPECT_TRUE(Before(confirm, "if (target && self && on_own_session_sign_out) on_own_session_sign_out();",
+                        "if (target) binding_.Revoke(*target);"));
+  const std::string window = ReadCode("MainWindow.cpp");
+  UR_EXPECT_TRUE(Contains(window, "sessionsPage_->on_own_session_sign_out = [this] {\n"
+                                  "    ownSessionSignOut_ = host_.SignInNow("));
+}
