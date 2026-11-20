@@ -12,6 +12,7 @@
 #include "TestHarness.hpp"
 
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -259,16 +260,18 @@ UR_TEST(AuthLogout_AnAccountSignInNoticeNamesAnotherDeviceOnlyForTheTrustedCause
     UR_EXPECT_TRUE_MSG(std::string("\"") + other + "\"",
                        a::AccountSignInNotice(report, english) == "Sign in again to manage sessions.");
   }
-  // each part is looked up by its key, one lookup each
-  std::string asked;
+  // Each part is looked up once. The lookup order is unspecified by C++.
+  std::multiset<std::string> asked;
   const auto keys = [&asked](const a::Text& text) {
-    asked += std::string(text.key) + ";";
+    asked.emplace(text.key);
     return std::string("[") + text.key + "]";
   };
   report.cause = a::kSessionRevoked;
   UR_EXPECT_TRUE(a::AccountSignInNotice(report, keys) ==
                  "[sessions_signed_out_remotely] [sessions_sign_in_required]");
-  UR_EXPECT_TRUE(asked == "sessions_signed_out_remotely;sessions_sign_in_required;");
+  const std::multiset<std::string> expectedKeys = {
+      "sessions_signed_out_remotely", "sessions_sign_in_required"};
+  UR_EXPECT_TRUE(asked == expectedKeys);
   // both are the catalog's entries, byte for byte
   std::ifstream in(std::string(UR_SRC_DIR) + "/../po/en.po", std::ios::binary);
   UR_EXPECT_TRUE(in.good());
