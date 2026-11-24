@@ -154,19 +154,25 @@ UR_TEST(ConnectionHealthWiring_TheTrayIconMeansProven) {
        "SanitizeExternalDisplayText(reading.postQuantumUnavailableLocation)",
        "std::string(T_(tray.textKey, tray.textEnglish));",
        "on_tray_state(connected_, proven, status, signedIn_);"}));
-  // observed means the presentation is open or the session latched a status
+  // observed means the presentation is open, the session latched a status, or
+  // the SDK says the no-post-quantum-exits notice, which it never says over a
+  // connection
   const std::string host = ReadHealthWiringSource("SdkHost.cpp");
   const std::string facts = HealthWiringBody(host, "ConnectReading SdkHost::ReadConnectFacts() {");
   UR_EXPECT_TRUE(HealthWiringInOrder(
       facts, {"r.statusObserved = connectVc_.has_value();", "return r;",
               "r.statusObserved = connectVc_.has_value() || "
-              "r.sdk != health::SdkStatus::Unknown;"}));
-  // and the notice latched with the status: cleared with the session, kept
-  // from the controller, and said again with none (the window hidden)
+              "r.sdk != health::SdkStatus::Unknown ||",
+              "r.postQuantumUnavailable;"}));
+  // and the notice is the controller's while the window shows, and with none
+  // (the window hidden) the device's own as its listener last said it, never
+  // asked over the device's rpc; cleared with the session
   UR_EXPECT_TRUE(HealthWiringInOrder(
-      facts, {"if (!sessionUp) {", "lastPostQuantumUnavailable_ = false;", "return r;",
-              "if (connectVc_) {", "lastPostQuantumUnavailable_ = r.postQuantumUnavailable;",
-              "} else {", "r.postQuantumUnavailable = lastPostQuantumUnavailable_;"}));
+      facts, {"connectVc_->getPostQuantumUnavailable()", "} else if (haveDevice) {",
+              "std::scoped_lock lock(postQuantumNoticeMutex_);",
+              "r.postQuantumUnavailableLocation = *devicePostQuantumNotice_;", "if (!sessionUp) {",
+              "r.postQuantumUnavailable = false;", "return r;"}));
+  UR_EXPECT_FALSE(HealthWiringHas(facts, "device_->getPostQuantumUnavailable()"));
   UR_EXPECT_TRUE(HealthWiringHas(ReadHealthWiringSource("SdkHost.hpp"),
                                  "statusObserved == o.statusObserved"));
   UR_EXPECT_TRUE(HealthWiringHas(ReadHealthWiringSource("main.cpp"),
@@ -188,6 +194,32 @@ UR_TEST(ConnectionHealthWiring_TheTrayIconMeansProven) {
                                      {"\"NewIcon\"", "\"NewToolTip\""}));
   UR_EXPECT_TRUE(HealthWiringHas(HealthWiringBody(tray, "void Tray::EmitMenuLayoutUpdated() {"),
                                  "\"LayoutUpdated\""));
+}
+
+// The device's no-post-quantum-exits notice (Device::getPostQuantumUnavailable)
+// comes off a listener bound with the device beside its other feeds, so the
+// tray has it with the window hidden: kept for that device only, each change
+// handed on as a reading, and the bind's one read loses to a push since.
+UR_TEST(ConnectionHealthWiring_TheDeviceKeepsThePostQuantumNotice) {
+  const std::string host = ReadHealthWiringSource("SdkHost.cpp");
+  UR_EXPECT_TRUE(HealthWiringInOrder(
+      HealthWiringBody(host, "TunnelStartResult SdkHost::BindRemoteDeviceLocked("),
+      {"BindClientLimitLocked();", "BindPostQuantumNoticeLocked();", "PublishConnectReading();"}));
+  const std::string bind = HealthWiringBody(host, "void SdkHost::BindPostQuantumNoticeLocked() {");
+  UR_EXPECT_TRUE(HealthWiringInOrder(
+      bind, {"generation = ++postQuantumNoticeGeneration_;",
+             "revision = postQuantumNoticeRevision_;", "devicePostQuantumNotice_.reset();",
+             "subs_.push_back(device_->addPostQuantumUnavailableChangeListener(",
+             "if (generation != postQuantumNoticeGeneration_) return;",
+             "++postQuantumNoticeRevision_;", "devicePostQuantumNotice_ = location;",
+             "PublishConnectReading();", "device_->getPostQuantumUnavailable();",
+             "revision == postQuantumNoticeRevision_", "devicePostQuantumNotice_ = location;"}));
+  // its listener takes the notice's lock, never mutex_
+  UR_EXPECT_FALSE(HealthWiringHas(bind, "lock(mutex_)"));
+  // and the notice outlives the subscriptions that call into it
+  UR_EXPECT_TRUE(HealthWiringInOrder(ReadHealthWiringSource("SdkHost.hpp"),
+                                     {"std::mutex postQuantumNoticeMutex_;",
+                                      "std::vector<urnet::Sub> subs_;"}));
 }
 
 // The window's diagnosis is read only while it can matter, the page renders it
