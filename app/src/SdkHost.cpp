@@ -3993,6 +3993,11 @@ ConnectReading SdkHost::ReadConnectFacts() {
     // nor can a location want post-quantum exits for a session that is gone
     r.postQuantumUnavailable = false;
     r.postQuantumUnavailableLocation.clear();
+    {
+      std::scoped_lock lock(postQuantumNoticeMutex_);
+      lastPostQuantumUnavailable_ = false;
+      lastPostQuantumUnavailableLocation_.clear();
+    }
     return r;
   }
   const health::SdkStatus parsed = health::ParseSdkStatus(r.rawStatus);
@@ -4004,6 +4009,19 @@ ConnectReading SdkHost::ReadConnectFacts() {
     // reopened, or none at all): keep the last thing this session actually
     // said.
     r.sdk = static_cast<health::SdkStatus>(lastKnownSdk_.load());
+  }
+  // The no-post-quantum-exits notice the same way: what the controller says,
+  // and with none (the window hidden) what it last said this session, so the
+  // tray does not fall back to connecting while the notice stands.
+  {
+    std::scoped_lock lock(postQuantumNoticeMutex_);
+    if (connectVc_) {
+      lastPostQuantumUnavailable_ = r.postQuantumUnavailable;
+      lastPostQuantumUnavailableLocation_ = r.postQuantumUnavailableLocation;
+    } else {
+      r.postQuantumUnavailable = lastPostQuantumUnavailable_;
+      r.postQuantumUnavailableLocation = lastPostQuantumUnavailableLocation_;
+    }
   }
   // With the presentation closed since before the session's first status
   // there is no evidence at all, and the tray keeps the session's claim.

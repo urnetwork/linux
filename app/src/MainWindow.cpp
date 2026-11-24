@@ -2919,7 +2919,14 @@ void MainWindow::ApplyConnectReading(const ConnectReading& reading) {
   const health::Reading tray = health::TrayReading(
       view, signals, connect_tap::StatusObserved(reading.statusObserved, pendingTap_));
   const bool proven = health::Proven(tray);
-  const std::string status = T_(tray.textKey, tray.textEnglish);
+  // The SDK's no-post-quantum-exits notice in place of the state's words, by
+  // the status row's rule (ConnectPage::ApplyConnectStatus): never over a
+  // connection. Its location's name is external text, filtered as the row's is.
+  const std::string status =
+      reading.postQuantumUnavailable && tray.state != health::State::Connected
+          ? Format(T_("post_quantum_no_exits", "No post-quantum exits in {} right now"),
+                   SanitizeExternalDisplayText(reading.postQuantumUnavailableLocation))
+          : std::string(T_(tray.textKey, tray.textEnglish));
   if (on_tray_state && (connected_ != wasConnected || proven != trayProven_ ||
                         status != trayStatus_ || signedIn_ != trayHasStatus_ ||
                         !trayStatePushed_)) {

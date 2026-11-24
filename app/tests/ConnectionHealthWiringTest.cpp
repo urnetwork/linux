@@ -146,7 +146,13 @@ UR_TEST(ConnectionHealthWiring_TheTrayIconMeansProven) {
        "health::TrayReading(",
        "view, signals, connect_tap::StatusObserved(reading.statusObserved, pendingTap_));",
        "const bool proven = health::Proven(tray);",
-       "const std::string status = T_(tray.textKey, tray.textEnglish);",
+       // the SDK's no-post-quantum-exits notice in place of the state's words,
+       // never over a connection
+       "const std::string status =",
+       "reading.postQuantumUnavailable && tray.state != health::State::Connected",
+       "T_(\"post_quantum_no_exits\",",
+       "SanitizeExternalDisplayText(reading.postQuantumUnavailableLocation)",
+       "std::string(T_(tray.textKey, tray.textEnglish));",
        "on_tray_state(connected_, proven, status, signedIn_);"}));
   // observed means the presentation is open or the session latched a status
   const std::string host = ReadHealthWiringSource("SdkHost.cpp");
@@ -155,6 +161,12 @@ UR_TEST(ConnectionHealthWiring_TheTrayIconMeansProven) {
       facts, {"r.statusObserved = connectVc_.has_value();", "return r;",
               "r.statusObserved = connectVc_.has_value() || "
               "r.sdk != health::SdkStatus::Unknown;"}));
+  // and the notice latched with the status: cleared with the session, kept
+  // from the controller, and said again with none (the window hidden)
+  UR_EXPECT_TRUE(HealthWiringInOrder(
+      facts, {"if (!sessionUp) {", "lastPostQuantumUnavailable_ = false;", "return r;",
+              "if (connectVc_) {", "lastPostQuantumUnavailable_ = r.postQuantumUnavailable;",
+              "} else {", "r.postQuantumUnavailable = lastPostQuantumUnavailable_;"}));
   UR_EXPECT_TRUE(HealthWiringHas(ReadHealthWiringSource("SdkHost.hpp"),
                                  "statusObserved == o.statusObserved"));
   UR_EXPECT_TRUE(HealthWiringHas(ReadHealthWiringSource("main.cpp"),
@@ -188,8 +200,12 @@ UR_TEST(ConnectionHealthWiring_TheStallReasonAndRetry) {
       facts, {"if (!sessionUp) {", "return r;",
               "if (connectVc_ && r.sdk != health::SdkStatus::Connected) {",
               "device_->getWindowStatus()", "r.stallReason = windowStatus->StallReason;"}));
-  UR_EXPECT_TRUE(HealthWiringHas(ReadHealthWiringSource("SdkHost.hpp"),
-                                 "stallReason == o.stallReason;"));
+  // compared with the no-post-quantum-exits notice that follows it
+  UR_EXPECT_TRUE(HealthWiringInOrder(ReadHealthWiringSource("SdkHost.hpp"),
+                                     {"stallReason == o.stallReason &&",
+                                      "postQuantumUnavailable == o.postQuantumUnavailable &&",
+                                      "postQuantumUnavailableLocation == "
+                                      "o.postQuantumUnavailableLocation;"}));
   const std::string page = ReadHealthWiringSource("ConnectPage.cpp");
   const std::string status = HealthWiringBody(page, "void ConnectPage::ApplyConnectStatus() {");
   UR_EXPECT_TRUE(HealthWiringInOrder(
