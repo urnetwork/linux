@@ -79,8 +79,11 @@ UR_TEST(StatusStripWiring_ThePageRaisesWhatItRendered) {
   const std::string page = ReadStripSource("ConnectPage.cpp");
   const std::string status = StripBody(page, "void ConnectPage::ApplyConnectStatus() {");
   UR_EXPECT_TRUE(!status.empty());
+  // the text is the state's words, or the SDK's no-post-quantum-exits notice
+  // in their place
   UR_EXPECT_TRUE(
-      StripInOrder(status, {"const Glib::ustring text = T_(view.textKey, view.textEnglish);",
+      StripInOrder(status, {"Glib::ustring text = T_(view.textKey, view.textEnglish);",
+                            "text = Format(T_(\"post_quantum_no_exits\",",
                             "statusText_->set_text(text);", "on_status_rendered(text, dot);"}));
   const std::string location = StripBody(page, "void ConnectPage::ApplyLocationRow() {");
   UR_EXPECT_TRUE(!location.empty());

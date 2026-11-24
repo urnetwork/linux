@@ -2345,6 +2345,15 @@ class SdkHost {
   // clears it the moment the session stops being up, so it can never outlive
   // the thing it describes.
   std::atomic<int> lastKnownSdk_{static_cast<int>(health::SdkStatus::Unknown)};
+  // The SDK's no-post-quantum-exits notice as the presentation controller last
+  // said it this session, for the readings taken with no controller (the
+  // window hidden): the tray keeps saying it there, as it keeps the session's
+  // last status above. Session-scoped the same way: ReadConnectFacts clears it
+  // the moment the session stops being up. Under its own lock, because
+  // readings are taken on any thread.
+  std::mutex postQuantumNoticeMutex_;
+  bool lastPostQuantumUnavailable_ = false;
+  std::string lastPostQuantumUnavailableLocation_;
   // The daemon stopped the tunnel underneath us (PollDaemonHealth saw it).
   // Forces tunnelBound false in EVERY subsequent reading until a new
   // start_tunnel clears it — see ReadConnectReading. Atomic because the poll
