@@ -11473,6 +11473,11 @@ msgid_plural "{0} days free, then {1}/year. Cancel anytime."
 msgstr[0] "{0} día gratis, luego {1}/año. Cancela cuando quieras."
 msgstr[1] "{0} días gratis, luego {1}/año. Cancela cuando quieras."
 
+#. ur.io Connect screen: the note on the post quantum encryption option, which is off and cannot be turned on in the browser. The browser's connections run on hosted devices, which run without post-quantum encryption; the desktop and mobile apps have it on by default. Name the option by its label (post_quantum_encryption), exactly as the apps show it.
+msgctxt "site_post_quantum_encryption_in_apps"
+msgid "Post Quantum Encryption is available in the desktop and mobile apps."
+msgstr "El Cifrado poscuántico está disponible en las apps de escritorio y móviles."
+
 #. Account panel: client info — principal label
 msgctxt "site_principal"
 msgid "Principal"

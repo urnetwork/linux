@@ -162,7 +162,7 @@ gate expression and the guest fork verbatim.
 4. **Fixed IP row**: `fixed_ip` → "Fixed IP" + Switch. Insensitive while Auto; Auto forces it off.
 5. **Strong Anonymization row**: `strong_anonymization` → "Strong Anonymization" + Switch,
    default ON (nil profile → allow_direct false; the switch is the *inverted* `allow_direct`).
-6. **Post Quantum Encryption row**: `post_quantum_encryption` → "Post Quantum Encryption" + Switch, default off.
+6. **Post Quantum Encryption row**: `post_quantum_encryption` → "Post Quantum Encryption" + Switch, default on (the SDK default profile).
 7. **Kill switch row**: `kill_switch` → "Kill switch" + Switch. NOT part of the profile:
    handler (echo-guarded by `updatingKillSwitch_`) calls `host_.SetRouteLocal(!active)`;
    `RefreshKillSwitch()` reads `!host_.GetRouteLocal()`. GUI persists to LocalState and applies

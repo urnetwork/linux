@@ -11508,6 +11508,11 @@ msgstr[0] "{0} день бесплатно, затем {1}/год. Отмена 
 msgstr[1] "{0} дня бесплатно, затем {1}/год. Отмена в любое время."
 msgstr[2] "{0} дней бесплатно, затем {1}/год. Отмена в любое время."
 
+#. ur.io Connect screen: the note on the post quantum encryption option, which is off and cannot be turned on in the browser. The browser's connections run on hosted devices, which run without post-quantum encryption; the desktop and mobile apps have it on by default. Name the option by its label (post_quantum_encryption), exactly as the apps show it.
+msgctxt "site_post_quantum_encryption_in_apps"
+msgid "Post Quantum Encryption is available in the desktop and mobile apps."
+msgstr "«Постквантовое шифрование» доступно в приложениях для компьютера и телефона."
+
 #. Account panel: client info — principal label
 msgctxt "site_principal"
 msgid "Principal"
