@@ -287,6 +287,9 @@ class ConnectPage : public Gtk::Box {
   // writer back to the SDK.
   void SeedConnectControls();
   void PushPerformanceProfile();
+  // the no-post-quantum-exits notice's second choice: post-quantum off through
+  // its own switch and the one profile writer
+  void TurnOffPostQuantum();
   void OnConnectionModeChanged();
 
   // ---- pane B / C writers (one per surface) --------------------------------
@@ -592,6 +595,9 @@ class ConnectPage : public Gtk::Box {
   Gtk::Label* trafficHeldText_ = nullptr;
   Gtk::Label* statusReasonText_ = nullptr;
   Gtk::Label* daemonNoticeText_ = nullptr;
+  // the two choices of the no-post-quantum-exits notice (owner, 2026-11-24),
+  // shown only with it; one writer, ApplyConnectStatus
+  Gtk::Box* postQuantumNoticeActions_ = nullptr;
   // the out-of-balance held alert (ApplyBalanceNotice)
   Gtk::Box* heldAlert_ = nullptr;
   Gtk::Box* heldAlertRefresh_ = nullptr;    // the refresh line and its Why?

@@ -3776,6 +3776,9 @@ void SdkHost::SubscribeStats() {
   };
   presentationSubs_.push_back(connectVc_->addConnectionStatusListener(pub));
   presentationSubs_.push_back(connectVc_->addGridListener(pub));  // provider window size
+  // the notice that the selected location has no post-quantum exits, which
+  // the status row reads off the connect reading
+  presentationSubs_.push_back(connectVc_->addPostQuantumUnavailableListener(pub));
   presentationSubs_.push_back(connectVc_->addSelectedLocationListener(
       [this](std::optional<urnet::ConnectLocation>) { PublishStats(); }));
   presentationSubs_.push_back(contractVc_->addThroughputListener(pub));
@@ -3957,6 +3960,14 @@ ConnectReading SdkHost::ReadConnectFacts() {
     r.rawStatus = connectVc_->getConnectionStatus();
     r.destinationSelected = connectVc_->getConnected();
     if (auto grid = connectVc_->getGrid()) r.providerCount = grid.getWindowCurrentSize();
+    // The SDK decides the no-post-quantum-exits notice; this only carries it
+    // to the status row. A controller read like the two above, no rpc.
+    if (auto notice = connectVc_->getPostQuantumUnavailable()) {
+      r.postQuantumUnavailable = true;
+      if (notice->location && notice->location->name) {
+        r.postQuantumUnavailableLocation = *notice->location->name;
+      }
+    }
   } else if (haveDevice) {
     // No presentation controller (the window is hidden): the destination is
     // still the honest half, and there is simply no status to report. Left
@@ -3979,6 +3990,9 @@ ConnectReading SdkHost::ReadConnectFacts() {
     // same lie in miniature.
     r.rawStatus = "DISCONNECTED";
     r.statusObserved = connectVc_.has_value();
+    // nor can a location want post-quantum exits for a session that is gone
+    r.postQuantumUnavailable = false;
+    r.postQuantumUnavailableLocation.clear();
     return r;
   }
   const health::SdkStatus parsed = health::ParseSdkStatus(r.rawStatus);
