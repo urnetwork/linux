@@ -3286,6 +3286,9 @@ TunnelStartResult SdkHost::BindRemoteDeviceLocked(const std::string& clientJwt,
     // The client limit hold, for the same reason: the Connect page's notice
     // and the desktop notification while the window sits in the tray.
     BindClientLimitLocked();
+    // The no-post-quantum-exits notice, for the tray while the window sits in
+    // the tray, where there is no connect controller to say it.
+    BindPostQuantumNoticeLocked();
     if (presentationActive_) {
       SubscribeStats();
       SubscribeDrawer();
@@ -3574,6 +3577,65 @@ void SdkHost::RetryClientLimitAfterChange(const char* reason) {
               ended ? "the hold ended; the device dials the platform again"
                     : "no hold ended (none in force, or a change retry ended one in the last 30 s)");
   });
+}
+
+// ---- the device's no-post-quantum-exits notice -------------------------------
+// The device decides the notice as the connect controller does (owner,
+// 2026-11-24: "Tell them, let them choose"; Device.GetPostQuantumUnavailable),
+// so the tray says it with the window hidden, where there is no controller. A
+// DeviceRemote's getter reads through over its rpc, so a reading takes the
+// listener's value and the one read is the bind's, on the worker. Stamped with
+// the device's generation like the feeds above; the listener takes only
+// postQuantumNoticeMutex_, never mutex_, and publishes the reading outside it.
+
+void SdkHost::BindPostQuantumNoticeLocked() {
+  // by the location's name, as the location list shows it ("" when it names
+  // none); nullopt with no notice
+  const auto locationOf = [](const std::optional<urnet::PostQuantumUnavailable>& notice)
+      -> std::optional<std::string> {
+    if (!notice) return std::nullopt;
+    if (notice->location && notice->location->name) return *notice->location->name;
+    return std::string();
+  };
+  uint64_t generation = 0;
+  uint64_t revision = 0;
+  {
+    std::scoped_lock lock(postQuantumNoticeMutex_);
+    generation = ++postQuantumNoticeGeneration_;
+    revision = postQuantumNoticeRevision_;
+    devicePostQuantumNotice_.reset();
+  }
+  // The notice is never a reason to fail the start it rides on: a throw leaves
+  // the tray without it, which is what it shows without one anyway.
+  try {
+    subs_.push_back(device_->addPostQuantumUnavailableChangeListener(
+        [this, generation, locationOf](std::optional<urnet::PostQuantumUnavailable> notice) {
+          const std::optional<std::string> location = locationOf(notice);
+          {
+            std::scoped_lock lock(postQuantumNoticeMutex_);
+            if (generation != postQuantumNoticeGeneration_) return;
+            ++postQuantumNoticeRevision_;
+            if (location == devicePostQuantumNotice_) return;
+            devicePostQuantumNotice_ = location;
+          }
+          PublishConnectReading();
+        }));
+  } catch (const std::exception& e) {
+    g_warning("sdkhost: the post-quantum notice listener could not be added: %s", e.what());
+    return;
+  }
+  // A remote's listener hears the notice at its next sync, and a pair that
+  // synced already has had it: read once, after registering, on this worker.
+  // A push that lands meanwhile is newer than the read and wins. The bind's
+  // caller publishes the reading.
+  const std::optional<std::string> location =
+      locationOf(ReadGuarded<std::optional<urnet::PostQuantumUnavailable>>(
+          "getPostQuantumUnavailable", [&] { return device_->getPostQuantumUnavailable(); },
+          std::nullopt));
+  std::scoped_lock lock(postQuantumNoticeMutex_);
+  if (generation == postQuantumNoticeGeneration_ && revision == postQuantumNoticeRevision_) {
+    devicePostQuantumNotice_ = location;
+  }
 }
 
 // ---- the device list (ManageDevicesSheet) -------------------------------------
@@ -3973,6 +4035,14 @@ ConnectReading SdkHost::ReadConnectFacts() {
     // still the honest half, and there is simply no status to report. Left
     // Unknown rather than fabricated — Unknown is not Disconnected.
     r.destinationSelected = device_->getConnectLocation().has_value();
+    // The no-post-quantum-exits notice is the device's own then, the
+    // controller's decision made without one, as its listener last said it
+    // (BindPostQuantumNoticeLocked). No rpc.
+    std::scoped_lock lock(postQuantumNoticeMutex_);
+    if (devicePostQuantumNotice_) {
+      r.postQuantumUnavailable = true;
+      r.postQuantumUnavailableLocation = *devicePostQuantumNotice_;
+    }
   }
   if (haveDevice) {
     if (auto cs = device_->getContractStatus(); cs) r.insufficientBalance = cs->InsufficientBalance;
@@ -3993,11 +4063,6 @@ ConnectReading SdkHost::ReadConnectFacts() {
     // nor can a location want post-quantum exits for a session that is gone
     r.postQuantumUnavailable = false;
     r.postQuantumUnavailableLocation.clear();
-    {
-      std::scoped_lock lock(postQuantumNoticeMutex_);
-      lastPostQuantumUnavailable_ = false;
-      lastPostQuantumUnavailableLocation_.clear();
-    }
     return r;
   }
   const health::SdkStatus parsed = health::ParseSdkStatus(r.rawStatus);
@@ -4010,22 +4075,13 @@ ConnectReading SdkHost::ReadConnectFacts() {
     // said.
     r.sdk = static_cast<health::SdkStatus>(lastKnownSdk_.load());
   }
-  // The no-post-quantum-exits notice the same way: what the controller says,
-  // and with none (the window hidden) what it last said this session, so the
-  // tray does not fall back to connecting while the notice stands.
-  {
-    std::scoped_lock lock(postQuantumNoticeMutex_);
-    if (connectVc_) {
-      lastPostQuantumUnavailable_ = r.postQuantumUnavailable;
-      lastPostQuantumUnavailableLocation_ = r.postQuantumUnavailableLocation;
-    } else {
-      r.postQuantumUnavailable = lastPostQuantumUnavailable_;
-      r.postQuantumUnavailableLocation = lastPostQuantumUnavailableLocation_;
-    }
-  }
   // With the presentation closed since before the session's first status
-  // there is no evidence at all, and the tray keeps the session's claim.
-  r.statusObserved = connectVc_.has_value() || r.sdk != health::SdkStatus::Unknown;
+  // there is no evidence at all, and the tray keeps the session's claim. The
+  // device's no-post-quantum-exits notice is evidence: the SDK says it only
+  // while the connection is not CONNECTED, so the tray says it in place of
+  // connecting rather than claim a connection.
+  r.statusObserved = connectVc_.has_value() || r.sdk != health::SdkStatus::Unknown ||
+                     r.postQuantumUnavailable;
   // Why the window is not there yet, for the line under the status. A device
   // rpc, so only while the attempt is still building or has failed, and with
   // the presentation open, as the grid's size is.

@@ -231,12 +231,15 @@ struct ConnectReading {
   // CONNECTED, the presentation open. "" otherwise.
   std::string stallReason;
   // The SDK's notice that the selected location has no post-quantum exits
-  // right now (ConnectViewController::getPostQuantumUnavailable; owner,
-  // 2026-11-24): set only while post-quantum encryption is on, the selection
-  // is a location or a group, the controller is not CONNECTED, and the SDK's
-  // check found exits there without post-quantum but none with it. The status
-  // row says so in place of connecting, with its two choices. Read from the
-  // presentation controller, no rpc; false with no session.
+  // right now (owner, 2026-11-24): set only while post-quantum encryption is
+  // on, the selection is a location or a group, the connection is not
+  // CONNECTED, and the SDK's check found exits there without post-quantum but
+  // none with it. The status row says so in place of connecting, with its two
+  // choices, and so does the tray. Read from the presentation controller while
+  // the window shows (ConnectViewController::getPostQuantumUnavailable), and
+  // with none from the device's own notice as its listener last said it
+  // (Device::getPostQuantumUnavailable); no rpc either way, false with no
+  // session.
   bool postQuantumUnavailable = false;
   // the notice's location, by its name as the location list shows it
   std::string postQuantumUnavailableLocation;
@@ -2206,6 +2209,21 @@ class SdkHost {
   void ClearClientLimit();
   // Hands on the feed's reading when it changed. Requires clientLimitMutex_.
   void PublishClientLimitLocked();
+  // ---- the device's no-post-quantum-exits notice -----------------------------
+  // Device::getPostQuantumUnavailable as the device's listener last said it,
+  // for the readings taken with no presentation controller (the window
+  // hidden), so the tray says it there. Its own lock, for the slow-internet
+  // feed's reason; declared before subs_ the same way.
+  std::mutex postQuantumNoticeMutex_;
+  // moved by each bind: a call from a device torn down since changes nothing
+  uint64_t postQuantumNoticeGeneration_ = 0;  // guarded by postQuantumNoticeMutex_
+  // moved by each push: the bind's read loses to a push that lands meanwhile
+  uint64_t postQuantumNoticeRevision_ = 0;  // guarded by postQuantumNoticeMutex_
+  // the notice's location name ("" when it names none); nullopt is no notice
+  std::optional<std::string> devicePostQuantumNotice_;  // guarded by postQuantumNoticeMutex_
+  // Registers the device's notice listener in subs_ (a device-lifetime feed)
+  // and reads the notice once after registering. Requires mutex_ and a device.
+  void BindPostQuantumNoticeLocked();
   // ---- the device list (OpenManageDevices) -----------------------------------
   // What the open list was opened on.
   enum class ManageDevicesOwner { None, Device, Api, SignIn };
@@ -2345,15 +2363,6 @@ class SdkHost {
   // clears it the moment the session stops being up, so it can never outlive
   // the thing it describes.
   std::atomic<int> lastKnownSdk_{static_cast<int>(health::SdkStatus::Unknown)};
-  // The SDK's no-post-quantum-exits notice as the presentation controller last
-  // said it this session, for the readings taken with no controller (the
-  // window hidden): the tray keeps saying it there, as it keeps the session's
-  // last status above. Session-scoped the same way: ReadConnectFacts clears it
-  // the moment the session stops being up. Under its own lock, because
-  // readings are taken on any thread.
-  std::mutex postQuantumNoticeMutex_;
-  bool lastPostQuantumUnavailable_ = false;
-  std::string lastPostQuantumUnavailableLocation_;
   // The daemon stopped the tunnel underneath us (PollDaemonHealth saw it).
   // Forces tunnelBound false in EVERY subsequent reading until a new
   // start_tunnel clears it — see ReadConnectReading. Atomic because the poll
