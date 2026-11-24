@@ -8263,6 +8263,21 @@ msgctxt "post_quantum_identity_explanation"
 msgid "Your provider identity key is stored locally on this device. If any peer's key appears different than their locally stored key, it means the network operator cannot be trusted."
 msgstr "يُخزَّن مفتاح هوية المزوّد الخاص بك محليًا على هذا الجهاز. إذا ظهر مفتاح أي قرين مختلفًا عن مفتاحه المخزَّن محليًا، فهذا يعني أنه لا يمكن الوثوق بمشغّل الشبكة."
 
+#. Connect screen notice, shown in place of the connecting state while post-quantum encryption is on and the selected location has no post-quantum exits right now (the sdk's ConnectViewController.GetPostQuantumUnavailable), so the reader can choose instead of waiting on a connection that cannot complete. {location} is the location's name as the location list shows it, inserted as is, so no case ending or preposition can attach to it. Two actions follow: post_quantum_no_exits_pick_location and post_quantum_no_exits_turn_off.
+msgctxt "post_quantum_no_exits"
+msgid "No post-quantum exits in {} right now"
+msgstr "لا توجد مخارج ما بعد الكمومية في {} حاليًا"
+
+#. Connect screen notice (post_quantum_no_exits): the first action, which opens the location picker so the reader can choose a location with post-quantum exits. Nothing changes until the reader picks one.
+msgctxt "post_quantum_no_exits_pick_location"
+msgid "Pick another location"
+msgstr "اختر موقعًا آخر"
+
+#. Connect screen notice (post_quantum_no_exits): the second action, which turns post-quantum encryption off and saves it, as the option's own switch (post_quantum_encryption) does, so the connection can use the location's other exits. Name the option as its label does.
+msgctxt "post_quantum_no_exits_turn_off"
+msgid "Turn off post-quantum"
+msgstr "إيقاف التشفير ما بعد الكمومي"
+
 #. Button under the strict Private DNS notice that opens the Android wireless/network settings screen (there is no public Private DNS intent).
 msgctxt "private_dns_open_settings"
 msgid "Open network settings"

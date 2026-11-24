@@ -230,6 +230,16 @@ struct ConnectReading {
   // read only while it can matter: a session up, the controller not saying
   // CONNECTED, the presentation open. "" otherwise.
   std::string stallReason;
+  // The SDK's notice that the selected location has no post-quantum exits
+  // right now (ConnectViewController::getPostQuantumUnavailable; owner,
+  // 2026-11-24): set only while post-quantum encryption is on, the selection
+  // is a location or a group, the controller is not CONNECTED, and the SDK's
+  // check found exits there without post-quantum but none with it. The status
+  // row says so in place of connecting, with its two choices. Read from the
+  // presentation controller, no rpc; false with no session.
+  bool postQuantumUnavailable = false;
+  // the notice's location, by its name as the location list shows it
+  std::string postQuantumUnavailableLocation;
 
   // Value equality, so a consumer can skip a rebuild when nothing moved. It
   // compares EVERY field on purpose: a partial comparison would be one more
@@ -239,7 +249,9 @@ struct ConnectReading {
            destinationSelected == o.destinationSelected && tunnelBound == o.tunnelBound &&
            providerCount == o.providerCount && insufficientBalance == o.insufficientBalance &&
            proofLoss == o.proofLoss && statusObserved == o.statusObserved &&
-           stallReason == o.stallReason;
+           stallReason == o.stallReason &&
+           postQuantumUnavailable == o.postQuantumUnavailable &&
+           postQuantumUnavailableLocation == o.postQuantumUnavailableLocation;
   }
   bool operator!=(const ConnectReading& o) const { return !(*this == o); }
 

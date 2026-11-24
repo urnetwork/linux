@@ -97,6 +97,7 @@ Element order, top to bottom:
   2. `ProtectionText` — `UrSupportingTextStyle` (12px muted, wraps), collapsed by default.
   3. `TrafficHeldText` — same style, collapsed by default.
   4. `StatusReasonText` — same style, collapsed by default.
+  5. `PostQuantumNoticeActions` — vertical StackPanel Spacing 8, Margin 0,4,0,0, collapsed by default: two `UrSecondaryButtonStyle` buttons, `PostQuantumNoticePickLocationButton` Loc("post_quantum_no_exits_pick_location") “Pick another location” and `PostQuantumNoticeTurnOffButton` Loc("post_quantum_no_exits_turn_off") “Turn off post-quantum” (labels set in ApplyStrings). Linux: a vertical Gtk::Box spacing 8, margin-top 4, two `ur-pane-secondary` buttons aligned START, after `daemonNoticeText_`.
 
 **One writer**: `ConnectPage::ApplyConnectStatus()`. It renders the AGGREGATE health (`urnw::health::State`: NoService, Disconnected, Connecting, Evaluating, Connected, Degraded, Failed), not the raw SDK status. Inputs: `health_` (from LiveStats), `connectStatus_` (SDK connect controller: Disconnected/Connecting/DestinationSet/Connected/Failed, parsed case-insensitively from `getConnectionStatus()` strings `"CONNECTED"|"CONNECTING"|"DESTINATION_SET"|"CONNECT_FAILED"`, anything else ⇒ Disconnected), `connected_` (service tunnel), the window’s service facts (`statusRoutesInstalled()`, `statusWfpState()`, `statusStopReason()`, `statusFailsafeArmed()`, `statusSessionMode()`), and balance state (`balanceConfirming()`, `balanceBlocked()`).
 
@@ -146,6 +147,12 @@ NOTE (code wins over doc): the old idle copy “{network} is ready to connect”
 - "auth-failing" ⇒ Adv("conn_reason_auth", "Signing in to the platform is failing…")
 - If render == Failed and no reason matched ⇒ Adv("conn_failed_detail", "No providers could be reached. Retry rebuilds the connection from scratch.")
 - Plain "evaluating" renders nothing (headline already says Finding providers…).
+
+**No post-quantum exits** (owner 2026-11-24, “Tell them, let them choose”). The SDK decides it: `ConnectViewController.getPostQuantumUnavailable()` is non-nil only while post-quantum encryption is on, the selection is a location or a group, the controller is not CONNECTED, and the SDK's check found exits there without post-quantum but none with it; it clears when the location changes, post-quantum turns off, the connection reaches CONNECTED, or the SDK's recheck finds exits. Windows carries it on `LiveStats.postQuantumUnavailable` / `postQuantumUnavailableLocation` (ReadStats, cleared by the rpc-only and service-down clamps), Linux on `ConnectReading.postQuantumUnavailable` / `postQuantumUnavailableLocation` (ReadConnectFacts, cleared with no session); both subscribe `addPostQuantumUnavailableListener` beside the status listener. While the notice is set and render ≠ Connected, ApplyConnectStatus:
+- replaces the headline with Format("post_quantum_no_exits", location name) “No post-quantum exits in {} right now” (the name sanitized as the location row's is), dot `#FF6C58` coral, hero `Error` (no climbing dots);
+- collapses `StatusReasonText` (the notice is the reason); `TrafficHeldText` and the connect action are unchanged;
+- shows `PostQuantumNoticeActions`: Pick another location opens the location chooser (Windows `ShowLocationChooserSheet`, Linux `on_open_locations`); Turn off post-quantum sets the post-quantum switch off inside the echo guard and pushes the profile once through the one writer (Windows `PushPerformanceSettings`, Linux `PushPerformanceProfile`), which saves it to the app's state and the device.
+Nothing else changes: no automatic location switch and no silent downgrade.
 
 The same text+dot is relayed to the window status strip via `w_.ApplyStatusStripConnection(text, dot)` — one derivation, two surfaces.
 

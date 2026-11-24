@@ -602,6 +602,31 @@ void ConnectPage::BuildPaneA() {
   // are DISTINCT actionable states, never a blank — MIGRATION.md)
   daemonNoticeText_ = MakeSupportingLine();
   statusColumn->append(*daemonNoticeText_);
+  // owner 2026-11-24, "Tell them, let them choose": the two choices of the
+  // no-post-quantum-exits notice the status line carries. Stacked, so a
+  // longer translation never pushes the narrow rail wider. Shown only with
+  // the notice (ApplyConnectStatus).
+  postQuantumNoticeActions_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 8);
+  postQuantumNoticeActions_->set_margin_top(4);
+  {
+    auto* pick = Gtk::make_managed<Gtk::Button>(
+        T_("post_quantum_no_exits_pick_location", "Pick another location"));
+    pick->add_css_class("ur-pane-secondary");
+    pick->set_halign(Gtk::Align::START);
+    // the location chooser, as the selected-provider row opens it
+    pick->signal_clicked().connect([this] {
+      if (on_open_locations) on_open_locations();
+    });
+    postQuantumNoticeActions_->append(*pick);
+    auto* turnOff = Gtk::make_managed<Gtk::Button>(
+        T_("post_quantum_no_exits_turn_off", "Turn off post-quantum"));
+    turnOff->add_css_class("ur-pane-secondary");
+    turnOff->set_halign(Gtk::Align::START);
+    turnOff->signal_clicked().connect([this] { TurnOffPostQuantum(); });
+    postQuantumNoticeActions_->append(*turnOff);
+  }
+  postQuantumNoticeActions_->set_visible(false);
+  statusColumn->append(*postQuantumNoticeActions_);
   statusRow->append(*statusColumn);
   paneAContent_->append(*statusRow);
   paneAContent_->append(*kit::MakeDivider());
@@ -2013,7 +2038,7 @@ void ConnectPage::ApplyConnectStatus() {
   const health::Reading view = health::Render(signals);
   renderedState_ = view.state;
 
-  const Glib::ustring text = T_(view.textKey, view.textEnglish);
+  Glib::ustring text = T_(view.textKey, view.textEnglish);
   const char* dot = kDotIdle;
   switch (view.dot) {
     case health::Dot::Green: dot = kDotGreen; break;
@@ -2030,6 +2055,28 @@ void ConnectPage::ApplyConnectStatus() {
     case health::Hero::Processing: heroState = ConnectCanvas::State::Processing; break;
     case health::Hero::Disconnected: heroState = ConnectCanvas::State::Disconnected; break;
   }
+  // ---- no post-quantum exits (owner, 2026-11-24: "Tell them, let them
+  // choose") ----------------------------------------------------------------
+  // The SDK found the selected location with no post-quantum exits while
+  // post-quantum encryption is on, and exits there without it. Rather than a
+  // headline and a hero that say connecting for as long as the user waits,
+  // the line says so and the two choices under it offer the ways out: pick
+  // another location, or turn post-quantum off. Nothing changes until the
+  // user picks one; the location and the setting stay as they are. The
+  // decision is the SDK's (ConnectViewController::getPostQuantumUnavailable),
+  // so this only renders it, never over a connection that has providers.
+  // Windows' ConnectPage::ApplyConnectStatus does the same.
+  const bool postQuantumNotice =
+      reading_.postQuantumUnavailable && view.state != health::State::Connected;
+  if (postQuantumNotice) {
+    // the location's name is external text, filtered as the location row's is
+    text = Format(T_("post_quantum_no_exits", "No post-quantum exits in {} right now"),
+                  SanitizeExternalDisplayText(reading_.postQuantumUnavailableLocation));
+    dot = kDotCoral;
+    // a settled state, not a transition: no climbing dots
+    heroState = ConnectCanvas::State::Error;
+  }
+  postQuantumNoticeActions_->set_visible(postQuantumNotice);
   const bool showNotProtected = view.showNotProtected;
 
   statusText_->set_text(text);
@@ -2055,8 +2102,10 @@ void ConnectPage::ApplyConnectStatus() {
   kit::SetTextOrCollapse(*trafficHeldText_, held);
   // why it is not connected yet, or what Retry does (the SDK's window diagnosis)
   const health::ReasonLine reason = health::ReasonLineFor(view.state, reading_.stallReason);
-  const Glib::ustring reasonText =
-      reason.key ? Glib::ustring(T_(reason.key, reason.english)) : Glib::ustring();
+  // the post-quantum notice is the reason, and its line says it
+  const Glib::ustring reasonText = !postQuantumNotice && reason.key
+                                       ? Glib::ustring(T_(reason.key, reason.english))
+                                       : Glib::ustring();
   kit::SetTextOrCollapse(*statusReasonText_, reasonText);
   // The daemon's notice first: it says what already happened. The failsafe's
   // warning says what happens next if nothing changes.
@@ -3688,6 +3737,18 @@ void ConnectPage::PushPerformanceProfile() {
   }
   host_.SetPerformanceProfile(profile);
   profileSig_ = ProfileSig(profile);  // our own write is not a feed change
+}
+
+// The no-post-quantum-exits notice's second choice: post-quantum off, through
+// the option's own switch and the one profile writer, which saves it to the
+// app's state and the device. Quietly flipped, pushed once, as
+// OnConnectionModeChanged moves Fixed IP.
+void ConnectPage::TurnOffPostQuantum() {
+  if (!pqeToggle_ || !pqeToggle_->get_active()) return;
+  updatingControls_ = true;
+  pqeToggle_->set_active(false);
+  updatingControls_ = false;
+  PushPerformanceProfile();
 }
 
 // ---- pane A: the selected provider and the network peers -----------------------
