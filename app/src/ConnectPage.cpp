@@ -3627,11 +3627,13 @@ void ConnectPage::OnExtenderToggled() {
 
 // ---- connect options: the performance profile (§2.8) ---------------------------
 // The Linux SdkHost exposes GetPerformanceProfile/SetPerformanceProfile, and a
-// nil profile means Auto with everything off.
+// nil profile is the SDK's default profile: Auto, direct off and post-quantum on
+// (urnet::defaultPerformanceProfile).
 
 void ConnectPage::SeedConnectControls() {
   if (!modeAuto_ || !fixedIpToggle_ || !anonToggle_ || !pqeToggle_) return;
-  const auto profile = host_.GetPerformanceProfile();
+  auto profile = host_.GetPerformanceProfile();
+  if (!profile) profile = urnet::defaultPerformanceProfile();
   updatingControls_ = true;
   if (profile && profile->window_type == urnet::WindowTypeQuality) {
     modeWeb_->set_active(true);
