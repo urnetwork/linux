@@ -10122,6 +10122,11 @@ msgctxt "site_payment_error_plan_unavailable"
 msgid "This plan is not available right now. Try again later."
 msgstr "Cette offre n'est pas disponible pour le moment. Réessayez plus tard."
 
+#. ur.io Connect screen: the note on the post quantum encryption option, which is off and cannot be turned on in the browser. The browser's connections run on hosted devices, which run without post-quantum encryption; the desktop and mobile apps have it on by default. Name the option by its label (post_quantum_encryption), exactly as the apps show it.
+msgctxt "site_post_quantum_encryption_in_apps"
+msgid "Post Quantum Encryption is available in the desktop and mobile apps."
+msgstr "Le Chiffrement post-quantique est disponible dans les apps pour ordinateur et mobile."
+
 #. Instant account creation: heading of the view that shows the new seedphrase once.
 msgctxt "site_save_your_seedphrase"
 msgid "Save Your Seedphrase"
