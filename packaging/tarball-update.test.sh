@@ -325,8 +325,141 @@ run_update --dry-run
 [ -s "$case_dir/curl.log" ] && fail "dryrun: made a request: $(tr '\n' ' ' <"$case_dir/curl.log")"
 grep -q 'urnetwork/linux' "$case_dir/out" || fail "dryrun: the plan does not name urnetwork/linux"
 
+# ---- release signature (SHA256SUMS + SHA256SUMS.sig) ------------------------
+#
+# A test key is generated here and handed to the installer through its
+# test-only UR_TEST_RELEASE_SIG_PUBKEY hook. The verifying openssl must do
+# ed25519 with pkeyutl -rawin (OpenSSL 3); macOS's /usr/bin/openssl is
+# LibreSSL, so Homebrew's openssl@3 is preferred when present.
+ossl=''
+for cand in "$(brew --prefix openssl@3 2>/dev/null)/bin/openssl" \
+            /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl \
+            "$(command -v openssl 2>/dev/null || true)"; do
+    [ -x "$cand" ] || continue
+    if "$cand" genpkey -algorithm ed25519 -out "$run_dir/probe.pem" >/dev/null 2>&1 && \
+       "$cand" pkeyutl -help 2>&1 | grep -q -- '-rawin'; then
+        ossl="$cand"; break
+    fi
+done
+
+if [ -z "$ossl" ]; then
+    echo "SKIP: signature cases (no OpenSSL 3 with ed25519 pkeyutl -rawin on this host)" >&2
+else
+    echo "signature cases use $ossl ($("$ossl" version))"
+    ln -sf "$ossl" "$bin/openssl"
+    # An openssl that cannot verify raw ed25519 (LibreSSL / 1.1.1 shape).
+    weak_bin="$run_dir/weakbin"
+    mkdir -p "$weak_bin"
+    cp "$bin/uname" "$bin/curl" "$weak_bin/"
+    cat >"$weak_bin/openssl" <<EOF
+#!/bin/sh
+if [ "\$1" = pkeyutl ]; then echo "usage: pkeyutl [-in file] [-sigfile file]" >&2; exit 1; fi
+exec "$ossl" "\$@"
+EOF
+    chmod 0755 "$weak_bin/openssl"
+
+    raw_pub() { "$ossl" pkey -in "$1" -pubout -outform DER | tail -c 32 | "$ossl" base64 -A; }
+    "$ossl" genpkey -algorithm ed25519 -out "$run_dir/test.key" 2>/dev/null
+    "$ossl" genpkey -algorithm ed25519 -out "$run_dir/other.key" 2>/dev/null
+    test_pub="$(raw_pub "$run_dir/test.key")"
+
+    sign() {  # sign <key> <sums file> <out .sig>: base64 std signature + newline
+        "$ossl" pkeyutl -sign -inkey "$1" -rawin -in "$2" -out "$3.bin"
+        { "$ossl" base64 -A -in "$3.bin"; printf '\n'; } >"$3"
+    }
+    sums_url="https://github.com/urnetwork/linux/releases/download/$tag/SHA256SUMS"
+    sig_url="$sums_url.sig"
+
+    # signed_case <name> <sums content> <key>: release + sums + sig mapped.
+    signed_case() {
+        setup_case "$1"
+        release_json "$case_dir/release.json" false false "$(asset_json "$asset" "$asset_url" "$good_digest")"
+        map_url "$api_url" 200 "$case_dir/release.json"
+        map_url "$asset_url" 200 "$tarball"
+        printf '%s' "$2" >"$case_dir/SHA256SUMS"
+        sign "$3" "$case_dir/SHA256SUMS" "$case_dir/SHA256SUMS.sig"
+        map_url "$sums_url" 200 "$case_dir/SHA256SUMS"
+        map_url "$sig_url" 200 "$case_dir/SHA256SUMS.sig"
+    }
+    good_sums="$(printf '%s  %s\n%s  %s\n' "${bad_digest#sha256:}" "urnetwork-daemon-$version-arm64.install.tar.gz" "${good_digest#sha256:}" "$asset")
+"
+
+    # S1. Signed by the release key, tarball line matches: installed.
+    signed_case sig-good "$good_sums" "$run_dir/test.key"
+    UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -ne 0 ] || ! ran_update; then fail "sig-good: a correctly signed release was not installed (exit $rc)"; show; fi
+    grep -q 'release signature verified' "$case_dir/out" || fail "sig-good: did not report the verified signature"
+    requested "$sig_url" || fail "sig-good: never fetched SHA256SUMS.sig"
+
+    # S1b. Same with signatures required.
+    signed_case sig-good-required "$good_sums" "$run_dir/test.key"
+    UR_REQUIRE_SIG=1 UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -ne 0 ] || ! ran_update; then fail "sig-good-required: exit $rc"; show; fi
+
+    # S2. Signed by some other key: refused.
+    signed_case sig-wrongkey "$good_sums" "$run_dir/other.key"
+    UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -eq 0 ] || ran_update; then fail "sig-wrongkey: installed a release signed by another key"; fi
+    stderr_has 'does NOT verify' || { fail "sig-wrongkey: refusal does not say the signature failed"; show; }
+
+    # S2b. Without the test hook the built-in key is used: a test-key
+    #      signature does not verify against it.
+    signed_case sig-builtin-key "$good_sums" "$run_dir/test.key"
+    run_update --yes
+    if [ "$rc" -eq 0 ] || ran_update; then fail "sig-builtin-key: a test-key signature passed against the release key"; fi
+
+    # S3. SHA256SUMS altered after signing: refused.
+    signed_case sig-tampered "$good_sums" "$run_dir/test.key"
+    printf '%s  %s\n' "${good_digest#sha256:}" "extra-file" >>"$case_dir/SHA256SUMS"
+    UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -eq 0 ] || ran_update; then fail "sig-tampered: installed despite altered SHA256SUMS"; fi
+
+    # S4. Validly signed, but the tarball's line names other bytes: refused
+    #     (the GitHub digest alone would have passed it).
+    signed_case sig-wronghash "$(printf '%s  %s\n' "${bad_digest#sha256:}" "$asset")" "$run_dir/test.key"
+    UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -eq 0 ] || ran_update; then fail "sig-wronghash: installed a tarball whose signed sha256 differs"; fi
+    stderr_has 'does not match the signed SHA256SUMS' || { fail "sig-wronghash: refusal does not say why"; show; }
+
+    # S5. Validly signed, no line for this tarball: refused.
+    signed_case sig-noline "$(printf '%s  %s\n' "${good_digest#sha256:}" "something-else.tar.gz")" "$run_dir/test.key"
+    UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -eq 0 ] || ran_update; then fail "sig-noline: installed with no SHA256SUMS line for $asset"; fi
+    stderr_has 'no line for' || { fail "sig-noline: refusal does not say why"; show; }
+
+    # S6. A corrupt .sig (not 64 bytes): refused.
+    signed_case sig-short "$good_sums" "$run_dir/test.key"
+    printf 'AAAA\n' >"$case_dir/SHA256SUMS.sig"
+    UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -eq 0 ] || ran_update; then fail "sig-short: installed with a truncated signature"; fi
+
+    # S7. No .sig: staged default warns and installs; REQUIRE_SIG=1 refuses.
+    setup_case sig-absent
+    release_json "$case_dir/release.json" false false "$(asset_json "$asset" "$asset_url" "$good_digest")"
+    map_url "$api_url" 200 "$case_dir/release.json"
+    map_url "$asset_url" 200 "$tarball"
+    UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -ne 0 ] || ! ran_update; then fail "sig-absent: staged mode refused an unsigned release (exit $rc)"; show; fi
+    stderr_has 'no SHA256SUMS.sig' || { fail "sig-absent: no warning about the missing signature"; show; }
+    rm -f "$case_dir/marker"
+    UR_REQUIRE_SIG=1 UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -eq 0 ] || ran_update; then fail "sig-absent: REQUIRE_SIG=1 installed an unsigned release"; fi
+
+    # S8. .sig present but openssl cannot verify ed25519: warn (staged) or
+    #     refuse (required).
+    signed_case sig-weak-openssl "$good_sums" "$run_dir/other.key"
+    saved_bin="$bin"; bin="$weak_bin"
+    UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -ne 0 ] || ! ran_update; then fail "sig-weak-openssl: staged mode refused (exit $rc)"; show; fi
+    stderr_has 'cannot verify ed25519' || { fail "sig-weak-openssl: no warning about openssl"; show; }
+    rm -f "$case_dir/marker"
+    UR_REQUIRE_SIG=1 UR_TEST_RELEASE_SIG_PUBKEY="$test_pub" run_update --yes
+    if [ "$rc" -eq 0 ] || ran_update; then fail "sig-weak-openssl: REQUIRE_SIG=1 installed unverified"; fi
+    bin="$saved_bin"
+fi
+
 if [ "$failures" -gt 0 ]; then
     echo "$failures failure(s)" >&2
     exit 1
 fi
-echo "ok: install.sh --update resolves, verifies and refuses as specified"
+echo "ok: install.sh --update resolves, verifies (digest and signature) and refuses as specified"
