@@ -400,6 +400,13 @@ struct Selection {
   std::string assetName;
   std::string assetUrl;
   std::string digestHex;  // lowercase
+  // The signed checksum pair (UpdateSignature.hpp), from the SAME release.
+  // sigAttached says a SHA256SUMS.sig is listed at all; its URL (and the
+  // SHA256SUMS URL) stay empty unless hosted by the official repo, and an
+  // attached signature with no usable URL is refused at apply time.
+  bool sigAttached = false;
+  std::string sumsUrl;
+  std::string sigUrl;
 
   // code outranks the running build. A dev build (own code 0) is never
   // offered anything: nothing is "newer" than unversioned in a way that is
@@ -469,6 +476,17 @@ inline Selection SelectRelease(const std::vector<Release>& releases, std::uint64
     if (digestHex.empty()) {
       s.skipped.push_back({rel.tag, "lacks a usable digest for " + name});
       continue;
+    }
+    s.sigAttached = false;
+    s.sumsUrl.clear();
+    s.sigUrl.clear();
+    for (const auto& asset : rel.assets) {
+      if (asset.name == "SHA256SUMS.sig") {
+        s.sigAttached = true;
+        if (IsFeedAssetUrl(rel.tag, asset.name, asset.url)) s.sigUrl = asset.url;
+      } else if (asset.name == "SHA256SUMS" && IsFeedAssetUrl(rel.tag, asset.name, asset.url)) {
+        s.sumsUrl = asset.url;
+      }
     }
     s.code = code;
     s.version = ver;
