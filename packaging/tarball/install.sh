@@ -15,6 +15,16 @@
 # replaced, and the previous install is restored if anything fails while the
 # daemon is stopped.
 #
+# On Debian, Ubuntu and their derivatives (ID or ID_LIKE says debian/ubuntu
+# and apt-get exists) a FRESH install goes through the apt repository instead:
+# it adds https://apt.ur.io (keyring in /etc/apt/keyrings, deb822 source in
+# /etc/apt/sources.list.d/urnetwork.sources) and runs
+# `apt-get install urnetwork-daemon`, so apt owns the files and upgrades them.
+# If that fails, the repository files it added are removed again and the
+# tarball install runs instead, with a warning. An existing tarball install
+# stays a tarball install (apt would silently take over its files); run
+# uninstall.sh first to switch. --no-apt forces the tarball path.
+#
 # It REFUSES to run where dpkg, rpm or pacman already owns these paths: two
 # package managers owning the same files is the worst failure available here,
 # and it is silent until an upgrade half-replaces them. Use the distribution's
@@ -41,11 +51,18 @@
 #                   one of github.com/urnetwork/linux, read from the GitHub
 #                   releases API; the tarball must match the sha256 digest the
 #                   API reports for it before anything in it runs.
+#                   When the release has SHA256SUMS.sig (ed25519) and this
+#                   host's openssl can check it, the signature and the
+#                   tarball's SHA256SUMS line must verify too (staged: a
+#                   missing signature only warns for now). On an apt-managed
+#                   install this runs apt-get install --only-upgrade instead.
 #   --url <url>     with --update: fetch this tarball instead of asking the
 #                   API (also UR_TARBALL_URL)
 #   --sha256 <hex>  with --url: the tarball's expected sha256 (also
 #                   UR_TARBALL_SHA256); without it an explicit URL is
 #                   installed unverified, with a warning
+#   --no-apt        never use the apt repository; install (or --update) from
+#                   the tarball even on Debian/Ubuntu
 #   --force         override downgrade/preflight refusals
 #   --yes           assume yes on prompts
 #   --skip-selftest do not run the post-install egress self-test. That test
@@ -166,6 +183,11 @@ UPDATE_SHA256="${UR_TARBALL_SHA256:-}"
 UPDATE_SOURCE_FLAG=0
 GROUP_ADDED=0
 SKIP_SELFTEST=0
+NO_APT=0
+# TEST HOOK ONLY: roots /etc/os-release, /etc/apt and the install manifests
+# the apt decision reads under a scratch directory, so packaging/*.test.sh can
+# exercise the apt path on any host. Never set on a real install.
+TEST_ROOT="${UR_INSTALL_TEST_ROOT:-}"
 # Accumulated across preflight so the last thing on screen can be ONE install
 # command instead of five scattered warnings the tester has to reassemble.
 MISSING_PKGS=''
@@ -282,6 +304,7 @@ while [ $# -gt 0 ]; do
         --url)     UPDATE_URL_OVERRIDE="${2:?--url needs a tarball URL}"; UPDATE_SOURCE_FLAG=1; shift 2 ;;
         --sha256)  UPDATE_SHA256="${2:?--sha256 needs a hex digest}"; UPDATE_SOURCE_FLAG=1; shift 2 ;;
         --skip-selftest) SKIP_SELFTEST=1; shift ;;
+        --no-apt)  NO_APT=1; shift ;;
         --force)   FORCE=1; shift ;;
         --yes|-y)  ASSUME_YES=1; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -312,8 +335,8 @@ esac
 # /etc/os-release is shell syntax by spec, but this script runs as root and
 # reading three fields does not justify sourcing a file to find that out.
 os_release_field() {
-    [ -r /etc/os-release ] || return 0
-    sed -n "s/^$1=//p" /etc/os-release 2>/dev/null | head -n1 | tr -d "\"'"
+    [ -r "${TEST_ROOT}/etc/os-release" ] || return 0
+    sed -n "s/^$1=//p" "${TEST_ROOT}/etc/os-release" 2>/dev/null | head -n1 | tr -d "\"'"
 }
 DISTRO_ID="$(os_release_field ID)"
 DISTRO_LIKE="$(os_release_field ID_LIKE)"
@@ -579,6 +602,198 @@ CURL_SAFE=(--proto '=https' --proto-redir '=https' --tlsv1.2)
 if [ "${DO_UPDATE}" != 1 ] && [ "${UPDATE_SOURCE_FLAG}" = 1 ]; then
     die "--url and --sha256 only apply with --update"
 fi
+
+# ---------------------------------------------------------------------------
+# Release signature (SHA256SUMS + SHA256SUMS.sig)
+# ---------------------------------------------------------------------------
+# Every stable release carries SHA256SUMS ("<64 hex>  <asset name>" lines) and
+# SHA256SUMS.sig: the base64 (standard alphabet) ed25519 signature over the
+# exact SHA256SUMS bytes, plus a newline. The GitHub digest above proves the
+# bytes are what was uploaded; the signature proves WE uploaded them -- an
+# attacker with write access to the release can replace both an asset and its
+# digest, but cannot sign.
+#
+# STAGED: REQUIRE_SIG=0 until every release carries the signature. Until then
+# a missing .sig, or a host whose openssl cannot verify ed25519, only warns. A
+# .sig that IS present and checkable must verify, and the tarball's own line
+# in SHA256SUMS must match, or the update is refused -- whatever REQUIRE_SIG
+# says. UR_REQUIRE_SIG=1 can only raise it, never lower it.
+REQUIRE_SIG=0
+if [ "${UR_REQUIRE_SIG:-}" = 1 ]; then REQUIRE_SIG=1; fi
+# Raw 32-byte ed25519 public key, base64.
+RELEASE_SIG_PUBKEY='Qm4V/UTZcuIRMFJuAzDhxf2CK6ycwxF0HFOcFhXBIYQ='
+# TEST HOOK ONLY: packaging/tarball-update.test.sh signs with a key it
+# generates. Announced loudly so it can never pass unnoticed.
+if [ -n "${UR_TEST_RELEASE_SIG_PUBKEY:-}" ]; then
+    RELEASE_SIG_PUBKEY="${UR_TEST_RELEASE_SIG_PUBKEY}"
+    warn "UR_TEST_RELEASE_SIG_PUBKEY is set: verifying release signatures with a TEST key"
+fi
+
+sig_unverifiable() {  # sig_unverifiable <reason> -- refuse or warn per REQUIRE_SIG
+    if [ "${REQUIRE_SIG}" = 1 ]; then
+        die "$1 -- refusing to install without a verified release signature"
+    fi
+    warn "$1 -- continuing with the sha256 check only (release signatures are not yet required)"
+}
+
+# openssl_ed25519_ok <pem> -> 0 when this openssl can verify ed25519 over a
+# raw message (OpenSSL >= 3.0; LibreSSL and OpenSSL 1.1.1 lack pkeyutl -rawin).
+openssl_ed25519_ok() {
+    command -v openssl >/dev/null 2>&1 || return 1
+    openssl pkey -pubin -in "$1" -noout >/dev/null 2>&1 || return 1
+    openssl pkeyutl -help 2>&1 | grep -q -- '-rawin'
+}
+
+# verify_release_signature <tarball> <tarball url> <work dir> -- dies on any
+# failure of a checkable signature; SHA256SUMS lives next to the tarball.
+verify_release_signature() {
+    local tarball="$1" url="$2" dir="$3" base name sums sig sigbin pem actual expected
+    base="${url%/*}"; name="${url##*/}"; name="${name%%\?*}"
+    sums="${dir}/SHA256SUMS"; sig="${dir}/SHA256SUMS.sig"
+    sigbin="${dir}/SHA256SUMS.sig.bin"; pem="${dir}/release-key.pem"
+    if ! curl -fsSL "${CURL_SAFE[@]}" -o "${sig}" "${base}/SHA256SUMS.sig" 2>/dev/null; then
+        rm -f "${sig}"
+        sig_unverifiable "this release has no SHA256SUMS.sig (${base}/SHA256SUMS.sig)"
+        return 0
+    fi
+    printf '%s' "${RELEASE_SIG_PUBKEY}" | grep -Eq '^[A-Za-z0-9+/]{43}=$' || \
+        die "the release signing key is not a base64 32-byte ed25519 key"
+    # SPKI DER = 302a300506032b6570032100 || key. The 12-byte prefix is a
+    # whole number of base64 groups, so its base64 simply prefixes the key's.
+    printf -- '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA%s\n-----END PUBLIC KEY-----\n' \
+        "${RELEASE_SIG_PUBKEY}" >"${pem}"
+    if ! openssl_ed25519_ok "${pem}"; then
+        sig_unverifiable "this host's openssl cannot verify ed25519 signatures (needs OpenSSL 3 with pkeyutl -rawin)"
+        return 0
+    fi
+    curl -fsSL "${CURL_SAFE[@]}" -o "${sums}" "${base}/SHA256SUMS" || \
+        die "the release has SHA256SUMS.sig but SHA256SUMS could not be fetched -- refusing it"
+    tr -d ' \t\r\n' <"${sig}" | openssl base64 -d -A -out "${sigbin}" 2>/dev/null || \
+        die "SHA256SUMS.sig is not base64 -- refusing it"
+    [ "$(wc -c <"${sigbin}" | tr -d ' ')" = 64 ] || \
+        die "SHA256SUMS.sig is not a 64-byte ed25519 signature -- refusing it"
+    openssl pkeyutl -verify -pubin -inkey "${pem}" -rawin -in "${sums}" -sigfile "${sigbin}" >/dev/null 2>&1 || \
+        die "SHA256SUMS.sig does NOT verify against the URnetwork release key -- refusing to install it"
+    log "release signature verified (SHA256SUMS)"
+    expected="$(awk -v n="${name}" 'NF == 2 && $2 == n && length($1) == 64 && $1 ~ /^[0-9a-fA-F]+$/ { print tolower($1); exit }' "${sums}")"
+    [ -n "${expected}" ] || die "the signed SHA256SUMS has no line for ${name} -- refusing it"
+    actual="$(sha256_hex "${tarball}")" || die "cannot hash the download: no sha256sum, shasum or openssl on this host"
+    [ "${actual}" = "${expected}" ] || \
+        die "${name} does not match the signed SHA256SUMS (expected ${expected}, got ${actual}) -- refusing to install it"
+    log "signed sha256 matches: ${name}"
+}
+
+# ---------------------------------------------------------------------------
+# apt channel (Debian, Ubuntu and derivatives)
+# ---------------------------------------------------------------------------
+# The .deb (packaging/deb/nfpm.yaml) is the SAME package name, the same paths
+# and the same unit as this tarball, so the two must never both be installed:
+# the dpkg guard below refuses a tarball install over a dpkg-owned one, and
+# the apt path is not taken over an existing tarball install (dpkg would
+# overwrite the unowned files without a word, and the tarball's manifest would
+# then describe files apt owns).
+APT_REPO_URL='https://apt.ur.io'
+APT_KEY_URL="${APT_REPO_URL}/urnetwork-archive-keyring.gpg"
+APT_KEYRING="${TEST_ROOT}/etc/apt/keyrings/urnetwork-archive-keyring.gpg"
+APT_SOURCES="${TEST_ROOT}/etc/apt/sources.list.d/urnetwork.sources"
+
+apt_eligible() {
+    [ "${NO_APT}" = 0 ] || return 1
+    [ -z "${PREFIX}" ] || return 1
+    # An explicit tarball URL/digest is a request for the tarball.
+    [ "${UPDATE_SOURCE_FLAG}" = 0 ] && [ -z "${UPDATE_URL_OVERRIDE}" ] || return 1
+    [ "${HOST_OS}" = 'Linux' ] || return 1
+    [ ! -f "${TEST_ROOT}/run/ostree-booted" ] || return 1
+    command -v apt-get >/dev/null 2>&1 || return 1
+    case " ${DISTRO_ID} ${DISTRO_LIKE} " in
+        *" debian "*|*" ubuntu "*) return 0 ;;
+    esac
+    return 1
+}
+
+dpkg_installed() {
+    command -v dpkg >/dev/null 2>&1 || return 1
+    (dpkg -s "${PKG_NAME}" 2>/dev/null || true) | grep -q '^Status: .* installed$'
+}
+
+tarball_installed() {
+    [ -f "${TEST_ROOT}/usr/lib/urnetwork/.install-manifest" ] || \
+        [ -f "${TEST_ROOT}/usr/local/lib/urnetwork/.install-manifest" ]
+}
+
+need_root_for_apt() {
+    [ "${DRY_RUN}" = 1 ] || [ "$(id -u)" = 0 ] || die "must run as root (sudo urnetwork-daemon/install.sh)"
+}
+
+# apt_install -> 0 on success; on failure removes the repository files it
+# added and returns 1.
+apt_install() {
+    local added_key=0 added_sources=0 tmpkey
+    run install -d -m 0755 "${TEST_ROOT}/etc/apt/keyrings"
+    if [ ! -f "${APT_KEYRING}" ]; then
+        if [ "${DRY_RUN}" = 1 ]; then
+            printf 'would run: curl -fsSL %s -o %s\n' "${APT_KEY_URL}" "${APT_KEYRING}"
+        else
+            tmpkey="$(mktemp "${TMPDIR:-/tmp}/urnetwork-key.XXXXXX")"
+            if ! curl -fsSL "${CURL_SAFE[@]}" -o "${tmpkey}" "${APT_KEY_URL}" || [ ! -s "${tmpkey}" ]; then
+                rm -f "${tmpkey}"
+                warn "could not fetch the apt signing key from ${APT_KEY_URL}"
+                return 1
+            fi
+            install -m 0644 "${tmpkey}" "${APT_KEYRING}"
+            rm -f "${tmpkey}"
+            added_key=1
+        fi
+    fi
+    if [ ! -f "${APT_SOURCES}" ]; then
+        if [ "${DRY_RUN}" = 1 ]; then
+            printf 'would write %s\n' "${APT_SOURCES}"
+        else
+            install -d -m 0755 "${APT_SOURCES%/*}"
+            printf 'Types: deb\nURIs: %s\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/urnetwork-archive-keyring.gpg\n' \
+                "${APT_REPO_URL}" >"${APT_SOURCES}"
+            chmod 0644 "${APT_SOURCES}"
+            added_sources=1
+        fi
+    fi
+    if run apt-get update && run apt-get install -y "${PKG_NAME}"; then
+        return 0
+    fi
+    # Leave no half-configured repository behind: a source that cannot be
+    # fetched makes every later `apt-get update` on this machine fail.
+    if [ "${added_sources}" = 1 ]; then rm -f "${APT_SOURCES}"; fi
+    if [ "${added_key}" = 1 ]; then rm -f "${APT_KEYRING}"; fi
+    return 1
+}
+
+if apt_eligible; then
+    if [ "${DO_UPDATE}" = 1 ]; then
+        if dpkg_installed; then
+            need_root_for_apt
+            log "${PKG_NAME} is managed by apt -- updating through apt"
+            run apt-get update || die "apt-get update failed"
+            run apt-get install -y --only-upgrade "${PKG_NAME}" || die "apt-get install --only-upgrade ${PKG_NAME} failed"
+            exit 0
+        fi
+    elif tarball_installed; then
+        note "an existing tarball install is present -- upgrading it from this tarball (run uninstall.sh first to switch to apt)"
+    else
+        need_root_for_apt
+        log "Debian/Ubuntu host: installing ${PKG_NAME} from the apt repository ${APT_REPO_URL}"
+        if apt_install; then
+            if [ "${DRY_RUN}" = 1 ]; then
+                log "[dry-run] if apt fails, the tarball install below would run instead"
+            else
+                log "installed ${PKG_NAME} through apt; future updates come with apt upgrade"
+                exit 0
+            fi
+        elif dpkg_installed; then
+            die "apt failed part-way, but dpkg now has ${PKG_NAME} -- not installing the tarball over it; fix apt first (sudo apt-get -f install)"
+        else
+            warn "the apt install did not succeed -- falling back to the tarball install (use --no-apt to skip apt)"
+        fi
+    fi
+fi
 if [ "${DO_UPDATE}" = 1 ]; then
     [ "${HOST_ARCH}" != 'unsupported' ] || die "unsupported architecture '${HOST_ARCH_RAW}' -- URnetwork ships amd64 and arm64 only"
     UPDATE_SHA256="$(printf '%s' "${UPDATE_SHA256}" | tr 'A-F' 'a-f')"
@@ -653,6 +868,7 @@ if [ "${DO_UPDATE}" = 1 ]; then
     log "fetching ${UPDATE_URL} ..."
     curl -fsSL "${CURL_SAFE[@]}" -o "${UPDATE_TARBALL}" "${UPDATE_URL}" || die "download failed: ${UPDATE_URL}"
     [ -z "${UPDATE_DIGEST}" ] || verify_sha256 "${UPDATE_TARBALL}" "${UPDATE_DIGEST}"
+    verify_release_signature "${UPDATE_TARBALL}" "${UPDATE_URL}" "${UPDATE_TMP}"
     tar xzf "${UPDATE_TARBALL}" -C "${UPDATE_TMP}" || die "the downloaded tarball did not extract"
     [ -f "${UPDATE_TMP}/urnetwork-daemon/install.sh" ] || die "downloaded tarball has no urnetwork-daemon/install.sh"
     trap - EXIT
