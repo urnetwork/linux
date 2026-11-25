@@ -17,6 +17,7 @@
 #include <cstring>
 #include <dirent.h>
 #include <exception>
+#include <optional>
 #include <fstream>
 #include <string>
 #include <utility>
@@ -25,6 +26,7 @@
 #include "AppPrefs.hpp"
 #include "Ui.hpp"
 #include "UpdateSchedule.hpp"
+#include "UpdateSignature.hpp"
 
 // The build stamp: meson passes -DUR_APP_VERSION into the GUI (see
 // meson.build); the fallback keeps this TU self-contained, the same idiom
@@ -604,7 +606,8 @@ void UpdateChecker::RunCheck() {
     if (kOwnCode == 0) {
       snapshot_.lastCheck = sel.newestCode ? CheckOutcome::DevBuild : CheckOutcome::NoUpdate;
     } else if (sel.updateAvailable) {
-      offer_ = Offer{sel.code, sel.version, sel.assetName, sel.assetUrl, sel.digestHex};
+      offer_ = Offer{sel.code,      sel.version,     sel.assetName, sel.assetUrl,
+                     sel.digestHex, sel.sigAttached, sel.sumsUrl, sel.sigUrl};
       snapshot_.lastCheck = CheckOutcome::UpdateFound;
       // A different (newer) release replaces whatever the notice said about
       // an older one; the SAME release keeps its standing Ready/Downloaded/
@@ -721,6 +724,52 @@ void UpdateChecker::RunApply() {
     return;
   }
   g_message("update: verified %s (%s)", offer.assetName.c_str(), actual.c_str());
+
+  // ---- (b2) the signed SHA256SUMS (UpdateSignature.hpp) -------------------------
+  // Staged: an attached SHA256SUMS.sig must verify and vouch for this file;
+  // an unsigned release proceeds on the digest alone, with a warning, until
+  // update::kRequireUpdateSignature is true.
+  {
+    const auto fetchSmall = [this](const std::string& url,
+                                   std::uint64_t cap) -> std::optional<std::string> {
+      if (url.empty()) return std::nullopt;
+      std::string bytes;
+      std::string error;
+      const bool ok = FetchUrl(
+          url, nullptr, cap, /*followRedirects=*/true, cancellable_,
+          [&bytes](const char* data, gsize n) {
+            bytes.append(data, n);
+            return true;
+          },
+          nullptr, error);
+      if (!ok) {
+        g_warning("update: fetching %s failed: %s", url.c_str(), error.c_str());
+        return std::nullopt;
+      }
+      return bytes;
+    };
+    std::optional<std::string> sig;
+    std::optional<std::string> sums;
+    if (offer.sigAttached) {
+      sig = fetchSmall(offer.sigUrl, update::kMaxSigBytes);
+      sums = fetchSmall(offer.sumsUrl, update::kMaxSumsBytes);
+    }
+    const update::SignatureCheck signature = update::CheckReleaseSignature(
+        offer.sigAttached, sums, sig, offer.assetName, actual, update::kUpdateSigningPublicKey,
+        update::kRequireUpdateSignature);
+    if (signature.verdict == update::SignatureVerdict::Refused) {
+      g_warning("update: signature check refused %s: %s", offer.assetName.c_str(),
+                signature.reason.c_str());
+      ::unlink(part.c_str());
+      fail(Failure::Checksum);
+      return;
+    }
+    if (signature.verdict == update::SignatureVerdict::Unsigned) {
+      g_warning("update: %s -- proceeding on the asset digest alone", signature.reason.c_str());
+    } else {
+      g_message("update: SHA256SUMS.sig verified for %s", offer.assetName.c_str());
+    }
+  }
 
   // ---- (c) make it the image ----------------------------------------------------
   Mutate([](Snapshot& s) { s.phase = Phase::Installing; });

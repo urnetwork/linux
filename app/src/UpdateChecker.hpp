@@ -153,6 +153,9 @@ class UpdateChecker {
     std::string assetName;
     std::string assetUrl;
     std::string digestHex;
+    bool sigAttached = false;
+    std::string sumsUrl;
+    std::string sigUrl;
   };
 
   void WorkerLoop();

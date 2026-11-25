@@ -37,6 +37,10 @@ libsecret = dependency('libsecret-1', required : get_option('gui'))
 # the daemon never fetches anything. Ubuntu 24.04 ships it as
 # libsoup-3.0-dev; the GNOME 49 Flatpak runtime carries it.
 libsoup = dependency('libsoup-3.0', required : get_option('gui'))
+# The updater's signed SHA256SUMS check (src/UpdateSignature.hpp): ed25519
+# through OpenSSL 3's EVP. GUI and tests only -- the daemon never verifies a
+# download.
+libcrypto = dependency('libcrypto', version : '>= 3.0', required : get_option('gui'))
 build_gui = gtkmm.found() and adwaita.found()
 
 gio     = dependency('gio-2.0')         # raw GDBus C API for the SNI tray (also brings glib/gobject)
@@ -131,7 +135,7 @@ pkgdata_args = ['-DUR_PKGDATADIR="' + pkgdatadir + '"']
 # Ubuntu 24.04 ships it as libwebkitgtk-6.0-dev.
 webkit = dependency('webkitgtk-6.0', required : false)
 webkit_args = []
-gui_deps = [gtkmm, adwaita, libsecret, libsoup, gio, gio_unix, json, threads, sdk_lib]
+gui_deps = [gtkmm, adwaita, libsecret, libsoup, libcrypto, gio, gio_unix, json, threads, sdk_lib]
 if webkit.found() and build_gui
   gui_deps += webkit
   webkit_args = ['-DUR_HAVE_WEBKIT']
@@ -613,6 +617,14 @@ install_data('assets/carousel/LoginCarousel1.jpg',
 # authorization) carry no GTK, libadwaita or SDK dependency on purpose, so this
 # binary builds and runs anywhere a C++17 compiler does -- including a
 # developer machine that cannot build the app itself.  meson test -C build
+# The signed-SHA256SUMS test needs libcrypto; a GTK-less image without it
+# still builds the rest.
+signature_test_sources = []
+signature_test_deps = []
+if libcrypto.found()
+  signature_test_sources = ['tests/UpdateSignatureTest.cpp']
+  signature_test_deps = [libcrypto]
+endif
 urnetwork_tests = executable('urnetwork-tests',
   sources : [
     'tests/main.cpp',
@@ -844,9 +856,9 @@ urnetwork_tests = executable('urnetwork-tests',
     'src/ConnectCommandQueue.cpp',
     # the crypto invoice's QR (src/PaymentQr.hpp), encoded by the tests too
     'third_party/qrcodegen/qrcodegen.cpp',
-  ],
+  ] + signature_test_sources,
   include_directories : [include_directories('src', 'tests'), qrcodegen_inc],
-  dependencies : [json],
+  dependencies : [json] + signature_test_deps,
   cpp_args : ['-DUR_ASSETS_DIR="' + meson.project_source_root() / 'assets' + '"',
               # CatalogLookupTest reads every GUI source, po/urnetwork.pot and
               # po/linux-keys.txt: each string looked up must be an entry of the

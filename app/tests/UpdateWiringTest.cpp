@@ -231,6 +231,18 @@ UR_TEST(theCheckerVerifiesBeforeItSwapsAndReadsOnlyTheOfficialList) {
   UR_EXPECT_TRUE_MSG("the apply never swaps the image", swap != std::string::npos);
   UR_EXPECT_TRUE_MSG("the digest is compared AFTER the swap", verify < swap);
   UR_EXPECT_TRUE_MSG("the digest is compared AFTER the save", verify < save);
+  // the signed SHA256SUMS is judged after the digest, before either rename,
+  // and a refusal unlinks the download
+  const size_t signature = apply.find("update::CheckReleaseSignature(");
+  const size_t refused = apply.find("signature.verdict == update::SignatureVerdict::Refused");
+  UR_EXPECT_TRUE_MSG("the apply never checks the signed SHA256SUMS",
+                     signature != std::string::npos && refused != std::string::npos);
+  UR_EXPECT_TRUE_MSG("the signature is checked before the digest", verify < signature);
+  UR_EXPECT_TRUE_MSG("the signature is checked AFTER the swap", signature < swap);
+  UR_EXPECT_TRUE_MSG("the signature is checked AFTER the save", signature < save);
+  UR_EXPECT_TRUE_MSG("the release key or the staged flag is not what the apply uses",
+                     Has(apply, "update::kUpdateSigningPublicKey") &&
+                         Has(apply, "update::kRequireUpdateSignature"));
   UR_EXPECT_TRUE_MSG("the AppImage download does not follow the storage host's redirect",
                      Has(apply, "kMaxImageBytes, /*followRedirects=*/true"));
   UR_EXPECT_TRUE_MSG("the apply never runs a package manager or elevates",
