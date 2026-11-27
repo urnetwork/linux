@@ -713,6 +713,14 @@ void ConnectPage::BuildPaneA() {
   connectBtn_->add_css_class("ur-pane-primary");
   connectBtn_->signal_clicked().connect([this] { RelayConnectPress(); });
   paneAContent_->append(*connectBtn_);
+  // 2.4a the failed state's Disconnect beside Retry (health::Reading
+  // disconnectBeside): Retry holds the traffic in the tunnel again while the
+  // held line says to disconnect. Its own control, as the held alert's below.
+  failedDisconnectBtn_ = Gtk::make_managed<Gtk::Button>(T_("disconnect", "Disconnect"));
+  failedDisconnectBtn_->add_css_class("ur-pane-secondary");
+  failedDisconnectBtn_->set_visible(false);
+  failedDisconnectBtn_->signal_clicked().connect([this] { RelayFailedDisconnectPress(); });
+  paneAContent_->append(*failedDisconnectBtn_);
 
   // 2.4b out of balance with a connection requested, the tunnel holds traffic
   // with no provider behind it: say so and offer both ways out. Disconnect is
@@ -2017,6 +2025,16 @@ void ConnectPage::RelayConnectPress() {
   if (on_toggle_connect) on_toggle_connect();
 }
 
+// The Disconnect beside Retry carries its action itself: the shared handler
+// would read Retry, and a bare toggle re-derives the action from the same
+// reading, so neither may stand in for it.
+void ConnectPage::RelayFailedDisconnectPress() {
+  // the same in-flight feedback as the connect action's Disconnect
+  disconnectRequestedAtUs_ = g_get_monotonic_time();
+  ApplyConnectStatus();
+  if (on_connect_action) on_connect_action(true);  // disconnect
+}
+
 // ---- the one status writer ----------------------------------------------------
 
 void ConnectPage::ApplyConnectStatus() {
@@ -2146,6 +2164,9 @@ void ConnectPage::ApplyConnectStatus() {
   // (kDisconnectIntentUs), so this can never latch off.
   connectBtn_->set_sensitive(!intent);
   hero_->set_sensitive(!intent);
+  // the failed state's Disconnect beside Retry, from the same reading; a
+  // press reads Disconnecting, which is not Failed, so it hides at once
+  failedDisconnectBtn_->set_visible(view.disconnectBeside);
   // the strip says what this row says, from this render
   if (on_status_rendered) on_status_rendered(text, dot);
 }

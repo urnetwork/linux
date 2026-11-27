@@ -256,3 +256,34 @@ UR_TEST(ConnectionHealthWiring_TheStallReasonAndRetry) {
       HealthWiringBody(window, "void MainWindow::RetryConnect() {"),
       {"host_.Disconnect();", "StartTunnelUi(\"retry\", SdkHost::ConnectTarget{});"}));
 }
+
+// The failed state offers Disconnect beside Retry (health::Reading
+// disconnectBeside): Retry holds the traffic again while the held line says to
+// disconnect, so with Retry alone the tray was the only way out. The page
+// builds it hidden after the connect button, shows it from the reading that
+// labels Retry, and its press relays a disconnect, never a retry.
+UR_TEST(ConnectionHealthWiring_FailedOffersDisconnectBesideRetry) {
+  const std::string page = ReadHealthWiringSource("ConnectPage.cpp");
+  UR_EXPECT_TRUE(HealthWiringInOrder(
+      page, {"paneAContent_->append(*connectBtn_);",
+             "failedDisconnectBtn_ = Gtk::make_managed<Gtk::Button>(T_(\"disconnect\", "
+             "\"Disconnect\"));",
+             "failedDisconnectBtn_->set_visible(false);",
+             "failedDisconnectBtn_->signal_clicked().connect([this] { "
+             "RelayFailedDisconnectPress(); });",
+             "paneAContent_->append(*failedDisconnectBtn_);"}));
+  const std::string status = HealthWiringBody(page, "void ConnectPage::ApplyConnectStatus() {");
+  UR_EXPECT_TRUE(HealthWiringInOrder(
+      status, {"const health::Reading view = health::Render(signals);",
+               "actionIsRetry_ = view.action == health::Action::Retry;",
+               "failedDisconnectBtn_->set_visible(view.disconnectBeside);"}));
+  const std::string relay = HealthWiringBody(page, "void ConnectPage::RelayFailedDisconnectPress() {");
+  UR_EXPECT_TRUE(HealthWiringInOrder(
+      relay, {"disconnectRequestedAtUs_ = g_get_monotonic_time();", "ApplyConnectStatus();",
+              "on_connect_action(true);"}));
+  UR_EXPECT_TRUE(!HealthWiringHas(relay, "on_retry_connect"));
+  UR_EXPECT_TRUE(!HealthWiringHas(relay, "on_toggle_connect"));
+  const std::string window = ReadHealthWiringSource("MainWindow.cpp");
+  UR_EXPECT_TRUE(HealthWiringHas(
+      window, "connectPage_->on_connect_action = [this](bool disconnect) { ToggleConnect(disconnect); };"));
+}

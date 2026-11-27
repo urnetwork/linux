@@ -244,6 +244,9 @@ class ConnectPage : public Gtk::Box {
   // that wrote the label, records a disconnect intent when that action is
   // "disconnect", re-renders, and only then relays.
   void RelayConnectPress();
+  // The failed state's Disconnect beside Retry: records the disconnect intent,
+  // re-renders and relays a disconnect, never a retry.
+  void RelayFailedDisconnectPress();
   // Is a Disconnect press still in flight? Settles the intent as a side effect
   // (clears it once the reading really is down, or after kDisconnectIntentUs so
   // a teardown that never completes cannot freeze the page on "Disconnecting").
@@ -628,6 +631,7 @@ class ConnectPage : public Gtk::Box {
   Gtk::Label* locationText_ = nullptr;
   Gtk::Button* locationRow_ = nullptr;
   Gtk::Button* connectBtn_ = nullptr;
+  Gtk::Button* failedDisconnectBtn_ = nullptr;  // beside Retry (disconnectBeside)
   Gtk::Button* moreOptionsToggle_ = nullptr;
   Gtk::Box* moreOptionsHost_ = nullptr;
   Gtk::Label* provideDot_ = nullptr;
