@@ -90,6 +90,12 @@ UR_TEST(stateTableFailedAndDisconnected) {
   // the failed state's one action is Retry: stop, then connect again
   ExpectRow("window failed", Session(SdkStatus::Failed, 0), State::Failed, "Couldn't connect",
             Dot::Coral, Hero::Error, Action::Retry);
+  // Retry holds the traffic in the tunnel again while the held line says to
+  // disconnect, so Disconnect is offered beside it (the tray was the only way
+  // out); nowhere else
+  UR_EXPECT_TRUE(Render(Session(SdkStatus::Failed, 0)).disconnectBeside);
+  UR_EXPECT_TRUE(!Render(Session(SdkStatus::Connected, 4)).disconnectBeside);
+  UR_EXPECT_TRUE(!Render(Session(SdkStatus::Connecting, 0)).disconnectBeside);
   ExpectRow("idle", Signals{}, State::Disconnected, "Disconnected", Dot::Idle, Hero::Disconnected,
             Action::Connect);
   UR_EXPECT_TRUE(Render(Signals{}).showNotProtected);
@@ -218,6 +224,14 @@ UR_TEST(theButtonAndTheHeadlineComeFromTheSameReading) {
               const bool somethingToStop = SessionUp(s) || s.disconnectRequested;
               if ((r.action == Action::Retry) != (r.state == State::Failed)) {
                 UR_FAIL("Retry is offered outside the failed state, or not in it");
+              }
+              // the Disconnect beside Retry comes with Retry and only with it,
+              // and always over a session it can stop
+              if (r.disconnectBeside != (r.action == Action::Retry)) {
+                UR_FAIL("Disconnect beside Retry is missing in the failed state, or shown outside it");
+              }
+              if (r.disconnectBeside && !SessionUp(s)) {
+                UR_FAIL("Disconnect beside Retry is offered with no session to stop");
               }
               if (offersDisconnect != somethingToStop) {
                 UR_FAIL("button action disagrees with the session reading");

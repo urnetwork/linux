@@ -191,6 +191,8 @@ struct Reading {
   Dot dot = Dot::Idle;
   Hero hero = Hero::Disconnected;
   Action action = Action::Connect;
+  // A second control beside Retry that only disconnects (the Failed state's).
+  bool disconnectBeside = false;
   bool showNotProtected = false;
 };
 
@@ -263,7 +265,16 @@ inline Reading Render(const Signals& s) {
   // A failure whose one control is Disconnect leaves the user a step from the
   // retry that usually works, so the failed state offers that instead. It is
   // still a session to stop: a Retry press stops it first.
-  if (r.state == State::Failed) r.action = Action::Retry;
+  //
+  // Retry alone strands the user the other way: it holds the traffic in the
+  // tunnel again while the held line says to disconnect, and the tray was the
+  // only way out. So Disconnect shows beside it, as android and apple have it.
+  // Failed is reached only over a session (Aggregate), so there is always one
+  // to stop.
+  if (r.state == State::Failed) {
+    r.action = Action::Retry;
+    r.disconnectBeside = true;
+  }
   return r;
 }
 
