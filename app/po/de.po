@@ -5748,7 +5748,7 @@ msgctxt "expiry_time"
 msgid "Expiry time"
 msgstr "Ablaufzeit"
 
-#. Used in Shared/Views/ExportLogsButton/ExportLogsButton.swift.
+#. Settings: on android and apple the row that shares the app's and the tunnel's recent logs through the share sheet; on windows and linux the note under Save logs, and the title of the dialog that saves them.
 msgctxt "export_logs"
 msgid "Export Logs"
 msgstr "Logs exportieren"
@@ -7740,7 +7740,7 @@ msgctxt "no_locations_found_detail"
 msgid "Sorry, we couldn't find any locations related to {}."
 msgstr "Leider konnten wir keine Standorte finden, die mit {} in Verbindung stehen."
 
-#. Call to action
+#. Shown when there is no log file: after Save logs on windows and linux, and after Export Logs and in View Logs on android and apple.
 msgctxt "no_log_files_found"
 msgid "No log file found"
 msgstr "Keine Protokolldatei gefunden"
@@ -13711,6 +13711,11 @@ msgstr "Versions- und Build-Informationen"
 msgctxt "via_exit"
 msgid "via {}"
 msgstr "über {}"
+
+#. Settings on android and apple: the row that opens a read-only view of the last lines of the app's and the tunnel's logs, and the title of that view.
+msgctxt "view_logs"
+msgid "View Logs"
+msgstr "Logs anzeigen"
 
 #. The VLESS settings: the Settings row and screen title, and the row on the login screen's network settings. VLESS is a proxy protocol name.
 msgctxt "vless"
