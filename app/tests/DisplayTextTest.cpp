@@ -157,15 +157,18 @@ UR_TEST(DisplayText_TheDisplaySitesFilterExternalNames) {
     const char* needle;
   };
   const Site sites[] = {
-      {"LocationsSheet.cpp", "SanitizeExternalDisplayText(location.name.value_or(std::string()))"},
+      {"LocationsSheet.cpp", "SanitizeExternalDisplayText(LocationDisplayName(location))"},
       {"LocationsSheet.cpp", "SanitizeExternalDisplayText(peer.DeviceSpec)"},
-      {"NetworkPage.cpp", "SanitizeExternalDisplayText(location.name.value_or(std::string()))"},
+      {"NetworkPage.cpp", "SanitizeExternalDisplayText(LocationDisplayName(location))"},
       {"NetworkPage.cpp", "SanitizeExternalDisplayText(peer.DeviceSpec)"},
-      {"NetworkPage.cpp", "SanitizeExternalDisplayText(loc.name.value_or(std::string()))"},
-      {"NetworkPage.cpp", "SanitizeExternalDisplayText(loc.country.value_or(std::string()))"},
+      {"NetworkPage.cpp", "SanitizeExternalDisplayText(LocationDisplayName(loc))"},
+      {"NetworkPage.cpp", "SanitizeExternalDisplayText(region::LocationDisplayName(\n"
+                          "              true, loc.country_code.value_or(std::string()), "
+                          "loc.country.value_or(std::string()),\n"
+                          "              CountryDisplayName))"},
       {"NetworkPage.cpp", "SanitizeExternalDisplayText(loc.region.value_or(std::string()))"},
       {"NetworkPage.cpp", "SanitizeExternalDisplayText(loc.city.value_or(std::string()))"},
-      {"ConnectPage.cpp", "SanitizeExternalDisplayText(location->name.value_or(std::string()))"},
+      {"ConnectPage.cpp", "SanitizeExternalDisplayText(LocationDisplayName(*location))"},
       {"ConnectPage.cpp", "SanitizeExternalDisplayText(peer.DeviceSpec)"},
       {"MainWindow.cpp", "SanitizeExternalDisplayText(byJwt->NetworkName)"},
       {"EarningsPage.cpp", "SanitizeExternalDisplayText(earner.network_name)"},
