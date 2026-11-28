@@ -33,7 +33,9 @@
 // NetworkConsent.hpp), the Bittensor wallet
 // block (connect through the bridge, or
 // enter an address manually — validated locally and then against
-// /sn/wallet/validate before anything is sent — and still sign it), and the
+// /sn/wallet/validate before anything is sent — and still sign it; Disconnect
+// wallet, confirmed by an emailed code, while no signed consent holds the
+// wallet; a plain line when the network has no payout wallet at all), and the
 // Top 200 tile: the projected place from GET /sn/top/me (the Protocol board's
 // own place) for a network projected inside the top 200 or claimed, with
 // "Claiming opens soon" while binding is closed (ProtocolBoardPresentation.hpp
@@ -104,6 +106,16 @@ struct SnWalletInfo {
   int64_t setAtMillis = 0;
 };
 
+// What the network's wallets allow, read from the same GET /sn/wallet answer
+// as the wallet (sdk SnGetWalletResult.Disconnectable and HasWallet).
+struct SnWalletPayout {
+  // a wallet connected without a consent, while no signed consent pays the
+  // network: Disconnect wallet shows
+  bool disconnectable = false;
+  // any wallet is attached; without one the earnings can't be paid out
+  bool hasWallet = false;
+};
+
 struct AccountEpochRow {
   int64_t epoch = 0;
   int64_t startMillis = 0;
@@ -142,6 +154,7 @@ class ClaimAlphaSheet;
 class EmojiTagSheet;
 class LedgerClaimSheet;
 class Top200SignSheet;
+class WalletDisconnectSheet;
 
 class EarningsPage : public Gtk::Box {
  public:
@@ -361,6 +374,9 @@ class EarningsPage : public Gtk::Box {
 
   // ---- loads -----------------------------------------------------------------
   void LoadEarnings();
+  // the Bittensor wallet card's read (GET /sn/wallet): the wallet, what it
+  // allows, then the subnet layer behind it; a visit and a disconnect read it
+  void LoadSnWallet();
   void LoadWalletLayer();  // claims, v2 accounts + gas key: only with an attached wallet
   void LoadGas();          // the gas key and its balance
   void LoadLeaderboard();
@@ -368,7 +384,10 @@ class EarningsPage : public Gtk::Box {
   // ---- appliers (one writer per surface) -------------------------------------
   void ApplyPoints(std::optional<urnet::AccountPointsList> points, Fetch state);
   void ApplyEpochs(std::optional<std::vector<AccountEpochRow>> epochs, Fetch state);
-  void ApplySnWallet(std::optional<SnWalletInfo> wallet, Fetch state);
+  // `payout` is what the same read says the wallets allow; a state other than
+  // Ready, or no read (the preview, no session), knows nothing of it
+  void ApplySnWallet(std::optional<SnWalletInfo> wallet, Fetch state,
+                     std::optional<SnWalletPayout> payout = std::nullopt);
   // `schedule` is the current epoch's, read with the claims (absent when the
   // SDK could not read the coordinator's policy)
   void ApplyClaims(std::optional<std::vector<SnClaimRow>> claims, int64_t totalClaimableRao,
@@ -455,6 +474,21 @@ class EarningsPage : public Gtk::Box {
   void ApplyWalletConnectResult(uint32_t generation, bool ok, const std::string& serverError,
                                 const std::string& address);
   void FinishConnecting();
+
+  // ---- disconnect the payout wallet (sdk api_sn_wallet_disconnect.go) ---------
+  // Disconnect wallet on the connected card, while the wallet read says one
+  // can go (SnWalletPayout::disconnectable): the confirmation sheet, then the
+  // code the server emails to the account's sign-in addresses. The page makes
+  // both calls (20 s each) and answers the sheet; a disconnect closes it,
+  // reads the wallet again and says so.
+  void OnDisconnectWallet();
+  void SendWalletDisconnectCode();
+  void DisconnectWallet(const std::string& code);
+  // A refusal of either call: no_wallet reads the card again (nothing is left
+  // to disconnect), code_expired asks for a new code, and the rest show on
+  // the sheet's step in this app's words (AccountCodeText.hpp), else the
+  // server's.
+  void ApplyWalletDisconnectRefusal(const urnet::SnWalletDisconnectError& refusal);
 
   // ---- the network payout consent (NetworkConsent.hpp) -------------------------
   // The section beside the Settlement v2 tile, drawn from the flow's view only.
@@ -628,8 +662,11 @@ class EarningsPage : public Gtk::Box {
   Gtk::Box* walletConnectedPanel_ = nullptr;
   Gtk::Label* walletAddressLabel_ = nullptr;
   Gtk::Button* changeWalletButton_ = nullptr;
+  Gtk::Button* disconnectWalletButton_ = nullptr;
   Gtk::Box* walletConnectPanel_ = nullptr;
   Gtk::Label* walletConnectNote_ = nullptr;
+  // no wallet attached to the network at all (SnWalletPayout::hasWallet)
+  Gtk::Label* walletNoPayoutNote_ = nullptr;
   // provide mode row + gate
   Gtk::Label provideModeDot_;
   Gtk::Label* provideModeValue_ = nullptr;
@@ -753,6 +790,9 @@ class EarningsPage : public Gtk::Box {
   Fetch epochsState_ = Fetch::Loading;
   std::optional<SnWalletInfo> wallet_;
   Fetch walletState_ = Fetch::Loading;
+  // what the last answered wallet read says the wallets allow; none while it
+  // loads, after a failure, and with no session
+  std::optional<SnWalletPayout> walletPayout_;
   std::vector<SnClaimRow> claims_;
   int64_t totalClaimableRao_ = 0;
   Fetch claimsState_ = Fetch::Loading;
@@ -845,6 +885,7 @@ class EarningsPage : public Gtk::Box {
   Flow ledgerClaimFlow_;  // 3 min + 6 per account: the v2 claim, past the SDK's bounds
   Flow rankingFlow_;   // 20s
   Flow consentStep_;  // the consent's step: the wallet's minutes, 20s for a call
+  Flow walletDisconnectFlow_;  // 20s: the disconnect's code, then the disconnect
 
   // the payout consent (NetworkConsent.hpp); its ports reach host_ and epoch_
   consent::Flow consent_;
@@ -905,6 +946,7 @@ class EarningsPage : public Gtk::Box {
   std::weak_ptr<ClaimAlphaSheet> claimSheet_;
   std::weak_ptr<LedgerClaimSheet> ledgerClaimSheet_;
   std::weak_ptr<Top200SignSheet> top200SignSheet_;
+  std::weak_ptr<WalletDisconnectSheet> walletDisconnectSheet_;
 
   // the Protocol board: its list in pane B, its own block in pane C (or on top
   // of its list), its own place behind the Top 200 tile; created before the

@@ -1,7 +1,8 @@
 // The words of the account's emailed-code flows (AccountCodeText.hpp): every
-// email change refusal code reads as its own store key, the local address
-// check's answer reads as the server's invalid_email does, and a code without
-// a line here reads as the server's message (nullopt).
+// email change and payout wallet disconnect refusal code reads as its own store
+// key, the local address check's answer reads as the server's invalid_email
+// does, and a code without a line here reads as the server's message
+// (nullopt).
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -18,6 +19,11 @@ namespace {
 // The key a code reads as, "" for none.
 std::string EmailChangeKey(const char* code) {
   const std::optional<ac::Text> text = ac::EmailChangeRefusalText(code);
+  return text ? std::string(text->key) : std::string();
+}
+
+std::string WalletDisconnectKey(const char* code) {
+  const std::optional<ac::Text> text = ac::WalletDisconnectRefusalText(code);
   return text ? std::string(text->key) : std::string();
 }
 
@@ -59,4 +65,35 @@ UR_TEST(AccountCodeText_TheSignInRequiredLineIsOwnerOnlys) {
   if (!ownerOnly) return;
   UR_EXPECT_TRUE(std::string(ownerOnly->key) == ac::kEmailChangeSignInRequired.key);
   UR_EXPECT_TRUE(std::string(ownerOnly->english) == "Sign in again to change your email.");
+}
+
+// sdk SnWalletDisconnectErrorCode*, each in the words the brief names
+UR_TEST(AccountCodeText_EveryWalletDisconnectRefusalHasItsLine) {
+  const std::pair<const char*, const char*> cases[] = {
+      {"consent_in_force", "wallet_disconnect_consent_in_force"},
+      {"email_required", "wallet_disconnect_email_required"},
+      {"rate_limited", "account_too_many_tries"},
+      {"send_failed", "account_code_send_failed"},
+      {"code_invalid", "account_code_invalid"},
+      {"code_expired", "account_code_expired"},
+  };
+  for (const auto& [code, key] : cases) {
+    UR_EXPECT_TRUE_MSG(std::string(code) + " reads as " + WalletDisconnectKey(code),
+                       WalletDisconnectKey(code) == key);
+  }
+}
+
+// owner_only and a newer server's code read as the server's message, and
+// no_wallet is no refusal to word: the card reads the wallet again
+UR_TEST(AccountCodeText_TheServersWordsForTheOtherDisconnectCodes) {
+  for (const char* code : {"owner_only", "no_wallet", "", "something_new", "no_change"}) {
+    UR_EXPECT_TRUE_MSG(code, !ac::WalletDisconnectRefusalText(code).has_value());
+  }
+}
+
+// both flows share the lines for a wrong code, too many tries and a failed send
+UR_TEST(AccountCodeText_BothFlowsShareTheCodeLines) {
+  for (const char* code : {"rate_limited", "send_failed", "code_invalid"}) {
+    UR_EXPECT_TRUE_MSG(code, EmailChangeKey(code) == WalletDisconnectKey(code));
+  }
 }

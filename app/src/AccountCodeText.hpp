@@ -1,9 +1,11 @@
 // The words of the account's emailed-code flows, by the code of the server's
 // refusal: the email change (sdk api_email_change.go, the Account page's email
-// change sheet). The codes are the sdk's AuthEmailChangeErrorCode*, spelled as
-// the server sends them. A code without a line here (a newer server's) reads
-// as the server's message, and a request that got no answer as the sheet's
-// generic line.
+// change sheet) and the payout wallet disconnect (sdk
+// api_sn_wallet_disconnect.go, the Earnings page's disconnect sheet). The codes
+// are the sdk's AuthEmailChangeErrorCode* and SnWalletDisconnectErrorCode*,
+// spelled as the server sends them. A code without a line here (a newer
+// server's) reads as the server's message, and a request that got no answer as
+// the sheet's generic line.
 //
 // Dependency-free so tests/AccountCodeTextTest.cpp runs it without GTK or the
 // SDK.
@@ -64,6 +66,31 @@ inline std::optional<Text> EmailChangeRefusalText(std::string_view code) {
   if (code == "code_invalid") return kCodeInvalid;
   if (code == "too_many_tries") {
     return Text{"email_change_too_many_tries", "Too many wrong codes. Start again."};
+  }
+  return std::nullopt;
+}
+
+// A payout wallet disconnect refusal (its SnWalletDisconnectError code) in
+// this app's words; nullopt for a code without a line here: owner_only and a
+// newer server's code read as the server's message, and no_wallet is no
+// refusal to word (the card reads the wallet again).
+inline std::optional<Text> WalletDisconnectRefusalText(std::string_view code) {
+  if (code == "consent_in_force") {
+    return Text{"wallet_disconnect_consent_in_force",
+                "Your signed payout consent sends your earnings to this wallet, and only another "
+                "signed consent can replace it. Use Change wallet instead."};
+  }
+  if (code == "email_required") {
+    return Text{"wallet_disconnect_email_required",
+                "Add an email sign-in to your account first. The confirmation code is sent to "
+                "it."};
+  }
+  if (code == "rate_limited") return kTooManyTries;
+  if (code == "send_failed") return kCodeSendFailed;
+  if (code == "code_invalid") return kCodeInvalid;
+  if (code == "code_expired") {
+    return Text{"account_code_expired",
+                "That code expired or was already used. Ask for a new one."};
   }
   return std::nullopt;
 }
