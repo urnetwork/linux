@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "Formatters.hpp"
+#include "HelpButton.hpp"
 #include "I18n.hpp"
 #include "PaneKit.hpp"
 #include "UsageBarReferralRow.hpp"
@@ -53,6 +54,8 @@ UsageBar::UsageBar() : Gtk::Box(Gtk::Orientation::VERTICAL, 8) {
   auto* legend = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 12);
   legend->append(*MakeLegendKey(T_("used_data_key", "Used"), UsedColor()));
   legend->append(*MakeLegendKey(T_("pending_data_key", "Pending"), PendingColor()));
+  // the '?' says what Pending is, beside its key
+  legend->append(*MakeHelpButton(HelpTopic::Pending));
   legend->append(*MakeLegendKey(T_("available_data_key", "Available"), AvailableColor()));
   append(*legend);
 

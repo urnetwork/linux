@@ -19,6 +19,7 @@
 #include "FailsafeNotice.hpp"
 #include "FastDnsCopy.hpp"
 #include "Formatters.hpp"
+#include "HelpButton.hpp"
 #include "I18n.hpp"
 #include "KeyedReconcile.hpp"
 #include "KillSwitchCopy.hpp"
@@ -946,8 +947,10 @@ void ConnectPage::BuildPaneA() {
   moreOptionsHost_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 0);
   paneAContent_->append(*moreOptionsHost_);
 
-  // provide group: the indicator dot + the 4-item control mode segmented row
+  // provide group: the indicator dot + the 4-item control mode segmented row,
+  // with the '?' that says what providing is
   auto provideHeader = kit::MakePaneGroupHeader(T_("provide", "Provide"));
+  provideHeader.trailing->append(*MakeHelpButton(HelpTopic::Provide));
   moreOptionsHost_->append(*provideHeader.root);
   {
     auto* row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
