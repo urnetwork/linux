@@ -118,6 +118,11 @@ msgctxt "add_tao_for_gas"
 msgid "Add TAO for gas"
 msgstr "Voeg TAO toe voor gas"
 
+#. Accessible name and tooltip of the star button beside the selected location when it is not a favorite: keeps the location (or the exit the user stays on) in Favorites.
+msgctxt "add_to_favorites"
+msgid "Add to favorites"
+msgstr "Toevoegen aan favorieten"
+
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
 msgid "Providing is off by default. Choose when your device provides below."
@@ -5618,10 +5623,25 @@ msgctxt "exclude_apps_launcher_note"
 msgid "Each app you turn on gets a second launcher in your app menu, with (outside VPN) after its name. An app opened from that launcher bypasses the VPN and the kill switch. An app that is already running stays in the VPN until you quit it, and Flatpak and Snap apps are not listed."
 msgstr "Elke app die je aanzet, krijgt een tweede starter in je app-menu, met (buiten VPN) achter de naam. Een app die je vanuit die starter opent, omzeilt de VPN en de kill switch. Een app die al draait, blijft in de VPN tot je hem afsluit, en Flatpak- en Snap-apps worden niet getoond."
 
+#. Button beside a search result on the Excluded exit locations screen: adds that country, region or city to the excluded list. Short.
+msgctxt "exclude_exit_location"
+msgid "Exclude"
+msgstr "Uitsluiten"
+
 #. transfer stats and split rules; Linux: the header over the apps already excluded in Settings > Exclude apps from the VPN.
 msgctxt "excluded"
 msgid "Excluded"
 msgstr "Uitgesloten"
+
+#. Title of the settings row and screen that list the places (countries, regions such as US states, cities) whose exits the user's connections avoid. Use the app's own word for exit (as in 'Stay on this exit').
+msgctxt "excluded_exit_locations"
+msgid "Excluded exit locations"
+msgstr "Uitgesloten exitlocaties"
+
+#. Explanation at the top of the Excluded exit locations screen: best available, collections and larger places skip exits in these places; picking one of the places itself still connects there.
+msgctxt "excluded_exit_locations_description"
+msgid "Connections won't use exits in these places, unless you pick one of them directly."
+msgstr "Verbindingen gebruiken geen exits op deze plaatsen, tenzij je er een rechtstreeks kiest."
 
 #. Screen reader state of a row that shows or hides a section below it (Advanced, Why?): the section is shown. The counterpart of collapsed. Windows: the Sessions page's group headings (Hosted proxies (N)...), read as the heading's item status.
 msgctxt "expanded"
@@ -5943,6 +5963,16 @@ msgctxt "fast_dns_on_connect_description"
 msgid "Answers DNS over the local network while the tunnel's DNS starts. This can reveal your lookups to the local network and return answers that don't match your exit location. When off, DNS only resolves through the tunnel."
 msgstr "Beantwoordt DNS via het lokale netwerk terwijl de DNS van de tunnel opstart. Hierdoor kan het lokale netwerk je zoekopdrachten zien en kun je antwoorden krijgen die niet bij je exitlocatie passen. Als dit uitstaat, wordt DNS alleen via de tunnel opgelost."
 
+#. Note under a favorite that is one specific exit (another member's device), not a place. Honest: the device can disappear.
+msgctxt "favorite_exit_note"
+msgid "A member's device. It can go offline or leave the network at any time."
+msgstr "Het apparaat van een lid. Het kan op elk moment offline gaan of het netwerk verlaten."
+
+#. Title of the section at the top of the location list that holds the user's favorite locations and exits. Short.
+msgctxt "favorites"
+msgid "Favorites"
+msgstr "Favorieten"
+
 #. Used in Main/Feedback/FeedbackView.swift.
 msgctxt "feedback"
 msgid "Feedback"
@@ -6188,6 +6218,66 @@ msgid "{} host"
 msgid_plural "{} hosts"
 msgstr[0] "{} host"
 msgstr[1] "{} hosts"
+
+#. The hotspot proxy: its row in Settings and the title of its screen. The android app runs an HTTP and a SOCKS5 proxy on the phone so the devices on its Wi-Fi hotspot or USB tethering can use URnetwork.
+msgctxt "hotspot_proxy"
+msgid "Hotspot proxy"
+msgstr "Hotspotproxy"
+
+#. Button on the Hotspot proxy screen that copies the proxy addresses with their credentials, as HTTP and SOCKS5 proxy URLs, for another device.
+msgctxt "hotspot_proxy_copy_details"
+msgid "Copy connection details"
+msgstr "Verbindingsgegevens kopiëren"
+
+#. Muted text under the switch on the Hotspot proxy screen: who can use the proxy, how, and that their traffic only goes through the tunnel.
+msgctxt "hotspot_proxy_description"
+msgid "Devices on your Wi-Fi hotspot or USB tethering can use URnetwork through an HTTP or SOCKS5 proxy on this phone. Their traffic goes only through URnetwork, so nothing is shared while you are disconnected."
+msgstr "Apparaten op je wifi-hotspot of via USB-tethering kunnen URnetwork gebruiken via een HTTP- of SOCKS5-proxy op deze telefoon. Hun verkeer gaat alleen via URnetwork, dus er wordt niets gedeeld zolang je niet verbonden bent."
+
+#. Label of the HTTP proxy address (host:port) on the Hotspot proxy screen, which a shared device enters as its HTTP proxy.
+msgctxt "hotspot_proxy_http"
+msgid "HTTP proxy"
+msgstr "HTTP-proxy"
+
+#. Error on the Hotspot proxy screen when the proxy could not listen on the hotspot, usually because another app holds its ports.
+msgctxt "hotspot_proxy_listen_failed"
+msgid "The proxy could not start on your hotspot. Another app may be using its ports."
+msgstr "De proxy kon niet starten op je hotspot. Misschien gebruikt een andere app de poorten."
+
+#. Button on the Hotspot proxy screen that replaces the proxy's user name and password with new generated ones.
+msgctxt "hotspot_proxy_new_password"
+msgid "New password"
+msgstr "Nieuw wachtwoord"
+
+#. Muted note under the New password button on the Hotspot proxy screen: new credentials disconnect the devices signed in with the old ones.
+msgctxt "hotspot_proxy_new_password_note"
+msgid "A new password disconnects the devices using the old one."
+msgstr "Een nieuw wachtwoord verbreekt de verbinding van apparaten die het oude gebruiken."
+
+#. Muted note under the Hotspot proxy row in Settings: what the screen it opens does.
+msgctxt "hotspot_proxy_row_note"
+msgid "Share URnetwork with the devices on your hotspot."
+msgstr "Deel URnetwork met de apparaten op je hotspot."
+
+#. Label of the switch that turns the hotspot proxy on, on the Hotspot proxy screen. Off by default.
+msgctxt "hotspot_proxy_share"
+msgid "Share with hotspot devices"
+msgstr "Delen met hotspotapparaten"
+
+#. Label of the SOCKS5 proxy address (host:port) on the Hotspot proxy screen, which a shared device enters as its SOCKS proxy.
+msgctxt "hotspot_proxy_socks"
+msgid "SOCKS5 proxy"
+msgstr "SOCKS5-proxy"
+
+#. Label of the generated user name a shared device signs in to the hotspot proxy with.
+msgctxt "hotspot_proxy_username"
+msgid "Username"
+msgstr "Gebruikersnaam"
+
+#. Status on the Hotspot proxy screen while the proxy is on and the phone has no Wi-Fi hotspot or USB tethering to listen on.
+msgctxt "hotspot_proxy_waiting_for_hotspot"
+msgid "Turn on your Wi-Fi hotspot or USB tethering to start sharing."
+msgstr "Zet je wifi-hotspot of USB-tethering aan om te beginnen met delen."
 
 #. Compact relative-time label with an abbreviated hours unit ("3h ago"), shown by the windows and linux stats formatters for events an hour or more old. The argument is the elapsed hours. Not a plural: the abbreviated unit does not inflect, but the word order and the unit abbreviation localize.
 msgctxt "hours_ago_abbrev"
@@ -7539,6 +7629,11 @@ msgstr "Geen e-mail, telefoonnummer of wachtwoord nodig. Je account wordt beveil
 msgctxt "no_ethos_wallet_found"
 msgid "No EthOs wallet found"
 msgstr "Geen EthOs-wallet gevonden"
+
+#. Empty state of the Excluded exit locations screen, above its search field.
+msgctxt "no_excluded_exit_locations"
+msgid "No excluded locations yet. Search for a country, region or city to exclude it."
+msgstr "Nog geen uitgesloten locaties. Zoek een land, regio of stad om die uit te sluiten."
 
 #. App split rules: empty state when no installed apps were enumerated.
 msgctxt "no_installed_apps_found"
@@ -9059,6 +9154,11 @@ msgctxt "remove"
 msgid "Remove"
 msgstr "Verwijderen"
 
+#. Accessible name and tooltip of the filled star button beside the selected location when it is a favorite: removes it from Favorites.
+msgctxt "remove_from_favorites"
+msgid "Remove from favorites"
+msgstr "Verwijderen uit favorieten"
+
 #. A button to remove a split rule.
 msgctxt "remove_rule"
 msgid "Remove rule"
@@ -9204,6 +9304,11 @@ msgstr "QR-code scannen"
 msgctxt "search_apps_placeholder"
 msgid "Search apps"
 msgstr "Zoek apps"
+
+#. Placeholder of the search field on the Excluded exit locations screen, which finds countries, regions (such as US states) and cities to exclude.
+msgctxt "search_exit_locations_placeholder"
+msgid "Search countries, regions and cities"
+msgstr "Zoek landen, regio’s en steden"
 
 #. Locations List
 msgctxt "search_placeholder"
