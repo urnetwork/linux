@@ -577,8 +577,9 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     ApplyAuthState(false);
   }
 
-  // Verification hook for the Google / Apple sign-in round trip (with URNETWORK_SSO_SIMULATE,
-  // WalletConnect.cpp): URNETWORK_SSO_AUTOSTART=<google|apple> presses that
+  // Verification hook for the Google / Apple / Microsoft sign-in round trip
+  // (with URNETWORK_SSO_SIMULATE, WalletConnect.cpp):
+  // URNETWORK_SSO_AUTOSTART=<google|apple|microsoft> presses that
   // pill shortly after the window shows, so the whole return path — minted
   // state + nonce, the simulated return, the login call, the error line the
   // server's rejection of an unsigned token paints — runs without a click and
@@ -897,11 +898,11 @@ urnw::motion::MotionBin* WrapInBin(Gtk::Widget& child) {
 }  // namespace
 
 // The initial step, in the login stack's order (LOGIN_STACK_SPEC, shared by
-// every app): carousel hero, then up to three full-width pills — Google,
-// Apple, Create Instant Account — then the remaining ways in as square icon
+// every app): carousel hero, then the full-width pills — Google, Apple,
+// Microsoft, Create Instant Account — then the remaining ways in as square icon
 // tiles four per row (secret key, auth code, Bittensor, Solana), then "or",
-// the email/phone field and Get started. Google and Apple sign in through the
-// provider's own web flow in the browser (Linux has no native provider flow). There is
+// the email/phone field and Get started. Google, Apple and Microsoft sign in
+// through a web flow in the browser (Linux has no native provider flow). There is
 // deliberately NO heading (the carousel supplies the headline) and NO guest
 // button (superseded by seedphrase accounts). Wide (>=1000dip) the carousel
 // moves to an art pane beside a fixed 544dip form column; narrow it rides
@@ -919,7 +920,7 @@ void MainWindow::BuildLogin() {
   heroBin_->set_size_request(-1, 200);  // the narrow slot's cap
   loginPanel_->append(*heroBin_);
 
-  // ---- the three full-width pills ----------------------------------------
+  // ---- the full-width pills ------------------------------------------------
   auto* pillGroup = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
   auto* google = MakeUrIconButton(BrandIcon::Kind::Google,
                                   T_("sign_in_with_google", "Sign in with Google"));
@@ -929,6 +930,11 @@ void MainWindow::BuildLogin() {
                                  T_("sign_in_with_apple", "Sign in with Apple"));
   apple->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnApple));
   pillGroup->append(*apple);
+  // the app carries no Microsoft mark: a plain SECONDARY pill
+  auto* microsoft =
+      MakeUrButton(T_("sign_in_with_microsoft", "Sign in with Microsoft"), false);
+  microsoft->signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::OnMicrosoft));
+  pillGroup->append(*microsoft);
   auto* instant =
       MakeUrButton(T_("create_instant_account", "Create Instant Account"), false);
   instant->signal_clicked().connect([this] {
@@ -2430,9 +2436,12 @@ void MainWindow::OnGoogle() { OnSso(sso::kProviderGoogle); }
 
 void MainWindow::OnApple() { OnSso(sso::kProviderApple); }
 
-// Google / Apple: the browser carries the provider's own sign-in; the api's
-// callback returns the identity token on urnetwork://oauth/<provider> and it
-// lands in OnWalletAuth like the wallet flows.
+void MainWindow::OnMicrosoft() { OnSso(sso::kProviderMicrosoft); }
+
+// Google / Apple / Microsoft: the browser carries the provider's own sign-in;
+// the api's callback returns the identity token on
+// urnetwork://oauth/<provider> and it lands in OnWalletAuth like the wallet
+// flows.
 void MainWindow::OnSso(const std::string& provider) {
   loginError_.set_text("");
   SetLoginBusy(true);
@@ -2485,6 +2494,15 @@ void MainWindow::OnWalletAuth(const AuthResult& result) {
       // an sso identity with no network: the host kept the identity token
       loginError_.set_text("");
       NavigateCreate(CreateNetworkPage::Mode::Sso, "", /*fromHome=*/false);
+    } else if (result.microsoftFailure != sso::MicrosoftFailure::None) {
+      // the sdk's attempt refused the Microsoft return, in this app's words;
+      // a cancel on Microsoft's page says nothing
+      if (const std::optional<sso::FailureText> text =
+              sso::MicrosoftFailureTextFor(result.microsoftFailure)) {
+        SetLoginError(g_dpgettext2(GETTEXT_PACKAGE, text->key, text->english));
+      } else {
+        loginError_.set_text("");
+      }
     } else if (!result.ok && !result.authAllowed.empty()) {
       // the account exists under other sign-in methods
       SetLoginError(Format(T_("login_error_auth_allowed", "Please login with one of: {}."),

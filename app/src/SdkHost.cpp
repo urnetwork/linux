@@ -66,6 +66,26 @@ constexpr int64_t kMemoryLimit = 64ll * 1024 * 1024;
 // "solana" -> ed25519, urnet::TAO ("TAO") -> sr25519 (bittensor).
 constexpr const char* kSolanaBlockchain = "solana";
 
+// Sign in with Microsoft: the app's provider id is its identity token's
+// auth_jwt_type, and the attempt's platform claim is the one the Google and
+// Apple states carry (the api returns to urnetwork://).
+static_assert(std::string_view(sso::kProviderMicrosoft) == urnet::AuthJwtTypeMicrosoft,
+              "the Microsoft provider id is the sdk's auth_jwt_type");
+static_assert(std::string_view(sso::kPlatform) == urnet::OAuthPlatformLinux,
+              "the Microsoft attempt's platform claim");
+
+// A Microsoft attempt for this platform (sdk NewMicrosoftSignInAttempt), or
+// nullptr with the sdk's words in `error`.
+std::shared_ptr<urnet::MicrosoftSignInAttempt> NewMicrosoftSignInAttempt(std::string& error) {
+  try {
+    return std::make_shared<urnet::MicrosoftSignInAttempt>(
+        urnet::newMicrosoftSignInAttempt(urnet::OAuthPlatformLinux));
+  } catch (const std::exception& e) {
+    error = e.what();
+    return nullptr;
+  }
+}
+
 // One rpc, guarded: a throwing getter costs its OWN field (which then reads as
 // UNKNOWN), not the whole snapshot. The failure is logged because the two bool
 // fields have no unknown state to carry — false is all they can say.
@@ -1824,6 +1844,9 @@ void SdkHost::SetupWalletCallbacks() {
     }
     if (done) done({false, false, err});
   };
+  // The Microsoft return (the api's oauth callback): the sdk's attempt in
+  // flight judges it whole (FinishMicrosoftSignIn).
+  wallet_.on_microsoft = [this](std::string returnUrl) { FinishMicrosoftSignIn(returnUrl); };
 }
 
 bool SdkHost::WalletFlowIsCurrent(uint64_t flow) {
@@ -1966,20 +1989,38 @@ void SdkHost::SignInWithSso(const std::string& provider, std::function<void(Auth
   if (char* n = g_uuid_string_random()) { nonce = n; g_free(n); }
   // Google and Apple run their own web flow: the state carries the platform
   // claim the api's callback reads to redirect back to this app
-  // (urnetwork://oauth/<provider>). No other provider signs in this way.
+  // (urnetwork://oauth/<provider>). Microsoft's attempt is the sdk's: it mints
+  // the state and nonce, builds the api's start url and judges the return
+  // (FinishMicrosoftSignIn). No other provider signs in this way.
   const bool apple = provider == sso::kProviderApple;
   const bool google = provider == sso::kProviderGoogle;
-  if (!apple && !google) {
+  const bool microsoft = provider == sso::kProviderMicrosoft;
+  if (!apple && !google && !microsoft) {
     AuthResult r;
     r.error = "unknown sign-in provider";
     if (done) done(r);
     return;
   }
-  state = sso::OAuthState(state);
+  std::shared_ptr<urnet::MicrosoftSignInAttempt> microsoftAttempt;
+  if (microsoft) {
+    std::string error;
+    microsoftAttempt = NewMicrosoftSignInAttempt(error);
+    if (!microsoftAttempt) {
+      AuthResult r;
+      r.error = error;
+      r.sso = true;
+      if (done) done(r);
+      return;
+    }
+    state = microsoftAttempt->getState();
+    nonce = microsoftAttempt->getNonce();
+  } else {
+    state = sso::OAuthState(state);
+  }
   std::string apiUrl;
   {
     std::scoped_lock lock(mutex_);
-    walletFlows_.Begin();
+    const uint64_t flow = walletFlows_.Begin();
     pendingWalletAuth_.reset();
     pendingSsoAuth_ = false;
     pendingSsoType_.clear();
@@ -1988,6 +2029,8 @@ void SdkHost::SignInWithSso(const std::string& provider, std::function<void(Auth
     ssoState_ = state;
     ssoNonce_ = nonce;
     ssoOwner_ = addsignin::Owner::SignIn;
+    microsoftAttempt_ = microsoftAttempt;  // none for Google and Apple
+    microsoftFlow_ = flow;
     walletAuthEpoch_ = CaptureAuthEpoch();
     walletAuthDone_ = std::move(done);
     if (networkSpace_) apiUrl = networkSpace_->getApiUrl();
@@ -1997,6 +2040,8 @@ void SdkHost::SignInWithSso(const std::string& provider, std::function<void(Auth
     wallet_.SignInWithApple(apiUrl, state, nonce);
   } else if (google) {
     wallet_.SignInWithGoogle(apiUrl, state, nonce);
+  } else {
+    wallet_.SignInWithMicrosoft(microsoftAttempt->startUrl(apiUrl), state, nonce);
   }
 }
 
@@ -2020,6 +2065,7 @@ void SdkHost::CancelPendingAddSignIn(const std::string& reason) {
       ssoProvider_.clear();
       ssoState_.clear();
       ssoNonce_.clear();
+      microsoftAttempt_.reset();
     }
   }
   if (walletDone) walletDone({false, reason});
@@ -2038,6 +2084,7 @@ void SdkHost::CancelAddSignIn() {
       ssoProvider_.clear();
       ssoState_.clear();
       ssoNonce_.clear();
+      microsoftAttempt_.reset();
     }
     // a challenge still being fetched for the add opens no tab
     if (cancelSession) walletFlows_.Begin();
@@ -2055,23 +2102,38 @@ void SdkHost::AddSignInWithSso(const std::string& provider,
   CancelPendingAddSignIn("superseded by another sign-in method");
   const bool apple = provider == sso::kProviderApple;
   const bool google = provider == sso::kProviderGoogle;
-  if (!apple && !google) {
+  const bool microsoft = provider == sso::kProviderMicrosoft;
+  if (!apple && !google && !microsoft) {
     if (done) done({false, "unknown sign-in provider"});
     return;
   }
-  // a fresh state + nonce per attempt, as for a sign-in
+  // a fresh state + nonce per attempt, as for a sign-in (Microsoft's the sdk's)
   std::string state;
   std::string nonce;
   if (char* s = g_uuid_string_random()) { state = s; g_free(s); }
   if (char* n = g_uuid_string_random()) { nonce = n; g_free(n); }
-  state = sso::OAuthState(state);
+  std::shared_ptr<urnet::MicrosoftSignInAttempt> microsoftAttempt;
+  if (microsoft) {
+    std::string error;
+    microsoftAttempt = NewMicrosoftSignInAttempt(error);
+    if (!microsoftAttempt) {
+      if (done) done({false, error});
+      return;
+    }
+    state = microsoftAttempt->getState();
+    nonce = microsoftAttempt->getNonce();
+  } else {
+    state = sso::OAuthState(state);
+  }
   std::string apiUrl;
   {
     std::scoped_lock lock(mutex_);
-    walletFlows_.Begin();
+    const uint64_t flow = walletFlows_.Begin();
     ssoProvider_ = provider;
     ssoState_ = state;
     ssoNonce_ = nonce;
+    microsoftAttempt_ = microsoftAttempt;  // none for Google and Apple
+    microsoftFlow_ = flow;
     // the verified return goes to add-auth and never signs in (on_sso)
     ssoOwner_ = addsignin::Owner::AddSignIn;
     ssoAddDone_ = std::move(done);
@@ -2079,8 +2141,100 @@ void SdkHost::AddSignInWithSso(const std::string& provider,
   }
   if (apple) {
     wallet_.SignInWithApple(apiUrl, state, nonce);
-  } else {
+  } else if (google) {
     wallet_.SignInWithGoogle(apiUrl, state, nonce);
+  } else {
+    wallet_.SignInWithMicrosoft(microsoftAttempt->startUrl(apiUrl), state, nonce);
+  }
+}
+
+// The Microsoft return (urnetwork://oauth/microsoft?...): the sdk's attempt in
+// flight judges it (urnet::MicrosoftSignInAttempt::finish: the echoed state,
+// the token's nonce, the attempt's age). Another attempt's return
+// (not_this_attempt) leaves it waiting. Any other answer ends it: a verified
+// identity token goes to the attempt's owner as a Google or Apple one does
+// (on_sso), a sign-in to authLogin and an add to add-auth, and a refusal goes
+// to the owner as a sso::MicrosoftFailure its screen words. A return that
+// lands after a newer wallet or sso flow started is dropped: that flow owns
+// the slots now.
+void SdkHost::FinishMicrosoftSignIn(const std::string& returnUrl) {
+  std::shared_ptr<urnet::MicrosoftSignInAttempt> attempt;
+  {
+    std::scoped_lock lock(mutex_);
+    attempt = microsoftAttempt_;
+  }
+  if (!attempt) {
+    std::fprintf(stderr, "[sso] a Microsoft return with no attempt in flight, ignoring it\n");
+    return;
+  }
+  std::string idToken;
+  std::string refusal;
+  try {
+    const std::optional<urnet::MicrosoftSignInResult> result = attempt->finish(returnUrl);
+    if (result) idToken = result->IdToken;
+    if (idToken.empty()) refusal = "the Microsoft return carried no identity token";
+  } catch (const std::exception& e) {
+    refusal = e.what();
+  }
+  sso::MicrosoftFailure failure = sso::MicrosoftFailure::None;
+  if (!refusal.empty()) {
+    failure = sso::MicrosoftFailureFor(urnet::microsoftSignInErrorCodeOf(refusal));
+    std::fprintf(stderr, "[sso] the Microsoft return was refused: %s\n", refusal.c_str());
+    // a stray or replayed return: the attempt waits on for its own
+    if (failure == sso::MicrosoftFailure::KeepWaiting) return;
+  }
+  addsignin::Owner owner = addsignin::Owner::None;
+  std::function<void(AddSignInResult)> addDone;
+  std::function<void(AuthResult)> signInDone;
+  {
+    std::scoped_lock lock(mutex_);
+    if (microsoftAttempt_ != attempt || !walletFlows_.IsCurrent(microsoftFlow_)) {
+      std::fprintf(stderr, "[sso] a Microsoft return for a superseded attempt, ignoring it\n");
+      return;
+    }
+    owner = ssoOwner_;
+    if (owner == addsignin::Owner::AddSignIn) {
+      addDone = std::move(ssoAddDone_);
+      ssoAddDone_ = nullptr;
+    } else if (owner == addsignin::Owner::SignIn && failure != sso::MicrosoftFailure::None) {
+      // a verified token's sign-in takes its completion itself (AuthLoginWithSso)
+      signInDone = std::move(walletAuthDone_);
+      walletAuthDone_ = nullptr;
+    }
+    microsoftAttempt_.reset();
+    ssoOwner_ = addsignin::Owner::None;
+    ssoProvider_.clear();
+    ssoState_.clear();
+    ssoNonce_.clear();
+  }
+  if (failure != sso::MicrosoftFailure::None) {
+    if (addDone) {
+      AddSignInResult r;
+      r.error = refusal;
+      r.microsoftFailure = failure;
+      addDone(r);
+    }
+    if (signInDone) {
+      AuthResult r;
+      r.error = refusal;
+      r.sso = true;
+      r.microsoftFailure = failure;
+      signInDone(r);
+    }
+    return;
+  }
+  switch (addsignin::RouteSso(owner)) {
+    case addsignin::SsoRoute::AddSignIn:
+      // the identity token is added to this network; it never signs in
+      AddAuthMethod(addsignin::ProviderArgs(addsignin::Method::Microsoft, idToken),
+                    std::move(addDone));
+      return;
+    case addsignin::SsoRoute::SignIn:
+      AuthLoginWithSso(urnet::AuthJwtTypeMicrosoft, idToken);
+      return;
+    case addsignin::SsoRoute::Drop:
+      std::fprintf(stderr, "[sso] a Microsoft return with no owner, ignoring it\n");
+      return;
   }
 }
 

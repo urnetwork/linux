@@ -208,10 +208,10 @@ UR_TEST(Sessions_EveryKindHasItsMethodAndLegacyKindsNone) {
   const std::pair<const char*, const char*> cases[] = {
       {"password", "Password"},         {"verify", "Verification code"},
       {"apple", "Apple"},               {"google", "Google"},
-      {"sso", "Single sign-on"},        {"wallet", "Wallet"},
-      {"seedphrase", "Recovery phrase"}, {"signup", "New account"},
-      {"auth_code", "Auth code"},       {"device_adopt", "Device pairing"},
-      {"api_key_client", "API key"},
+      {"microsoft", "Microsoft"},       {"sso", "Single sign-on"},
+      {"wallet", "Wallet"},             {"seedphrase", "Recovery phrase"},
+      {"signup", "New account"},        {"auth_code", "Auth code"},
+      {"device_adopt", "Device pairing"}, {"api_key_client", "API key"},
   };
   for (const auto& [kind, label] : cases) {
     const std::optional<s::Text> method = s::MethodFor(kind);
@@ -919,8 +919,8 @@ UR_TEST(Sessions_EveryKeyAndEnglishIsTheCatalogs) {
   for (const char* type : {"android", "ios", "macos", "windows", "linux", "web", "cli", "server", ""}) {
     texts.push_back(s::DeviceFor(type).label);
   }
-  for (const char* kind : {"password", "verify", "apple", "google", "sso", "wallet", "seedphrase",
-                           "signup", "auth_code", "device_adopt", "api_key_client"}) {
+  for (const char* kind : {"password", "verify", "apple", "google", "microsoft", "sso", "wallet",
+                           "seedphrase", "signup", "auth_code", "device_adopt", "api_key_client"}) {
     texts.push_back(*s::MethodFor(kind));
   }
   for (s::Body body : {s::Body::NoSession, s::Body::Progress, s::Body::Empty, s::Body::LoadFailed,

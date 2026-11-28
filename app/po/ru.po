@@ -49,10 +49,30 @@ msgctxt "account_auth_verified"
 msgid "{} (verified)"
 msgstr "{} (подтверждено)"
 
+#. Payout wallet disconnect: no confirmation code is waiting (it expired, was used, or too many wrong tries ended it); the person asks for a new one.
+msgctxt "account_code_expired"
+msgid "That code expired or was already used. Ask for a new one."
+msgstr "Срок действия кода истёк, или он уже использован. Запросите новый."
+
+#. Email change and payout wallet disconnect: a confirmation code the person entered is wrong; the request is still waiting.
+msgctxt "account_code_invalid"
+msgid "That code is wrong. Check it and try again."
+msgstr "Код неверный. Проверьте его и попробуйте снова."
+
+#. Email change and payout wallet disconnect: the server could not send a confirmation code; the person asks again.
+msgctxt "account_code_send_failed"
+msgid "The code could not be sent. Please try again."
+msgstr "Не удалось отправить код. Попробуйте снова."
+
 #. Shown when a purchase is refused before contacting the store because the account is not ready: on apple the networkId is missing or unparseable (Shared/ViewModels/AppStoreSubscriptionManager.swift), on android the active network space has no api yet (the Stripe sheet and pay page purchasers). The purchase could never be credited to anyone. This used to be a silent no-op.
 msgctxt "account_isn_t_ready_for_purchases"
 msgid "Your account isn't ready for purchases. Please restart the app and try again."
 msgstr "Ваш аккаунт пока не готов к покупкам. Перезапустите приложение и попробуйте снова."
+
+#. Email change and payout wallet disconnect: too many requests or codes were sent (rate limited); the person tries again later.
+msgctxt "account_too_many_tries"
+msgid "Too many tries. Please try again later."
+msgstr "Слишком много попыток. Повторите позже."
 
 #. Accessibility label of the row of rings, one per extender carrying a live connection.
 msgctxt "active_extenders"
@@ -5405,6 +5425,96 @@ msgctxt "edit_split_rule"
 msgid "Edit split rule"
 msgstr "Изменить правило разделения"
 
+#. Account, sign-in methods: the action beside the email sign-in that starts a verified email change, and the confirm button of its sheet.
+msgctxt "email_change"
+msgid "Change email"
+msgstr "Изменить почту"
+
+#. The email change sheet, first step: how the change works, above the new email field.
+msgctxt "email_change_body"
+msgid "Enter your new email. We'll send a code to your current email and another to the new one. Your email changes when you enter both. Your password stays the same."
+msgstr "Введите новый адрес почты. Мы отправим код на текущий адрес и ещё один на новый. Адрес изменится, когда вы введёте оба кода. Пароль останется прежним."
+
+#. The email change sheet, second step: the label of a code field. The argument is the address the code went to (the current email masked, or the new email).
+msgctxt "email_change_code_sent_to"
+msgid "Code sent to {}"
+msgstr "Код, отправленный на {}"
+
+#. The email change sheet, second step: where the two codes went. The arguments are the current email, masked (j…@example.com), and the new email.
+msgctxt "email_change_codes_sent"
+msgid "We sent a code to {0} and another to {1}."
+msgstr "Мы отправили код на {0} и ещё один на {1}."
+
+#. The email change sheet, once both codes were confirmed. The argument is the new email.
+msgctxt "email_change_done"
+msgid "Your email is now {}."
+msgstr "Теперь ваш адрес почты — {}."
+
+#. Email change refused: another account signs in with the new email.
+msgctxt "email_change_email_in_use"
+msgid "Another account already uses that email."
+msgstr "Этот адрес почты уже использует другой аккаунт."
+
+#. Email change refused: the current email sign-in is not verified yet.
+msgctxt "email_change_email_unverified"
+msgid "Verify your current email before you change it."
+msgstr "Подтвердите текущий адрес почты, прежде чем его менять."
+
+#. Email change: no change is waiting any more (it expired, was cancelled or never started); the sheet goes back to its first step.
+msgctxt "email_change_expired"
+msgid "This email change ended before it was confirmed. Start again."
+msgstr "Эта смена почты завершилась до подтверждения. Начните заново."
+
+#. Email change: the new email is not an email address.
+msgctxt "email_change_invalid_email"
+msgid "Enter a valid email address."
+msgstr "Введите правильный адрес почты."
+
+#. The email change sheet: the label of the new email field.
+msgctxt "email_change_new_email"
+msgid "New email"
+msgstr "Новый адрес почты"
+
+#. Email change refused: the account has no email sign-in to change; the person adds one as a sign-in method instead.
+msgctxt "email_change_no_email"
+msgid "Your account has no email sign-in. Add one as a sign-in method instead."
+msgstr "В вашем аккаунте нет входа по почте. Добавьте его как способ входа."
+
+#. The email change sheet, once complete, when the server could not sign out the other sessions (the current sign-in has none to keep). Names the Sessions screen (sessions_title) exactly.
+msgctxt "email_change_others_hint"
+msgid "To sign out your other devices, open Sessions."
+msgstr "Чтобы выйти на других устройствах, откройте «Сеансы»."
+
+#. The email change sheet, once complete: the account's other sessions were signed out.
+msgctxt "email_change_others_signed_out"
+msgid "Your other devices were signed out."
+msgstr "На других ваших устройствах выполнен выход."
+
+#. Email change refused: the new email is the current email.
+msgctxt "email_change_same_email"
+msgid "That's already your email."
+msgstr "Это уже ваш адрес почты."
+
+#. The email change sheet, first step: the button that sends the two codes.
+msgctxt "email_change_send_codes"
+msgid "Send codes"
+msgstr "Отправить коды"
+
+#. Email change: the app holds no network sign-in to send the change with (the sdk's network credential), or the server answered owner_only.
+msgctxt "email_change_sign_in_required"
+msgid "Sign in again to change your email."
+msgstr "Войдите снова, чтобы изменить адрес почты."
+
+#. The email change sheet: its title.
+msgctxt "email_change_title"
+msgid "Change your email"
+msgstr "Изменение электронной почты"
+
+#. Email change: too many wrong codes ended the request; the sheet goes back to its first step.
+msgctxt "email_change_too_many_tries"
+msgid "Too many wrong codes. Start again."
+msgstr "Слишком много неверных кодов. Начните заново."
+
 #. Onboarding feedback email, not-activated variant: one-tap reason 1.
 msgctxt "email_e4_reason_not_needed"
 msgid "I didn't need it yet"
@@ -5679,6 +5789,11 @@ msgstr "Произошла ошибка при отправке кода под�
 msgctxt "error_signing_in_with_google"
 msgid "Error signing in with Google"
 msgstr "Ошибка входа через Google"
+
+#. Sign-in screen and the add sign-in method sheet: Microsoft sign-in failed (not a cancel, which shows nothing).
+msgctxt "error_signing_in_with_microsoft"
+msgid "Error signing in with Microsoft"
+msgstr "Ошибка входа через Microsoft"
 
 #. Snackbar shown when saving the device name fails. Used in Main/Account/Settings/SettingsView.swift.
 msgctxt "error_updating_device_name"
@@ -7314,6 +7429,21 @@ msgstr "Участник"
 msgctxt "method"
 msgid "Method"
 msgstr "Способ"
+
+#. A label for Microsoft sign-in: the sign-in method in the account's list, and (apple) the Sessions screen's sign-in method of a session created with Sign in with Microsoft.
+msgctxt "microsoft"
+msgid "Microsoft"
+msgstr "Microsoft"
+
+#. Snackbar message displayed when a Microsoft sign-in method is successfully added.
+msgctxt "microsoft_sign_in_method_added"
+msgid "Microsoft sign-in method added"
+msgstr "Способ входа через Microsoft добавлен"
+
+#. Sign-in screen and the add sign-in method sheet: the server has no Microsoft sign-in configured yet (not_configured).
+msgctxt "microsoft_sign_in_unavailable"
+msgid "Sign in with Microsoft isn't available yet. Try another way to sign in."
+msgstr "Вход через Microsoft пока недоступен. Попробуйте другой способ входа."
 
 #. Compact relative-time label with an abbreviated minutes unit ("7m ago"), shown by the windows and linux stats formatters for events 1-59 minutes old. The argument is the elapsed minutes. Not a plural: the abbreviated unit does not inflect, but the word order and the unit abbreviation localize.
 msgctxt "minutes_ago_abbrev"
@@ -9788,6 +9918,11 @@ msgctxt "sessions_kind_google"
 msgid "Google"
 msgstr "Google"
 
+#. Sessions screen (Account > Sessions), row line 3, after the sign-in date: the sign-in method of a session created with Sign in with Microsoft. Not tagged apple: Apple's catalog is keyed by the English source, and microsoft already carries "Microsoft" there, so the apple screen reads that entry.
+msgctxt "sessions_kind_microsoft"
+msgid "Microsoft"
+msgstr "Microsoft"
+
 #. Sessions screen (Account > Sessions), row line 3, after the sign-in date: the sign-in method of a session created by signing in with a password. Not tagged apple: Apple's catalog is keyed by the English source, and password_label already carries "Password" there, so the apple screen reads that entry. Translated as password_label is, so every platform shows the same words.
 msgctxt "sessions_kind_password"
 msgid "Password"
@@ -10084,6 +10219,16 @@ msgstr "Войти через Google"
 msgctxt "sign_in_with_google_to_add_it"
 msgid "Sign in with Google to add it as a sign-in method."
 msgstr "Войдите через Google, чтобы добавить этот способ входа."
+
+#. Sign-in screen and the add sign-in method sheet: the Sign in with Microsoft button.
+msgctxt "sign_in_with_microsoft"
+msgid "Sign in with Microsoft"
+msgstr "Войти через Microsoft"
+
+#. Add sign-in method sheet: how to add Microsoft as a sign-in method.
+msgctxt "sign_in_with_microsoft_to_add_it"
+msgid "Sign in with Microsoft to add it as a sign-in method."
+msgstr "Войдите через Microsoft, чтобы добавить этот способ входа."
 
 msgctxt "sign_in_with_seedphrase"
 msgid "Sign in with Seedphrase"
@@ -14023,6 +14168,46 @@ msgctxt "wallet_connected_to_protocol"
 msgid "Connected to the UR protocol. Claims land here. Alpha accrues from the next epoch after connecting."
 msgstr "Подключено к протоколу UR. Полученные средства поступают сюда. Alpha начисляется со следующей эпохи после подключения."
 
+#. Earnings, Bittensor wallet card: the action that disconnects the connected payout wallet, and the confirm button of its dialog.
+msgctxt "wallet_disconnect"
+msgid "Disconnect wallet"
+msgstr "Отключить кошелёк"
+
+#. Earnings, the dialog that disconnects the payout wallet: what happens with no payout wallet, said plainly, before the code is sent.
+msgctxt "wallet_disconnect_body"
+msgid "With no payout wallet, your earnings can't be paid out. Earnings already paid stay claimable by the wallet they were paid to. To confirm, we'll email a code to your account."
+msgstr "Без кошелька для выплат ваш заработок не может быть выплачен. Уже выплаченный заработок по-прежнему может получить кошелёк, на который он был выплачен. Для подтверждения мы отправим код на электронную почту вашего аккаунта."
+
+#. Earnings, the dialog that disconnects the payout wallet, once the code is sent. The argument is the masked sign-in email addresses it went to, joined with commas (j…@example.com).
+msgctxt "wallet_disconnect_code_sent"
+msgid "We sent a code to {}. Enter it to disconnect the wallet."
+msgstr "Мы отправили код на {}. Введите его, чтобы отключить кошелёк."
+
+#. Earnings, the payout wallet disconnect refused because a signed payout consent (or hotkey delegation) pays the network: only a signed replacement can end it. Names the Change wallet button (sn_consent_change) exactly.
+msgctxt "wallet_disconnect_consent_in_force"
+msgid "Your signed payout consent sends your earnings to this wallet, and only another signed consent can replace it. Use Change wallet instead."
+msgstr "Ваше подписанное согласие на выплаты направляет заработок на этот кошелёк, и заменить его может только другое подписанное согласие. Используйте «Сменить кошелек»."
+
+#. Earnings, the payout wallet disconnect refused because the account has no sign-in email to send the confirmation code to.
+msgctxt "wallet_disconnect_email_required"
+msgid "Add an email sign-in to your account first. The confirmation code is sent to it."
+msgstr "Сначала добавьте в аккаунт вход по электронной почте. Код подтверждения отправляется на неё."
+
+#. Earnings, the dialog that disconnects the payout wallet: the button that emails the confirmation code to the account's sign-in addresses.
+msgctxt "wallet_disconnect_send_code"
+msgid "Email me a code"
+msgstr "Отправить код на почту"
+
+#. Earnings, the dialog that disconnects the payout wallet: its title.
+msgctxt "wallet_disconnect_title"
+msgid "Disconnect your payout wallet?"
+msgstr "Отключить кошелёк для выплат?"
+
+#. Earnings, after the payout wallet was disconnected: the confirmation, saying plainly that earnings can't be paid out now.
+msgctxt "wallet_disconnected"
+msgid "Wallet disconnected. Your earnings can't be paid out until you connect a payout wallet."
+msgstr "Кошелёк отключён. Ваш заработок не может быть выплачен, пока вы не подключите кошелёк для выплат."
+
 #. Warning when a wallet address has no activity on the Bittensor chain yet; the user may continue.
 msgctxt "wallet_looks_new_warning"
 msgid "This address has no activity on the Bittensor chain yet. It looks like a new wallet. Make sure it is yours before continuing."
@@ -14032,6 +14217,11 @@ msgstr "У этого адреса пока нет активности в бл�
 msgctxt "wallet_needs_network"
 msgid "This wallet isn't linked to a network yet. Pick a network name to create one."
 msgstr "Этот кошелек пока не привязан к сети. Выберите имя сети, чтобы создать ее."
+
+#. Earnings, Bittensor wallet card with no wallet connected: says plainly that earnings can't be paid out without a payout wallet.
+msgctxt "wallet_none_no_payout"
+msgid "No payout wallet. Your earnings can't be paid out until you connect one."
+msgstr "Нет кошелька для выплат. Ваш заработок не может быть выплачен, пока вы его не подключите."
 
 #. Line on the wallet block before a wallet is connected.
 msgctxt "wallet_not_retroactive"

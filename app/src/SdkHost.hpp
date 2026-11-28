@@ -53,6 +53,7 @@
 #include "AddSignInFlow.hpp"
 #include "AuthLogout.hpp"
 #include "BittensorWalletFlow.hpp"
+#include "SsoBridge.hpp"
 #include "WalletBridgeRoute.hpp"
 #include "WalletConnect.hpp"
 
@@ -68,8 +69,8 @@ struct AuthResult {
   // kept the signed wallet_auth (see CreateNetworkWithPendingWallet) and the
   // UI routes into the create-network page instead of dead-ending.
   bool wallet_needs_network = false;
-  // Google/Apple (the provider's web flow) authenticated but the identity has
-  // no network yet: the host kept the identity token (see
+  // Google/Apple/Microsoft (the provider's web flow) authenticated but the
+  // identity has no network yet: the host kept the identity token (see
   // CreateNetworkWithPendingSso) and the UI routes into the create-network
   // page the same way.
   bool sso_needs_network = false;
@@ -89,6 +90,11 @@ struct AuthResult {
   // screens say where to sign sessions out (session_limit::SignInRefusalBody)
   // instead of the server's words. Nothing is kept to try again.
   bool sessionLimit = false;
+  // The sdk's Microsoft attempt refused the return (SdkHost::
+  // FinishMicrosoftSignIn): the sign-in screen words it itself
+  // (sso::MicrosoftFailureTextFor), and a cancel says nothing. `error` keeps
+  // the sdk's words, for the log.
+  sso::MicrosoftFailure microsoftFailure = sso::MicrosoftFailure::None;
 };
 
 // Outcome of the authLogin account discovery (macOS LoginInitialViewModel
@@ -626,7 +632,10 @@ class SdkHost {
   // token minted for that nonce reaches
   // authLogin{auth_jwt_type, auth_jwt}. A new identity (no network) reports
   // sso_needs_network and the create page finishes with
-  // CreateNetworkWithPendingSso.
+  // CreateNetworkWithPendingSso. Microsoft (sso::kProviderMicrosoft) signs in
+  // the same way through the sdk's MicrosoftSignInAttempt, which mints the
+  // state and nonce, builds the api's start url and judges the return
+  // (FinishMicrosoftSignIn); a return it refused reports microsoftFailure.
   void SignInWithSso(const std::string& provider, std::function<void(AuthResult)> done);
 
   // The same bridge as a plain SIGNER (no sign-in): fetch a wallet challenge for
@@ -670,6 +679,9 @@ class SdkHost {
   struct AddSignInResult {
     bool ok = false;
     std::string error;
+    // the sdk's Microsoft attempt refused the return: the sheet words it
+    // itself, as the sign-in screen does (AuthResult::microsoftFailure)
+    sso::MicrosoftFailure microsoftFailure = sso::MicrosoftFailure::None;
   };
   void AddSignInWithSso(const std::string& provider, std::function<void(AddSignInResult)> done);
   void AddSignInWithSolana(WalletConnect::Provider provider,
@@ -2335,6 +2347,17 @@ class SdkHost {
   // (addsignin::RouteSso).
   addsignin::Owner ssoOwner_ = addsignin::Owner::None;
   std::function<void(AddSignInResult)> ssoAddDone_;
+  // The Microsoft attempt in flight (guarded by mutex_), none for Google and
+  // Apple: the sdk's MicrosoftSignInAttempt (oauth_microsoft.go), whose state
+  // and nonce are ssoState_ and ssoNonce_ and which judges its return, and the
+  // wallet flow it started; a return after a newer flow started is dropped.
+  // ssoOwner_ and walletAuthDone_ / ssoAddDone_ carry its owner and completion
+  // as for Google and Apple. Shared, so a return is judged outside the lock.
+  std::shared_ptr<urnet::MicrosoftSignInAttempt> microsoftAttempt_;
+  uint64_t microsoftFlow_ = 0;
+  // urnetwork://oauth/microsoft: the attempt in flight judges it, and a
+  // verified identity token goes to its owner as a Google one does (on_sso).
+  void FinishMicrosoftSignIn(const std::string& returnUrl);
   // A wallet being added (guarded by mutex_): its signature goes to add-auth
   // (bridge::SignatureRoute::AnswerAdd), never to authLogin.
   std::function<void(AddSignInResult)> walletAddDone_;

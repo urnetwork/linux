@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <utility>
 
+#include "AccountCodeText.hpp"
 #include "BittensorKeyScreen.hpp"
 #include "BittensorKeyText.hpp"
 #include "BittensorWalletChooser.hpp"
@@ -822,17 +823,23 @@ SnWalletInfo ToWalletInfo(const urnet::SnWallet& wallet) {
 }
 
 // The wallet that counts for THIS device: the one attached to its provider
-// client, else the network-level one. ok=false is a transport/server failure;
-// ok=true with no wallet is the definite answer "none attached".
-using WalletDone =
-    std::function<void(bool ok, std::optional<SnWalletInfo> wallet, std::string err)>;
+// client, else the network-level one, and what the network's wallets allow
+// (the sdk's SnGetWalletResult.Disconnectable and HasWallet over the same
+// answer). ok=false is a transport/server failure; ok=true with no wallet is
+// the definite answer "none attached".
+using WalletDone = std::function<void(bool ok, std::optional<SnWalletInfo> wallet,
+                                      SnWalletPayout payout, std::string err)>;
 void FetchWallet(SdkHost& host, const std::string& clientId, WalletDone done) {
   host.api().snGetWallet([done, clientId](std::optional<urnet::SnGetWalletResult> result,
                                           std::optional<std::string> err) {
     if (err || !result || result->error) {
-      done(false, std::nullopt, ErrorText(result ? result->error : std::nullopt, err, "no result"));
+      done(false, std::nullopt, SnWalletPayout{},
+           ErrorText(result ? result->error : std::nullopt, err, "no result"));
       return;
     }
+    SnWalletPayout payout;
+    payout.disconnectable = urnet::snWalletDisconnectable(result);
+    payout.hasWallet = urnet::snWalletHasWallet(result);
     std::optional<SnWalletInfo> chosen;
     if (!clientId.empty() && result->wallets) {
       for (const auto& wallet : *result->wallets) {
@@ -845,7 +852,7 @@ void FetchWallet(SdkHost& host, const std::string& clientId, WalletDone done) {
     if (!chosen && result->wallet && !result->wallet->coldkey_ss58.empty()) {
       chosen = ToWalletInfo(*result->wallet);
     }
-    done(true, std::move(chosen), std::string());
+    done(true, std::move(chosen), payout, std::string());
   });
 }
 
@@ -2033,6 +2040,165 @@ void LedgerClaimSheet::ShowError(const Glib::ustring& message) {
   kit::SetTextOrCollapse(*errorText_, message);
 }
 
+// ---- WalletDisconnectSheet ---------------------------------------------------
+// Disconnect wallet's dialog (sdk api_sn_wallet_disconnect.go): what having no
+// payout wallet means, then the code the server emails to the account's
+// sign-in addresses, which disconnects the wallet. Two steps: the
+// confirmation, whose Email me a code asks the page for a code, and the code,
+// whose Disconnect wallet sends it. The page makes the calls and answers here;
+// every refusal renders on the sheet (a snackbar behind a modal is
+// unreadable). Enter never disconnects: the code field submits nothing.
+class WalletDisconnectSheet : public Gtk::Window {
+ public:
+  explicit WalletDisconnectSheet(Gtk::Window& parent);
+
+  std::function<void()> on_send_code;                          // page: SendWalletDisconnectCode
+  std::function<void(const std::string& code)> on_disconnect;  // page: DisconnectWallet
+
+  // a call went out: the actions wait for its answer
+  void SetBusy();
+  // the code went to `sentTo` (the masked sign-in addresses, joined): the code
+  // step
+  void ShowCodeSent(const std::string& sentTo);
+  // a refusal, on the step it came from; with `askNewCode` the code ended and
+  // the confirmation asks for a new one
+  void ShowError(const Glib::ustring& message, bool askNewCode = false);
+
+ private:
+  void Render();
+
+  bool busy_ = false;
+  bool codeStep_ = false;
+  Glib::ustring error_;
+  Gtk::Stack stack_;
+  Gtk::Label* confirmError_ = nullptr;
+  Gtk::Button* sendCode_ = nullptr;
+  Gtk::Label* codeSent_ = nullptr;
+  Gtk::Entry* code_ = nullptr;
+  Gtk::Label* codeError_ = nullptr;
+  Gtk::Button* disconnect_ = nullptr;
+};
+
+WalletDisconnectSheet::WalletDisconnectSheet(Gtk::Window& parent) {
+  set_transient_for(parent);
+  set_modal(true);
+  set_title(T_("wallet_disconnect_title", "Disconnect your payout wallet?"));
+  set_default_size(kSheetMinWidth, -1);
+  add_css_class("ur-sheet");
+
+  // 1. what it means, and Email me a code
+  auto* confirm = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+  confirm->set_margin(24);
+  confirm->set_size_request(kSheetMinWidth, -1);
+  confirm->append(*MakeWrappedNote(
+      T_("wallet_disconnect_title", "Disconnect your payout wallet?"), "ur-step-heading"));
+  confirm->append(*MakeWrappedNote(
+      T_("wallet_disconnect_body",
+         "With no payout wallet, your earnings can't be paid out. Earnings already paid stay "
+         "claimable by the wallet they were paid to. To confirm, we'll email a code to your "
+         "account."),
+      "ur-body"));
+  confirmError_ = MakeSizedLabel({}, 12, "ur-danger-text");
+  confirmError_->set_visible(false);
+  confirm->append(*confirmError_);
+  auto* confirmActions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  confirmActions->set_halign(Gtk::Align::END);
+  auto* confirmCancel = Gtk::make_managed<Gtk::Button>(T_("cancel", "Cancel"));
+  confirmCancel->add_css_class("flat");
+  confirmCancel->signal_clicked().connect([this] { set_visible(false); });
+  confirmActions->append(*confirmCancel);
+  sendCode_ =
+      Gtk::make_managed<Gtk::Button>(T_("wallet_disconnect_send_code", "Email me a code"));
+  sendCode_->add_css_class("ur-pane-primary");
+  sendCode_->signal_clicked().connect([this] {
+    if (!busy_ && on_send_code) on_send_code();
+  });
+  confirmActions->append(*sendCode_);
+  confirm->append(*confirmActions);
+  stack_.add(*confirm, "confirm");
+
+  // 2. where the code went, the code, and Disconnect wallet
+  auto* code = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+  code->set_margin(24);
+  code->set_size_request(kSheetMinWidth, -1);
+  code->append(*MakeWrappedNote(
+      T_("wallet_disconnect_title", "Disconnect your payout wallet?"), "ur-step-heading"));
+  codeSent_ = MakeWrappedNote({}, "ur-body");
+  code->append(*codeSent_);
+  auto* codeLabel = Gtk::make_managed<Gtk::Label>(T_("code", "Code"));
+  codeLabel->add_css_class("ur-input-label");
+  codeLabel->set_xalign(0);
+  code->append(*codeLabel);
+  code_ = Gtk::make_managed<Gtk::Entry>();
+  code_->add_css_class("ur-otp");
+  code_->set_input_purpose(Gtk::InputPurpose::DIGITS);
+  kit::SetAccessibleLabel(*code_, T_("code", "Code"));
+  code_->signal_changed().connect([this] {
+    error_.clear();
+    Render();
+  });
+  code->append(*code_);
+  codeError_ = MakeSizedLabel({}, 12, "ur-danger-text");
+  codeError_->set_visible(false);
+  code->append(*codeError_);
+  auto* codeActions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+  codeActions->set_halign(Gtk::Align::END);
+  auto* codeCancel = Gtk::make_managed<Gtk::Button>(T_("cancel", "Cancel"));
+  codeCancel->add_css_class("flat");
+  codeCancel->signal_clicked().connect([this] { set_visible(false); });
+  codeActions->append(*codeCancel);
+  disconnect_ = Gtk::make_managed<Gtk::Button>(T_("wallet_disconnect", "Disconnect wallet"));
+  disconnect_->add_css_class("destructive-action");  // red is the confirmation context
+  disconnect_->signal_clicked().connect([this] {
+    const std::string typed = TrimWhitespace(code_->get_text().raw());
+    if (!busy_ && !typed.empty() && on_disconnect) on_disconnect(typed);
+  });
+  codeActions->append(*disconnect_);
+  code->append(*codeActions);
+  stack_.add(*code, "code");
+
+  stack_.set_vhomogeneous(false);
+  set_child(stack_);
+  Render();
+}
+
+void WalletDisconnectSheet::SetBusy() {
+  busy_ = true;
+  error_.clear();
+  Render();
+}
+
+void WalletDisconnectSheet::ShowCodeSent(const std::string& sentTo) {
+  busy_ = false;
+  codeStep_ = true;
+  codeSent_->set_text(Format(
+      T_("wallet_disconnect_code_sent", "We sent a code to {}. Enter it to disconnect the wallet."),
+      sentTo));
+  code_->set_text("");
+  error_.clear();
+  Render();
+  code_->grab_focus();
+}
+
+void WalletDisconnectSheet::ShowError(const Glib::ustring& message, bool askNewCode) {
+  busy_ = false;
+  if (askNewCode) {
+    codeStep_ = false;
+    code_->set_text("");
+  }
+  error_ = message;
+  Render();
+}
+
+void WalletDisconnectSheet::Render() {
+  stack_.set_visible_child(codeStep_ ? "code" : "confirm");
+  kit::SetTextOrCollapse(*confirmError_, codeStep_ ? Glib::ustring() : error_);
+  kit::SetTextOrCollapse(*codeError_, codeStep_ ? error_ : Glib::ustring());
+  sendCode_->set_sensitive(!busy_);
+  code_->set_sensitive(!busy_);
+  disconnect_->set_sensitive(!busy_ && !TrimWhitespace(code_->get_text().raw()).empty());
+}
+
 // ---- EarningsPage ------------------------------------------------------------
 
 EarningsPage::EarningsPage(SdkHost& host)
@@ -2144,6 +2310,7 @@ EarningsPage::~EarningsPage() {
   if (protocol_) protocol_->Release();
   rankingFlow_.timer.disconnect();
   consentStep_.timer.disconnect();
+  walletDisconnectFlow_.timer.disconnect();
   consent_.on_changed = nullptr;
   consent_.on_error = nullptr;
   // the key's flow ends with the page: nothing of it may reach a widget now
@@ -2285,6 +2452,11 @@ void EarningsPage::ResetForSignOut() {
   ledgerClaimFlow_.timer.disconnect();
   if (auto open = claimSheet_.lock()) open->set_visible(false);
   if (auto open = ledgerClaimSheet_.lock()) open->set_visible(false);
+  // a wallet disconnect in flight, and its sheet, were the departed account's:
+  // its watchdog goes too, so it cannot report to the next account
+  ++walletDisconnectFlow_.generation;
+  walletDisconnectFlow_.timer.disconnect();
+  if (auto open = walletDisconnectSheet_.lock()) open->set_visible(false);
   // A switch's set still in flight was the departed account's. Load's epoch
   // drops its answer, so it is abandoned here: its watchdog would otherwise
   // report it failed to whoever signs in next, and the switch would stay
@@ -2614,6 +2786,16 @@ void EarningsPage::BuildEarningsPane() {
            "Connected to the UR protocol. Claims land here. Alpha accrues from the next "
            "epoch after connecting."),
         "ur-row-note"));
+    // a wallet connected without a signed consent can go (the wallet read
+    // says so): flat on the card, red only in its confirmation
+    disconnectWalletButton_ =
+        Gtk::make_managed<Gtk::Button>(T_("wallet_disconnect", "Disconnect wallet"));
+    disconnectWalletButton_->add_css_class("flat");
+    disconnectWalletButton_->set_halign(Gtk::Align::START);
+    disconnectWalletButton_->set_visible(false);
+    disconnectWalletButton_->signal_clicked().connect(
+        sigc::mem_fun(*this, &EarningsPage::OnDisconnectWallet));
+    row.content->append(*disconnectWalletButton_);
     walletConnectedPanel_->set_visible(false);
     content->append(*row.root);
   }
@@ -2644,6 +2826,13 @@ void EarningsPage::BuildEarningsPane() {
     auto row = MakePaddedRow(12);
     row.content->set_spacing(10);
     walletConnectPanel_ = row.root;
+    // no wallet attached to the network at all: said plainly, above the hint
+    walletNoPayoutNote_ = MakeWrappedNote(
+        T_("wallet_none_no_payout",
+           "No payout wallet. Your earnings can't be paid out until you connect one."),
+        "ur-row-note");
+    walletNoPayoutNote_->set_visible(false);
+    row.content->append(*walletNoPayoutNote_);
     // plain note (not a link), then a "Learn more" link in the pink accent with
     // an outward arrow that opens the protocol site; inline, so it shares the
     // last line when it fits
@@ -3154,20 +3343,7 @@ void EarningsPage::LoadEarnings() {
   });
 
   // 4. the attached wallet — and, once known, the claims behind it
-  sn::FetchWallet(host_, ProviderClientId(),
-                  [this, epoch, seen](bool ok, std::optional<SnWalletInfo> wallet,
-                                      std::string err) {
-    PostToMain([this, epoch, seen, ok, wallet = std::move(wallet), err = std::move(err)] {
-      if (*epoch != seen) return;
-      if (!ok) {
-        g_warning("earnings: sn wallet failed: %s", err.c_str());
-        ApplySnWallet(std::nullopt, Fetch::Failed);
-        return;
-      }
-      ApplySnWallet(std::move(wallet), Fetch::Ready);
-      LoadWalletLayer();
-    });
-  });
+  LoadSnWallet();
 
   // 4b. the payout consent: the status, whatever the wallet above
   consent_.Load();
@@ -3200,6 +3376,29 @@ void EarningsPage::LoadEarnings() {
           ApplyReliability(result->reliability_window, Fetch::Ready);
         });
       });
+}
+
+// The Bittensor wallet card's read: the wallet that counts for this device and
+// what the network's wallets allow (Disconnect wallet, the no payout wallet
+// line), then the subnet layer behind the wallet.
+void EarningsPage::LoadSnWallet() {
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  sn::FetchWallet(host_, ProviderClientId(),
+                  [this, epoch, seen](bool ok, std::optional<SnWalletInfo> wallet,
+                                      SnWalletPayout payout, std::string err) {
+    PostToMain([this, epoch, seen, ok, wallet = std::move(wallet), payout,
+                err = std::move(err)] {
+      if (*epoch != seen) return;
+      if (!ok) {
+        g_warning("earnings: sn wallet failed: %s", err.c_str());
+        ApplySnWallet(std::nullopt, Fetch::Failed);
+        return;
+      }
+      ApplySnWallet(std::move(wallet), Fetch::Ready, payout);
+      LoadWalletLayer();
+    });
+  });
 }
 
 // The subnet layer: the vault's view of this network's epochs, the coldkey's
@@ -3384,8 +3583,10 @@ void EarningsPage::ApplyEpochs(std::optional<std::vector<AccountEpochRow>> epoch
   RebuildHistory();
 }
 
-void EarningsPage::ApplySnWallet(std::optional<SnWalletInfo> wallet, Fetch state) {
+void EarningsPage::ApplySnWallet(std::optional<SnWalletInfo> wallet, Fetch state,
+                                 std::optional<SnWalletPayout> payout) {
   walletState_ = state;
+  walletPayout_ = state == Fetch::Ready ? payout : std::nullopt;
   if (state == Fetch::Loading) {
     kit::SetTextOrCollapse(*walletStatus_, T_("loading", "Loading..."));
     RebuildWalletBlock();
@@ -3792,6 +3993,10 @@ void EarningsPage::RebuildWalletBlock() {
                                 wallet_->coldkeySs58);
     changeWalletButton_->set_sensitive(!connecting_ && !consent_.Busy());
   }
+  // Disconnect wallet only while the wallet read says one can go
+  disconnectWalletButton_->set_visible(connected && walletPayout_ &&
+                                       walletPayout_->disconnectable);
+  disconnectWalletButton_->set_sensitive(!connecting_ && !consent_.Busy());
   // the one-tap key on this device, while no wallet is read: its address, and
   // whether the consent pays it yet
   const bool keyPanel = KeyPanelShows();
@@ -3817,6 +4022,8 @@ void EarningsPage::RebuildWalletBlock() {
   walletConnectPanel_->set_visible(offerConnect);
   // a link label keeps its markup; only its visibility follows the wallet state
   walletConnectNote_->set_visible(!connected);
+  // the read found no wallet attached to the network: nothing can be paid out
+  walletNoPayoutNote_->set_visible(!connected && walletPayout_ && !walletPayout_->hasWallet);
   // the bridge carries one wallet flow at a time: a consent signing holds it too
   const bool bridgeBusy = connecting_ || consent_.Busy();
   connectBridgeButton_->set_sensitive(!bridgeBusy);
@@ -4501,6 +4708,147 @@ void EarningsPage::ApplyWalletConnectResult(uint32_t generation, bool ok,
 void EarningsPage::FinishConnecting() {
   connecting_ = false;
   RebuildWalletBlock();
+}
+
+// ---- disconnect the payout wallet ----------------------------------------------
+// Disconnect wallet on the connected card (sdk api_sn_wallet_disconnect.go):
+// the confirmation, then the code the server emails, each call behind a 20 s
+// watchdog. The routes take only the network credential, which the sdk sends.
+// A disconnect lands on the card whether or not its sheet is still open: the
+// wallet is read again and the card says so.
+
+void EarningsPage::OnDisconnectWallet() {
+  // the card's wallet actions wait for the bridge's flow, as Change does
+  if (connecting_ || consent_.Busy()) return;
+  if (!CanCallApi()) {
+    RefuseNoSession();
+    return;
+  }
+  auto* root = dynamic_cast<Gtk::Window*>(get_root());
+  if (root == nullptr || sheet_ || (sheet_open && sheet_open())) return;
+  auto sheet = std::make_shared<WalletDisconnectSheet>(*root);
+  sheet->on_send_code = [this] { SendWalletDisconnectCode(); };
+  sheet->on_disconnect = [this](const std::string& code) { DisconnectWallet(code); };
+  walletDisconnectSheet_ = sheet;
+  PresentSheet(sheet);
+}
+
+void EarningsPage::SendWalletDisconnectCode() {
+  auto open = walletDisconnectSheet_.lock();
+  if (!open) return;
+  if (!CanCallApi()) {
+    open->ShowError(T_("please_login_to_urnetwork", "Please login to URnetwork"));
+    return;
+  }
+  open->SetBusy();
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  const uint32_t generation = BeginFlow(walletDisconnectFlow_, kApiTimeoutMs, [this] {
+    if (auto sheet = walletDisconnectSheet_.lock()) {
+      sheet->ShowError(T_("something_went_wrong", "Something went wrong."));
+    }
+  });
+  host_.api().snWalletDisconnectCode(
+      [this, epoch, seen, generation](std::optional<urnet::SnWalletDisconnectCodeResult> result,
+                                      std::optional<std::string> err) {
+        PostToMain([this, epoch, seen, generation, result = std::move(result),
+                    err = std::move(err)] {
+          if (*epoch != seen) return;
+          if (!SettleFlow(walletDisconnectFlow_, generation, "wallet disconnect code")) return;
+          if (err || !result) {
+            g_warning("earnings: the wallet disconnect code failed: %s",
+                      err ? err->c_str() : "(no result)");
+            if (auto sheet = walletDisconnectSheet_.lock()) {
+              sheet->ShowError(T_("something_went_wrong", "Something went wrong."));
+            }
+            return;
+          }
+          if (result->error) {
+            ApplyWalletDisconnectRefusal(*result->error);
+            return;
+          }
+          // the masked sign-in addresses the code went to
+          std::string sentTo;
+          for (const std::string& address : result->sent_to.value_or(urnet::StringList{})) {
+            if (!sentTo.empty()) sentTo += ", ";
+            sentTo += address;
+          }
+          if (auto sheet = walletDisconnectSheet_.lock()) sheet->ShowCodeSent(sentTo);
+        });
+      });
+}
+
+void EarningsPage::DisconnectWallet(const std::string& code) {
+  auto open = walletDisconnectSheet_.lock();
+  if (!open) return;
+  if (!CanCallApi()) {
+    open->ShowError(T_("please_login_to_urnetwork", "Please login to URnetwork"));
+    return;
+  }
+  open->SetBusy();
+  auto epoch = epoch_;
+  const uint64_t seen = *epoch_;
+  const uint32_t generation = BeginFlow(walletDisconnectFlow_, kApiTimeoutMs, [this] {
+    if (auto sheet = walletDisconnectSheet_.lock()) {
+      sheet->ShowError(T_("something_went_wrong", "Something went wrong."));
+    }
+  });
+  // the sdk normalizes the code as an email change code
+  host_.api().snWalletDisconnect(
+      code, [this, epoch, seen, generation](std::optional<urnet::SnWalletDisconnectResult> result,
+                                            std::optional<std::string> err) {
+        PostToMain([this, epoch, seen, generation, result = std::move(result),
+                    err = std::move(err)] {
+          if (*epoch != seen) return;
+          if (!SettleFlow(walletDisconnectFlow_, generation, "wallet disconnect")) return;
+          if (err || !result || (!result->error && !result->disconnected)) {
+            g_warning("earnings: the wallet disconnect failed: %s",
+                      err ? err->c_str() : "(not disconnected)");
+            if (auto sheet = walletDisconnectSheet_.lock()) {
+              sheet->ShowError(T_("something_went_wrong", "Something went wrong."));
+            }
+            return;
+          }
+          if (result->error) {
+            ApplyWalletDisconnectRefusal(*result->error);
+            return;
+          }
+          // the network has no payout wallet now: the sheet closes, the card
+          // reads the wallet again and says what that means
+          if (auto sheet = walletDisconnectSheet_.lock()) sheet->set_visible(false);
+          changingWallet_ = false;
+          LoadSnWallet();
+          Notify(T_("wallet_disconnected",
+                    "Wallet disconnected. Your earnings can't be paid out until you connect a "
+                    "payout wallet."),
+                 kit::Snackbar::Severity::Success);
+        });
+      });
+}
+
+void EarningsPage::ApplyWalletDisconnectRefusal(const urnet::SnWalletDisconnectError& refusal) {
+  std::shared_ptr<WalletDisconnectSheet> sheet = walletDisconnectSheet_.lock();
+  if (refusal.code == urnet::SnWalletDisconnectErrorCodeNoWallet) {
+    // nothing is left to disconnect: the card reads the wallet again
+    if (sheet) sheet->set_visible(false);
+    LoadSnWallet();
+    return;
+  }
+  g_message("earnings: the wallet disconnect was refused: %s", refusal.code.c_str());
+  if (!sheet) return;
+  const std::optional<account_code::Text> text =
+      account_code::WalletDisconnectRefusalText(refusal.code);
+  Glib::ustring message;
+  if (text) {
+    message = g_dpgettext2(GETTEXT_PACKAGE, text->key, text->english);
+  } else if (!refusal.message.empty()) {
+    message = refusal.message;  // owner_only, or a newer server's code
+  } else {
+    message = T_("something_went_wrong", "Something went wrong.");
+  }
+  // an expired or used-up code: the confirmation asks for a new one; a wrong
+  // code keeps the field
+  sheet->ShowError(message, refusal.code == urnet::SnWalletDisconnectErrorCodeCodeExpired);
 }
 
 // ---- the network payout consent ------------------------------------------------
@@ -5926,6 +6274,7 @@ void EarningsPage::CloseSheet() {
   ledgerClaimSheet_.reset();
   claimRelaySheet_.reset();
   top200SignSheet_.reset();
+  walletDisconnectSheet_.reset();
   if (on_sheet_open_changed) on_sheet_open_changed(false);
 }
 
@@ -6032,7 +6381,8 @@ void EarningsPage::ApplyPreviewSample() {
   }
 
   if (g_getenv("URNETWORK_PREVIEW_WALLET") == nullptr) {
-    ApplySnWallet(std::nullopt, Fetch::Ready);
+    // the sample network has no wallet at all: the no payout wallet line
+    ApplySnWallet(std::nullopt, Fetch::Ready, SnWalletPayout{});
     if (g_getenv("URNETWORK_PREVIEW_MANUAL") != nullptr) {
       // the manual entry with an address that passed the syntax check and
       // came back from the validate call as a new wallet (warn, allow)
@@ -6051,7 +6401,11 @@ void EarningsPage::ApplyPreviewSample() {
   wallet.coldkeySs58 = kSampleColdkey;
   wallet.clientId = "sample-client";
   wallet.setAtMillis = 1756000000000LL;
-  ApplySnWallet(wallet, Fetch::Ready);
+  // connected without a consent: Disconnect wallet shows
+  SnWalletPayout payout;
+  payout.disconnectable = true;
+  payout.hasWallet = true;
+  ApplySnWallet(wallet, Fetch::Ready, payout);
   auto claim = [](int64_t epoch, int64_t shareBps, int64_t rao, const char* status,
                   const char* tx) {
     SnClaimRow out;

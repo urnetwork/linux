@@ -255,6 +255,7 @@ inline std::optional<Text> MethodFor(const std::string& kind) {
   if (kind == "verify") return Text{"sessions_kind_verify", "Verification code"};
   if (kind == "apple") return Text{"sessions_kind_apple", "Apple"};
   if (kind == "google") return Text{"sessions_kind_google", "Google"};
+  if (kind == "microsoft") return Text{"sessions_kind_microsoft", "Microsoft"};
   if (kind == "sso") return Text{"sessions_kind_sso", "Single sign-on"};
   if (kind == "wallet") return Text{"sessions_kind_wallet", "Wallet"};
   if (kind == "seedphrase") return Text{"sessions_kind_seedphrase", "Recovery phrase"};
