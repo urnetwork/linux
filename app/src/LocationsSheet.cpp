@@ -175,13 +175,15 @@ void LocationsSheet::AppendLocationSection(
 }
 
 Gtk::Button* LocationsSheet::MakeLocationRow(const urnet::ConnectLocation& location,
-                                             bool selected) {
+                                             bool selected, const std::string& captionOverride) {
   const int providerCount = location.provider_count.value_or(0);
   const std::string caption =
-      0 < providerCount ? Format(TN_("provider_count", "{} provider", "{} providers",
-                                     static_cast<unsigned long>(providerCount)),
-                                 providerCount)
-                        : std::string();
+      !captionOverride.empty()
+          ? captionOverride
+          : (0 < providerCount ? Format(TN_("provider_count", "{} provider", "{} providers",
+                                            static_cast<unsigned long>(providerCount)),
+                                        providerCount)
+                               : std::string());
   // a country in the app's language, as the connection region picker names it
   const std::string name = SanitizeExternalDisplayText(LocationDisplayName(location));
   auto row = MakeRowShell(MakeColorDot(LocationColor(location)), name, caption);
@@ -263,6 +265,26 @@ void LocationsSheet::RebuildSections() {
       box->append(*MakePeerRow(peer, IsPeerSelected(selected, peer)));
     }
     sectionsBox_.append(*box);
+  }
+
+  // 1a. favorites (sdk exit_location_preferences.go), while not searching. A
+  //     favorite exit is one member's device, and its row says so.
+  if (!searching) {
+    const auto favorites = host_.FavoriteLocations();
+    if (!favorites.empty()) {
+      sectionsBox_.append(*MakeCaption(T_("favorites", "Favorites")));
+      auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
+      for (const auto& favorite : favorites) {
+        const std::string caption =
+            urnet::isFavoriteExit(favorite)
+                ? std::string(T_("favorite_exit_note",
+                                 "A member's device. It can go offline or leave the network at "
+                                 "any time."))
+                : std::string();
+        box->append(*MakeLocationRow(favorite, IsLocationSelected(selected, favorite), caption));
+      }
+      sectionsBox_.append(*box);
+    }
   }
 
   const auto filtered = host_.GetFilteredLocations();

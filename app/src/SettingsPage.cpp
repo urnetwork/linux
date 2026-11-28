@@ -16,11 +16,15 @@
 
 #include "AppPrefs.hpp"
 #include "CloudProxyLink.hpp"
+#include "ConnectionRegionSheet.hpp"  // LocationDisplayName: the location list's name
+#include "DisplayText.hpp"            // SanitizeExternalDisplayText
 #include "ExcludeAppsSheet.hpp"
 #include "I18n.hpp"
 #include "KillSwitchCopy.hpp"
 #include "LaunchAtStartup.hpp"
 #include "LicensesSheet.hpp"
+#include "LocationFeed.hpp"       // TrimLocationQuery
+#include "LocationSelection.hpp"  // IsLocationSelected
 #include "ManageDevicesPresentation.hpp"  // the Device pane's Manage devices row
 #include "PaneKit.hpp"
 #include "PostQuantumIdentity.hpp"  // ProviderIdentitiesSheet (reused as-is)
@@ -353,6 +357,190 @@ class SettingsDeviceNameSheet : public Gtk::Window {
   Gtk::Label* error_ = nullptr;
   Gtk::Button* save_ = nullptr;
   bool saving_ = false;
+};
+
+// =============================================================================
+// Excluded exit locations — places a connection's picks avoid
+// =============================================================================
+// The countries, regions (such as US states) and cities the user excludes
+// (sdk exit_location_preferences.go). The list lives in the GUI's LocalState;
+// the provider location search the location list asks finds places to add;
+// every change applies to a connection in place
+// (SdkHost::SetExcludedExitLocation). A newer query or a reopen drops an
+// older answer.
+class SettingsExcludedExitLocationsSheet : public Gtk::Window {
+ public:
+  SettingsExcludedExitLocationsSheet(Gtk::Window& parent, SdkHost& host) : host_(host) {
+    set_transient_for(parent);
+    set_modal(true);
+    set_title(T_("excluded_exit_locations", "Excluded exit locations"));
+    set_default_size(kSheetBlocked, 560);
+    set_hide_on_close(true);
+    add_css_class("ur-sheet");
+    AddEscapeToClose(*this);
+
+    auto* scroller = Gtk::make_managed<Gtk::ScrolledWindow>();
+    scroller->set_policy(Gtk::PolicyType::NEVER, Gtk::PolicyType::AUTOMATIC);
+    auto* box = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+    box->set_margin(24);
+
+    auto* heading = Gtk::make_managed<Gtk::Label>(
+        T_("excluded_exit_locations", "Excluded exit locations"));
+    heading->add_css_class("ur-step-heading");
+    heading->set_xalign(0);
+    box->append(*heading);
+
+    auto* description = Gtk::make_managed<Gtk::Label>(
+        T_("excluded_exit_locations_description",
+           "Connections won't use exits in these places, unless you pick one of them "
+           "directly."));
+    description->add_css_class("ur-caption");
+    description->set_xalign(0);
+    description->set_wrap(true);
+    box->append(*description);
+
+    excludedPanel_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 4);
+    box->append(*excludedPanel_);
+    empty_ = Gtk::make_managed<Gtk::Label>();
+    empty_->add_css_class("ur-caption");
+    empty_->set_xalign(0);
+    empty_->set_wrap(true);
+    SetToned(*empty_, kUrTextFaint,
+             T_("no_excluded_exit_locations",
+                "No excluded locations yet. Search for a country, region or city to exclude "
+                "it."));
+    box->append(*empty_);
+
+    box->append(*kit::MakeDivider());
+
+    search_ = Gtk::make_managed<Gtk::SearchEntry>();
+    search_->set_placeholder_text(
+        T_("search_exit_locations_placeholder", "Search countries, regions and cities"));
+    // a placeholder is NOT an accessible name
+    kit::SetAccessibleLabel(
+        *search_, T_("search_exit_locations_placeholder", "Search countries, regions and cities"));
+    search_->signal_search_changed().connect([this] { Search(); });
+    box->append(*search_);
+
+    resultsPanel_ = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 2);
+    box->append(*resultsPanel_);
+
+    scroller->set_child(*box);
+    set_child(*scroller);
+  }
+
+  void Open() {
+    ++*epoch_;  // an answer still in flight from a previous presentation dies
+    results_.clear();
+    search_->set_text("");
+    RenderExcluded();
+    RenderResults();
+    present();
+  }
+
+ private:
+  void RenderExcluded() {
+    RemoveAllChildren(*excludedPanel_);
+    const auto excluded = host_.ExcludedExitLocations();
+    empty_->set_visible(excluded.empty());
+    for (const auto& location : excluded) {
+      excludedPanel_->append(*MakeRow(location, T_("remove", "Remove"), false));
+    }
+  }
+
+  // The search's places the sdk lets the user exclude, less the excluded ones.
+  void RenderResults() {
+    RemoveAllChildren(*resultsPanel_);
+    const auto excluded = host_.ExcludedExitLocations();
+    for (const auto& location : results_) {
+      if (!urnet::canExcludeExitLocation(location)) continue;
+      const bool already = std::any_of(excluded.begin(), excluded.end(), [&](const auto& kept) {
+        return IsLocationSelected(std::optional<urnet::ConnectLocation>(kept), location);
+      });
+      if (!already) {
+        resultsPanel_->append(*MakeRow(location, T_("exclude_exit_location", "Exclude"), true));
+      }
+    }
+  }
+
+  // The country a region or a city is in, "" for a country: there is a
+  // Georgia of each kind.
+  static std::string CountryLine(const urnet::ConnectLocation& location) {
+    if (location.location_type && *location.location_type == urnet::LocationTypeCountry) {
+      return {};
+    }
+    std::string country = CountryDisplayName(location.country_code.value_or(std::string()));
+    if (country.empty()) country = location.country.value_or(std::string());
+    return SanitizeExternalDisplayText(country);
+  }
+
+  Gtk::Widget* MakeRow(const urnet::ConnectLocation& location, const char* action, bool exclude) {
+    auto* row = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    auto* column = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 1);
+    column->set_hexpand(true);
+    column->set_valign(Gtk::Align::CENTER);
+    auto* name =
+        Gtk::make_managed<Gtk::Label>(SanitizeExternalDisplayText(LocationDisplayName(location)));
+    name->set_xalign(0);
+    name->set_ellipsize(Pango::EllipsizeMode::END);
+    column->append(*name);
+    if (const std::string country = CountryLine(location); !country.empty()) {
+      auto* caption = Gtk::make_managed<Gtk::Label>(country);
+      caption->add_css_class("ur-caption");
+      caption->set_xalign(0);
+      caption->set_ellipsize(Pango::EllipsizeMode::END);
+      column->append(*caption);
+    }
+    row->append(*column);
+    auto* button = Gtk::make_managed<Gtk::Button>(action);
+    button->add_css_class("flat");
+    const urnet::ConnectLocation locationCopy = location;
+    button->signal_clicked().connect([this, locationCopy, exclude] {
+      host_.SetExcludedExitLocation(locationCopy, exclude);
+      RenderExcluded();
+      RenderResults();
+    });
+    row->append(*button);
+    return row;
+  }
+
+  void Search() {
+    const std::string query = TrimLocationQuery(search_->get_text().raw());
+    auto epoch = epoch_;
+    const uint64_t seen = ++*epoch_;
+    if (query.empty()) {
+      results_.clear();
+      RenderResults();
+      return;
+    }
+    urnet::FindLocationsArgs args;
+    args.query = query;
+    host_.api().findProviderLocations(
+        args, [this, epoch, seen, query](std::optional<urnet::FindLocationsResult> result,
+                                         std::optional<std::string> err) {
+          PostToMain([this, epoch, seen, query, result = std::move(result), err = std::move(err)] {
+            if (*epoch != seen) return;
+            results_.clear();
+            if (result && !err) {
+              if (auto filtered = urnet::getFilteredLocationsFromResult(result, query)) {
+                for (const auto* list : {&filtered->BestMatches, &filtered->Countries,
+                                         &filtered->Regions, &filtered->Cities}) {
+                  if (*list) results_.insert(results_.end(), (*list)->begin(), (*list)->end());
+                }
+              }
+            }
+            RenderResults();
+          });
+        });
+  }
+
+  SdkHost& host_;
+  Gtk::Box* excludedPanel_ = nullptr;
+  Gtk::Label* empty_ = nullptr;
+  Gtk::SearchEntry* search_ = nullptr;
+  Gtk::Box* resultsPanel_ = nullptr;
+  std::vector<urnet::ConnectLocation> results_;
+  std::shared_ptr<uint64_t> epoch_ = std::make_shared<uint64_t>(0);
 };
 
 // =============================================================================
@@ -1427,6 +1615,12 @@ void SettingsPage::BuildConnectionsSection(Gtk::Box& host) {
   blockedRow.root->signal_clicked().connect([this] { ShowBlockedLocationsSheet(); });
   host.append(*blockedRow.root);
 
+  // Row 4a — excluded exit locations: the places a connection's picks avoid.
+  auto excludedRow = kit::MakePaneTwoLineRowButton(
+      T_("excluded_exit_locations", "Excluded exit locations"), {}, kRowTall);
+  excludedRow.root->signal_clicked().connect([this] { ShowExcludedExitLocationsSheet(); });
+  host.append(*excludedRow.root);
+
   // Row 4b — VLESS: a server of the user's own for the client strategy to dial
   // through when direct connections are blocked. A local edit of the network
   // space, readable and writable with no session (the login screen's network
@@ -1985,6 +2179,15 @@ void SettingsPage::ShowBlockedLocationsSheet() {
     blockedSheet_ = std::make_unique<SettingsBlockedLocationsSheet>(*root, host_);
   }
   blockedSheet_->Open();
+}
+
+void SettingsPage::ShowExcludedExitLocationsSheet() {
+  Gtk::Window* root = RootWindow();
+  if (root == nullptr) return;
+  if (!excludedExitSheet_) {
+    excludedExitSheet_ = std::make_unique<SettingsExcludedExitLocationsSheet>(*root, host_);
+  }
+  excludedExitSheet_->Open();
 }
 
 void SettingsPage::ShowAppSplitRulesSheet() {

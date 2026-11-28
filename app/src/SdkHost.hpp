@@ -1295,6 +1295,20 @@ class SdkHost {
   // loop: the query then runs once the queue settles.
   void FilterLocations(const std::string& query);
   std::string GetFilteredLocationState();
+  // ---- exit location preferences (sdk exit_location_preferences.go) ----
+  // The user's favorite places, collections and exits, the newest first, from
+  // the GUI's LocalState; empty while signed out.
+  std::vector<urnet::ConnectLocation> FavoriteLocations();
+  // Keeps or forgets a favorite; false when the sdk refused it (best
+  // available, or past its bound).
+  bool SetFavoriteLocation(const urnet::ConnectLocation& location, bool favorite);
+  // The excluded exit locations (countries, regions, cities a connection's
+  // picks avoid), the newest first.
+  std::vector<urnet::ConnectLocation> ExcludedExitLocations();
+  // Excludes or includes a place, then has the connect controller apply the
+  // change to a connection in place, on the command queue
+  // (excludedExitLocationsChanged). False when the sdk refused it.
+  bool SetExcludedExitLocation(const urnet::ConnectLocation& location, bool excluded);
   std::optional<urnet::NetworkPeerList> ConnectedProvidePeers();
   // count of ALL connected peers (online, provide or not)
   int64_t ConnectedPeerCount();
