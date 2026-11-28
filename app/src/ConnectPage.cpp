@@ -707,7 +707,17 @@ void ConnectPage::BuildPaneA() {
   kit::SetAccessibleLabel(*locationRow_,
                           Glib::ustring(T_("selected_provider", "Selected provider")) + ", " +
                               locationText_->get_text());
-  paneAContent_->append(*locationRow_);
+  // beside the row, its favorite star (ApplyFavoriteStar)
+  favoriteStar_ = Gtk::make_managed<Gtk::Button>();
+  favoriteStar_->add_css_class("flat");
+  favoriteStar_->set_valign(Gtk::Align::CENTER);
+  favoriteStar_->set_visible(false);
+  favoriteStar_->signal_clicked().connect([this] { ToggleFavorite(); });
+  auto* locationLine = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 4);
+  locationRow_->set_hexpand(true);
+  locationLine->append(*locationRow_);
+  locationLine->append(*favoriteStar_);
+  paneAContent_->append(*locationLine);
 
   // 2.4 the connect action: filled = there is something to do, outlined =
   // you are fine (the fill IS a status channel)
@@ -3806,7 +3816,32 @@ void ConnectPage::ApplyLocationRow() {
   kit::SetAccessibleLabel(*locationRow_,
                           Glib::ustring(T_("selected_provider", "Selected provider")) + ", " +
                               text);
+  ApplyFavoriteStar();
   if (on_location_rendered) on_location_rendered(text);
+}
+
+void ConnectPage::ApplyFavoriteStar() {
+  if (!favoriteStar_) return;
+  const auto& location = selectedLocation_;
+  const bool favoritable = location && urnet::canFavoriteLocation(*location);
+  favoriteStar_->set_visible(favoritable);
+  if (!favoritable) return;
+  const auto favorites = host_.FavoriteLocations();
+  favoriteShown_ = std::any_of(favorites.begin(), favorites.end(), [&](const auto& favorite) {
+    return IsLocationSelected(location, favorite);
+  });
+  favoriteStar_->set_icon_name(favoriteShown_ ? "starred-symbolic" : "non-starred-symbolic");
+  const char* label = favoriteShown_ ? T_("remove_from_favorites", "Remove from favorites")
+                                     : T_("add_to_favorites", "Add to favorites");
+  favoriteStar_->set_tooltip_text(label);
+  kit::SetAccessibleLabel(*favoriteStar_, label);
+}
+
+void ConnectPage::ToggleFavorite() {
+  const auto& location = selectedLocation_;
+  if (!location) return;
+  host_.SetFavoriteLocation(*location, !favoriteShown_);
+  ApplyFavoriteStar();
 }
 
 // §2.8 PeersLine: a stale zero is never presented as fact — with the peer feed

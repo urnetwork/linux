@@ -12,6 +12,7 @@ add_emoji
 add_local_split_rule
 add_referral_code
 add_tao_for_gas
+add_to_favorites
 adv_action_id
 adv_addresses
 adv_advanced_mode
@@ -788,7 +789,10 @@ exclude_app_launcher_name
 exclude_apps_from_vpn
 exclude_apps_from_vpn_note
 exclude_apps_launcher_note
+exclude_exit_location
 excluded
+excluded_exit_locations
+excluded_exit_locations_description
 expires
 export_logs
 extender
@@ -826,6 +830,8 @@ extenders_no_session
 extenders_reset_done
 fast_dns_on_connect
 fast_dns_on_connect_description
+favorite_exit_note
+favorites
 feedback
 feedback_include_logs
 feedback_sending
@@ -1041,6 +1047,7 @@ no_apps_found
 no_balance_codes_found
 no_blocked_locations
 no_claims_yet_linux
+no_excluded_exit_locations
 no_locations_found
 no_log_files_found
 no_open_contracts
@@ -1248,6 +1255,7 @@ remote_dns_servers
 remote_doh_urls
 remote_lowercase
 remove
+remove_from_favorites
 remove_rule
 resend_verify_code
 reset_extenders
@@ -1267,6 +1275,7 @@ safety_rule_detail
 save
 save_logs
 search_apps_placeholder
+search_exit_locations_placeholder
 search_placeholder
 search_providers_input_label
 search_providers_input_placeholder

@@ -5313,6 +5313,79 @@ std::optional<urnet::FilteredLocations> SdkHost::GetFilteredLocations() {
   });
 }
 
+std::vector<urnet::ConnectLocation> SdkHost::FavoriteLocations() {
+  using Locations = std::vector<urnet::ConnectLocation>;
+  return ReadOnMain<Locations>("FavoriteLocations", [&]() -> Locations {
+    if (!localState_) return {};
+    try {
+      if (auto favorites = localState_->getFavoriteLocations()) return *favorites;
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] read favorites failed: %s\n", e.what());
+    }
+    return {};
+  });
+}
+
+bool SdkHost::SetFavoriteLocation(const urnet::ConnectLocation& location, bool favorite) {
+  std::scoped_lock lock(mutex_);
+  if (!localState_) return false;
+  try {
+    if (favorite) {
+      localState_->addFavoriteLocation(location);
+    } else {
+      localState_->removeFavoriteLocation(location);
+    }
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] favorite failed: %s\n", e.what());
+    return false;
+  }
+  // the next main-loop read answers the list as written
+  KeepOnMain<std::vector<urnet::ConnectLocation>>(
+      "FavoriteLocations",
+      localState_->getFavoriteLocations().value_or(urnet::ConnectLocationList{}));
+  return true;
+}
+
+std::vector<urnet::ConnectLocation> SdkHost::ExcludedExitLocations() {
+  using Locations = std::vector<urnet::ConnectLocation>;
+  return ReadOnMain<Locations>("ExcludedExitLocations", [&]() -> Locations {
+    if (!localState_) return {};
+    try {
+      if (auto excluded = localState_->getExcludedExitLocations()) return *excluded;
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] read excluded exit locations failed: %s\n", e.what());
+    }
+    return {};
+  });
+}
+
+bool SdkHost::SetExcludedExitLocation(const urnet::ConnectLocation& location, bool excluded) {
+  {
+    std::scoped_lock lock(mutex_);
+    if (!localState_) return false;
+    try {
+      if (excluded) {
+        localState_->addExcludedExitLocation(location);
+      } else {
+        localState_->removeExcludedExitLocation(location);
+      }
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] exclude failed: %s\n", e.what());
+      return false;
+    }
+    KeepOnMain<std::vector<urnet::ConnectLocation>>(
+        "ExcludedExitLocations",
+        localState_->getExcludedExitLocations().value_or(urnet::ConnectLocationList{}));
+  }
+  // a connection the change affects reconnects with the new list; the
+  // controller's device calls wait behind the queued commands, off this loop
+  RunCommand(ConnectCommandQueue::Kind::Connect, [this] {
+    std::scoped_lock lock(mutex_);
+    if (connectVc_) connectVc_->excludedExitLocationsChanged();
+  });
+  return true;
+}
+
 void SdkHost::FilterLocations(const std::string& query) {
   // The filter is one, shared by the chooser and the Network page, and it
   // outlives either: each says what its own box holds when it shows, and the
