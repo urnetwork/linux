@@ -64,6 +64,7 @@ src/ExtenderProvideRowPaint.hpp
 src/GuestConversionSheet.cpp
 src/HomeShell.cpp
 src/KillSwitchCopy.hpp
+src/HelpButton.hpp
 src/LicensesSheet.cpp
 src/ReleaseNotesSheet.cpp
 src/OfferCard.cpp
