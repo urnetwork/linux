@@ -948,8 +948,31 @@ UR_TEST(controlProviderStatsAbsentFieldsMeanNothingRuns) {
   UR_EXPECT_TRUE(empty.provider_status_json.empty());
   UR_EXPECT_TRUE(empty.extender_provide_status_json.empty());
   UR_EXPECT_TRUE(empty.extender_throughput_points_json.empty());
+  UR_EXPECT_TRUE(empty.status_provided_epoch == 0);
+  UR_EXPECT_TRUE(empty.status_unpaid_byte_count == 0);
   const nlohmann::json defaults = nlohmann::json(ctl::ProviderStatsReply());
   UR_EXPECT_FALSE(defaults.at("running").get<bool>());
+}
+
+// The provider-only device's controller carries the network's unpaid data
+// provided and its settled epoch beside the status (feature 14), so the
+// Earnings line shows while disconnected too; figures past 2^53 bytes survive
+// the frame. A daemon from before them sends neither: no settled epoch.
+UR_TEST(controlProviderStatsCarriesTheUnpaidDataProvided) {
+  ctl::ProviderStatsReply stats;
+  stats.running = true;
+  stats.status_open = true;
+  stats.status_loaded = true;
+  stats.status_provided_epoch = 8;
+  stats.status_unpaid_byte_count = (int64_t{1} << 53) + 1;
+  const auto back = ctl::DecodeFrame(ctl::EncodeFrame(
+      ctl::MakeReply(17, true, nlohmann::json(stats))))->get<ctl::ProviderStatsReply>();
+  UR_EXPECT_TRUE(back.status_provided_epoch == 8);
+  UR_EXPECT_TRUE(back.status_unpaid_byte_count == (int64_t{1} << 53) + 1);
+  const nlohmann::json older = {{"running", true}, {"status_open", true}};
+  const auto fromOlder = older.get<ctl::ProviderStatsReply>();
+  UR_EXPECT_TRUE(fromOlder.status_provided_epoch == 0);
+  UR_EXPECT_TRUE(fromOlder.status_unpaid_byte_count == 0);
 }
 
 // The provider-only device's extender role travels beside its provider

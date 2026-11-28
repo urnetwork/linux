@@ -155,6 +155,10 @@ enum class DrawerEvent {
   // one in flight, or the controller opened or closed (the earnings page's
   // reason line, demand histogram and ranking numbers)
   ProviderStatus,
+  // this device's sharing against the owner's sharing limits changed: the
+  // month's data, the limits, the month or the budget (the connect page's
+  // Sharing limits line)
+  ProvideShareStatus,
 };
 
 // Outcome of StartTunnel. Everything except Started is a degraded state the
@@ -894,6 +898,25 @@ class SdkHost {
   std::string GetProvideControlMode();
   bool ProvideEnabled();
 
+  // The owner's sharing limits (feature 10): the most this device shares with
+  // others a second and in a calendar month (UTC), 0 for no limit. Read and
+  // written through the device, whose DeviceLocal in the daemon keeps them in
+  // the daemon's space, where its provider-only device starts under them too,
+  // and applies them at once; a write while the daemon is out of contact is
+  // queued and replayed at the next sync. With no device nothing takes them
+  // (the daemon has no verb for them), so the getter answers nullopt, which the
+  // connect page's Sharing limits section renders as hidden, and the setter,
+  // never called while it is hidden (N1), drops the write. A read that throws
+  // reads as nullopt too.
+  std::optional<urnet::ProvideShareLimits> GetProvideShareLimits();
+  void SetProvideShareLimits(const urnet::ProvideShareLimits& limits);
+  // This month's sharing against the limits, from the device; nullopt with no
+  // device. Changes arrive as DrawerEvent::ProvideShareStatus: the SDK tells
+  // the data growing at most once a second, and a change of the limits, the
+  // month or the budget at once, and fires none on registration, so the page
+  // re-reads it on DeviceLifecycle.
+  std::optional<urnet::ProvideShareStatus> GetProvideShareStatus();
+
   // Keep providing while disconnected (ProvideLifecycle.hpp). With no tunnel
   // session the daemon's provider-only device is the provider; this keeps it in
   // step with the stored provide mode — started, re-moded, or stopped
@@ -1514,6 +1537,12 @@ class SdkHost {
     // this device's status; nullopt before a poll, or when the device is not
     // one of the network's provider clients
     std::optional<urnet::ProviderStatus> status;
+    // the network's data in the newest settled SN25 epoch that SN25 did not
+    // pay for want of a payout wallet, the unpaid data provided (feature 14),
+    // and that epoch (getUnpaidByteCount, getProvidedEpoch); 0 and 0 before a
+    // settled epoch, and from a server or a daemon that predates them
+    int64_t providedEpoch = 0;
+    int64_t unpaidByteCount = 0;
   };
   // The controller's state, read together under the lock. With no DeviceRemote
   // it is the controller the daemon runs on its provider-only device, as

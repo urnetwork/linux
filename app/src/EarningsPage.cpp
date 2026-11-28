@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <string_view>
 #include <utility>
 
 #include "AccountCodeText.hpp"
@@ -328,6 +329,9 @@ Gtk::Box* MakeChartRow(int height, TransferChart* chart) {
 
 static_assert(providerstatus::kProvideModePublic == urnet::ProvideModePublic,
               "the idle reason compares the live provide mode with the SDK's public mode");
+static_assert(std::string_view(providerstatus::kProvidedPayoutUnpaid) ==
+                  std::string_view(urnet::ProviderStatusProvidedUnpaid),
+              "the not-paid line reads the SDK's unpaid payout");
 
 Glib::ustring IdleReasonText(providerstatus::ProviderIdleReason reason) {
   switch (reason) {
@@ -538,11 +542,19 @@ providerstatus::Poll ProviderStatusPollOf(const SdkHost::ProviderStatusSnapshot&
   poll.open = snapshot.open;
   poll.loaded = snapshot.loaded;
   poll.lastFetchError = snapshot.lastFetchError;
+  // the network's unpaid data provided does not need this device's status
+  poll.unpaidEpoch = snapshot.providedEpoch;
+  poll.unpaidByteCount = snapshot.unpaidByteCount;
   if (!snapshot.status) return poll;
   const urnet::ProviderStatus& status = *snapshot.status;
   poll.hasStatus = true;
   poll.reason = status.reason;
   poll.reasonText = status.reason_text;
+  if (status.provided) {
+    poll.providedEpoch = status.provided->epoch;
+    poll.providedByteCount = status.provided->usage_byte_count;
+    poll.providedPayout = status.provided->payout;
+  }
   if (status.appearances) {
     poll.hasAppearances = true;
     poll.appearancesPerMinute =
@@ -3258,6 +3270,49 @@ void EarningsPage::BuildNetworkPane() {
     inner->append(*demandChart_);
   }
   content->append(*demandChartRow_);
+
+  // 9f'. what SN25 counted in its newest settled epoch (feature 14), beside
+  // this device's own status and from the same controller (ApplyProvidedLines):
+  // this device's data, with the line saying SN25 paid nothing for it while it
+  // had no payout wallet; then the network's unpaid data provided, built as a
+  // "Why?" row is (the label and the figure over the help line). Each row is
+  // hidden while there is nothing to say.
+  {
+    auto row = MakePaddedRow(8);
+    row.content->set_spacing(2);
+    providedText_ = MakeWrappedNote({}, "ur-key");
+    row.content->append(*providedText_);
+    providedNotPaidText_ = MakeWrappedNote(
+        T_("provided_not_paid_no_wallet", "Not paid: no payout wallet"), "ur-row-note");
+    providedNotPaidText_->set_visible(false);
+    row.content->append(*providedNotPaidText_);
+    providedRow_ = row.root;
+    providedRow_->set_visible(false);
+    content->append(*providedRow_);
+  }
+  {
+    auto row = MakePaddedRow(8);
+    row.content->set_spacing(2);
+    auto* line = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    auto* label =
+        Gtk::make_managed<Gtk::Label>(T_("unpaid_data_provided", "Unpaid data provided"));
+    label->add_css_class("ur-key");
+    label->set_xalign(0);
+    label->set_hexpand(true);
+    label->set_wrap(true);
+    kit::MarkDecorative(*label);  // the value carries "Label, value"
+    line->append(*label);
+    unpaidValue_ = Gtk::make_managed<Gtk::Label>();
+    unpaidValue_->add_css_class("ur-value");
+    unpaidValue_->set_xalign(1.f);
+    line->append(*unpaidValue_);
+    row.content->append(*line);
+    unpaidHelpText_ = MakeWrappedNote({}, "ur-row-note");
+    row.content->append(*unpaidHelpText_);
+    unpaidRow_ = row.root;
+    unpaidRow_->set_visible(false);
+    content->append(*unpaidRow_);
+  }
 
   // 9g. "Why?": a disclosure, collapsed by default; expanded, one row per number
   // the network ranks this device by, in the server's order, then the country
@@ -7898,6 +7953,7 @@ void EarningsPage::OnHostEvent(DrawerEvent event) {
     case DrawerEvent::ProviderLocations:
     case DrawerEvent::ProviderSelection:
     case DrawerEvent::ExtenderStatus:
+    case DrawerEvent::ProvideShareStatus:
       // the connect page's and the window's surfaces
       break;
   }
@@ -8094,6 +8150,37 @@ void EarningsPage::ApplyProviderStatus() {
   RebuildWhyRows();
   ApplyWhyVisibility();
   ApplyStatusLine();
+  ApplyProvidedLines();
+}
+
+// What SN25 counted in its newest settled epoch (feature 14), from the reading
+// ApplyProviderStatus just took. A poll a minute that repeats the figures
+// redraws nothing.
+void EarningsPage::ApplyProvidedLines() {
+  if (providedRow_ == nullptr || unpaidRow_ == nullptr) return;
+  const providerstatus::ProvidedView view = providerstatus::ProvidedViewFor(providerStatus_);
+  if (providedApplied_ && view == providedDrawn_) return;
+  providedApplied_ = true;
+  providedDrawn_ = view;
+  providedRow_->set_visible(view.provided);
+  if (view.provided) {
+    providedText_->set_text(Format(T_("provided_in_epoch", "Provided in epoch {0}: {1}"),
+                                   view.epoch, FormatByteCountCompact(view.byteCount)));
+    providedNotPaidText_->set_visible(view.notPaid);
+  }
+  unpaidRow_->set_visible(view.unpaid);
+  if (view.unpaid) {
+    const std::string value = FormatByteCountCompact(view.unpaidByteCount);
+    unpaidValue_->set_text(value);
+    kit::SetAccessibleLabel(
+        *unpaidValue_,
+        Glib::ustring(T_("unpaid_data_provided", "Unpaid data provided")) + ", " + value);
+    unpaidHelpText_->set_text(Format(T_("unpaid_data_provided_help",
+                                        "Data SN25 counted in epoch {} but did not pay, because "
+                                        "no payout wallet was connected. This is data, not money "
+                                        "owed."),
+                                     view.unpaidEpoch));
+  }
 }
 
 void EarningsPage::RebuildWhyRows() {

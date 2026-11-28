@@ -259,6 +259,26 @@
 >   Apple's session does. Each sheet's Claim waits for that read too, beside the other kind's claim,
 >   and the page redraws an open sheet as its kind's read starts and answers.
 > - Unchanged: a failed read still reads Failed (the claims) or Unavailable (the accounts).
+>
+> **2026-11-28 — what SN25 counted, on the provider statistics (feature 14, owner decision
+> 2026-11-28).** The old Unpaid row (§1.2, `transfer/stats`' `unpaid_bytes_provided`, 0 since USDC
+> payouts ended) comes back in pane C from the SN25 rows, read off the same
+> `ProviderStatusViewController` as the demand chart, between that chart and "Why?":
+> - **This device:** with a settled epoch in its status's `provided` (epoch > 0),
+>   `provided_in_epoch` ("Provided in epoch {epoch}: {data}", `FormatByteCountCompact` of
+>   `usage_byte_count`), and under it `provided_not_paid_no_wallet` while its `payout` is the
+>   SDK's `ProviderStatusProvidedUnpaid`. Nothing without one.
+> - **The network:** while the controller's `getProvidedEpoch()` is above 0, the label
+>   `unpaid_data_provided` with `FormatByteCountCompact(getUnpaidByteCount())` right-aligned (a
+>   "Why?" row's shape, the value carrying "Label, value"), and `unpaid_data_provided_help` with
+>   the epoch under it. Nothing at epoch 0, which is also how a server that predates the figures
+>   reads.
+> - Both re-read wherever the page re-reads the controller (`ApplyProviderStatus`: the
+>   `ProviderStatus` event and `DeviceLifecycle`) and redraw only when they change; the rules are
+>   `providerstatus::ProvidedViewFor`, host-tested. Disconnected, the daemon's controller on the
+>   provider-only device answers: its status carries `provided`, and `provider_stats` carries the
+>   epoch and the unpaid data beside it (`status_provided_epoch`, `status_unpaid_byte_count`; a
+>   daemon that predates them reads as epoch 0).
 
 Source of truth read in full: `urnetwork-windows/app/src/App/WalletPage.{h,cpp}` (1681+262 lines), `WalletSheets.{h,cpp}` (687+185), plus the markup (`MainWindow.xaml` 1838–2156), the kit (`UrComponents.{h,cpp}`, `App.xaml`), tokens (`UrColors.h`), breakpoints (`MainWindow.xaml.cpp` ApplyBreakpoint ~561–580), balance gating (`MainWindow.xaml.cpp` ~1407–1418), navigation loads (~1351–1375), and the en string table (`Strings/en/Resources.resw`). Doc cross-check: `linux_agent_help.md` §7.10 / §7.3 / §8 — disagreements listed in FLAGS; **the code wins**.
 

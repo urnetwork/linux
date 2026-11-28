@@ -1753,6 +1753,13 @@ struct ProviderStatsReply {
   bool status_loaded = false;
   std::string status_last_fetch_error;
   std::string provider_status_json;
+  // Beside it, the controller's newest settled SN25 epoch and the network's
+  // data in it that SN25 did not pay for want of a payout wallet, the unpaid
+  // data provided (its getProvidedEpoch and getUnpaidByteCount). 0 and 0
+  // before a settled epoch; a daemon that predates them sends neither, which
+  // reads the same: no unpaid data line while disconnected, as before.
+  int64_t status_provided_epoch = 0;
+  int64_t status_unpaid_byte_count = 0;
   // The device's own extender role (urnet::ExtenderProvideStatus, its
   // getExtenderProvideStatus: the read-only extender row, and in Enabled the
   // running state behind the extender statistics) and the contract view
@@ -1793,6 +1800,8 @@ inline void to_json(nlohmann::json& j, const ProviderStatsReply& v) {
   j["status_loaded"] = v.status_loaded;
   j["status_last_fetch_error"] = v.status_last_fetch_error;
   j["provider_status_json"] = v.provider_status_json;
+  j["status_provided_epoch"] = v.status_provided_epoch;
+  j["status_unpaid_byte_count"] = v.status_unpaid_byte_count;
   j["extender_provide_status_json"] = v.extender_provide_status_json;
   j["extender_throughput_points_json"] = v.extender_throughput_points_json;
   j["provide_extender"] = v.provide_extender;
@@ -1811,6 +1820,8 @@ inline void from_json(const nlohmann::json& j, ProviderStatsReply& v) {
   detail::Get(j, "status_loaded", v.status_loaded);
   detail::Get(j, "status_last_fetch_error", v.status_last_fetch_error);
   detail::Get(j, "provider_status_json", v.provider_status_json);
+  detail::Get(j, "status_provided_epoch", v.status_provided_epoch);  // absent = no epoch
+  detail::Get(j, "status_unpaid_byte_count", v.status_unpaid_byte_count);
   detail::Get(j, "extender_provide_status_json", v.extender_provide_status_json);
   detail::Get(j, "extender_throughput_points_json", v.extender_throughput_points_json);
   detail::Get(j, "provide_extender", v.provide_extender);

@@ -55,7 +55,9 @@
 // (EXTENDER.md N7, O5, O8). Under the provide mode row, one line says why an
 // enabled provider is idle; after the provider plots, under their gate, the
 // Demand histogram and "Why?" show the network's provider status for this
-// device (support part P008, ProviderStatusPresentation.hpp).
+// device (support part P008, ProviderStatusPresentation.hpp). Between the two,
+// what SN25 counted in its newest settled epoch: this device's data and the
+// network's unpaid data provided (feature 14).
 //
 // Every panel settles on exactly one of Loading / Ready-empty / Failed, and
 // every server write AND every server question is gated by CanCallApi(); the
@@ -437,8 +439,13 @@ class EarningsPage : public Gtk::Box {
   // tick's provider bytes and the controller.
   void ApplyStatusLine();
   // Re-reads the SDK's ProviderStatusViewController (SdkHost::ProviderStatusNow)
-  // into the demand chart, "Why?" and the line.
+  // into the demand chart, "Why?", the line and what SN25 counted.
   void ApplyProviderStatus();
+  // What SN25 counted in its newest settled epoch (feature 14) under the demand
+  // chart: this device's data and, when SN25 paid nothing for want of a payout
+  // wallet, the line that says so; and the network's unpaid data provided
+  // (providerstatus::ProvidedViewFor), redrawn only when they change.
+  void ApplyProvidedLines();
   // The rows under "Why?", rebuilt only when they change.
   void RebuildWhyRows();
   // "Why?" shows with the plots and a status; its rows while it is expanded.
@@ -755,6 +762,15 @@ class EarningsPage : public Gtk::Box {
   Gtk::Label* statusLineText_ = nullptr;
   Gtk::Box* demandChartRow_ = nullptr;
   DemandChart* demandChart_ = nullptr;
+  // what SN25 counted (feature 14), under the demand chart: this device's line
+  // with its not-paid line, and the network's unpaid data provided with its
+  // figure and help line; each row hidden while there is nothing to say
+  Gtk::Box* providedRow_ = nullptr;
+  Gtk::Label* providedText_ = nullptr;
+  Gtk::Label* providedNotPaidText_ = nullptr;
+  Gtk::Box* unpaidRow_ = nullptr;
+  Gtk::Label* unpaidValue_ = nullptr;
+  Gtk::Label* unpaidHelpText_ = nullptr;
   Gtk::Button* whyRow_ = nullptr;
   Gtk::Image* whyChevron_ = nullptr;
   Gtk::Box* whyRows_ = nullptr;
@@ -782,6 +798,9 @@ class EarningsPage : public Gtk::Box {
   providerstatus::StatusView providerStatusView_;
   std::vector<providerstatus::NumberRow> whyRowsDrawn_;
   bool whyRowsApplied_ = false;
+  // what SN25 counted as it was last drawn
+  providerstatus::ProvidedView providedDrawn_;
+  bool providedApplied_ = false;
 
   // ---- state -----------------------------------------------------------------
   urnet::AccountPointsList points_;
