@@ -11,8 +11,9 @@
 //     view row + edit panel, the auth line, the status line, update password,
 //     the Sessions row that opens the Sessions page and the API keys row that
 //     opens the API keys page; every row of this pane leads with an icon),
-//     the security group (login methods + add + auth code + client id), the
-//     referral group (bonus code, referral network, summary, royalty badge)
+//     the security group (login methods, the email sign-in's Change email,
+//     add + auth code + client id), the referral group (bonus code, referral
+//     network, summary, royalty badge)
 //     and the danger group (sign out, delete account).
 //   Pane C "Balance Codes" (380) — the redeemed-code record. It folds first:
 //     nothing in it is actionable and Redeem lives in the plan pane.
@@ -76,6 +77,7 @@ class AccountUsageBar;
 class AccountAddAuthSheet;
 class AccountAuthCodeSheet;
 class AccountDeleteSheet;
+class AccountEmailChangeSheet;
 
 // §0.4 — the terminal states of EVERY async field on this destination and its
 // sheets. NoDevice is not a nicety: the client id comes off the DEVICE, so
@@ -288,6 +290,9 @@ class AccountPage : public Gtk::Box {
   void EndSheet();
   void WireSheet(Gtk::Window& sheet);  // report the close edge exactly once
   void ShowAddAuthSheet();
+  // the email sign-in's Change email: the verified email change (sdk
+  // api_email_change.go), confirmed at both addresses
+  void ShowEmailChangeSheet();
   void ShowAuthCodeSheet();
   void ShowDeleteAccountSheet();
   // Sign out, with the warning while the network's one-tap key isn't backed up
@@ -410,6 +415,9 @@ class AccountPage : public Gtk::Box {
   bool needsNameClaim_ = false;   // claim (no cooldown) vs change (24h, server-side)
   std::string acknowledgedName_;  // the server-acknowledged name; the box is never truth
   std::vector<std::string> authMethods_;
+  // the account's email sign-in (urnet::networkUserEmailSignIn), the address
+  // Change email replaces; empty without one, and then no Change email shows
+  std::string emailSignIn_;
   std::string referralCode_;
   ReferralTotalsFetch referralCount_;
   std::string clientId_;
@@ -442,6 +450,7 @@ class AccountPage : public Gtk::Box {
   // ---- sheets ----------------------------------------------------------------
   bool sheetShowing_ = false;  // this page's half of the one-modal gate
   std::unique_ptr<AccountAddAuthSheet> addAuthSheet_;
+  std::unique_ptr<AccountEmailChangeSheet> emailChangeSheet_;
   std::unique_ptr<AccountAuthCodeSheet> authCodeSheet_;
   std::unique_ptr<AccountDeleteSheet> deleteSheet_;
   std::unique_ptr<ExtenderShareSheet> extenderShareSheet_;

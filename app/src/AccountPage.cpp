@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "AccountCodeText.hpp"
 #include "AddSignInFlow.hpp"
 #include "AuthViews.hpp"
 #include "BalanceCodeRedeem.hpp"  // IsProGiftCode: a gift code's row
@@ -1314,6 +1315,471 @@ class AccountAuthCodeSheet : public Gtk::Window {
 };
 
 // =============================================================================
+// EmailChangeSheet — change the email sign-in, confirmed at both addresses
+// =============================================================================
+// The sdk's email change (api_email_change.go): the new address, then a code
+// sent to the current email and another to the new one. The change lands once
+// both are confirmed before the request expires; the password stays the same,
+// and the server signs the account's other sessions out as it lands. Three
+// pages: the new address (checked locally first,
+// urnet::validateEmailChangeAddress), the two codes, and the change done,
+// which reloads the page so the new email shows (on_changed).
+//
+// A refusal that ends the request (urnet::authEmailChangeErrorEndsRequest)
+// goes back to the address page with its words. Any other refusal keeps both
+// code fields, and a side the server confirmed is done: its field is disabled
+// and checked. Leaving the codes page any way but done cancels the request
+// (fire and forget), so its codes stop working. Every refusal reads on the
+// sheet in this app's words (AccountCodeText.hpp), a code without words in the
+// server's. The routes take only the network credential: without one the sdk
+// refuses before sending, which reads as signing in again.
+class AccountEmailChangeSheet : public Gtk::Window {
+ public:
+  AccountEmailChangeSheet(Gtk::Window& parent, SdkHost& host, std::function<bool()> canAct)
+      : host_(host), canAct_(std::move(canAct)) {
+    set_transient_for(parent);
+    set_modal(true);
+    set_title(T_("email_change_title", "Change your email"));
+    set_default_size(kSheetWidthNarrow, -1);
+    set_resizable(false);
+    set_hide_on_close(true);
+    add_css_class("ur-sheet");
+    AddEscapeToClose(*this);
+
+    // ---- page 1: the new address ----
+    auto* addressPage = MakePage();
+    addressPage->append(*MakeNote(
+        T_("email_change_body",
+           "Enter your new email. We'll send a code to your current email and another to the "
+           "new one. Your email changes when you enter both. Your password stays the same.")));
+    addressPage->append(*MakeInputLabel(T_("email_change_new_email", "New email")));
+    newEmail_ = Gtk::make_managed<Gtk::Entry>();
+    newEmail_->add_css_class("ur-input");
+    newEmail_->set_input_purpose(Gtk::InputPurpose::EMAIL);
+    kit::SetAccessibleLabel(*newEmail_, T_("email_change_new_email", "New email"));
+    newEmail_->signal_changed().connect([this] {
+      error_.clear();
+      Render();
+    });
+    newEmail_->signal_activate().connect([this] { SendCodes(); });
+    addressPage->append(*newEmail_);
+    addressError_ = MakeErrorLine();
+    addressPage->append(*addressError_);
+    send_ = Gtk::make_managed<Gtk::Button>(T_("email_change_send_codes", "Send codes"));
+    send_->set_sensitive(false);  // nothing typed yet
+    send_->signal_clicked().connect([this] { SendCodes(); });
+    addressPage->append(*MakeActions(*send_));
+    stack_.add(*addressPage, "address");
+
+    // ---- page 2: a code from each address ----
+    auto* codesPage = MakePage();
+    codesSent_ = MakeNote({});
+    codesPage->append(*codesSent_);
+    currentCodeLabel_ = MakeInputLabel({});
+    codesPage->append(*currentCodeLabel_);
+    currentCode_ = MakeCodeEntry();
+    codesPage->append(*currentCode_);
+    newCodeLabel_ = MakeInputLabel({});
+    codesPage->append(*newCodeLabel_);
+    newCode_ = MakeCodeEntry();
+    codesPage->append(*newCode_);
+    codesError_ = MakeErrorLine();
+    codesPage->append(*codesError_);
+    confirm_ = Gtk::make_managed<Gtk::Button>(T_("email_change", "Change email"));
+    confirm_->signal_clicked().connect([this] { Confirm(); });
+    codesPage->append(*MakeActions(*confirm_));
+    stack_.add(*codesPage, "codes");
+
+    // ---- page 3: the change landed ----
+    auto* donePage = MakePage();
+    doneLine_ = MakeSizedLabel({}, 14, "ur-body");
+    donePage->append(*doneLine_);
+    othersLine_ = MakeNote({});
+    donePage->append(*othersLine_);
+    auto* done = Gtk::make_managed<Gtk::Button>(T_("done", "Done"));
+    done->add_css_class("suggested-action");
+    done->set_halign(Gtk::Align::END);
+    done->signal_clicked().connect([this] { set_visible(false); });
+    donePage->append(*done);
+    stack_.add(*donePage, "done");
+
+    stack_.set_vhomogeneous(false);
+    set_child(stack_);
+    // leaving the codes page any way but done ends the request, so its codes
+    // stop working; an answer still out is the closed sheet's
+    hideConnection_ = signal_hide().connect([this] {
+      if (step_ != Step::Codes) return;
+      step_ = Step::Address;
+      ++*epoch_;
+      flow_.Abandon();
+      busy_ = false;
+      Cancel();
+    });
+  }
+
+  ~AccountEmailChangeSheet() override {
+    ++*epoch_;  // orphan every in-flight call
+    // the window's own teardown may hide it: nothing of this sheet runs then
+    hideConnection_.disconnect();
+  }
+
+  // The page reloads the network user so the new email shows.
+  std::function<void()> on_changed;
+
+  void Open() {
+    ++*epoch_;
+    flow_.Abandon();
+    busy_ = false;
+    step_ = Step::Address;
+    currentEmail_.clear();
+    sentEmail_.clear();
+    doneEmail_.clear();
+    othersSignedOut_ = false;
+    ClearCodes();
+    newEmail_->set_text("");
+    error_.clear();
+    Render();
+    present();
+    newEmail_->grab_focus();
+  }
+
+ private:
+  enum class Step { Address, Codes, Done };
+
+  bool CanAct() const { return canAct_ && canAct_(); }
+
+  // A page: the sheet's title over its lines.
+  static Gtk::Box* MakePage() {
+    auto* page = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
+    page->set_margin(24);
+    page->set_size_request(kSheetWidthNarrow, -1);
+    auto* heading = Gtk::make_managed<Gtk::Label>(T_("email_change_title", "Change your email"));
+    heading->add_css_class("ur-step-heading");
+    heading->set_xalign(0);
+    page->append(*heading);
+    return page;
+  }
+
+  static Gtk::Label* MakeNote(const Glib::ustring& text) {
+    auto* note = Gtk::make_managed<Gtk::Label>(text);
+    note->add_css_class("ur-caption");
+    note->set_xalign(0);
+    note->set_wrap(true);
+    return note;
+  }
+
+  static Gtk::Label* MakeInputLabel(const Glib::ustring& text) {
+    auto* label = Gtk::make_managed<Gtk::Label>(text);
+    label->add_css_class("ur-input-label");
+    label->set_xalign(0);
+    return label;
+  }
+
+  static Gtk::Label* MakeErrorLine() {
+    auto* line = MakeSizedLabel({}, 12, "ur-caption");
+    line->set_visible(false);
+    return line;
+  }
+
+  // Cancel, then the page's own action, at the end.
+  Gtk::Box* MakeActions(Gtk::Button& primary) {
+    auto* actions = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::HORIZONTAL, 8);
+    actions->set_halign(Gtk::Align::END);
+    auto* cancel = Gtk::make_managed<Gtk::Button>(T_("cancel", "Cancel"));
+    cancel->signal_clicked().connect([this] { set_visible(false); });
+    actions->append(*cancel);
+    primary.add_css_class("suggested-action");  // the dialog-primary role
+    actions->append(primary);
+    return actions;
+  }
+
+  // A code field: the digits one address was sent, typed or pasted (the sdk
+  // drops spaces and dashes).
+  Gtk::Entry* MakeCodeEntry() {
+    auto* entry = Gtk::make_managed<Gtk::Entry>();
+    entry->add_css_class("ur-otp");
+    entry->set_input_purpose(Gtk::InputPurpose::DIGITS);
+    entry->signal_changed().connect([this] {
+      error_.clear();
+      Render();
+    });
+    entry->signal_activate().connect([this] { Confirm(); });
+    return entry;
+  }
+
+  void ClearCodes() {
+    currentConfirmed_ = false;
+    newConfirmed_ = false;
+    currentCode_->set_text("");
+    newCode_->set_text("");
+  }
+
+  // A refusal in this app's words (AccountCodeText.hpp), else the server's,
+  // else the generic line.
+  static std::string RefusalText(const std::string& code, const std::string& message) {
+    if (const std::optional<account_code::Text> text = account_code::EmailChangeRefusalText(code)) {
+      return g_dpgettext2(GETTEXT_PACKAGE, text->key, text->english);
+    }
+    if (!message.empty()) return message;
+    return T_("something_went_wrong", "Something went wrong.");
+  }
+
+  // A request that got no answer. Without the network credential the sdk
+  // refuses the email change before sending it (ErrNetworkCredentialRequired),
+  // and signing in again brings one; anything else is the generic line.
+  std::string NoAnswerText(const std::optional<std::string>& err) {
+    g_warning("account: an email change request failed: %s",
+              err ? err->c_str() : "(no result)");
+    if (!host_.api().hasNetworkCredential()) {
+      return g_dpgettext2(GETTEXT_PACKAGE, account_code::kEmailChangeSignInRequired.key,
+                          account_code::kEmailChangeSignInRequired.english);
+    }
+    return T_("something_went_wrong", "Something went wrong.");
+  }
+
+  // Step 1: POST /auth/email-change with the new address, once the local
+  // check passed (the server makes the authoritative one).
+  void SendCodes() {
+    if (busy_ || step_ != Step::Address) return;
+    if (!CanAct()) {
+      Render();
+      return;
+    }
+    const std::string email = TrimSpace(newEmail_->get_text().raw());
+    if (email.empty()) return;
+    const std::string invalid = urnet::validateEmailChangeAddress(email);
+    if (!invalid.empty()) {
+      error_ = RefusalText(invalid, std::string());
+      Render();
+      return;
+    }
+    busy_ = true;
+    error_.clear();
+    Render();
+    urnet::AuthEmailChangeArgs args{};
+    args.new_email = email;
+    auto epoch = epoch_;
+    const uint64_t seen = *epoch_;
+    // 20 s: an answer that never comes must not leave Send codes greyed out
+    const uint32_t flow = flow_.Begin(kApiTimeoutMs, [this] {
+      busy_ = false;
+      error_ = T_("something_went_wrong", "Something went wrong.");
+      Render();
+    });
+    host_.api().authEmailChange(
+        std::optional<urnet::AuthEmailChangeArgs>(args),
+        [this, epoch, seen, flow, email](std::optional<urnet::AuthEmailChangeResult> result,
+                                         std::optional<std::string> err) {
+          PostToMain([this, epoch, seen, flow, email, result = std::move(result),
+                      err = std::move(err)] {
+            if (*epoch != seen) return;  // a newer Open() (or the close) owns it
+            if (!flow_.Settle(flow, "email change")) return;
+            busy_ = false;
+            if (err || !result) {
+              error_ = NoAnswerText(err);
+              Render();
+              return;
+            }
+            if (result->error) {
+              error_ = RefusalText(result->error->code, result->error->message);
+              Render();
+              return;
+            }
+            // closed while the codes were sent: nothing waits for them
+            if (!get_visible()) {
+              Cancel();
+              return;
+            }
+            // the current email comes masked; the new one as the server
+            // normalized it
+            currentEmail_ = result->current_email.value_or(std::string());
+            sentEmail_ = result->new_email.value_or(email);
+            ClearCodes();
+            step_ = Step::Codes;
+            Render();
+            currentCode_->grab_focus();
+          });
+        });
+  }
+
+  // Step 2: POST /auth/email-change/confirm with the code of each side still
+  // to confirm (the sdk normalizes them).
+  void Confirm() {
+    if (busy_ || step_ != Step::Codes) return;
+    if (!CanAct()) {
+      Render();
+      return;
+    }
+    const std::string currentCode = TrimSpace(currentCode_->get_text().raw());
+    const std::string newCode = TrimSpace(newCode_->get_text().raw());
+    if ((currentConfirmed_ && newConfirmed_) || (!currentConfirmed_ && currentCode.empty()) ||
+        (!newConfirmed_ && newCode.empty())) {
+      return;
+    }
+    urnet::AuthEmailChangeConfirmArgs args{};
+    if (!currentConfirmed_) args.current_code = currentCode;
+    if (!newConfirmed_) args.new_code = newCode;
+    busy_ = true;
+    error_.clear();
+    Render();
+    auto epoch = epoch_;
+    const uint64_t seen = *epoch_;
+    const uint32_t flow = flow_.Begin(kApiTimeoutMs, [this] {
+      busy_ = false;
+      error_ = T_("something_went_wrong", "Something went wrong.");
+      Render();
+    });
+    host_.api().authEmailChangeConfirm(
+        std::optional<urnet::AuthEmailChangeConfirmArgs>(args),
+        [this, epoch, seen, flow](std::optional<urnet::AuthEmailChangeConfirmResult> result,
+                                  std::optional<std::string> err) {
+          PostToMain([this, epoch, seen, flow, result = std::move(result),
+                      err = std::move(err)] {
+            if (*epoch != seen) return;
+            if (!flow_.Settle(flow, "email change confirm")) return;
+            busy_ = false;
+            if (err || !result) {
+              error_ = NoAnswerText(err);
+              Render();
+              return;
+            }
+            if (result->error && urnet::authEmailChangeErrorEndsRequest(result->error)) {
+              // nothing waits any more: back to the address, saying why
+              ClearCodes();
+              step_ = Step::Address;
+              error_ = RefusalText(result->error->code, result->error->message);
+              Render();
+              newEmail_->grab_focus();
+              return;
+            }
+            if (!result->error && result->complete) {
+              doneEmail_ = result->email.value_or(sentEmail_);
+              othersSignedOut_ = result->other_sessions_signed_out.value_or(false);
+              step_ = Step::Done;
+              Render();
+              if (on_changed) on_changed();  // the new email shows
+              return;
+            }
+            // a wrong code keeps both fields; a side the server confirmed is
+            // done for the request's life, and the other is still to enter
+            currentConfirmed_ = currentConfirmed_ || result->current_confirmed;
+            newConfirmed_ = newConfirmed_ || result->new_confirmed;
+            if (result->error) error_ = RefusalText(result->error->code, result->error->message);
+            Render();
+          });
+        });
+  }
+
+  // Ends the waiting request; nothing waits for its answer.
+  void Cancel() {
+    if (!CanAct()) return;
+    host_.api().authEmailChangeCancel(
+        [](std::optional<urnet::AuthEmailChangeCancelResult> result,
+           std::optional<std::string> err) {
+          if (err || (result && result->error)) {
+            g_message("account: the email change was not cancelled: %s",
+                      err ? err->c_str() : result->error->message.c_str());
+          }
+        });
+  }
+
+  void Render() {
+    const bool session = CanAct();
+    switch (step_) {
+      case Step::Address:
+        stack_.set_visible_child("address");
+        newEmail_->set_sensitive(session && !busy_);
+        send_->set_sensitive(session && !busy_ &&
+                             !TrimSpace(newEmail_->get_text().raw()).empty());
+        ShowError(*addressError_, session);
+        return;
+      case Step::Codes: {
+        stack_.set_visible_child("codes");
+        codesSent_->set_text(Format(
+            T_("email_change_codes_sent", "We sent a code to {0} and another to {1}."),
+            currentEmail_, sentEmail_));
+        RenderCode(*currentCodeLabel_, *currentCode_, currentEmail_, currentConfirmed_, session);
+        RenderCode(*newCodeLabel_, *newCode_, sentEmail_, newConfirmed_, session);
+        const bool currentReady =
+            currentConfirmed_ || !TrimSpace(currentCode_->get_text().raw()).empty();
+        const bool newReady = newConfirmed_ || !TrimSpace(newCode_->get_text().raw()).empty();
+        confirm_->set_sensitive(session && !busy_ && !(currentConfirmed_ && newConfirmed_) &&
+                                currentReady && newReady);
+        ShowError(*codesError_, session);
+        return;
+      }
+      case Step::Done:
+        stack_.set_visible_child("done");
+        doneLine_->set_text(Format(T_("email_change_done", "Your email is now {}."), doneEmail_));
+        othersLine_->set_text(
+            othersSignedOut_
+                ? T_("email_change_others_signed_out", "Your other devices were signed out.")
+                : T_("email_change_others_hint", "To sign out your other devices, open Sessions."));
+        return;
+    }
+  }
+
+  // A code field under the address its code went to; a side the server
+  // confirmed is done.
+  void RenderCode(Gtk::Label& label, Gtk::Entry& entry, const std::string& address,
+                  bool confirmed, bool session) {
+    const Glib::ustring text = Format(T_("email_change_code_sent_to", "Code sent to {}"), address);
+    label.set_text(text);
+    kit::SetAccessibleLabel(entry, text);
+    entry.set_sensitive(session && !busy_ && !confirmed);
+    if (confirmed) {
+      entry.set_icon_from_icon_name("emblem-ok-symbolic", Gtk::Entry::IconPosition::SECONDARY);
+    } else {
+      entry.unset_icon(Gtk::Entry::IconPosition::SECONDARY);
+    }
+  }
+
+  // The page's error line: why the sheet cannot act, else the last refusal.
+  void ShowError(Gtk::Label& line, bool session) {
+    if (!session) {
+      // never a disabled field with no explanation
+      ApplyFieldState(line, AccountFieldState::NoSession);
+      line.set_visible(true);
+      return;
+    }
+    if (error_.empty()) {
+      line.set_visible(false);
+      return;
+    }
+    SetToned(line, kUrDanger, error_);
+    line.set_visible(true);
+  }
+
+  SdkHost& host_;
+  std::function<bool()> canAct_;  // the PAGE's gate: preview first, then session
+  std::shared_ptr<uint64_t> epoch_ = std::make_shared<uint64_t>(0);
+  AccountFlow flow_;
+  sigc::connection hideConnection_;
+  Step step_ = Step::Address;
+  bool busy_ = false;  // a request in flight: the actions wait
+  std::string error_;  // the last refusal, on the page it came from
+  std::string currentEmail_;  // the current email, masked, as the server sent it
+  std::string sentEmail_;     // the new email, as the server normalized it
+  bool currentConfirmed_ = false;
+  bool newConfirmed_ = false;
+  std::string doneEmail_;
+  bool othersSignedOut_ = false;
+  Gtk::Stack stack_;
+  Gtk::Entry* newEmail_ = nullptr;
+  Gtk::Label* addressError_ = nullptr;
+  Gtk::Button* send_ = nullptr;
+  Gtk::Label* codesSent_ = nullptr;
+  Gtk::Label* currentCodeLabel_ = nullptr;
+  Gtk::Entry* currentCode_ = nullptr;
+  Gtk::Label* newCodeLabel_ = nullptr;
+  Gtk::Entry* newCode_ = nullptr;
+  Gtk::Label* codesError_ = nullptr;
+  Gtk::Button* confirm_ = nullptr;
+  Gtk::Label* doneLine_ = nullptr;
+  Gtk::Label* othersLine_ = nullptr;
+};
+
+// =============================================================================
 // §3.4 DeleteAccountSheet — typed confirmation
 // =============================================================================
 // FRESHNESS RULE: the sheet takes NO cached name. Api::networkDelete takes no
@@ -1752,6 +2218,8 @@ void AccountPage::CloseSheets() {
     if (sheet != nullptr && sheet->get_visible()) sheet->set_visible(false);
   };
   hide(addAuthSheet_.get());
+  // an email change waiting for its codes is the departed account's
+  hide(emailChangeSheet_.get());
   hide(authCodeSheet_.get());
   hide(deleteSheet_.get());
   // the share code is this network's extender list and the import sheet may
@@ -1774,6 +2242,7 @@ void AccountPage::SettleNoSession() {
   referralCode_.clear();
   referralCount_.Reset();
   authMethods_.clear();
+  emailSignIn_.clear();
   codes_.clear();
 
   CloseNameEditor();
@@ -2785,6 +3254,7 @@ void AccountPage::LoadAccount() {
     ApplyAuthLine();
     ApplyAccountState(AccountFieldState::NoSession);
     authMethods_.clear();
+    emailSignIn_.clear();
     methodsState_ = AccountFieldState::NoSession;
     RenderAuthMethods();
     return;
@@ -2802,6 +3272,7 @@ void AccountPage::LoadAccount() {
   const uint32_t flow = accountFlow_.Begin(kApiTimeoutMs, [this] {
     ApplyAccountState(AccountFieldState::Failed);
     authMethods_.clear();
+    emailSignIn_.clear();
     methodsState_ = AccountFieldState::Failed;
     RenderAuthMethods();
   });
@@ -2819,6 +3290,7 @@ void AccountPage::LoadAccount() {
                                                      : "(no network user)"));
             ApplyAccountState(AccountFieldState::Failed);
             authMethods_.clear();
+            emailSignIn_.clear();
             methodsState_ = AccountFieldState::Failed;
             RenderAuthMethods();
             return;
@@ -2833,6 +3305,8 @@ void AccountPage::LoadAccount() {
           ApplyNetworkName(user.network_name);
           ApplyAuthLine();
           authMethods_ = ParseAuthMethods(user);
+          // the address an email change replaces (sdk NetworkUser.EmailSignIn)
+          emailSignIn_ = urnet::networkUserEmailSignIn(user);
           methodsState_ =
               authMethods_.empty() ? AccountFieldState::Empty : AccountFieldState::Loaded;
           RenderAuthMethods();
@@ -3051,6 +3525,19 @@ void AccountPage::RenderAuthMethods() {
     // NOT red in pane mode: red belongs to the confirmation context.
     remove->signal_clicked().connect(
         [this, method, label] { ConfirmRemoveAuth(method, label); });
+    // the email sign-in changes in place, confirmed at both addresses: Change
+    // email beside its Remove, only for an account that has one
+    if (Lower(method) == "email" && !emailSignIn_.empty()) {
+      if (auto* trailing = dynamic_cast<Gtk::Box*>(remove->get_parent())) {
+        const Glib::ustring action = T_("email_change", "Change email");
+        auto* change = Gtk::make_managed<Gtk::Button>(action);
+        change->set_valign(Gtk::Align::CENTER);
+        change->set_margin_end(8);
+        kit::SetAccessibleLabel(*change, action + ". " + label);
+        change->signal_clicked().connect([this] { ShowEmailChangeSheet(); });
+        trailing->prepend(*change);
+      }
+    }
   }
 }
 
@@ -3314,6 +3801,23 @@ void AccountPage::ShowAddAuthSheet() {
     WireSheet(*addAuthSheet_);
   }
   addAuthSheet_->Open();
+}
+
+void AccountPage::ShowEmailChangeSheet() {
+  Gtk::Window* root = RootWindow();
+  if (root == nullptr) {
+    g_warning("account: no window root; the email change sheet was not opened");
+    return;
+  }
+  if (!BeginSheet("email change")) return;
+  if (!emailChangeSheet_) {
+    // the page's gate, as the add sheet takes it
+    emailChangeSheet_ =
+        std::make_unique<AccountEmailChangeSheet>(*root, host_, [this] { return CanCallApi(); });
+    emailChangeSheet_->on_changed = [this] { LoadAccount(); };  // the new email appears
+    WireSheet(*emailChangeSheet_);
+  }
+  emailChangeSheet_->Open();
 }
 
 void AccountPage::ShowAuthCodeSheet() {
