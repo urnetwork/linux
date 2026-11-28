@@ -255,6 +255,53 @@ UR_TEST(ProviderStatusDemandFollowsTheBlockedChartUnderTheSameGate) {
   UR_EXPECT_TRUE(why.find("providerStatusView_.showWhy") != std::string::npos);
 }
 
+// What SN25 counted (feature 14) sits beside this device's status, between the
+// demand chart and "Why?", and is re-read wherever the controller is: the
+// device's line from its status, the unpaid data provided from the
+// controller, connected (the GUI's own) or not (the daemon's, provider_stats).
+UR_TEST(ProviderStatusProvidedLinesFollowTheDemandChart) {
+  const std::string page = ReadProviderStatusSource("EarningsPage.cpp");
+  const std::string build =
+      ProviderStatusFunctionBody(page, "void EarningsPage::BuildNetworkPane()");
+  UR_EXPECT_TRUE(InOrder(build, "content->append(*demandChartRow_);",
+                         "content->append(*providedRow_);"));
+  UR_EXPECT_TRUE(
+      InOrder(build, "content->append(*providedRow_);", "content->append(*unpaidRow_);"));
+  UR_EXPECT_TRUE(InOrder(build, "content->append(*unpaidRow_);", "content->append(*whyRow_);"));
+  const std::string apply =
+      ProviderStatusFunctionBody(page, "void EarningsPage::ApplyProviderStatus()");
+  UR_EXPECT_TRUE(InOrder(apply, "ProviderStatusPollOf(host_.ProviderStatusNow())",
+                         "ApplyProvidedLines();"));
+  const std::string poll = ProviderStatusFunctionBody(
+      page, "providerstatus::Poll ProviderStatusPollOf(const SdkHost::ProviderStatusSnapshot&");
+  UR_EXPECT_TRUE(InOrder(poll, "poll.unpaidEpoch = snapshot.providedEpoch;",
+                         "if (!snapshot.status) return poll;"));
+  UR_EXPECT_TRUE(poll.find("poll.providedEpoch = status.provided->epoch;") != std::string::npos);
+
+  const std::string host = ReadProviderStatusSource("SdkHost.cpp");
+  const std::string now =
+      ProviderStatusFunctionBody(host, "SdkHost::ProviderStatusSnapshot SdkHost::ProviderStatusNow()");
+  UR_EXPECT_TRUE(InOrder(now, "snapshot.status = providerStatusVc_->getProviderStatus();",
+                         "snapshot.providedEpoch = providerStatusVc_->getProvidedEpoch();"));
+  UR_EXPECT_TRUE(now.find("snapshot.unpaidByteCount = providerStatusVc_->getUnpaidByteCount();") !=
+                 std::string::npos);
+  const std::string daemonStats =
+      ProviderStatusFunctionBody(host, "void SdkHost::PollDaemonProviderStatsLocked()");
+  UR_EXPECT_TRUE(daemonStats.find("stats.status.providedEpoch = reply->status_provided_epoch;") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(daemonStats.find(
+                     "stats.status.unpaidByteCount = reply->status_unpaid_byte_count;") !=
+                 std::string::npos);
+  const std::string daemon = ReadProviderStatusSource("daemon/TunnelHost.cpp");
+  const std::string reply =
+      ProviderStatusFunctionBody(daemon, "ctl::ProviderStatsReply TunnelHost::ProviderStats(");
+  UR_EXPECT_TRUE(reply.find("reply.status_provided_epoch = providerStatusVc_->getProvidedEpoch();") !=
+                 std::string::npos);
+  UR_EXPECT_TRUE(
+      reply.find("reply.status_unpaid_byte_count = providerStatusVc_->getUnpaidByteCount();") !=
+      std::string::npos);
+}
+
 // The key of the first T_("key", ...) after the case label `label` in `body`
 // ("" when none): a case that shares its group's return reads that return's key.
 std::string FirstKeyAfter(const std::string& body, const std::string& label) {

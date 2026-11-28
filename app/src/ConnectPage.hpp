@@ -48,6 +48,7 @@
 #include "IpFamilyStatusRow.hpp"
 #include "PaneKit.hpp"
 #include "ProFeaturesNotice.hpp"
+#include "ProvideSharePresentation.hpp"
 #include "QuickAction.hpp"
 #include "SdkHost.hpp"
 #include "SlowInternet.hpp"
@@ -279,6 +280,19 @@ class ConnectPage : public Gtk::Box {
   // mapping state while the switch is on, drawn beside the switch as just drawn
   // and hidden by a press until the role reports for the new position.
   void DrawPortMappingLine(const extender::PortMappingLine& line);
+  // The owner's sharing limits after the provide group (feature 10): one writer
+  // that re-reads the limits, shows the section while a device takes them and
+  // hides it otherwise (N1), draws both pickers (ProvideSharePresentation.hpp)
+  // and then the line; the line alone follows the status feed. A choice writes
+  // both limits, the chosen one and the other as read.
+  void ApplyShareLimits();
+  void ApplyShareStatus();
+  // A picker's options and selection under the echo guard; its options are
+  // replaced only when they change, and a reading that changes nothing draws
+  // nothing.
+  void DrawSharePicker(Gtk::DropDown& dropDown, provide_share::Picker& drawn,
+                       provide_share::Picker picker);
+  void OnShareLimitChosen(bool speed);
   // the selected-provider row (§2.3): stats.locationName with a selected peer
   // resolved to its device name; empty => "Best available provider"
   void ApplyLocationRow();
@@ -674,6 +688,22 @@ class ConnectPage : public Gtk::Box {
   Gtk::Label* portMappingLine_ = nullptr;
   extender::PortMappingLine portMappingLineDrawn_;
   bool portMappingLineApplied_ = false;
+  // the owner's sharing limits (feature 10), directly after the provide group:
+  // the group header, the two picker rows, the line of this month's sharing
+  // and the help line; hidden, never disabled, while no device takes the
+  // limits (N1)
+  kit::PaneGroupHeader shareLimitsHeader_;
+  Gtk::Widget* shareSpeedRow_ = nullptr;
+  Gtk::DropDown* shareSpeedPicker_ = nullptr;
+  Gtk::Widget* shareMonthlyRow_ = nullptr;
+  Gtk::DropDown* shareMonthlyPicker_ = nullptr;
+  Gtk::Label* shareStatusText_ = nullptr;
+  Gtk::Label* shareLimitsHelp_ = nullptr;
+  // the limits as last read or written (nullopt while no device takes them),
+  // and each picker as drawn, whose options a choice is read back from
+  std::optional<urnet::ProvideShareLimits> shareLimits_;
+  provide_share::Picker shareSpeedDrawn_;
+  provide_share::Picker shareMonthlyDrawn_;
   // connect options (§2.8): the 3-item connection-mode segmented control and
   // the three PerformanceProfile toggles, all echo-guarded
   Gtk::ToggleButton* modeAuto_ = nullptr;

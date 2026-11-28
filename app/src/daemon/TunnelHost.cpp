@@ -2030,12 +2030,18 @@ ctl::ProviderStatsReply TunnelHost::ProviderStats(bool pollStatus) {
       if (auto status = providerStatusVc_->getProviderStatus()) {
         reply.provider_status_json = ctl::DumpForWire(nlohmann::json(*status));
       }
+      // the network's unpaid data provided in the newest settled SN25 epoch,
+      // which the GUI reads off its own controller while connected
+      reply.status_provided_epoch = providerStatusVc_->getProvidedEpoch();
+      reply.status_unpaid_byte_count = providerStatusVc_->getUnpaidByteCount();
     } catch (const std::exception& e) {
       // a malformed document reads as a failed poll, as the GUI's own read
       // of its controller does
       reply.status_loaded = false;
       reply.status_last_fetch_error = e.what();
       reply.provider_status_json.clear();
+      reply.status_provided_epoch = 0;
+      reply.status_unpaid_byte_count = 0;
     }
   }
   return reply;

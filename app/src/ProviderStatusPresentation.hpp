@@ -15,6 +15,10 @@
 //     reason holding it back, and the numbers it is ranked by (the expandable
 //     "Why?").
 //
+// The same answer carries what SN25 counted in its newest settled epoch
+// (feature 14): this device's data with how it was paid, and the network's
+// unpaid data provided, which show beside the demand chart (ProvidedViewFor).
+//
 // Header-only and free of GTK and the SDK so the unit tests need no vendored
 // headers (tests/ProviderIdleReasonTest.cpp,
 // tests/ProviderStatusPresentationTest.cpp).
@@ -302,6 +306,17 @@ struct Poll {
   std::vector<int64_t> appearancesPerMinute;
   std::vector<RankingNumber> ranking;
   std::optional<Country> country;
+  // this device's data in the newest settled SN25 epoch (its status's
+  // provided, feature 14): the epoch, 0 without one, the usage bytes SN25
+  // counted and how they were paid (the SDK's ProviderStatusProvided*)
+  int64_t providedEpoch = 0;
+  int64_t providedByteCount = 0;
+  std::string providedPayout;
+  // the network's data in the newest settled epoch that SN25 did not pay for
+  // want of a payout wallet (the controller's unpaid data provided), and that
+  // epoch, 0 without one
+  int64_t unpaidEpoch = 0;
+  int64_t unpaidByteCount = 0;
 };
 
 // ---- the states -----------------------------------------------------------------
@@ -351,6 +366,56 @@ inline StatusView StatusViewFor(const Poll& poll) {
     view.chart = ChartState::Empty;
   } else {
     view.chart = ChartState::Bars;
+  }
+  return view;
+}
+
+// ---- the SN25 data provided (feature 14) ------------------------------------------
+
+// The SDK's ProviderStatusProvidedUnpaid: SN25 paid nothing for the data, for
+// want of a payout wallet.
+inline constexpr const char* kProvidedPayoutUnpaid = "unpaid";
+
+struct ProvidedView {
+  // provided_in_epoch with the epoch and this device's data
+  bool provided = false;
+  int64_t epoch = 0;
+  int64_t byteCount = 0;
+  // provided_not_paid_no_wallet under it
+  bool notPaid = false;
+  // unpaid_data_provided with the network's unpaid data, and under it
+  // unpaid_data_provided_help with its epoch
+  bool unpaid = false;
+  int64_t unpaidEpoch = 0;
+  int64_t unpaidByteCount = 0;
+
+  bool operator==(const ProvidedView& other) const {
+    return provided == other.provided && epoch == other.epoch && byteCount == other.byteCount &&
+           notPaid == other.notPaid && unpaid == other.unpaid &&
+           unpaidEpoch == other.unpaidEpoch && unpaidByteCount == other.unpaidByteCount;
+  }
+  bool operator!=(const ProvidedView& other) const { return !(*this == other); }
+};
+
+// What SN25 counted, beside this device's own status. The device's line shows
+// for a settled epoch in its status (epoch > 0), with "Not paid: no payout
+// wallet" under it when SN25 paid nothing for want of a wallet; nothing
+// without one. The unpaid data provided shows while the controller has a
+// settled epoch, and nothing while it has none (a server that predates the
+// figures reads as epoch 0). Like the rest of the status, a failed poll after
+// a success keeps the last figures.
+inline ProvidedView ProvidedViewFor(const Poll& poll) {
+  ProvidedView view;
+  if (poll.hasStatus && poll.providedEpoch > 0) {
+    view.provided = true;
+    view.epoch = poll.providedEpoch;
+    view.byteCount = poll.providedByteCount;
+    view.notPaid = poll.providedPayout == kProvidedPayoutUnpaid;
+  }
+  if (poll.unpaidEpoch > 0) {
+    view.unpaid = true;
+    view.unpaidEpoch = poll.unpaidEpoch;
+    view.unpaidByteCount = poll.unpaidByteCount;
   }
   return view;
 }

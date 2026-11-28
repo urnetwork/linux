@@ -8254,6 +8254,61 @@ msgctxt "provide_power_mode_pause_in_low_power"
 msgid "Pause in Low Power Mode"
 msgstr "Pausa i strömsparläge"
 
+#. Provide settings: the monthly data limit is reached, so this device stopped sharing with other people until the next month. The argument is the date the next month starts, such as Dec 1.
+msgctxt "provide_share_limit_reached"
+msgid "Monthly limit reached. Sharing with others resumes {}."
+msgstr "Månadsgränsen är nådd. Delningen med andra fortsätter {}."
+
+#. Provide settings: the title of the section with the owner's limits on how much this device shares.
+msgctxt "provide_share_limits"
+msgid "Sharing limits"
+msgstr "Delningsgränser"
+
+#. Provide settings: what a sharing limit costs the device's owner, shown under the limits.
+msgctxt "provide_share_limits_help"
+msgid "A limit lowers how much this device shares, which can lower its reliability ranking and its earnings."
+msgstr "En gräns minskar hur mycket den här enheten delar, vilket kan sänka dess tillförlitlighetsrankning och intäkter."
+
+#. Provide settings: the label of the fastest speed this device shares at, for others using the network through it.
+msgctxt "provide_share_max_speed"
+msgid "Max sharing speed"
+msgstr "Max delningshastighet"
+
+#. Provide settings: the label of the most data this device shares with others in a calendar month.
+msgctxt "provide_share_monthly_limit"
+msgid "Monthly data limit"
+msgstr "Månatlig datagräns"
+
+#. Provide settings: the choice of no sharing speed or monthly data limit.
+msgctxt "provide_share_no_limit"
+msgid "No limit"
+msgstr "Ingen gräns"
+
+#. Provide settings: a sharing speed choice in megabits per second. The argument is the number of megabits.
+msgctxt "provide_share_speed_mbps"
+msgid "{} Mbps"
+msgstr "{} Mbit/s"
+
+#. Provide settings: the data this device shared with others this calendar month, with no monthly limit set. The argument is an amount of data such as 12.3 GiB.
+msgctxt "provide_share_used"
+msgid "{} shared this month"
+msgstr "{} delat den här månaden"
+
+#. Provide settings: the data this device shared with others this calendar month against its monthly limit. The arguments are amounts of data such as 12.3 GiB and 50 GiB.
+msgctxt "provide_share_used_of_limit"
+msgid "{0} of {1} shared this month"
+msgstr "{0} av {1} delat den här månaden"
+
+#. Provider status: the data a device provided that SN25 counted in a settled epoch. The arguments are the epoch number and an amount of data such as 12.3 GiB.
+msgctxt "provided_in_epoch"
+msgid "Provided in epoch {0}: {1}"
+msgstr "Tillhandahållet i epok {0}: {1}"
+
+#. Provider status: SN25 did not pay for a device's provided data because the device had no payout wallet.
+msgctxt "provided_not_paid_no_wallet"
+msgid "Not paid: no payout wallet"
+msgstr "Inte utbetalt: ingen utbetalningsplånbok"
+
 #. Compact duration a provider has been connected, as hours and minutes (e.g. 3h 24m). {hours} is the whole hours, {minutes} the remaining minutes.
 msgctxt "provider_connected_duration_hours"
 msgid "{0}h {1}m"
@@ -11607,6 +11662,16 @@ msgstr "Du låser upp ännu snabbare hastigheter och får först tillgång till 
 msgctxt "unlock_supporter_tooltip"
 msgid "Unlock even faster speeds and first dibs on new features."
 msgstr "Lås upp ännu snabbare hastigheter och få först tillgång till nya funktioner."
+
+#. Provider status: the data SN25 counted for the account's devices in the newest settled epoch but did not pay, because the device had no payout wallet.
+msgctxt "unpaid_data_provided"
+msgid "Unpaid data provided"
+msgstr "Obetalda data tillhandahållen"
+
+#. Provider status: what the unpaid data provided is, under that figure. The argument is the settled epoch number.
+msgctxt "unpaid_data_provided_help"
+msgid "Data SN25 counted in epoch {} but did not pay, because no payout wallet was connected. This is data, not money owed."
+msgstr "Data som SN25 räknade i epok {} men inte betalade för, eftersom ingen utbetalningsplånbok var ansluten. Det här är data, inte pengar du har att få."
 
 #. Locations list: screen reader name of the warning icon on a location whose providers may be unstable.
 msgctxt "unstable_connection"

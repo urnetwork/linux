@@ -4,8 +4,9 @@
 // provide mode row (local reasons first, then the server's, "none" with and
 // without NoTrafficYet, an unknown code falling back to the server's text),
 // the "Why?" rows for every number name (label, value text, passes; unknown
-// names skipped, missing values, the country last), and the states of the
-// demand area.
+// names skipped, missing values, the country last), the states of the
+// demand area, and what SN25 counted beside it (this device's settled epoch,
+// its not-paid line and the network's unpaid data provided).
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -27,6 +28,8 @@ using urnw::providerstatus::NumberRow;
 using urnw::providerstatus::NumberRowsFor;
 using urnw::providerstatus::NumberWords;
 using urnw::providerstatus::Poll;
+using urnw::providerstatus::ProvidedView;
+using urnw::providerstatus::ProvidedViewFor;
 using urnw::providerstatus::ProviderIdleReason;
 using urnw::providerstatus::RankingNumber;
 using urnw::providerstatus::ServerReason;
@@ -390,6 +393,76 @@ UR_TEST(ProviderStatusStatesAfterAPoll) {
   Poll stale = Loaded();
   stale.lastFetchError = "timeout";
   UR_EXPECT_TRUE(ViewIs(StatusViewFor(stale), ChartState::Bars, true));
+}
+
+// ---- what SN25 counted (feature 14) ----------------------------------------------
+
+// A poll whose status carries this device's data in epoch 8, paid as `payout`.
+Poll ProvidedIn8(const std::string& payout) {
+  Poll poll = Loaded();
+  poll.providedEpoch = 8;
+  poll.providedByteCount = 12LL * 1024 * 1024 * 1024;
+  poll.providedPayout = payout;
+  return poll;
+}
+
+UR_TEST(ProviderStatusProvidedShowsThisDevicesSettledEpoch) {
+  const ProvidedView view = ProvidedViewFor(ProvidedIn8("paid"));
+  UR_EXPECT_TRUE(view.provided);
+  UR_EXPECT_EQ(8, view.epoch);
+  UR_EXPECT_TRUE(view.byteCount == 12LL * 1024 * 1024 * 1024);
+  UR_EXPECT_FALSE(view.notPaid);
+  // the network's figure is the controller's, not this device's
+  UR_EXPECT_FALSE(view.unpaid);
+}
+
+UR_TEST(ProviderStatusProvidedSaysNotPaidOnlyForAnUnpaidEpoch) {
+  UR_EXPECT_TRUE(ProvidedViewFor(ProvidedIn8("unpaid")).notPaid);
+  for (const char* payout : {"paid", "head", "none", "", "unknown"}) {
+    const ProvidedView view = ProvidedViewFor(ProvidedIn8(payout));
+    UR_EXPECT_TRUE_MSG(payout, view.provided && !view.notPaid);
+  }
+}
+
+UR_TEST(ProviderStatusProvidedIsNothingWithoutASettledEpoch) {
+  // no provided in the status (a server that predates it), or epoch 0
+  Poll none = Loaded();
+  UR_EXPECT_TRUE(ProvidedViewFor(none) == ProvidedView{});
+  Poll zero = ProvidedIn8("unpaid");
+  zero.providedEpoch = 0;
+  UR_EXPECT_FALSE(ProvidedViewFor(zero).provided);
+  UR_EXPECT_FALSE(ProvidedViewFor(zero).notPaid);
+  // and no status for this device at all
+  Poll noStatus = ProvidedIn8("paid");
+  noStatus.hasStatus = false;
+  UR_EXPECT_FALSE(ProvidedViewFor(noStatus).provided);
+  UR_EXPECT_TRUE(ProvidedViewFor(Poll{}) == ProvidedView{});
+}
+
+UR_TEST(ProviderStatusUnpaidDataShowsWhileTheControllerHasASettledEpoch) {
+  // the network's unpaid data provided needs no status for this device
+  Poll poll;
+  poll.open = true;
+  poll.loaded = true;
+  poll.unpaidEpoch = 8;
+  poll.unpaidByteCount = 3LL * 1024 * 1024 * 1024;
+  const ProvidedView view = ProvidedViewFor(poll);
+  UR_EXPECT_TRUE(view.unpaid);
+  UR_EXPECT_EQ(8, view.unpaidEpoch);
+  UR_EXPECT_TRUE(view.unpaidByteCount == 3LL * 1024 * 1024 * 1024);
+  UR_EXPECT_FALSE(view.provided);
+  // a settled epoch with nothing unpaid still says so: 0 B
+  poll.unpaidByteCount = 0;
+  UR_EXPECT_TRUE(ProvidedViewFor(poll).unpaid);
+  // epoch 0 (none settled, or a server that predates the figures): nothing
+  poll.unpaidEpoch = 0;
+  poll.unpaidByteCount = 5;
+  UR_EXPECT_FALSE(ProvidedViewFor(poll).unpaid);
+}
+
+UR_TEST(ProviderStatusProvidedPayoutIsTheSdksUnpaid) {
+  // EarningsPage.cpp static_asserts this against urnet::ProviderStatusProvidedUnpaid
+  UR_EXPECT_TRUE(std::string(urnw::providerstatus::kProvidedPayoutUnpaid) == "unpaid");
 }
 
 }  // namespace

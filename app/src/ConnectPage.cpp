@@ -143,6 +143,24 @@ Gtk::Label* MakeSupportingLine() {
   return line;
 }
 
+// The store's words for the sharing limits' pickers (ProvideSharePresentation.hpp)
+// and the app's byte formatter for the monthly limits.
+provide_share::Words ShareLimitWords() {
+  provide_share::Words words;
+  words.noLimit = T_("provide_share_no_limit", "No limit");
+  words.mbps = [](int64_t mbps) { return Format(T_("provide_share_speed_mbps", "{} Mbps"), mbps); };
+  words.bytes = [](int64_t byteCount) { return FormatByteCountCompact(byteCount); };
+  return words;
+}
+
+// A picker's option labels, in order.
+std::vector<Glib::ustring> SharePickerLabels(const provide_share::Picker& picker) {
+  std::vector<Glib::ustring> labels;
+  labels.reserve(picker.options.size());
+  for (const provide_share::Option& option : picker.options) labels.push_back(option.label);
+  return labels;
+}
+
 // ---- feed fingerprints --------------------------------------------------
 // The SDK structs carry no operator==, and the clock-driven poll re-reads
 // every feed once a second: a list rebuild destroys hover and keyboard focus,
@@ -1172,6 +1190,84 @@ void ConnectPage::BuildPaneA() {
   }
   portMappingRow_->set_visible(false);
   moreOptionsHost_->append(*portMappingRow_);
+
+  // The owner's sharing limits (feature 10, owner decision 2026-11-28),
+  // directly after the provide group: a group of its own with a picker for the
+  // most this device shares with others a second and one for a calendar
+  // month, the line of this month's sharing under them and what a limit costs.
+  // The pickers' options are ProvideSharePresentation.hpp's, redrawn from the
+  // device's limits under the echo guard (ApplyShareLimits). Hidden, never
+  // disabled, until a device takes the limits (N1).
+  shareLimitsHeader_ = kit::MakePaneGroupHeader(T_("provide_share_limits", "Sharing limits"));
+  shareLimitsHeader_.root->set_visible(false);
+  moreOptionsHost_->append(*shareLimitsHeader_.root);
+  {
+    // no limit, until the first reading draws the device's
+    const provide_share::Words words = ShareLimitWords();
+    shareSpeedDrawn_ = provide_share::SpeedPickerFor(0, words);
+    shareMonthlyDrawn_ = provide_share::MonthlyPickerFor(0, words);
+  }
+  {
+    auto row = kit::MakePaneTwoLineRow(T_("provide_share_max_speed", "Max sharing speed"), {}, 40);
+    shareSpeedPicker_ = Gtk::make_managed<Gtk::DropDown>(SharePickerLabels(shareSpeedDrawn_));
+    shareSpeedPicker_->set_valign(Gtk::Align::CENTER);
+    shareSpeedPicker_->set_selected(static_cast<guint>(shareSpeedDrawn_.selected));
+    kit::SetAccessibleLabel(*shareSpeedPicker_,
+                            T_("provide_share_max_speed", "Max sharing speed"));
+    shareSpeedPicker_->property_selected().signal_changed().connect([this] {
+      // echo guard: a feed-driven write must not travel back to the SDK
+      if (updatingControls_) return;
+      OnShareLimitChosen(/*speed=*/true);
+    });
+    row.trailing->append(*shareSpeedPicker_);
+    shareSpeedRow_ = row.root;
+    shareSpeedRow_->set_visible(false);
+    moreOptionsHost_->append(*row.root);
+  }
+  {
+    auto row =
+        kit::MakePaneTwoLineRow(T_("provide_share_monthly_limit", "Monthly data limit"), {}, 40);
+    shareMonthlyPicker_ = Gtk::make_managed<Gtk::DropDown>(SharePickerLabels(shareMonthlyDrawn_));
+    shareMonthlyPicker_->set_valign(Gtk::Align::CENTER);
+    shareMonthlyPicker_->set_selected(static_cast<guint>(shareMonthlyDrawn_.selected));
+    kit::SetAccessibleLabel(*shareMonthlyPicker_,
+                            T_("provide_share_monthly_limit", "Monthly data limit"));
+    shareMonthlyPicker_->property_selected().signal_changed().connect([this] {
+      // echo guard: a feed-driven write must not travel back to the SDK
+      if (updatingControls_) return;
+      OnShareLimitChosen(/*speed=*/false);
+    });
+    row.trailing->append(*shareMonthlyPicker_);
+    shareMonthlyRow_ = row.root;
+    shareMonthlyRow_->set_visible(false);
+    moreOptionsHost_->append(*row.root);
+  }
+  // the month's sharing from the device's status (ApplyShareStatus); collapses,
+  // never a blank row, while there is no status
+  shareStatusText_ = Gtk::make_managed<Gtk::Label>();
+  shareStatusText_->add_css_class("ur-caption");
+  shareStatusText_->set_xalign(0);
+  shareStatusText_->set_margin_start(12);
+  shareStatusText_->set_margin_end(12);
+  shareStatusText_->set_margin_top(8);
+  shareStatusText_->set_margin_bottom(8);
+  shareStatusText_->set_wrap(true);
+  CapNatural(shareStatusText_, 32);
+  shareStatusText_->set_visible(false);
+  moreOptionsHost_->append(*shareStatusText_);
+  shareLimitsHelp_ = Gtk::make_managed<Gtk::Label>(
+      T_("provide_share_limits_help",
+         "A limit lowers how much this device shares, which can lower its reliability ranking "
+         "and its earnings."));
+  shareLimitsHelp_->add_css_class("ur-caption");
+  shareLimitsHelp_->set_xalign(0);
+  shareLimitsHelp_->set_margin_start(12);
+  shareLimitsHelp_->set_margin_end(12);
+  shareLimitsHelp_->set_margin_bottom(8);
+  shareLimitsHelp_->set_wrap(true);
+  CapNatural(shareLimitsHelp_, 32);
+  shareLimitsHelp_->set_visible(false);
+  moreOptionsHost_->append(*shareLimitsHelp_);
 
   // connect options: the four toggle rows, each writing through SdkHost with
   // an echo guard (the load writes the same control)
@@ -3695,6 +3791,94 @@ void ConnectPage::OnExtenderToggled() {
   DrawExtenderRow(extender::ProvideRowGuess(on, stats_.provideEnabled));
 }
 
+// ---- the owner's sharing limits (feature 10) ------------------------------------
+
+// Re-reads the limits and shows the section while a device takes them; while
+// none does it is hidden, never disabled (N1: the daemon has no verb for
+// them). Both pickers are drawn from the limits, then the line.
+void ConnectPage::ApplyShareLimits() {
+  if (!shareSpeedPicker_ || !shareMonthlyPicker_) return;
+  shareLimits_ = host_.GetProvideShareLimits();
+  const bool shown = shareLimits_.has_value();
+  shareLimitsHeader_.root->set_visible(shown);
+  shareSpeedRow_->set_visible(shown);
+  shareMonthlyRow_->set_visible(shown);
+  shareLimitsHelp_->set_visible(shown);
+  if (shown) {
+    const provide_share::Words words = ShareLimitWords();
+    DrawSharePicker(*shareSpeedPicker_, shareSpeedDrawn_,
+                    provide_share::SpeedPickerFor(shareLimits_->max_bytes_per_second, words));
+    DrawSharePicker(*shareMonthlyPicker_, shareMonthlyDrawn_,
+                    provide_share::MonthlyPickerFor(shareLimits_->monthly_byte_count, words));
+  }
+  ApplyShareStatus();
+}
+
+void ConnectPage::DrawSharePicker(Gtk::DropDown& dropDown, provide_share::Picker& drawn,
+                                  provide_share::Picker picker) {
+  if (picker == drawn) return;
+  updatingControls_ = true;
+  // a value the list does not have comes or goes as an option of its own
+  if (picker.options != drawn.options) {
+    dropDown.set_model(Gtk::StringList::create(SharePickerLabels(picker)));
+  }
+  dropDown.set_selected(static_cast<guint>(picker.selected));
+  updatingControls_ = false;
+  drawn = std::move(picker);
+}
+
+// The line under the pickers, from the device's status (provide_share::LineFor):
+// once the month's budget is reached, the day sharing with others resumes, in
+// the reader's own date format and zone; otherwise the month's data, of the
+// limit while there is one. Collapsed while there is no status.
+void ConnectPage::ApplyShareStatus() {
+  if (!shareStatusText_) return;
+  // a hidden section reads nothing
+  const std::optional<urnet::ProvideShareStatus> status =
+      shareLimits_ ? host_.GetProvideShareStatus() : std::nullopt;
+  std::string text;
+  switch (provide_share::LineFor(status.has_value(), status && status->budget_reached,
+                                 status ? status->monthly_byte_count : 0)) {
+    case provide_share::Line::Hidden:
+      break;
+    case provide_share::Line::LimitReached:
+      text = Format(T_("provide_share_limit_reached",
+                       "Monthly limit reached. Sharing with others resumes {}."),
+                    LocalDate(status->period_end_millis / 1000));
+      break;
+    case provide_share::Line::UsedOfLimit:
+      text = Format(T_("provide_share_used_of_limit", "{0} of {1} shared this month"),
+                    FormatByteCountCompact(status->byte_count),
+                    FormatByteCountCompact(status->monthly_byte_count));
+      break;
+    case provide_share::Line::Used:
+      text = Format(T_("provide_share_used", "{} shared this month"),
+                    FormatByteCountCompact(status->byte_count));
+      break;
+  }
+  kit::SetTextOrCollapse(*shareStatusText_, text);
+}
+
+// A choice writes both limits: the one chosen, and the other as last read.
+// Never while hidden: no device takes them then (N1). The line follows at
+// once, since the device's status answers for the new limits.
+void ConnectPage::OnShareLimitChosen(bool speed) {
+  if (!shareLimits_) return;
+  Gtk::DropDown* dropDown = speed ? shareSpeedPicker_ : shareMonthlyPicker_;
+  provide_share::Picker& drawn = speed ? shareSpeedDrawn_ : shareMonthlyDrawn_;
+  if (dropDown == nullptr) return;
+  const guint selected = dropDown->get_selected();
+  if (selected >= drawn.options.size()) return;
+  drawn.selected = selected;
+  urnet::ProvideShareLimits limits = *shareLimits_;
+  int64_t& limit = speed ? limits.max_bytes_per_second : limits.monthly_byte_count;
+  if (limit == drawn.options[selected].value) return;
+  limit = drawn.options[selected].value;
+  shareLimits_ = limits;
+  host_.SetProvideShareLimits(limits);
+  ApplyShareStatus();
+}
+
 // ---- connect options: the performance profile (§2.8) ---------------------------
 // The Linux SdkHost exposes GetPerformanceProfile/SetPerformanceProfile, and a
 // nil profile is the SDK's default profile: Auto, direct off and post-quantum on
@@ -3992,6 +4176,9 @@ void ConnectPage::RefreshFeeds(bool force) {
     // the extender row's listener fires nothing on registration, so a device
     // arriving, a re-show and the build all re-read the status
     ApplyExtenderProvideState();
+    // nor does the share status's: the sharing limits and their line are
+    // re-read the same way
+    ApplyShareLimits();
     ApplyInspectorVisibility();
     ApplyInspector();
     // Ask urnetworkd what floor is REALLY installed. There is no push for
@@ -4226,6 +4413,11 @@ void ConnectPage::OnHostEvent(DrawerEvent event) {
       break;
     case DrawerEvent::ProviderStatus:
       // the provider status is the earnings page's
+      break;
+    case DrawerEvent::ProvideShareStatus:
+      // the month's sharing moved, or the limits, the month or the budget did:
+      // the line under the sharing limits re-reads the status
+      ApplyShareStatus();
       break;
   }
 }

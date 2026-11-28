@@ -4269,6 +4269,15 @@ void SdkHost::SubscribeDrawer() {
       [this](std::optional<urnet::ExtenderProvideStatus>) {
         EmitDrawerEvent(DrawerEvent::ExtenderProvideStatus);
       }));
+  // ...and its sharing against the owner's sharing limits (feature 10): the
+  // connect page's Sharing limits line. The SDK tells the month's data growing
+  // at most once a second, and a change of the limits, the month or the budget
+  // at once, and fires none on registration, so the page re-reads the status
+  // on DeviceLifecycle.
+  presentationSubs_.push_back(device_->addProvideShareStatusChangeListener(
+      [this](std::optional<urnet::ProvideShareStatus>) {
+        EmitDrawerEvent(DrawerEvent::ProvideShareStatus);
+      }));
   // ...and the shared view controller behind the account section's settings,
   // share and import. It is opened with the rest of the presentation and
   // closed with it, so every accessor is nullopt with the window hidden or the
@@ -4399,6 +4408,10 @@ SdkHost::ProviderStatusSnapshot SdkHost::ProviderStatusNow() {
       snapshot.loaded = providerStatusVc_->getIsLoaded();
       snapshot.lastFetchError = providerStatusVc_->getLastFetchError();
       snapshot.status = providerStatusVc_->getProviderStatus();
+      // the network's unpaid data provided in the newest settled SN25 epoch
+      // (feature 14), read with the status it came with
+      snapshot.providedEpoch = providerStatusVc_->getProvidedEpoch();
+      snapshot.unpaidByteCount = providerStatusVc_->getUnpaidByteCount();
     } catch (const std::exception& e) {
       // a malformed document must never take the page down: it reads as a
       // failed poll
@@ -4406,6 +4419,8 @@ SdkHost::ProviderStatusSnapshot SdkHost::ProviderStatusNow() {
       snapshot.loaded = false;
       snapshot.lastFetchError = e.what();
       snapshot.status.reset();
+      snapshot.providedEpoch = 0;
+      snapshot.unpaidByteCount = 0;
     }
     return snapshot;
   });
@@ -4486,6 +4501,10 @@ void SdkHost::PollDaemonProviderStatsLocked() {
   stats.status.status =
       ProviderStatsPart<urnet::ProviderStatus>(reply->provider_status_json, "status");
   stats.statusJson = reply->provider_status_json;
+  // the network's unpaid data provided and its epoch beside it; a daemon that
+  // predates them sends neither, which reads as no settled epoch
+  stats.status.providedEpoch = reply->status_provided_epoch;
+  stats.status.unpaidByteCount = reply->status_unpaid_byte_count;
   // the extender role and its series; a daemon that predates them sends
   // neither, and the extender row and plot stay hidden
   stats.extenderProvideStatus = ProviderStatsPart<urnet::ExtenderProvideStatus>(
@@ -4511,7 +4530,11 @@ void SdkHost::PollDaemonProviderStatsLocked() {
                              daemonProviderStats_->status.loaded != stats.status.loaded ||
                              daemonProviderStats_->status.lastFetchError !=
                                  stats.status.lastFetchError ||
-                             daemonProviderStats_->statusJson != stats.statusJson;
+                             daemonProviderStats_->statusJson != stats.statusJson ||
+                             daemonProviderStats_->status.providedEpoch !=
+                                 stats.status.providedEpoch ||
+                             daemonProviderStats_->status.unpaidByteCount !=
+                                 stats.status.unpaidByteCount;
   const bool extenderChanged =
       !daemonProviderStats_ ||
       daemonProviderStats_->extenderProvideStatusJson != stats.extenderProvideStatusJson ||
@@ -6354,6 +6377,56 @@ std::string SdkHost::GetProvideControlMode() {
 bool SdkHost::ProvideEnabled() {
   return ReadOnMain<bool>("ProvideEnabled", [&]() -> bool {
     return device_ && device_->getProvideEnabled();
+  });
+}
+
+// ---- the owner's sharing limits (feature 10) ---------------------------------
+// Through the device only: its DeviceLocal in the daemon keeps them and applies
+// them at once, and the remote queues a write while the daemon is out of
+// contact. Both getters are rpcs that read through, with the last value cached
+// by the remote.
+
+std::optional<urnet::ProvideShareLimits> SdkHost::GetProvideShareLimits() {
+  return ReadOnMain<std::optional<urnet::ProvideShareLimits>>("GetProvideShareLimits", [&]() -> std::optional<urnet::ProvideShareLimits> {
+    // no device: nothing takes the limits, and the section hides
+    if (!device_) return std::nullopt;
+    try {
+      return device_->getProvideShareLimits();
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] getProvideShareLimits failed: %s\n", e.what());
+      return std::nullopt;
+    }
+  });
+}
+
+void SdkHost::SetProvideShareLimits(const urnet::ProvideShareLimits& limits) {
+  std::scoped_lock lock(mutex_);
+  if (!device_) {
+    g_warning("provide: dropping a sharing limits write with no device");
+    return;
+  }
+  try {
+    device_->setProvideShareLimits(limits);
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] setProvideShareLimits failed: %s\n", e.what());
+    return;
+  }
+  // a main-loop read before the queue settles says what was written
+  if (OnMainLoop()) {
+    KeepOnMain<std::optional<urnet::ProvideShareLimits>>(
+        "GetProvideShareLimits", std::optional<urnet::ProvideShareLimits>(limits));
+  }
+}
+
+std::optional<urnet::ProvideShareStatus> SdkHost::GetProvideShareStatus() {
+  return ReadOnMain<std::optional<urnet::ProvideShareStatus>>("GetProvideShareStatus", [&]() -> std::optional<urnet::ProvideShareStatus> {
+    if (!device_) return std::nullopt;
+    try {
+      return device_->getProvideShareStatus();
+    } catch (const std::exception& e) {
+      std::fprintf(stderr, "[sdk] getProvideShareStatus failed: %s\n", e.what());
+      return std::nullopt;
+    }
   });
 }
 

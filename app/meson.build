@@ -732,6 +732,7 @@ urnetwork_tests = executable('urnetwork-tests',
     'tests/ProviderStatusWiringTest.cpp',
     'tests/ProvideLifecycleTest.cpp',
     'tests/ProvideLineTest.cpp',
+    'tests/ProvideSharePresentationTest.cpp',
     'tests/LegacyHomeRemovedTest.cpp',
     'tests/ConnectActivityRowsWiringTest.cpp',
     'tests/ConnectFoldTest.cpp',
@@ -887,6 +888,8 @@ urnetwork_tests = executable('urnetwork-tests',
               # daemon and GUI call sites the same way, and
               # ProviderOnlyStatusWiringTest its statistics and settings call sites.
               # ProvideLineTest reads the connect page's provide line the same way.
+              # ProvideSharePresentationTest reads the connect page's sharing limits
+              # and SdkHost's share status listener the same way.
               # LegacyHomeRemovedTest reads the window, the shell and the build lists
               # the same way: the legacy home stays gone and every page is reachable.
               # ConnectActivityRowsWiringTest reads the connect page's ip family row
