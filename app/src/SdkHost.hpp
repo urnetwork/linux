@@ -724,6 +724,14 @@ class SdkHost {
   // The stored jwt itself, which the sdk's Pro decision reads its claim from
   // (urnet::SubscriptionProTracker); "" when none was read. Never logged.
   std::string StoredByJwt();
+  // The low-data warning to show for a balance just loaded, from the sdk's
+  // decision (urnet::lowDataWarningForBalance over this sign-in's LocalState,
+  // where it remembers each threshold once per balance period); nullopt for
+  // none, and while signed out. Not a read: the sdk records what it answers, so
+  // on the main loop, while a command holds mutex_ across its rpc, this balance
+  // warns nothing and the next one decides, rather than a kept answer repeating.
+  std::optional<urnet::LowDataWarning> LowDataWarningForBalance(
+      const urnet::SubscriptionBalanceResult& result);
   // Refresh the jwt when the sdk's Pro decision asks for it (mac parity:
   // Device::refreshToken). It renews the device's client token, not the
   // stored jwt. No-op without a device.
