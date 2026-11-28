@@ -36,6 +36,11 @@ class SdkHostRegionStore : public region::Store {
 // every GNOME country list uses), or "" when iso-codes is not installed.
 std::string CountryDisplayName(const std::string& countryCode);
 
+// A location's name in the location list and on the connect screen: a country
+// in the app's language by CountryDisplayName, the server's name otherwise
+// (region::LocationDisplayName). External text: the caller sanitizes it.
+std::string LocationDisplayName(const urnet::ConnectLocation& location);
+
 // The picker's rows over the SDK's regions, named in the locale.
 std::vector<region::Option> ConnectionRegionOptions();
 

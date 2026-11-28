@@ -361,10 +361,10 @@ UR_TEST(ReleaseNotes_ANoteNeverCrossesChineseScripts) {
 }
 
 UR_TEST(ReleaseNotes_TheNoteKeepsItsOwnLanguagesDirection) {
-  for (const char* rtl : {"ar", "he", "ar_EG", "ar-EG", "he_IL.UTF-8", "AR"}) {
+  for (const char* rtl : {"ar", "he", "fa", "ar_EG", "ar-EG", "he_IL.UTF-8", "fa_IR.UTF-8", "AR"}) {
     UR_EXPECT_TRUE_MSG(rtl, release_notes::IsRightToLeft(rtl));
   }
-  for (const char* ltr : {"en", "de", "fr", "pt-BR", "zh", "zh-HK", "hi", "", "C"}) {
+  for (const char* ltr : {"en", "de", "fr", "pt-BR", "zh", "zh-HK", "hi", "tr", "tr_TR.UTF-8", "", "C"}) {
     UR_EXPECT_TRUE_MSG(ltr, !release_notes::IsRightToLeft(ltr));
   }
   // an Arabic UI with no Arabic note reads en, laid out left to right

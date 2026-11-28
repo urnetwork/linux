@@ -77,6 +77,20 @@ inline std::vector<Option> Options(const std::vector<std::string>& sdkCodes,
   return out;
 }
 
+// The name the location list shows for a location (support inbox 8621). A
+// country reads in the app's language: `nameOf` its code, the locale's name the
+// picker's options use (iso-codes in the app), so the list and the picker name
+// a country alike. The server's name stays the fallback, for a code the locale
+// does not name (`nameOf` answers "") and for every region, city, group and
+// device, which the locale cannot name.
+inline std::string LocationDisplayName(bool isCountry, const std::string& countryCode,
+                                       const std::string& serverName,
+                                       const std::function<std::string(const std::string&)>& nameOf) {
+  if (!isCountry || countryCode.size() != 2 || !nameOf) return serverName;
+  const std::string name = nameOf(Lowercased(countryCode));
+  return name.empty() ? serverName : name;
+}
+
 // The row of `stored`: a stored code the list no longer offers reads as
 // Other / Undisclosed, the last row.
 inline size_t SelectedIndex(const std::vector<Option>& options, const std::string& stored) {

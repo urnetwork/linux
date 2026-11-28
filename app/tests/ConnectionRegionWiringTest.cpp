@@ -185,3 +185,24 @@ UR_TEST(ConnectionRegionWiring_EveryTextIsTheCatalogs) {
     UR_EXPECT_TRUE_MSG(std::string("not shown: ") + key, Has(all, std::string("\"") + key + "\""));
   }
 }
+
+// Support inbox 8621: the location list and the connect screen name a country
+// with the picker's lookup (CountryDisplayName), the server's name the fallback.
+UR_TEST(ConnectionRegionWiring_TheLocationListNamesCountriesAsThePickerDoes) {
+  const std::string picker = Source("ConnectionRegionSheet.cpp");
+  const std::string helper = Body(picker, "std::string LocationDisplayName(const urnet::ConnectLocation& location)");
+  UR_EXPECT_TRUE(Has(helper, "region::LocationDisplayName("));
+  UR_EXPECT_TRUE(Has(helper, "CountryDisplayName"));
+  UR_EXPECT_TRUE(Has(helper, "urnet::LocationTypeCountry"));
+
+  const std::string sheet = Source("LocationsSheet.cpp");
+  UR_EXPECT_TRUE(Has(sheet, "SanitizeExternalDisplayText(LocationDisplayName(location))"));
+  UR_EXPECT_FALSE(Has(sheet, "SanitizeExternalDisplayText(location.name.value_or(std::string()))"));
+  const std::string network = Source("NetworkPage.cpp");
+  UR_EXPECT_TRUE(Has(network, "MakeRow(SanitizeExternalDisplayText(LocationDisplayName(location)), meta,"));
+  UR_EXPECT_TRUE(Has(network, "SanitizeExternalDisplayText(LocationDisplayName(loc))"));
+  UR_EXPECT_FALSE(Has(network, "SanitizeExternalDisplayText(location.name.value_or(std::string()))"));
+  const std::string connect = Source("ConnectPage.cpp");
+  UR_EXPECT_TRUE(Has(Body(connect, "void ConnectPage::ApplyLocationRow("),
+                     "SanitizeExternalDisplayText(LocationDisplayName(*location))"));
+}
