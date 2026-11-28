@@ -36,6 +36,7 @@
 #include "PaymentPastDue.hpp"
 #include "RuntimePaths.hpp"
 #include "ServerRefusalText.hpp"
+#include "SsoBridge.hpp"
 #include "Ui.hpp"
 #include "UrTheme.hpp"
 
@@ -345,7 +346,7 @@ std::string AbbreviateCode(const std::string& code) {
 bool IsIdentityMethod(const std::string& method) {
   const std::string lower = Lower(method);
   return lower == "email" || lower == "phone" || lower == "google" ||
-         lower == "apple" || lower == "solana";
+         lower == "apple" || lower == "microsoft" || lower == "solana";
 }
 
 bool ComputeNeedsNameClaim(const urnet::NetworkUser& user) {
@@ -566,8 +567,8 @@ class AccountUsageBar : public Gtk::Box {
 // sign-in verifies. The jwt authVerify returns is not installed (the session
 // already holds this network's).
 //
-// Apple, Google and wallets (AddSignInFlow.hpp) run the login's own browser
-// and wallet flows through SdkHost::AddSignIn*, which end in add-auth on this
+// Apple, Google, Microsoft and wallets (AddSignInFlow.hpp) run the login's own
+// browser and wallet flows through SdkHost::AddSignIn*, which end in add-auth on this
 // session: never a sign-in, never a new jwt. They have no code step.
 class AccountAddAuthSheet : public Gtk::Window {
   // The SDK side of the flow, gated by the page and guarded by the sheet's
@@ -709,7 +710,8 @@ class AccountAddAuthSheet : public Gtk::Window {
     }
     box->append(*methods);
 
-    // apple and google: the provider's web flow in the browser
+    // apple, google and microsoft: the provider's web flow in the browser
+    // (microsoft's through the api's start url)
     auto providerPage = [this](addsignin::Method method, Glib::ustring hint,
                                Glib::ustring button) {
       auto* page = Gtk::make_managed<Gtk::Box>(Gtk::Orientation::VERTICAL, 12);
@@ -736,6 +738,11 @@ class AccountAddAuthSheet : public Gtk::Window {
                                       "Sign in with Google to add it as a sign-in method."),
                                    T_("sign_in_with_google", "Sign in with Google")),
                      "google");
+    methodStack_.add(*providerPage(addsignin::Method::Microsoft,
+                                   T_("sign_in_with_microsoft_to_add_it",
+                                      "Sign in with Microsoft to add it as a sign-in method."),
+                                   T_("sign_in_with_microsoft", "Sign in with Microsoft")),
+                     "microsoft");
 
     // wallet: a Solana wallet (Phantom / Solflare on the ur.io bridge) or a
     // Bittensor wallet (the shared chooser: the SDK's wallets for linux)
@@ -941,6 +948,7 @@ class AccountAddAuthSheet : public Gtk::Window {
     switch (method) {
       case addsignin::Method::Apple: return "apple";
       case addsignin::Method::Google: return "google";
+      case addsignin::Method::Microsoft: return "microsoft";
       case addsignin::Method::Wallet: return "wallet";
       case addsignin::Method::Email: return "email";
     }
@@ -954,8 +962,9 @@ class AccountAddAuthSheet : public Gtk::Window {
     }
   }
 
-  // The answer of an Apple, Google or wallet add, on whatever thread it
-  // arrives: posted to the main loop and dropped once the sheet moved on.
+  // The answer of an Apple, Google, Microsoft or wallet add, on whatever
+  // thread it arrives: posted to the main loop and dropped once the sheet
+  // moved on.
   std::function<void(SdkHost::AddSignInResult)> Answer(addsignin::Method method) {
     auto epoch = epoch_;
     const uint64_t seen = *epoch_;
@@ -972,6 +981,14 @@ class AccountAddAuthSheet : public Gtk::Window {
         // the user started another method
         if (bridge::IsSuperseded(result.error)) {
           providerError_.clear();
+        } else if (result.microsoftFailure != sso::MicrosoftFailure::None) {
+          // the sdk's attempt refused the Microsoft return, in this app's
+          // words; a cancel on Microsoft's page says nothing
+          const std::optional<sso::FailureText> text =
+              sso::MicrosoftFailureTextFor(result.microsoftFailure);
+          providerError_ =
+              text ? std::string(g_dpgettext2(GETTEXT_PACKAGE, text->key, text->english))
+                   : std::string();
         } else {
           g_warning("account: add sign-in failed: %s",
                     result.error.empty() ? "(no error text)" : result.error.c_str());

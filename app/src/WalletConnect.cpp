@@ -279,7 +279,37 @@ void WalletConnect::SignInWithGoogle(const std::string& apiUrl, const std::strin
   OpenUrl(sso::GoogleAuthorizeUrl(apiUrl, state, nonce));
 }
 
+void WalletConnect::SignInWithMicrosoft(const std::string& startUrl, const std::string& state,
+                                        const std::string& nonce) {
+  // the same debug hook as Apple and Google: URNETWORK_SSO_SIMULATE posts the
+  // return the api's callback would send, which the sdk's attempt accepts and
+  // the server rejects (the token is unsigned)
+  if (const char* sim = g_getenv("URNETWORK_SSO_SIMULATE")) {
+    const std::string given(sim);
+    const std::string token = given.find('.') != std::string::npos
+                                  ? given
+                                  : sso::SimulatedIdentityToken(nonce, "simulated");
+    const std::string uri = std::string("urnetwork://") + sso::kOAuthReturnHost +
+                            sso::kMicrosoftReturnPath + "?state=" + Esc(state) +
+                            "&id_token=" + Esc(token);
+    Glib::signal_timeout().connect_once([this, uri] { HandleDeepLink(uri); }, 400);
+    return;
+  }
+  // the attempt has no start url without an api url
+  if (startUrl.empty()) {
+    if (on_error) on_error("no api url for the Microsoft sign-in");
+    return;
+  }
+  OpenUrl(startUrl);
+}
+
 void WalletConnect::HandleOAuthReturn(const std::string& url) {
+  // urnetwork://oauth/microsoft?...: the sdk's attempt judges the whole return
+  // (its state, the token's nonce, its age), so it goes to the host as it came
+  if (urnet::isMicrosoftSignInReturnUrl(url)) {
+    if (on_microsoft) on_microsoft(url);
+    return;
+  }
   // urnetwork://oauth/apple?state=…&id_token=…  (or &error=…), and the same
   // shape on urnetwork://oauth/google: the path names the provider
   const std::string provider = sso::OAuthReturnProvider(sso::UrlPath(url));

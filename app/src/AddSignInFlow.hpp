@@ -4,12 +4,15 @@
 // (tests/AddSignInFlowTest.cpp).
 //
 // Every app offers the same set (ur.io AddSignInSheet, apple AddAuthSheet), in
-// the same order: Apple, Google, Wallet (a Solana or a Bittensor wallet), and
-// an email or phone with a password. The linux sheet offered only the email.
+// the same order: Apple, Google, Microsoft, Wallet (a Solana or a Bittensor
+// wallet), and an email or phone with a password. The linux sheet offered only
+// the email.
 //
 // How each one completes, reusing the login flows (SdkHost):
 //   - Apple, Google: the provider's own web flow in the browser (SsoBridge.hpp)
-//     returning on urnetwork://oauth/<provider>; the identity token goes to
+//     returning on urnetwork://oauth/<provider>; Microsoft: the sdk's
+//     MicrosoftSignInAttempt through the api's start url, returning on
+//     urnetwork://oauth/microsoft. The identity token goes to
 //     POST /auth/add-auth { auth_jwt, auth_jwt_type }.
 //   - Solana: the ur.io wallet bridge (connect, then sign a fresh
 //     /auth/wallet-challenge); Bittensor: the SDK BittensorWalletSession with
@@ -32,12 +35,12 @@
 
 namespace urnw::addsignin {
 
-enum class Method { Apple, Google, Wallet, Email };
+enum class Method { Apple, Google, Microsoft, Wallet, Email };
 enum class WalletChain { Solana, Bittensor };
 
 // The sheet's methods, in picker order (ur.io ADD_SIGN_IN_METHODS).
 inline std::vector<Method> Methods() {
-  return {Method::Apple, Method::Google, Method::Wallet, Method::Email};
+  return {Method::Apple, Method::Google, Method::Microsoft, Method::Wallet, Method::Email};
 }
 
 // The wallet option's chains (ur.io ADD_SIGN_IN_WALLET_CHAINS).
@@ -58,6 +61,7 @@ constexpr Text MethodLabel(Method method) noexcept {
   switch (method) {
     case Method::Apple: return {"apple", "Apple"};
     case Method::Google: return {"google", "Google"};
+    case Method::Microsoft: return {"microsoft", "Microsoft"};
     case Method::Wallet: return {"wallet", "Wallet"};
     case Method::Email: return {"site_app_email", "Email"};
   }
@@ -82,6 +86,8 @@ constexpr Text AddedMessage(Method method) noexcept {
   switch (method) {
     case Method::Apple: return {"apple_sign_in_method_added", "Apple sign-in method added"};
     case Method::Google: return {"google_sign_in_method_added", "Google sign-in method added"};
+    case Method::Microsoft:
+      return {"microsoft_sign_in_method_added", "Microsoft sign-in method added"};
     case Method::Wallet: return {"wallet_sign_in_method_added", "Wallet sign-in method added"};
     case Method::Email:
       return {"sign_in_method_added_successfully", "Sign-in method added successfully"};
@@ -92,10 +98,12 @@ constexpr Text AddedMessage(Method method) noexcept {
 // Only an email or phone has a code to verify.
 constexpr bool NeedsVerification(Method method) noexcept { return method == Method::Email; }
 
-// The sso provider id a provider method signs in with ("" for the others).
+// The sso provider id a provider method signs in with ("" for the others),
+// also its identity token's auth_jwt_type.
 constexpr std::string_view SsoProvider(Method method) noexcept {
   if (method == Method::Apple) return "apple";
   if (method == Method::Google) return "google";
+  if (method == Method::Microsoft) return "microsoft";
   return "";
 }
 

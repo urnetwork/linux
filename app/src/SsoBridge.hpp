@@ -9,6 +9,13 @@
 // token's `nonce` claim must be the one sent with it (the token was issued for
 // THIS attempt, not lifted from another sign-in). Header-only and pure (no
 // GTK, no SDK, no glib) so the unit test binary covers both checks anywhere.
+//
+// Sign in with Microsoft returns the same way, on urnetwork://oauth/microsoft,
+// but its attempt is the sdk's (oauth_microsoft.go, urnet::
+// MicrosoftSignInAttempt): the attempt mints the state and nonce, builds the
+// api's start url (the api holds the Microsoft client) and makes both checks
+// on the return itself. What is left here is the words for a return it
+// refused (MicrosoftFailureFor).
 // SPDX-License-Identifier: MPL-2.0
 #pragma once
 
@@ -25,6 +32,8 @@ namespace urnw::sso {
 
 inline constexpr const char* kProviderGoogle = "google";
 inline constexpr const char* kProviderApple = "apple";
+// also the auth_jwt_type of its identity token (sdk AuthJwtTypeMicrosoft)
+inline constexpr const char* kProviderMicrosoft = "microsoft";
 
 // Sign in with Apple has no desktop SDK, so the app goes straight to Apple: it
 // opens
@@ -65,6 +74,9 @@ inline constexpr const char* kGoogleClientId =
     "338638865390-cg4m0t700mq9073smhn9do81mr640ig1.apps.googleusercontent.com";
 inline constexpr const char* kGoogleCallbackPath = "/auth/google/callback";
 inline constexpr const char* kGoogleReturnPath = "/google";  // its path
+// Microsoft's return path (urnetwork://oauth/microsoft), for the simulated
+// return; the sdk recognizes a real one (urnet::isMicrosoftSignInReturnUrl)
+inline constexpr const char* kMicrosoftReturnPath = "/microsoft";
 
 namespace detail {
 
@@ -296,6 +308,48 @@ inline std::string SimulatedIdentityToken(const std::string& nonce, const std::s
   const std::string header = detail::Base64UrlEncode(R"({"alg":"none","typ":"JWT"})");
   const nlohmann::json payload = {{"iss", issuer}, {"sub", "simulated"}, {"nonce", nonce}};
   return header + "." + detail::Base64UrlEncode(payload.dump()) + ".";
+}
+
+// How a Microsoft return the sdk's attempt refused ends, by the code its
+// error starts with (urnet::microsoftSignInErrorCodeOf, the sdk's
+// MicrosoftSignInErrorCode*).
+enum class MicrosoftFailure {
+  None,         // not a refusal
+  KeepWaiting,  // another attempt's return (not_this_attempt): the attempt waits on
+  Cancelled,    // the person backed out on Microsoft's page: nothing to say
+  Unavailable,  // the server has no Microsoft sign-in yet (not_configured)
+  Failed,       // any other refusal
+};
+
+inline MicrosoftFailure MicrosoftFailureFor(const std::string& code) {
+  if (code == "not_this_attempt") return MicrosoftFailure::KeepWaiting;
+  if (code == "cancelled") return MicrosoftFailure::Cancelled;
+  if (code == "not_configured") return MicrosoftFailure::Unavailable;
+  return MicrosoftFailure::Failed;
+}
+
+// A line a sign-in screen shows: a store key and its English (the gettext
+// msgid).
+struct FailureText {
+  const char* key;
+  const char* english;
+};
+
+// What the sign-in screen and the add sign-in sheet say for a refused
+// Microsoft return; nothing for a cancel, nor for the outcomes no screen sees.
+inline std::optional<FailureText> MicrosoftFailureTextFor(MicrosoftFailure failure) {
+  switch (failure) {
+    case MicrosoftFailure::Unavailable:
+      return FailureText{"microsoft_sign_in_unavailable",
+                         "Sign in with Microsoft isn't available yet. Try another way to sign in."};
+    case MicrosoftFailure::Failed:
+      return FailureText{"error_signing_in_with_microsoft", "Error signing in with Microsoft"};
+    case MicrosoftFailure::None:
+    case MicrosoftFailure::KeepWaiting:
+    case MicrosoftFailure::Cancelled:
+      break;
+  }
+  return std::nullopt;
 }
 
 }  // namespace urnw::sso

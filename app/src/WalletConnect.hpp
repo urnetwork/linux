@@ -75,6 +75,15 @@ class WalletConnect {
   std::function<void(std::string provider, std::string authJwt, std::string state,
                      std::string error)>
       on_sso;
+  // Sign in with Microsoft through the api (sdk oauth_microsoft.go): the
+  // browser opens `startUrl`, the attempt's urnet::MicrosoftSignInAttempt
+  // start url; the api goes on to Microsoft and its callback redirects to
+  // urnetwork://oauth/microsoft, and on_microsoft fires with that whole url
+  // for the host's attempt to judge. `state` and `nonce` are the attempt's,
+  // read only by the simulated return.
+  void SignInWithMicrosoft(const std::string& startUrl, const std::string& state,
+                           const std::string& nonce);
+  std::function<void(std::string returnUrl)> on_microsoft;
 
   // Route a urnetwork:// callback here. Returns true if it was a wallet or
   // sso callback.
@@ -120,7 +129,8 @@ class WalletConnect {
   // an accepted proof -> on_signature; a refusal for this flow -> on_error;
   // an answer that is not this flow's -> dropped.
   void DeliverBittensorResult(const urnet::BittensorWalletResult& result);
-  // urnetwork://oauth/<apple|google>?state=…&id_token=… (or &error=…)
+  // urnetwork://oauth/<apple|google>?state=…&id_token=… (or &error=…) to
+  // on_sso, and urnetwork://oauth/microsoft?... whole to on_microsoft
   void HandleOAuthReturn(const std::string& url);
 
   std::optional<urnet::WalletKeyPair> dappKeyPair_;

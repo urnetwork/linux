@@ -21,6 +21,9 @@ using urnw::sso::OAuthState;
 using urnw::sso::ParseGoogleReturn;
 using urnw::sso::OAuthReturnProvider;
 using urnw::sso::UrlPath;
+using urnw::sso::MicrosoftFailure;
+using urnw::sso::MicrosoftFailureFor;
+using urnw::sso::MicrosoftFailureTextFor;
 
 UR_TEST(returnParsesTokenAndStateAndDecodesEscapes) {
   const Return r = ParseOAuthReturn("google", "id_token=a.b.c&state=x%20y");
@@ -144,4 +147,33 @@ UR_TEST(googleReturnParsesLikeTheAppleOne) {
   UR_EXPECT_TRUE(CheckReturn(good, "google", "s1", "n1").ok);
   UR_EXPECT_TRUE(!CheckReturn(good, "google", "s1", "n2").ok);
   UR_EXPECT_TRUE(!CheckReturn(good, "apple", "s1", "n1").ok);
+}
+
+// A Microsoft return the sdk's attempt refused, by its MicrosoftSignInErrorCode*:
+// another attempt's return keeps the attempt waiting, a cancel says nothing, a
+// server without Microsoft sign-in says so, and anything else is the sign-in's
+// error.
+UR_TEST(microsoftRefusalsReadInTheirOwnWords) {
+  UR_EXPECT_TRUE(MicrosoftFailureFor("not_this_attempt") == MicrosoftFailure::KeepWaiting);
+  UR_EXPECT_TRUE(MicrosoftFailureFor("cancelled") == MicrosoftFailure::Cancelled);
+  UR_EXPECT_TRUE(MicrosoftFailureFor("not_configured") == MicrosoftFailure::Unavailable);
+  for (const char* code : {"failed", "no_token", "nonce_mismatch", "expired", "", "something_new"}) {
+    UR_EXPECT_TRUE_MSG(code, MicrosoftFailureFor(code) == MicrosoftFailure::Failed);
+  }
+  const auto unavailable = MicrosoftFailureTextFor(MicrosoftFailure::Unavailable);
+  UR_EXPECT_TRUE(unavailable && std::string(unavailable->key) == "microsoft_sign_in_unavailable");
+  const auto failed = MicrosoftFailureTextFor(MicrosoftFailure::Failed);
+  UR_EXPECT_TRUE(failed && std::string(failed->key) == "error_signing_in_with_microsoft");
+  for (MicrosoftFailure silent :
+       {MicrosoftFailure::None, MicrosoftFailure::KeepWaiting, MicrosoftFailure::Cancelled}) {
+    UR_EXPECT_TRUE(!MicrosoftFailureTextFor(silent).has_value());
+  }
+}
+
+// The Microsoft return is no Google or Apple return: the deep-link handler
+// hands it whole to the sdk's attempt, never to the checks here.
+UR_TEST(microsoftReturnIsNoGoogleOrAppleProvider) {
+  UR_EXPECT_TRUE(UrlPath("urnetwork://oauth/microsoft?state=1") == urnw::sso::kMicrosoftReturnPath);
+  UR_EXPECT_TRUE(OAuthReturnProvider(urnw::sso::kMicrosoftReturnPath).empty());
+  UR_EXPECT_TRUE(std::string(urnw::sso::kProviderMicrosoft) == "microsoft");
 }

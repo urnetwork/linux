@@ -1,8 +1,8 @@
 // The Account > Login methods "Add sign-in method" sheet: the options every
-// app offers (Apple, Google, a Solana or Bittensor wallet, an email or phone),
-// the add-auth request each one sends, and that a browser or wallet return
-// started by an add is answered to the add and never signs in. The linux sheet
-// offered only the email.
+// app offers (Apple, Google, Microsoft, a Solana or Bittensor wallet, an email
+// or phone), the add-auth request each one sends, and that a browser or wallet
+// return started by an add is answered to the add and never signs in. The
+// linux sheet offered only the email.
 // SPDX-License-Identifier: MPL-2.0
 #include "TestHarness.hpp"
 
@@ -19,10 +19,11 @@ using urnw::bridge::RoutePublicKey;
 using urnw::bridge::RouteSignature;
 using urnw::bridge::SignatureRoute;
 
-// ur.io ADD_SIGN_IN_METHODS and the apple sheet's order
-UR_TEST(AddSignIn_OffersAppleGoogleWalletAndEmail) {
+// ur.io ADD_SIGN_IN_METHODS and the apple sheet's order, Microsoft beside Google
+UR_TEST(AddSignIn_OffersAppleGoogleMicrosoftWalletAndEmail) {
   const std::vector<as::Method> want = {as::Method::Apple, as::Method::Google,
-                                        as::Method::Wallet, as::Method::Email};
+                                        as::Method::Microsoft, as::Method::Wallet,
+                                        as::Method::Email};
   UR_EXPECT_TRUE(as::Methods() == want);
   const std::vector<as::WalletChain> chains = {as::WalletChain::Solana,
                                                as::WalletChain::Bittensor};
@@ -34,6 +35,9 @@ UR_TEST(AddSignIn_OffersAppleGoogleWalletAndEmail) {
 UR_TEST(AddSignIn_LabelsUseTheSharedKeys) {
   UR_EXPECT_TRUE(std::string("apple") == std::string(as::MethodLabel(as::Method::Apple).key));
   UR_EXPECT_TRUE(std::string("google") == std::string(as::MethodLabel(as::Method::Google).key));
+  UR_EXPECT_TRUE(std::string("microsoft") == std::string(as::MethodLabel(as::Method::Microsoft).key));
+  UR_EXPECT_TRUE(std::string("microsoft_sign_in_method_added") ==
+                 std::string(as::AddedMessage(as::Method::Microsoft).key));
   UR_EXPECT_TRUE(std::string("wallet") == std::string(as::MethodLabel(as::Method::Wallet).key));
   UR_EXPECT_TRUE(std::string("site_app_email") == std::string(as::MethodLabel(as::Method::Email).key));
   UR_EXPECT_TRUE(std::string("solana_wallet") == std::string(as::ChainLabel(as::WalletChain::Solana).key));
@@ -54,6 +58,11 @@ UR_TEST(AddSignIn_EveryMethodSuppliesAnAuthMethod) {
   const as::Args google = as::ProviderArgs(as::Method::Google, "google-identity-token");
   UR_EXPECT_TRUE(as::SuppliesMethod(google));
   UR_EXPECT_TRUE(std::string("google") == google.authJwtType);
+  // the sdk's AuthJwtTypeMicrosoft
+  const as::Args microsoft = as::ProviderArgs(as::Method::Microsoft, "microsoft-identity-token");
+  UR_EXPECT_TRUE(as::SuppliesMethod(microsoft));
+  UR_EXPECT_TRUE(std::string("microsoft") == microsoft.authJwtType);
+  UR_EXPECT_TRUE(std::string("microsoft-identity-token") == microsoft.authJwt);
 
   const as::Args solana =
       as::WalletArgs(as::WalletChain::Solana, "solana-public-key", "c2lnbmF0dXJl", "message");
@@ -63,7 +72,8 @@ UR_TEST(AddSignIn_EveryMethodSuppliesAnAuthMethod) {
       as::WalletArgs(as::WalletChain::Bittensor, "5ss58-address", "0xabcd", "message");
   UR_EXPECT_TRUE(as::SuppliesMethod(tao));
   UR_EXPECT_TRUE(std::string("TAO") == tao.blockchain);
-  for (as::Method m : {as::Method::Apple, as::Method::Google, as::Method::Wallet}) {
+  for (as::Method m :
+       {as::Method::Apple, as::Method::Google, as::Method::Microsoft, as::Method::Wallet}) {
     UR_EXPECT_FALSE(as::NeedsVerification(m));
   }
 }
