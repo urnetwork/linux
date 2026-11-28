@@ -6128,6 +6128,36 @@ msgctxt "hash_value"
 msgid "#{}"
 msgstr "#{}"
 
+#. Body of the short help for extenders (title: "What is an extender?"), opened from a '?' button next to Extenders. An extender relays the connection to URnetwork where the network is blocked; the traffic stays encrypted and the extender cannot read it.
+msgctxt "help_extender_body"
+msgid "An extender relays your connection to URnetwork where it is blocked. Your traffic stays encrypted through it, and the extender can't read it."
+msgstr "Extender meneruskan koneksi Anda ke URnetwork di tempat koneksi itu diblokir. Lalu lintas Anda tetap terenkripsi saat melewatinya, dan extender tidak dapat membacanya."
+
+#. Title of the short help that a '?' button next to Extenders opens (and that button's accessible name). Use the app's own word for extender (extenders, in the singular).
+msgctxt "help_extender_title"
+msgid "What is an extender?"
+msgstr "Apa itu extender?"
+
+#. Body of the short help for the usage bar's Pending (title: "What is Pending?"). Use the usage bar's words for Pending and Available (pending_data_key, available_data_key) as they read in your language. No time promise for the return.
+msgctxt "help_pending_body"
+msgid "Pending is data set aside for your open connections. What they don't use goes back to your available data when they close."
+msgstr "“Tertunda” adalah data yang dicadangkan untuk koneksi Anda yang terbuka. Yang tidak terpakai kembali ke data tersedia Anda saat koneksi ditutup."
+
+#. Title of the short help that a '?' button next to the usage bar's Pending opens (and that button's accessible name). Quote the usage bar's own word for Pending (pending_data_key) as it reads in your language.
+msgctxt "help_pending_title"
+msgid "What is Pending?"
+msgstr "Apa arti “Tertunda”?"
+
+#. Body of the short help for providing (title: "What is providing?"), opened from a '?' button next to the provide controls. Plain and honest: other members' traffic can leave through the user's connection; rewards are possible, not promised. Keep Provide mode as the app's label for that setting.
+msgctxt "help_provide_body"
+msgid "Providing shares some of your internet with other URnetwork members: their traffic can go out through your connection. Providers can earn rewards for the data they share. Provide mode sets when this device provides, and you can stop at any time."
+msgstr "Penyediaan membagikan sebagian internet Anda dengan anggota URnetwork lain: lalu lintas mereka dapat keluar melalui koneksi Anda. Penyedia dapat memperoleh hadiah atas data yang mereka bagikan. Mode penyediaan menentukan kapan perangkat ini menyediakan, dan Anda dapat berhenti kapan saja."
+
+#. Title of the short help that a '?' button next to the provide controls opens (and that button's accessible name): what providing means. Use the same word for providing as the app's Provide mode label.
+msgctxt "help_provide_title"
+msgid "What is providing?"
+msgstr "Apa itu penyediaan?"
+
 #. Used in Main/Connect/ConnectView-macOS.swift.
 msgctxt "hide_provider_list"
 msgid "Hide Provider List"

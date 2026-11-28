@@ -6,6 +6,7 @@
 
 #include <glib.h>
 
+#include "HelpButton.hpp"
 #include "I18n.hpp"
 #include "Ui.hpp"
 
@@ -68,7 +69,10 @@ void ApplyPlaceholder(Gtk::Entry& entry, const extender::SettingsField& field) {
 ExtenderSection::ExtenderSection(SdkHost& host)
     : Gtk::Box(Gtk::Orientation::VERTICAL, 0), host_(host) {
   set_hexpand(true);
-  append(*kit::MakePaneGroupHeader(T_("extenders", "Extenders")).root);
+  // the '?' says what an extender is
+  auto header = kit::MakePaneGroupHeader(T_("extenders", "Extenders"));
+  header.trailing->append(*MakeHelpButton(HelpTopic::Extender));
+  append(*header.root);
   BuildForm(*this);
   BuildControlDoh(*this);
   BuildAdvanced(*this);
