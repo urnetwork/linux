@@ -282,6 +282,11 @@ class ConnectPage : public Gtk::Box {
   // the selected-provider row (§2.3): stats.locationName with a selected peer
   // resolved to its device name; empty => "Best available provider"
   void ApplyLocationRow();
+  // The selected location's favorite star (sdk exit_location_preferences.go):
+  // filled when it is a favorite, hidden for best available. A stayed-on exit
+  // is kept this way too.
+  void ApplyFavoriteStar();
+  void ToggleFavorite();
   // §2.8 network peers: the count line, the group count and the peer rows
   void ApplyPeerCount();
   void ApplyPeersList();
@@ -630,6 +635,9 @@ class ConnectPage : public Gtk::Box {
   ConnectCanvas* canvas_ = nullptr;
   Gtk::Label* locationText_ = nullptr;
   Gtk::Button* locationRow_ = nullptr;
+  Gtk::Button* favoriteStar_ = nullptr;
+  // the star said the selected location is a favorite
+  bool favoriteShown_ = false;
   Gtk::Button* connectBtn_ = nullptr;
   Gtk::Button* failedDisconnectBtn_ = nullptr;  // beside Retry (disconnectBeside)
   Gtk::Button* moreOptionsToggle_ = nullptr;

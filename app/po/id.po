@@ -118,6 +118,11 @@ msgctxt "add_tao_for_gas"
 msgid "Add TAO for gas"
 msgstr "Tambahkan TAO untuk gas"
 
+#. Accessible name and tooltip of the star button beside the selected location when it is not a favorite: keeps the location (or the exit the user stays on) in Favorites.
+msgctxt "add_to_favorites"
+msgid "Add to favorites"
+msgstr "Tambahkan ke favorit"
+
 #. A description of the user's ability to provide bandwidth.
 msgctxt "adjust_setting_always_fill_data_faster"
 msgid "Providing is off by default. Choose when your device provides below."
@@ -5611,10 +5616,25 @@ msgctxt "exclude_apps_launcher_note"
 msgid "Each app you turn on gets a second launcher in your app menu, with (outside VPN) after its name. An app opened from that launcher bypasses the VPN and the kill switch. An app that is already running stays in the VPN until you quit it, and Flatpak and Snap apps are not listed."
 msgstr "Setiap aplikasi yang Anda aktifkan mendapat peluncur kedua di menu aplikasi, dengan (di luar VPN) setelah namanya. Aplikasi yang dibuka dari peluncur itu melewati VPN dan kill switch. Aplikasi yang sudah berjalan tetap berada di VPN sampai Anda menutupnya, dan aplikasi Flatpak serta Snap tidak ditampilkan."
 
+#. Button beside a search result on the Excluded exit locations screen: adds that country, region or city to the excluded list. Short.
+msgctxt "exclude_exit_location"
+msgid "Exclude"
+msgstr "Kecualikan"
+
 #. transfer stats and split rules; Linux: the header over the apps already excluded in Settings > Exclude apps from the VPN.
 msgctxt "excluded"
 msgid "Excluded"
 msgstr "Dikecualikan"
+
+#. Title of the settings row and screen that list the places (countries, regions such as US states, cities) whose exits the user's connections avoid. Use the app's own word for exit (as in 'Stay on this exit').
+msgctxt "excluded_exit_locations"
+msgid "Excluded exit locations"
+msgstr "Lokasi titik keluar yang dikecualikan"
+
+#. Explanation at the top of the Excluded exit locations screen: best available, collections and larger places skip exits in these places; picking one of the places itself still connects there.
+msgctxt "excluded_exit_locations_description"
+msgid "Connections won't use exits in these places, unless you pick one of them directly."
+msgstr "Koneksi tidak akan menggunakan titik keluar di tempat-tempat ini, kecuali Anda memilih salah satunya secara langsung."
 
 #. Screen reader state of a row that shows or hides a section below it (Advanced, Why?): the section is shown. The counterpart of collapsed. Windows: the Sessions page's group headings (Hosted proxies (N)...), read as the heading's item status.
 msgctxt "expanded"
@@ -5935,6 +5955,16 @@ msgstr "DNS cepat saat terhubung"
 msgctxt "fast_dns_on_connect_description"
 msgid "Answers DNS over the local network while the tunnel's DNS starts. This can reveal your lookups to the local network and return answers that don't match your exit location. When off, DNS only resolves through the tunnel."
 msgstr "Menjawab DNS melalui jaringan lokal saat DNS terowongan dimulai. Ini dapat memperlihatkan pencarian Anda ke jaringan lokal dan memberikan jawaban yang tidak sesuai dengan lokasi keluar Anda. Jika nonaktif, DNS hanya diselesaikan melalui terowongan."
+
+#. Note under a favorite that is one specific exit (another member's device), not a place. Honest: the device can disappear.
+msgctxt "favorite_exit_note"
+msgid "A member's device. It can go offline or leave the network at any time."
+msgstr "Perangkat milik seorang anggota. Perangkat ini bisa offline atau keluar dari jaringan kapan saja."
+
+#. Title of the section at the top of the location list that holds the user's favorite locations and exits. Short.
+msgctxt "favorites"
+msgid "Favorites"
+msgstr "Favorit"
 
 #. Used in Main/Feedback/FeedbackView.swift.
 msgctxt "feedback"
@@ -7524,6 +7554,11 @@ msgctxt "no_ethos_wallet_found"
 msgid "No EthOs wallet found"
 msgstr "Dompet EthOs tidak ditemukan"
 
+#. Empty state of the Excluded exit locations screen, above its search field.
+msgctxt "no_excluded_exit_locations"
+msgid "No excluded locations yet. Search for a country, region or city to exclude it."
+msgstr "Belum ada lokasi yang dikecualikan. Cari negara, wilayah, atau kota untuk mengecualikannya."
+
 #. App split rules: empty state when no installed apps were enumerated.
 msgctxt "no_installed_apps_found"
 msgid "No installed apps found. (Store apps aren't listed.)"
@@ -9030,6 +9065,11 @@ msgctxt "remove"
 msgid "Remove"
 msgstr "Hapus"
 
+#. Accessible name and tooltip of the filled star button beside the selected location when it is a favorite: removes it from Favorites.
+msgctxt "remove_from_favorites"
+msgid "Remove from favorites"
+msgstr "Hapus dari favorit"
+
 #. A button to remove a split rule.
 msgctxt "remove_rule"
 msgid "Remove rule"
@@ -9174,6 +9214,11 @@ msgstr "Pindai kode QR"
 msgctxt "search_apps_placeholder"
 msgid "Search apps"
 msgstr "Cari aplikasi"
+
+#. Placeholder of the search field on the Excluded exit locations screen, which finds countries, regions (such as US states) and cities to exclude.
+msgctxt "search_exit_locations_placeholder"
+msgid "Search countries, regions and cities"
+msgstr "Cari negara, wilayah, dan kota"
 
 #. Locations List
 msgctxt "search_placeholder"

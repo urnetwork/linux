@@ -74,6 +74,7 @@ class ProviderIdentitiesSheet;
 // Built for this destination, file-local to SettingsPage.cpp (spec §6.1/§6.2).
 class SettingsDeviceNameSheet;
 class SettingsBlockedLocationsSheet;
+class SettingsExcludedExitLocationsSheet;
 class LicensesSheet;
 // The bundled release note, which the App version row opens
 // (ReleaseNotesSheet.hpp).
@@ -128,6 +129,7 @@ class SettingsPage : public Gtk::Box {
   // PUBLIC because the Network destination's detail pane is a SECOND door to
   // the same sheet; the blocked list is a network-API read this page owns.
   void ShowBlockedLocationsSheet();
+  void ShowExcludedExitLocationsSheet();
 
   // Feed slots the window's DrawerEvent dispatcher forwards (already
   // marshalled onto the GTK loop). RouteLocal keeps the kill switch honest
@@ -281,6 +283,7 @@ class SettingsPage : public Gtk::Box {
   // ---- sheets --------------------------------------------------------------
   std::unique_ptr<SettingsDeviceNameSheet> deviceNameSheet_;
   std::unique_ptr<SettingsBlockedLocationsSheet> blockedSheet_;
+  std::unique_ptr<SettingsExcludedExitLocationsSheet> excludedExitSheet_;
   std::unique_ptr<SplitRulesSheet> splitRulesSheet_;
   std::unique_ptr<ProviderIdentitiesSheet> identitiesSheet_;
   std::unique_ptr<LicensesSheet> licensesSheet_;

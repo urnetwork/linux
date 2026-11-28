@@ -37,7 +37,9 @@ class LocationsSheet : public Gtk::Window {
   void AppendLocationSection(const std::string& title,
                              const std::optional<urnet::ConnectLocationList>& items,
                              const std::optional<urnet::ConnectLocation>& selected);
-  Gtk::Button* MakeLocationRow(const urnet::ConnectLocation& location, bool selected);
+  // `caption` replaces the provider count line when it is not empty.
+  Gtk::Button* MakeLocationRow(const urnet::ConnectLocation& location, bool selected,
+                               const std::string& caption = {});
   Gtk::Button* MakePeerRow(const urnet::NetworkPeer& peer, bool selected);
   Gtk::Button* MakeBestAvailableRow(bool selected);
   void OnSearchChanged();
