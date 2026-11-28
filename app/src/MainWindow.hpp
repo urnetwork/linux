@@ -476,6 +476,13 @@ class MainWindow : public Gtk::ApplicationWindow {
   // action (ClientLimitNoticeTracker update or reset).
   void ApplyClientLimitNotification(const std::string& trackerAction);
 
+  // ---- the low-data warning (sdk LowDataWarningForBalance) --------------------
+  // A warning the balance store reported, once per threshold per balance
+  // period: an alert with Got it and, on a plan that is not Pro, Get Pro while
+  // the window shows, and a notification while it is out of the user's sight.
+  // It only informs; nothing disconnects.
+  void OnLowDataWarning(const urnet::LowDataWarning& warning);
+
   // ---- the device list (ManageDevicesSheet) ---------------------------------
   std::unique_ptr<ManageDevicesSheet> manageDevicesSheet_;
   // The account's list (the notice's Manage devices, Settings > Device), or

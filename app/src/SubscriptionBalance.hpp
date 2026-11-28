@@ -68,6 +68,7 @@ class SubscriptionBalanceStore {
   // Fired on the GTK main loop after any state change.
   using ChangedHandler = std::function<void()>;
   using ReferralCelebrationHandler = std::function<void(const ReferralCelebration&)>;
+  using LowDataWarningHandler = std::function<void(const urnet::LowDataWarning&)>;
 
   explicit SubscriptionBalanceStore(SdkHost& host);
   ~SubscriptionBalanceStore();
@@ -196,6 +197,10 @@ class SubscriptionBalanceStore {
   void SetReferralCelebrationHandler(ReferralCelebrationHandler h) {
     onReferralCelebration_ = std::move(h);
   }
+  // Fired on the GTK main loop, after the changed handler of the same balance,
+  // when the sdk says to warn about it: little data is left (once per threshold
+  // per balance period, SdkHost::LowDataWarningForBalance).
+  void SetLowDataWarningHandler(LowDataWarningHandler h) { onLowDataWarning_ = std::move(h); }
 
  private:
   void MaybeCelebrateReferrals(int64_t count);
@@ -218,6 +223,7 @@ class SubscriptionBalanceStore {
   SdkHost& host_;
   ChangedHandler onChanged_;
   ReferralCelebrationHandler onReferralCelebration_;
+  LowDataWarningHandler onLowDataWarning_;
   // referral celebrations poll on their own timer: unlike the balance poll it
   // never stops for Pro (referrals keep landing either way)
   sigc::connection referralTimer_;

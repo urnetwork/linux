@@ -243,6 +243,7 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
         PostToMain([this, epoch, issued, result = std::move(result), err = std::move(err)] {
           if (*epoch != issued) return;  // logged out (or re-logged-in) since
           isLoading_ = false;
+          std::optional<urnet::LowDataWarning> lowDataWarning;
           if (err || !result) {
             if (err) std::fprintf(stderr, "[balance] fetch failed: %s\n", err->c_str());
             errorFetching_ = true;
@@ -328,6 +329,10 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
             const bool refreshJwt = proTracker_.balanceLoaded(serverIsPro);
             UpdateIsPro(proTracker_.getIsPro());
             if (refreshJwt) host_.RefreshJwt();
+            // little data left: the sdk says when, once per threshold per
+            // balance period, and remembers it in the LocalState. It only
+            // informs; nothing disconnects
+            lowDataWarning = host_.LowDataWarningForBalance(*result);
           }
 
           // confirmation poll bookkeeping. mac runs these checks after EVERY
@@ -346,6 +351,7 @@ void SubscriptionBalanceStore::FetchSubscriptionBalance() {
             StopPolling();  // background poll stops once supporter-with-balance
           }
           Emit();
+          if (lowDataWarning && onLowDataWarning_) onLowDataWarning_(*lowDataWarning);
           std::vector<std::function<void(bool)>> waiters;
           waiters.swap(fetchWaiters_);
           const bool ok = !err && result;

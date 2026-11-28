@@ -403,6 +403,12 @@ MainWindow::MainWindow(SdkHost& host) : host_(host), balance_(host) {
     }
   });
 
+  // Little data left (the sdk's LowDataWarningForBalance, once per threshold
+  // per balance period): the alert, and the notification out of sight. The
+  // store only polls while the window is visible. Nothing disconnects.
+  balance_.SetLowDataWarningHandler(
+      [this](const urnet::LowDataWarning& warning) { OnLowDataWarning(warning); });
+
   // Auth-state transitions are marshaled onto the GTK loop and flip the view.
   host_.SetAuthStateHandler([this](bool loggedIn, uint64_t epoch) {
     PostToMain([this, loggedIn, epoch] {
@@ -3168,6 +3174,55 @@ void MainWindow::ApplyClientLimitNotification(const std::string& trackerAction) 
     case client_limit::NotificationStep::None:
       return;
   }
+}
+
+// ---- the low-data warning (sdk LowDataWarningForBalance) -------------------------
+
+// One fixed notification id, so a later warning replaces an earlier one.
+constexpr const char* kLowDataWarningNoticeId = "low-data-warning";
+
+// With no default action a click on the notification activates the app, which
+// shows the window.
+void MainWindow::OnLowDataWarning(const urnet::LowDataWarning& warning) {
+  // the amount as the usage bar and the data sheet print it
+  const std::string amount = FormatByteCountCompact(warning.AvailableByteCount);
+  const std::string message =
+      warning.Kind == urnet::LowDataWarningKindPercent
+          ? Format(T_("low_data_warning_percent", "Only {0}% of your data is left ({1})."),
+                   warning.AvailablePercent, amount)
+          : Format(T_("low_data_warning_byte_count", "Only {} of data is left."), amount);
+  const char* title = T_("low_data_warning_title", "Running low on data");
+  g_message("low data warning: the %s threshold", warning.Kind.c_str());
+  // out of the user's sight: hidden to the tray, or another app in front
+  if (!windowVisible_ || !appFocused_) {
+    if (auto app = NotifyingApp()) {
+      auto notification = Gio::Notification::create(title);
+      notification->set_body(message);
+      app->send_notification(kLowDataWarningNoticeId, notification);
+    }
+  }
+  if (!windowVisible_) return;
+  GtkWidget* dialog = adw_message_dialog_new(GTK_WINDOW(gobj()), title, message.c_str());
+  if (balance_.IsPro()) {
+    adw_message_dialog_add_responses(ADW_MESSAGE_DIALOG(dialog), "close", T_("got_it", "Got it"),
+                                     nullptr);
+  } else {
+    // a plan that is not Pro: the upgrade path, as the out-of-balance alert's
+    adw_message_dialog_add_responses(ADW_MESSAGE_DIALOG(dialog), "close", T_("got_it", "Got it"),
+                                     "upgrade", T_("get_pro", "Get Pro"), nullptr);
+    adw_message_dialog_set_response_appearance(ADW_MESSAGE_DIALOG(dialog), "upgrade",
+                                               ADW_RESPONSE_SUGGESTED);
+  }
+  adw_message_dialog_set_default_response(ADW_MESSAGE_DIALOG(dialog), "close");
+  adw_message_dialog_set_close_response(ADW_MESSAGE_DIALOG(dialog), "close");
+  g_signal_connect(dialog, "response",
+                   G_CALLBACK(+[](AdwMessageDialog*, const char* response, gpointer data) {
+                     if (g_strcmp0(response, "upgrade") == 0) {
+                       static_cast<MainWindow*>(data)->OpenUpgrade();
+                     }
+                   }),
+                   this);
+  gtk_window_present(GTK_WINDOW(dialog));
 }
 
 // ---- the device list (ManageDevicesSheet) ---------------------------------------

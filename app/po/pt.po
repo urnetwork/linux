@@ -6986,6 +6986,21 @@ msgctxt "longest_streak"
 msgid "Longest streak"
 msgstr "Maior sequência"
 
+#. Body of the low-data warning (title: "Running low on data") when the available data falls to a fixed amount (1 GiB). {amount} is the available data as a size, e.g. 980 MB. Shown once per balance period in an in-app alert and a local notification.
+msgctxt "low_data_warning_byte_count"
+msgid "Only {} of data is left."
+msgstr "Restam apenas {} de dados."
+
+#. Body of the low-data warning (title: "Running low on data") when the available data falls to a part of the period's data. {percent} is a whole number from 1 to 100 (the % sign follows it in the text); {amount} is the available data as a size, e.g. 2.9 GB. Shown once per balance period in an in-app alert and a local notification.
+msgctxt "low_data_warning_percent"
+msgid "Only {0}% of your data is left ({1})."
+msgstr "Restam apenas {0}% dos seus dados ({1})."
+
+#. Title of the low-data warning: an in-app alert and a local notification shown once when the available data falls to 10% of the period's data, and once when it falls to 1 GiB. It only informs; nothing is disconnected. Short.
+msgctxt "low_data_warning_title"
+msgid "Running low on data"
+msgstr "Seus dados estão acabando"
+
 #. Call to action
 msgctxt "low_user_ip_ratio"
 msgid "Lowest user/IP ratio to access content"

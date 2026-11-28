@@ -1593,6 +1593,25 @@ std::string SdkHost::StoredByJwt() {
   });
 }
 
+std::optional<urnet::LowDataWarning> SdkHost::LowDataWarningForBalance(
+    const urnet::SubscriptionBalanceResult& result) {
+  std::unique_lock<std::mutex> lock(mutex_, std::defer_lock);
+  if (OnMainLoop()) {
+    // never wait on a command's rpc here, and never answer a kept value: the
+    // next balance decides
+    if (CommandsBusy() || !lock.try_lock()) return std::nullopt;
+  } else {
+    lock.lock();
+  }
+  if (!localState_) return std::nullopt;
+  try {
+    return urnet::lowDataWarningForBalance(*localState_, result);
+  } catch (const std::exception& e) {
+    std::fprintf(stderr, "[sdk] low data warning failed: %s\n", e.what());
+    return std::nullopt;
+  }
+}
+
 void SdkHost::RefreshJwt() {
   std::scoped_lock lock(mutex_);
   if (!device_) return;  // refreshed on the next device creation anyway
