@@ -12,6 +12,7 @@
 #include <glib.h>
 #include <gtk/gtk.h>
 
+#include "ConnectionRegionSheet.hpp"  // LocationDisplayName: the location list's name
 #include "DisplayText.hpp"
 #include "DnsPresetsPresentation.hpp"
 #include "ExtenderProvideRowPaint.hpp"
@@ -3788,7 +3789,8 @@ void ConnectPage::ApplyLocationRow() {
   const auto& location = selectedLocation_;
   Glib::ustring text = T_("best_available_provider", "Best available provider");
   if (!IsBestAvailableSelected(location)) {
-    std::string displayName = SanitizeExternalDisplayText(location->name.value_or(std::string()));
+    // the location list's name for it: a country in the app's language
+    std::string displayName = SanitizeExternalDisplayText(LocationDisplayName(*location));
     if (peers_) {
       for (const auto& peer : *peers_) {
         if (IsPeerSelected(location, peer)) {

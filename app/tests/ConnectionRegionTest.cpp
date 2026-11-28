@@ -136,3 +136,24 @@ UR_TEST(ConnectionRegion_ThePromptReachesThePageTheUserIsOn) {
   UR_EXPECT_TRUE(home.toast);
   UR_EXPECT_FALSE(home.loginLine);
 }
+
+// Support inbox 8621: the location list showed the server's English country
+// names. A country reads in the app's language by the name the picker gives its
+// code, and the server's name stays the fallback and every other location's.
+UR_TEST(ConnectionRegion_TheLocationListNamesACountryAsThePickerDoes) {
+  using urnw::region::LocationDisplayName;
+  const auto turkish = [](const std::string& code) -> std::string {
+    if (code == "de") return "Almanya";
+    if (code == "ir") return "İran";
+    return std::string();
+  };
+  UR_EXPECT_TRUE(LocationDisplayName(true, "DE", "Germany", turkish) == "Almanya");
+  UR_EXPECT_TRUE(LocationDisplayName(true, "ir", "Iran", turkish) == "İran");
+  // a code the locale does not name (or no iso-codes at all) keeps the server's name
+  UR_EXPECT_TRUE(LocationDisplayName(true, "xk", "Kosovo", turkish) == "Kosovo");
+  UR_EXPECT_TRUE(LocationDisplayName(true, "de", "Germany", nullptr) == "Germany");
+  UR_EXPECT_TRUE(LocationDisplayName(true, "", "Germany", turkish) == "Germany");
+  UR_EXPECT_TRUE(LocationDisplayName(true, "deu", "Germany", turkish) == "Germany");
+  // a city or region carries its country's code, which must not rename it
+  UR_EXPECT_TRUE(LocationDisplayName(false, "de", "Berlin", turkish) == "Berlin");
+}

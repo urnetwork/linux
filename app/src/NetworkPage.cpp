@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "ConnectionRegionSheet.hpp"
 #include "DisplayText.hpp"
 #include "I18n.hpp"
 #include "LocationRowName.hpp"
@@ -409,7 +410,8 @@ Gtk::Button* NetworkPage::MakeLocationRow(const urnet::ConnectLocation& location
                 TN_("provider_count", "{} provider", "{} providers", providerCount),
                 providerCount))
           : Glib::ustring();
-  auto* row = MakeRow(SanitizeExternalDisplayText(location.name.value_or(std::string())), meta,
+  // a country in the app's language, as the connection region picker names it
+  auto* row = MakeRow(SanitizeExternalDisplayText(LocationDisplayName(location)), meta,
                       LocationRowColor(location), selected, !location.stable,
                       location.strong_privacy, /*providing=*/false);
   const urnet::ConnectLocation copy = location;
@@ -581,7 +583,7 @@ void NetworkPage::RenderDetail() {
     // anywhere; there are no such rows. Do not invent them.
     const auto& loc = *selected;
     // the location's own fields came off the network: filtered for display
-    const Glib::ustring name = SanitizeExternalDisplayText(loc.name.value_or(std::string()));
+    const Glib::ustring name = SanitizeExternalDisplayText(LocationDisplayName(loc));
     addKv(T_("name_label", "Name"), name);
     kit::SetTextOrCollapse(*paneB_.meta, name);
     const int providerCount = static_cast<int>(loc.provider_count.value_or(0));
@@ -590,7 +592,11 @@ void NetworkPage::RenderDetail() {
             Format(TN_("provider_count", "{} provider", "{} providers", providerCount),
                    providerCount));
     }
-    addKv(T_("country", "Country"), SanitizeExternalDisplayText(loc.country.value_or(std::string())));
+    // a city's or region's country, in the app's language as the list names it
+    addKv(T_("country", "Country"),
+          SanitizeExternalDisplayText(region::LocationDisplayName(
+              true, loc.country_code.value_or(std::string()), loc.country.value_or(std::string()),
+              CountryDisplayName)));
     // deliberate plural-key reuse: the store has no singular Region/City keys
     addKv(T_("regions", "Regions"), SanitizeExternalDisplayText(loc.region.value_or(std::string())));
     addKv(T_("cities", "Cities"), SanitizeExternalDisplayText(loc.city.value_or(std::string())));

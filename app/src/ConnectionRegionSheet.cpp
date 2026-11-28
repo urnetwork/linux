@@ -64,6 +64,13 @@ std::string CountryDisplayName(const std::string& countryCode) {
   return dgettext(kIsoCodesDomain, it->second.c_str());
 }
 
+std::string LocationDisplayName(const urnet::ConnectLocation& location) {
+  return region::LocationDisplayName(
+      location.location_type && *location.location_type == urnet::LocationTypeCountry,
+      location.country_code.value_or(std::string()), location.name.value_or(std::string()),
+      CountryDisplayName);
+}
+
 std::vector<region::Option> ConnectionRegionOptions() {
   std::vector<region::Option> options = region::Options(
       SdkHost::IngressCountryCodes(),

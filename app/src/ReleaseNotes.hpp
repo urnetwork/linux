@@ -285,12 +285,12 @@ inline const Note* PickNote(const ReleaseNotes& notes, const std::string& uiLoca
 }
 
 // Whether a note in this locale is laid out right to left: the store's
-// right-to-left languages, Arabic and Hebrew. A note keeps its own language's
-// direction whatever the UI's, so the English fallback reads left to right
-// (its alignment and its punctuation) in an Arabic or Hebrew UI.
+// right-to-left languages, Arabic, Hebrew and Persian. A note keeps its own
+// language's direction whatever the UI's, so the English fallback reads left to
+// right (its alignment and its punctuation) in an Arabic, Hebrew or Persian UI.
 inline bool IsRightToLeft(const std::string& locale) {
   const std::string language = detail::LanguageOf(StoreLocale(locale));
-  return language == "ar" || language == "he";
+  return language == "ar" || language == "fa" || language == "he";
 }
 
 // The line under the note's title: the running build's version, exactly as

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 #include "LocationsSheet.hpp"
 
+#include "ConnectionRegionSheet.hpp"
 #include "DisplayText.hpp"
 #include "I18n.hpp"
 #include "LocationRowName.hpp"
@@ -181,7 +182,8 @@ Gtk::Button* LocationsSheet::MakeLocationRow(const urnet::ConnectLocation& locat
                                      static_cast<unsigned long>(providerCount)),
                                  providerCount)
                         : std::string();
-  const std::string name = SanitizeExternalDisplayText(location.name.value_or(std::string()));
+  // a country in the app's language, as the connection region picker names it
+  const std::string name = SanitizeExternalDisplayText(LocationDisplayName(location));
   auto row = MakeRowShell(MakeColorDot(LocationColor(location)), name, caption);
 
   if (!location.stable) row.content->append(*MakeTrailingIcon("dialog-warning-symbolic", nullptr));
