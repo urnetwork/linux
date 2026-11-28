@@ -114,7 +114,8 @@ UR_TEST(NetworkQuickPick_TheListAndTheQuickPickShareOneRow) {
   UR_EXPECT_TRUE(QuickPickInOrder(
       QuickPickBody(page, "Gtk::Button* NetworkPage::MakeLocationRow("),
       {"TN_(\"provider_count\", \"{} provider\", \"{} providers\", providerCount)",
-       "MakeRow(SanitizeExternalDisplayText(location.name.value_or(std::string())), meta,",
+       // the row's name: a country in the app's language (LocationDisplayName)
+       "MakeRow(SanitizeExternalDisplayText(LocationDisplayName(location)), meta,",
        "LocationRowColor(location), selected, !location.stable,",
        "row->signal_clicked().connect([this, copy] {", "host_.ConnectFromRow(copy);", "Render();",
        "return row;"}));
